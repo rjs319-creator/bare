@@ -1,0 +1,94 @@
+// Cron-invoked cache warmer — hits the heavy endpoints so their edge caches are
+// fresh (combined with stale-while-revalidate, the app stays instant for users).
+const HOST = process.env.WARM_HOST || 'market-news-app-chi.vercel.app';
+
+const PATHS = [
+  '/api/backtest?scope=large&months=6',
+  '/api/backtest?scope=small&months=6',
+  '/api/backtest?scope=micro&months=6',
+  '/api/screener?scope=large&lookback=1M',
+  '/api/screener?scope=small',
+  '/api/screener?scope=micro',
+  '/api/sectors',
+];
+
+async function warmOne(p) {
+  const t0 = Date.now();
+  try {
+    const r = await fetch('https://' + HOST + p, { headers: { 'x-warm': '1' } });
+    return { p, status: r.status, ms: Date.now() - t0 };
+  } catch (e) {
+    return { p, error: String(e && e.message || e), ms: Date.now() - t0 };
+  }
+}
+
+module.exports = async function handler(req, res) {
+  const queue = [...PATHS], out = [];
+  async function worker() { while (queue.length) out.push(await warmOne(queue.shift())); }
+  await Promise.all([worker(), worker(), worker()]); // 3 at a time
+
+  // Once caches are fresh, snapshot today's picks for the scoreboard (one cron
+  // does both — warm then log — so we stay within Vercel cron limits).
+  let track = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=track', { headers: { 'x-warm': '1' } });
+    track = await r.json();
+  } catch (e) { track = { error: String(e && e.message || e) }; }
+
+  // Refresh this week's market-narrative tag (cheap; no-ops if already set this week),
+  // THEN log today's Apex/Loaded signals so they're stamped with the current tag.
+  let narrative = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=narrative', { headers: { 'x-warm': '1' } });
+    narrative = await r.json();
+  } catch (e) { narrative = { error: String(e && e.message || e) }; }
+
+  let apexlog = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=apexlog', { headers: { 'x-warm': '1' } });
+    apexlog = await r.json();
+  } catch (e) { apexlog = { error: String(e && e.message || e) }; }
+
+  // Log today's Ghost/Stalking signals to their own ledger (Phase-2 adaptive engine).
+  let ghostlog = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=ghostlog', { headers: { 'x-warm': '1' } });
+    ghostlog = await r.json();
+  } catch (e) { ghostlog = { error: String(e && e.message || e) }; }
+
+  // Snapshot today's per-ticker mention counts + options baselines — the
+  // unrecoverable data capture (option chains & social mentions can't be
+  // reconstructed historically). One Blob write per day.
+  let archive = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=archive', { headers: { 'x-warm': '1' } });
+    archive = await r.json();
+  } catch (e) { archive = { error: String(e && e.message || e) }; }
+
+  // Run one CERN daily cycle — scan for forced-flow events, advance/resolve the
+  // ledger, update the Bayesian posteriors. The counterfactual archive is the moat.
+  let cern = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=cerntick', { headers: { 'x-warm': '1' } });
+    cern = await r.json();
+  } catch (e) { cern = { error: String(e && e.message || e) }; }
+
+  // Snapshot the two-sleeve Edge Book (conviction longs + CERN forced-flow) AFTER
+  // the CERN tick so Sleeve B reflects the freshest decisions. This is the paper
+  // book whose realized beat-SPY rate + cross-sleeve correlation we track.
+  let edgelog = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=edgelog', { headers: { 'x-warm': '1' } });
+    edgelog = await r.json();
+  } catch (e) { edgelog = { error: String(e && e.message || e) }; }
+
+  // Grade any matured trade-alerts on forward excess return (hands-off track record).
+  let alertsgrade = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=alertsgrade', { headers: { 'x-warm': '1' } });
+    alertsgrade = await r.json();
+  } catch (e) { alertsgrade = { error: String(e && e.message || e) }; }
+
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({ ok: true, host: HOST, warmed: out, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, at: new Date().toISOString() });
+};

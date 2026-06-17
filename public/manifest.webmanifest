@@ -1,0 +1,15 @@
+{
+  "name": "Market News & Signals",
+  "short_name": "Signals",
+  "description": "Live momentum, picks, options and real-time technical buy/sell signals.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#060b14",
+  "theme_color": "#060b14",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "market-news-app",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.100.1",
+    "@vercel/blob": "^2.4.0"
+  }
+}

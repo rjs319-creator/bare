@@ -1,0 +1,17 @@
+{
+  "functions": {
+    "api/trends.js":   { "maxDuration": 60 },
+    "api/picks.js":    { "maxDuration": 60 },
+    "api/options.js":  { "maxDuration": 60 },
+    "api/momentum.js": { "maxDuration": 60 },
+    "api/screener.js": { "maxDuration": 60 },
+    "api/backtest.js": { "maxDuration": 60 },
+    "api/sectors.js":  { "maxDuration": 30 },
+    "api/price.js":    { "maxDuration": 30 },
+    "api/warm.js":     { "maxDuration": 60 },
+    "api/tracker.js":  { "maxDuration": 60 }
+  },
+  "crons": [
+    { "path": "/api/warm", "schedule": "0 13 * * *" }
+  ]
+}
