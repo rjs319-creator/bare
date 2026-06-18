@@ -1638,6 +1638,21 @@
     .fade-adv summary::-webkit-details-marker { display: none; }
     .fade-adv-body { font-size: 0.72rem; color: var(--text-dim); line-height: 1.5; margin-top: 6px; max-width: 460px; }
     .fade-caveats { font-size: 0.74rem; color: var(--text-dim); line-height: 1.6; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 13px 15px; }
+
+    /* Trend Rider traffic light */
+    .tr-light-wrap { display: flex; gap: 20px; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px 22px; margin-bottom: 16px; }
+    .tr-light { display: flex; flex-direction: column; gap: 9px; background: #0c1322; border: 1px solid var(--border); border-radius: 12px; padding: 11px; flex: 0 0 auto; }
+    .tr-lamp { width: 34px; height: 34px; border-radius: 50%; transition: all .3s; }
+    .tr-light-info { flex: 1; min-width: 0; }
+    .tr-light-status { font-size: 1.5rem; font-weight: 800; letter-spacing: 0.04em; }
+    .tr-light-desc { font-size: 0.86rem; color: var(--text); margin-top: 2px; }
+    .tr-light-score { font-size: 0.74rem; color: var(--text-dim); margin-top: 6px; }
+    .tr-light-cmp { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .tr-light-cmp span { font-size: 0.66rem; padding: 3px 8px; border-radius: 20px; background: var(--surface); border: 1px solid var(--border); color: var(--text-dim); }
+    .tr-light-cmp span.on { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, transparent); }
+    .tr-light-cmp span.off { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, transparent); }
+    .rot-panel-pending { opacity: 0.9; }
+    @media (max-width: 520px) { .tr-light-wrap { flex-direction: column; align-items: flex-start; gap: 14px; } .tr-light { flex-direction: row; } }
   </style>
 </head>
 <body>
@@ -1658,6 +1673,7 @@
     <a class="nav-link" href="#events" data-tab="events">Events (CERN)</a>
     <a class="nav-link" href="#edge" data-tab="edge">Edge Book</a>
     <a class="nav-link" href="#fade" data-tab="fade">Overheated</a>
+    <a class="nav-link" href="#trendrider" data-tab="trendrider">Trend Rider</a>
     <a class="nav-link" href="#xalerts" data-tab="xalerts">Trade Alerts</a>
     <a class="nav-link" href="#scoreboard" data-tab="scoreboard">Scoreboard</a>
     <a class="nav-link" href="#momentum" data-tab="momentum">Alerts</a>
@@ -1685,6 +1701,7 @@
   <a class="mtt-item" href="#events" data-tab="events"><span class="mtt-ic">⚡</span>Events</a>
   <a class="mtt-item" href="#edge" data-tab="edge"><span class="mtt-ic">📓</span>Edge Book</a>
   <a class="mtt-item" href="#fade" data-tab="fade"><span class="mtt-ic">🔥</span>Overheated</a>
+  <a class="mtt-item" href="#trendrider" data-tab="trendrider"><span class="mtt-ic">🚦</span>Trend Rider</a>
   <a class="mtt-item" href="#xalerts" data-tab="xalerts"><span class="mtt-ic">🐦</span>Alerts+</a>
   <a class="mtt-item" href="#scoreboard" data-tab="scoreboard"><span class="mtt-ic">🏆</span>Scoreboard</a>
   <a class="mtt-item" href="#momentum" data-tab="momentum"><span class="mtt-ic">🔥</span>Alerts</a>
@@ -1991,6 +2008,22 @@
     </div>
     <div id="fade-container">
       <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load Overheated names…</p></div>
+    </div>
+  </section>
+
+  <!-- TREND RIDER (trend-following + momentum + market-climate traffic light) -->
+  <section class="screener-section" id="trendrider">
+    <div class="section-label">
+      <div class="accent-bar" style="background:#22c55e"></div>
+      <h2 style="color:#22c55e">🚦 Trend Rider</h2>
+      <span class="label-meta" id="trendr-meta">· ride trends when the light is green · stand down on red</span>
+      <div class="label-action">
+        <span class="lbl-time" id="trendr-gen-time"></span>
+        <button class="refresh-btn" style="color:#22c55e" id="trendr-refresh-btn">⟳ Refresh</button>
+      </div>
+    </div>
+    <div id="trendr-container">
+      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load the market-climate light…</p></div>
     </div>
   </section>
 
@@ -2378,6 +2411,7 @@
     <a class="mbn-item" href="#events" data-tab="events"><span class="mbn-icon">⚡</span><span class="mbn-label">Events</span></a>
     <a class="mbn-item" href="#edge" data-tab="edge"><span class="mbn-icon">📓</span><span class="mbn-label">Edge</span></a>
     <a class="mbn-item" href="#fade" data-tab="fade"><span class="mbn-icon">🔥</span><span class="mbn-label">Overheated</span></a>
+    <a class="mbn-item" href="#trendrider" data-tab="trendrider"><span class="mbn-icon">🚦</span><span class="mbn-label">Trend</span></a>
     <a class="mbn-item" href="#xalerts" data-tab="xalerts"><span class="mbn-icon">🐦</span><span class="mbn-label">Alerts+</span></a>
     <a class="mbn-item" href="#scoreboard" data-tab="scoreboard"><span class="mbn-icon">🏆</span><span class="mbn-label">Score</span></a>
     <a class="mbn-item" href="#momentum" data-tab="momentum"><span class="mbn-icon">🔥</span><span class="mbn-label">Alerts</span></a>
@@ -2398,6 +2432,7 @@
     events:   ['events'],
     edge:     ['edge'],
     fade:     ['fade'],
+    trendrider: ['trendrider'],
     xalerts:  ['xalerts'],
     scoreboard: ['scoreboard'],
     momentum: ['momentum'],
@@ -2455,6 +2490,7 @@
     if (sub === 'edge' && typeof ensureEdge === 'function') ensureEdge();
     if (sub === 'rotation' && typeof ensureRotationDW === 'function') ensureRotationDW();
     if (sub === 'fade' && typeof ensureFade === 'function') ensureFade();
+    if (sub === 'trendrider' && typeof ensureTrendRider === 'function') ensureTrendRider();
     if (sub === 'xalerts' && typeof ensureXalerts === 'function') ensureXalerts();
 
     const act = document.querySelector('.mobile-top-tabs .mtt-item.active');
@@ -5167,6 +5203,95 @@
   }
 
   document.getElementById('fade-refresh-btn')?.addEventListener('click', runFade);
+
+  // ── Trend Rider (trend-following + momentum + market-climate traffic light) ──
+  // The light is the star: validated that forward returns in green >> red. The
+  // basket is "what to ride when it's green." Self-learning (per-stock trend
+  // quality) drops names that stop trending; track record proves the light live.
+  let trendRiderLoaded = false;
+  function ensureTrendRider() { if (!trendRiderLoaded) { trendRiderLoaded = true; runTrendRider(); } }
+  async function runTrendRider() {
+    const el = document.getElementById('trendr-container');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Reading the market climate…</p></div>`;
+    try {
+      const [t, book] = await Promise.all([
+        fetch('/api/tracker?op=trend').then(r => r.json()).catch(() => null),
+        fetch('/api/tracker?op=trendbook').then(r => r.json()).catch(() => null),
+      ]);
+      renderTrendRider(t, book);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Trend Rider.</p></div>`; }
+  }
+
+  const TR_LIGHT = {
+    green: ['#22c55e', 'GREEN', 'Favorable — ride trends'],
+    yellow: ['#eab308', 'YELLOW', 'Mixed — be selective, size down'],
+    red: ['#ef4444', 'RED', 'Stand down — avoid new trend longs'],
+  };
+
+  function renderTrendRider(t, book) {
+    const el = document.getElementById('trendr-container');
+    if (!el) return;
+    if (!t || !t.ok) { el.innerHTML = `<div class="mom-status error"><p>Trend Rider unavailable.</p></div>`; return; }
+    const L = t.light || {}; const col = L.color || 'yellow';
+    const [c, lbl, desc] = TR_LIGHT[col] || TR_LIGHT.yellow;
+    const cmp = L.components || {};
+
+    // The big traffic light.
+    const lamp = clr => `<div class="tr-lamp" style="background:${col === clr ? TR_LIGHT[clr][0] : '#1b2740'};box-shadow:${col === clr ? '0 0 18px ' + TR_LIGHT[clr][0] : 'none'}"></div>`;
+    const lightHtml = `<div class="tr-light-wrap">
+      <div class="tr-light">${lamp('red')}${lamp('yellow')}${lamp('green')}</div>
+      <div class="tr-light-info">
+        <div class="tr-light-status" style="color:${c}">${lbl}</div>
+        <div class="tr-light-desc">${desc}</div>
+        <div class="tr-light-score">climate score <b>${L.score ?? '—'}</b>/100</div>
+        <div class="tr-light-cmp">
+          <span class="${cmp.spyAbove200 ? 'on' : 'off'}">SPY ${cmp.spyAbove200 ? '>' : '<'} 200DMA</span>
+          <span class="${cmp.ma200Rising ? 'on' : 'off'}">200DMA ${cmp.ma200Rising ? 'rising' : 'flat/falling'}</span>
+          <span class="${(cmp.efficiency || 0) >= 0.3 ? 'on' : 'off'}">trend efficiency ${cmp.efficiency ?? '—'}</span>
+          <span class="${(cmp.breadth || 0) >= 0.5 ? 'on' : 'off'}">breadth ${Math.round((cmp.breadth || 0) * 100)}%</span>
+          <span class="${cmp.regime === 'risk-on' ? 'on' : cmp.regime === 'risk-off' ? 'off' : ''}">${cmp.regime || '—'}</span>
+        </div>
+      </div></div>`;
+
+    // Live track record by light color (the proof).
+    let trackHtml = '';
+    if (book && book.resolved >= 10) {
+      const row = (name, s) => s && s.n ? `<div class="bt-ic-row"><span>${name} <span style="color:var(--text-dim)">${s.n} picks</span></span><span>avg ${s.avgRet > 0 ? '+' : ''}${s.avgRet}%</span><span>beat SPY ${s.beatRate}% <span style="color:var(--text-dim)">(LB ${s.wilsonLo}%)</span></span></div>` : '';
+      trackHtml = `<div class="rot-panel"><div class="rot-head">📊 Live track record — does the light work?</div>
+        <div class="rot-sub">Forward ${book.note.includes('21') ? '~1-month' : ''} returns of logged picks, split by the light when they were picked. Green should beat red.</div>
+        ${row('🟢 Green', book.byClimate.green)}${row('🟡 Yellow', book.byClimate.yellow)}${row('🔴 Red', book.byClimate.red)}
+        <div class="bt-ic-row" style="border-top:1px solid var(--border);margin-top:4px"><span><b>All picks</b></span><span></span><span>${book.resolved} resolved · ${book.stillOpen} open</span></div></div>`;
+    } else {
+      trackHtml = `<div class="rot-panel rot-panel-pending"><div class="rot-head">📊 Live track record — building…</div><div class="rot-sub">${book ? `${book.stillOpen || 0} picks logged, ${book.resolved || 0} resolved.` : ''} Each pick is scored ~1 month later; this fills in automatically. Until then, the back-test showed green picks beat red by a wide margin (and red underperformed SPY by ~12% out-of-sample).</div></div>`;
+    }
+
+    // The basket (only meaningful when not red).
+    const basket = t.basket || [];
+    let basketHtml;
+    if (col === 'red') {
+      basketHtml = `<div class="rot-panel"><div class="rot-head">🛑 Basket suppressed</div><div class="rot-sub">The climate is red — historically the worst time to add trend longs (they underperformed SPY ~12% out-of-sample). The engine shows no new ride list. Protect capital; wait for the light to turn.</div></div>`;
+    } else {
+      const rows = basket.slice(0, 15).map((b, i) => `<div class="bt-ic-row">
+        <span><b>${esc(b.ticker)}</b> <span style="color:var(--text-dim)">${esc(b.sector || '')}</span></span>
+        <span>mom ${b.mom > 0 ? '+' : ''}${b.mom}%</span>
+        <span>$${b.price} <span style="color:var(--text-dim)">trail ${b.trailStop}</span></span></div>`).join('');
+      basketHtml = `<div class="rot-panel"><div class="rot-head">🏇 Ride list — top trends ${col === 'yellow' ? '(size down — yellow)' : ''}</div>
+        <div class="rot-sub">Confirmed uptrends (above a rising 200DMA &amp; 50DMA) with the strongest 12-1 momentum, capped at 3 per sector for diversification. Trend-follow: ride while above the trailing 50DMA; the learner drops names that stop trending.</div>
+        ${rows || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No qualifying uptrends right now.</span></div>'}</div>`;
+    }
+
+    el.innerHTML = `${lightHtml}${basketHtml}${trackHtml}
+      <div class="fade-caveats"><b>How to use.</b> Trend-following works when markets trend and fails when they chop or fall. The light blends SPY's trend, how <i>clean</i> the trend is (efficiency), market breadth, and the risk regime. <b>Green/Yellow</b> = the climate that historically rewarded riding trends; <b>Red</b> = stand down.
+      <br><b>Honest caveat.</b> This is a market-timing + trend-capture system, not a stock-alpha engine — the proven edge is the <b>timing light</b> (when to be on vs off), not beating the market on selection. The basket largely captures the uptrend (beta) when it's safe to. Research, not financial advice.</div>`;
+
+    const meta = document.getElementById('trendr-meta');
+    if (meta) meta.textContent = `· light ${lbl} · ${basket.length} names in the ride list`;
+    const gt = document.getElementById('trendr-gen-time');
+    if (gt && t.generatedAt) gt.textContent = new Date(t.generatedAt).toLocaleTimeString();
+  }
+
+  document.getElementById('trendr-refresh-btn')?.addEventListener('click', runTrendRider);
 
   // ── Trade Alerts (social, ranked by the external-collector pipeline) ──
   let xalertsLoaded = false;

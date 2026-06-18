@@ -25,6 +25,7 @@ const { writeDay, readAllPicks, hasStore, writeApexDay, readAllApex, writeGhostD
         readInsider, writeInsider, readFundamentals, writeFundShard, readCern, writeCern,
         writeEdgeDay, readAllEdge,
         readFade, writeFade, writeFadeDay, readAllFade, readAllFadeDays,
+        readTrendEng, writeTrendEng, writeTrendDay, readAllTrendDays,
         readJSON, writeJSON } = require('../lib/store');
 const { fetchDailyHistory } = require('../lib/screener');
 const { analyzeVReversal } = require('../lib/vreversal');
@@ -1055,6 +1056,263 @@ async function runFadeBook(req, res) {
   });
 }
 
+// ── op=trendopt : go/no-go for the Trend-Rider strategy + traffic light ─────
+// Strategy: long names in a confirmed uptrend (close > rising 200DMA & > 50DMA)
+// with positive 12-1 momentum, kept only if in the top tercile of momentum that
+// day (relative-momentum filter). Forward H-session return + excess vs SPY.
+// Traffic light (per date, point-in-time): SPY trend + Kaufman efficiency + sector
+// breadth + macro risk regime → green/yellow/red. THE test: do forward returns in
+// green >> red (does the light discriminate), and does the strategy beat SPY OOS?
+async function runTrendOpt(req, res) {
+  const scope = (req.query.scope || 'large').toLowerCase();
+  const limit = Math.max(0, parseInt(req.query.limit, 10) || 120);
+  const H = Math.max(10, parseInt(req.query.h, 10) || 63);
+  const range = /^(2y|5y|10y|max)$/.test(req.query.range || '') ? req.query.range : '5y';
+  // Sensitivity knobs (defaults = the live config). Used to check the green≫red
+  // discrimination isn't a single-parameter artifact.
+  const topFrac = Math.min(1, Math.max(0.1, parseFloat(req.query.topfrac) || 0.34));
+  const gThresh = parseInt(req.query.green, 10) || 65;        // green climate cutoff
+  const yThresh = parseInt(req.query.yellow, 10) || 45;       // yellow cutoff
+  const momLb = parseInt(req.query.momlb, 10) || 252;         // momentum lookback (252=12mo, 126=6mo)
+  const momSkip = parseInt(req.query.momskip, 10) || 21;      // skip recent (1mo) to dodge reversal
+  const lists = scope === 'small' ? UNI_SMALL : scope === 'micro' ? UNI_MICRO : UNI_LARGE;
+  let tickers = [...new Set(lists)]; if (limit > 0) tickers = tickers.slice(0, limit);
+  const { buildMacroLookup } = require('../lib/macro');
+  const SEC = ['XLK', 'XLF', 'XLV', 'XLE', 'XLI', 'XLY', 'XLP', 'XLB', 'XLRE', 'XLU', 'XLC'];
+
+  const [spyD, macro, ...secD] = await Promise.all([
+    fetchDailyHistory('SPY', range), buildMacroLookup(range).catch(() => null),
+    ...SEC.map(s => fetchDailyHistory(s, range).catch(() => null)),
+  ]);
+  if (!spyD || spyD.candles.length < 300) return res.status(502).json({ ok: false, error: 'No benchmark data' });
+  const spy = spyD.candles, spyCl = spy.map(c => c.close), spyClose = {}; spy.forEach(c => { spyClose[c.date] = c.close; });
+  const sma = (arr, p, i) => { if (i + 1 < p) return null; let s = 0; for (let k = i - p + 1; k <= i; k++) s += arr[k]; return s / p; };
+  const effRatio = (cl, i, n) => { if (i < n) return 0; let den = 0; for (let j = i - n + 1; j <= i; j++) den += Math.abs(cl[j] - cl[j - 1]); return den > 0 ? Math.abs(cl[i] - cl[i - n]) / den : 0; };
+  const betaAt = (c, k, W = 252) => {
+    const lo = Math.max(1, k - W + 1); const sr = [], mr = [];
+    for (let j = lo; j <= k; j++) { const sp = spyClose[c[j].date], sp1 = spyClose[c[j - 1].date]; if (sp == null || sp1 == null) continue; sr.push(c[j].close / c[j - 1].close - 1); mr.push(sp / sp1 - 1); }
+    const n = sr.length; if (n < 30) return 1;
+    const mm = mr.reduce((a, x) => a + x, 0) / n, ms = sr.reduce((a, x) => a + x, 0) / n;
+    let cov = 0, vm = 0; for (let j = 0; j < n; j++) { cov += (sr[j] - ms) * (mr[j] - mm); vm += (mr[j] - mm) ** 2; }
+    return vm > 0 ? cov / vm : 1;
+  };
+
+  // Sector 200DMA per date for breadth.
+  const secMaps = secD.filter(Boolean).map(d => { const cl = d.candles.map(c => c.close), m = {}; d.candles.forEach((c, i) => { m[c.date] = { c: c.close, s200: sma(cl, 200, i) }; }); return m; });
+
+  // Climate timeline (point-in-time) per SPY date.
+  const climate = {};
+  spy.forEach((c, i) => {
+    const s200 = sma(spyCl, 200, i), s200p = sma(spyCl, 200, i - 21);
+    if (s200 == null || s200p == null) { climate[c.date] = { score: 50, color: 'yellow' }; return; }
+    const trendComp = spyCl[i] > s200 ? (s200 > s200p ? 1 : 0.5) : 0;
+    const eff = Math.min(effRatio(spyCl, i, 63) * 1.5, 1);
+    let above = 0, tot = 0; secMaps.forEach(m => { const r = m[c.date]; if (r && r.s200 != null) { tot++; if (r.c > r.s200) above++; } });
+    const breadth = tot ? above / tot : 0.5;
+    const regime = macro ? (macro.at(c.date) || {}).regime || 'neutral' : 'neutral';
+    const risk = regime === 'risk-on' ? 1 : regime === 'neutral' ? 0.5 : 0;
+    const score = Math.round(100 * (0.30 * trendComp + 0.25 * eff + 0.25 * breadth + 0.20 * risk));
+    climate[c.date] = { score, color: score >= gThresh ? 'green' : score >= yThresh ? 'yellow' : 'red' };
+  });
+
+  // Per-ticker candidate records.
+  const t0 = Date.now(), deadline = 50000; const recs = []; let i = 0;
+  const worker = async () => {
+    while (i < tickers.length) {
+      const t = tickers[i++]; if (Date.now() - t0 > deadline) return;
+      let d; try { d = await fetchDailyHistory(t, range); } catch { continue; }
+      if (!d || d.candles.length < 300) continue;
+      const c = d.candles, cl = c.map(x => x.close);
+      for (let k = Math.max(252, momLb); k < c.length - H; k++) {
+        const s200 = sma(cl, 200, k), s200p = sma(cl, 200, k - 21), s50 = sma(cl, 50, k);
+        if (s200 == null || s200p == null || s50 == null) continue;
+        if (!(cl[k] > s200 && s200 > s200p && cl[k] > s50)) continue;     // confirmed uptrend
+        const mom = cl[k - momSkip] / cl[k - momLb] - 1; if (mom <= 0) continue;  // positive momentum
+        const date = c[k].date; if (spyClose[date] == null || spyClose[c[k + H].date] == null) continue;
+        const fwd = (c[k + H].close / cl[k] - 1) * 100, sfwd = (spyClose[c[k + H].date] / spyClose[date] - 1) * 100;
+        const beta = betaAt(c, k);
+        recs.push({ date, ticker: t, mom, fwd, exc: fwd - sfwd, excB: fwd - beta * sfwd, color: (climate[date] || {}).color || 'yellow' });
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 14 }, worker));
+
+  // Relative-momentum filter: per date keep top tercile by 12-1 momentum.
+  const byDate = {}; recs.forEach(r => (byDate[r.date] = byDate[r.date] || []).push(r));
+  const picks = [];
+  Object.values(byDate).forEach(arr => { arr.sort((a, b) => b.mom - a.mom); const n = Math.max(1, Math.floor(arr.length * topFrac)); for (let j = 0; j < n; j++) picks.push(arr[j]); });
+
+  const mean = a => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0);
+  const agg = arr => {
+    const n = arr.length; if (!n) return { n: 0 };
+    const exc = arr.map(x => x.exc), beats = exc.filter(x => x > 0).length, ci = wilson(beats, n);
+    return { n, avgRet: +mean(arr.map(x => x.fwd)).toFixed(2), avgExc: +mean(exc).toFixed(2), avgExcBetaAdj: +mean(arr.map(x => x.excB)).toFixed(2), beatRate: +((beats / n) * 100).toFixed(0), wilsonLo: +(ci.lo * 100).toFixed(0) };
+  };
+  const dates = [...new Set(picks.map(p => p.date))].sort();
+  const splitDate = dates[Math.floor(0.6 * dates.length)] || dates[dates.length - 1];
+  const oosPick = picks.filter(p => p.date >= splitDate);
+  const dayMix = { green: 0, yellow: 0, red: 0 }; Object.values(climate).forEach(c => { if (dayMix[c.color] != null) dayMix[c.color]++; });
+
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({
+    ok: true, scope, range, horizonDays: H, namesScanned: tickers.length, candidates: recs.length, picks: picks.length,
+    climateDayMix: dayMix, currentLight: climate[spy[spy.length - 1].date] || null,
+    strategyOverall: agg(picks),
+    byClimate: { green: agg(picks.filter(p => p.color === 'green')), yellow: agg(picks.filter(p => p.color === 'yellow')), red: agg(picks.filter(p => p.color === 'red')) },
+    oosByClimate: { splitDate, green: agg(oosPick.filter(p => p.color === 'green')), yellow: agg(oosPick.filter(p => p.color === 'yellow')), red: agg(oosPick.filter(p => p.color === 'red')) },
+    note: `Trend+momentum longs, ${H}-session forward return & excess vs SPY. avgRet = raw forward return (what you actually make long); avgExc = vs SPY; avgExcBetaAdj = alpha after beta. THE test: green avgRet/beatRate should clearly exceed red. oosByClimate confirms it holds out-of-sample.`,
+    generatedAt: new Date().toISOString(),
+  });
+}
+
+// ── Trend Rider live: traffic light + basket, self-learning, tracking ───────
+const TREND_H = 21;   // live tracking horizon (sessions) — faster feedback than the 63d backtest
+const TREND_SEC = ['XLK', 'XLF', 'XLV', 'XLE', 'XLI', 'XLY', 'XLP', 'XLB', 'XLRE', 'XLU', 'XLC'];
+
+// Diversified basket: top by momentum but capped per sector (avoid a 20-semi book).
+function diversifyBasket(cands, maxPerSec = 3, n = 20) {
+  const bySec = {}, out = [];
+  for (const c of cands) {                       // cands already momentum-sorted desc
+    const s = c.sector || '?'; bySec[s] = (bySec[s] || 0);
+    if (bySec[s] >= maxPerSec) continue;
+    bySec[s]++; out.push(c);
+    if (out.length >= n) break;
+  }
+  return out;
+}
+
+async function scanTrendUniverse(tickers, deadlineMs, t0) {
+  const { trendCandidate } = require('../lib/trend');
+  const out = []; let i = 0;
+  const worker = async () => {
+    while (i < tickers.length) {
+      const t = tickers[i++]; if (Date.now() - t0 > deadlineMs) return;
+      let d; try { d = await fetchDailyHistory(t, '2y'); } catch { continue; }  // 2y: need 252d momentum + 200DMA
+      if (!d || d.candles.length < 260) continue;
+      const c = trendCandidate(d.candles);
+      if (c) { c.ticker = t; c.date = d.candles[d.candles.length - 1].date; c.sector = SECTOR_OF[t] || '?'; out.push(c); }
+    }
+  };
+  await Promise.all(Array.from({ length: 16 }, worker));
+  out.sort((a, b) => b.mom - a.mom);
+  return out;
+}
+
+// Shared: compute today's climate light + ranked candidate basket.
+async function computeTrendLive(t0, deadline) {
+  const trend = require('../lib/trend');
+  const { fetchMacro } = require('../lib/macro');
+  const [spyD, macro, ...secD] = await Promise.all([
+    fetchDailyHistory('SPY'), fetchMacro().catch(() => null),
+    ...TREND_SEC.map(s => fetchDailyHistory(s).catch(() => null)),
+  ]);
+  if (!spyD) return null;
+  const spyCl = spyD.candles.map(c => c.close);
+  let above = 0, tot = 0;
+  secD.filter(Boolean).forEach(d => { const cl = d.candles.map(c => c.close), i = cl.length - 1; const s = trend.sma(cl, 200, i); if (s != null) { tot++; if (cl[i] > s) above++; } });
+  const breadth = tot ? above / tot : 0.5;
+  const regime = macro ? macro.regime : 'neutral';
+  const light = trend.computeClimate(spyCl, breadth, regime);
+  const cands = await scanTrendUniverse([...new Set(UNI_LARGE)], deadline, t0);
+  return { light, regime, breadthPct: Math.round(breadth * 100), cands };
+}
+
+async function runTrend(req, res) {
+  const fe = require('../lib/fade-engine');
+  const t0 = Date.now();
+  const live = await computeTrendLive(t0, 45000);
+  if (!live) return res.status(502).json({ ok: false, error: 'No market data' });
+  const state = fe.load(await readTrendEng());
+  // Concentrate on the very top momentum names (sensitivity test: topfrac 0.20 beat
+  // 0.34/0.50), but keep a 3-per-sector cap for diversification. Then drop names the
+  // learner flagged as drifted.
+  const basket = diversifyBasket(live.cands, 3, 15).map(c => {
+    const p = fe.posterior(state, c.ticker, { sector: c.sector });
+    return { ...c, learnedExcess: p.expAlpha, confidence: p.pPos, nPriors: p.n, drifted: p.drifted };
+  }).filter(c => !c.drifted);                                     // engine drops names that stopped trending well
+  res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=86400');
+  return res.json({
+    ok: true, light: live.light, breadthPct: live.breadthPct, candidates: live.cands.length,
+    basketSize: basket.length, basket: basket.slice(0, 15), holdHorizon: TREND_H,
+    learnerUpdatedAt: state.updatedAt, generatedAt: new Date().toISOString(),
+  });
+}
+
+async function runTrendTick(req, res) {
+  if (!hasStore()) return res.json({ ok: false, error: 'Blob storage not configured.' });
+  const fe = require('../lib/fade-engine');
+  const t0 = Date.now();
+  try {
+  // One-off maintenance: ?prune=YYYY-MM-DD wipes a stale day file.
+  if (req.query.prune && /^\d{4}-\d{2}-\d{2}$/.test(req.query.prune)) {
+    await writeTrendDay(req.query.prune, { light: null, picks: [] });
+    return res.json({ ok: true, pruned: req.query.prune });
+  }
+
+  // 1) Resolve matured logged picks → learn (per-stock trend quality), persist.
+  //    Bounded by a time budget so the heavier scan below still fits in 60s.
+  const days = await readAllTrendDays();
+  const openTk = new Set(); days.forEach(dd => (dd.picks || []).forEach(p => { if (!p.resolved) openTk.add(p.ticker); }));
+  const tk = [...openTk, 'SPY'];
+  const hist = new Map(); let i = 0;
+  const rw = async () => { while (i < tk.length) { if (Date.now() - t0 > 15000) return; const t = tk[i++]; try { const d = await fetchDailyHistory(t); if (d) hist.set(t, d.candles); } catch {} } };
+  await Promise.all(Array.from({ length: 12 }, rw));
+  const spy = hist.get('SPY') || [];
+  const afterN = (cands, date, n) => { const idx = cands.findIndex(c => c.date >= date); if (idx < 0 || idx + n >= cands.length) return null; return { c1: cands[idx + n].close, c0: cands[idx].close, date: cands[idx + n].date }; };
+  const outcomes = []; const changed = new Set(); let resolvedNow = 0;
+  for (const dd of days) {
+    for (const p of (dd.picks || [])) {
+      if (p.resolved) continue;
+      const cands = hist.get(p.ticker); if (!cands) continue;
+      const r = afterN(cands, p.date, TREND_H); if (!r) continue;
+      const sp = afterN(spy, p.date, TREND_H); if (!sp) continue;
+      const fwd = (r.c1 / r.c0 - 1) * 100, sfwd = (sp.c1 / sp.c0 - 1) * 100;
+      p.resolved = true; p.fwdPct = +fwd.toFixed(2); p.excPct = +(fwd - sfwd).toFixed(2); p.exitDate = r.date;
+      outcomes.push({ ticker: p.ticker, alpha: p.excPct, sector: p.sector || SECTOR_OF[p.ticker] || '?', beta: p.beta });
+      changed.add(dd.date); resolvedNow++;
+    }
+  }
+  const state = fe.load(await readTrendEng());
+  if (outcomes.length) fe.update(state, outcomes);
+  await Promise.all([...changed].map(dt => { const dd = days.find(x => x.date === dt); return writeTrendDay(dt, { light: dd.light, picks: dd.picks }); }));
+
+  // 2) Log today's light + basket for future resolution (scan bounded to fit 60s).
+  const live = await computeTrendLive(t0, 45000);
+  let logged = 0, logDate = null, color = null;
+  if (live) {
+    color = live.light.color;
+    const picks = diversifyBasket(live.cands, 3, 15).map(c => ({ ticker: c.ticker, date: c.date, entry: c.price, mom: c.mom, sector: c.sector, resolved: false }));
+    logDate = picks.length ? picks[0].date : new Date().toISOString().slice(0, 10);
+    if (picks.length) { await writeTrendDay(logDate, { light: live.light, picks }); logged = picks.length; }
+  }
+  await writeTrendEng(fe.serialize(state));
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({ ok: true, resolvedNow, loggedToday: logged, logDate, lightToday: color, ...fe.summary(state), elapsedMs: Date.now() - t0 });
+  } catch (e) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: false, error: String(e && e.message || e), elapsedMs: Date.now() - t0 });
+  }
+}
+
+async function runTrendBook(req, res) {
+  const days = await readAllTrendDays();
+  const picks = [];
+  days.forEach(dd => (dd.picks || []).forEach(p => { if (p.resolved && p.excPct != null) picks.push({ ...p, color: (dd.light || {}).color || 'yellow' }); }));
+  const agg = arr => {
+    const n = arr.length; if (!n) return { n: 0 };
+    const beats = arr.filter(p => p.excPct > 0).length, ci = wilson(beats, n);
+    return { n, avgRet: +(arr.reduce((s, p) => s + (p.fwdPct || 0), 0) / n).toFixed(2), avgExc: +(arr.reduce((s, p) => s + p.excPct, 0) / n).toFixed(2), beatRate: +((beats / n) * 100).toFixed(0), wilsonLo: +(ci.lo * 100).toFixed(0) };
+  };
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({
+    ok: true, daysLogged: days.length, resolved: picks.length, stillOpen: days.reduce((a, dd) => a + (dd.picks || []).filter(p => !p.resolved).length, 0),
+    overall: agg(picks),
+    byClimate: { green: agg(picks.filter(p => p.color === 'green')), yellow: agg(picks.filter(p => p.color === 'yellow')), red: agg(picks.filter(p => p.color === 'red')) },
+    note: `Live forward (${TREND_H}-session) track record of logged Trend-Rider picks, split by the traffic light at entry. Green should beat red — the live proof the light discriminates. Accrues via the warm cron; thin until ~${TREND_H} sessions after first tick.`,
+    generatedAt: new Date().toISOString(),
+  });
+}
+
 // ── op=archive : snapshot today's per-ticker mention counts + options ───────
 // THE unrecoverable data capture. Social-mention counts (StockTwits trending)
 // and option-chain snapshots can't be reconstructed historically, so we persist
@@ -1880,6 +2138,10 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'fadesignals') return runFadeSignals(req, res);
   if (req.query.op === 'fadetick') return runFadeTick(req, res);
   if (req.query.op === 'fadebook') return runFadeBook(req, res);
+  if (req.query.op === 'trendopt') return runTrendOpt(req, res);
+  if (req.query.op === 'trend') return runTrend(req, res);
+  if (req.query.op === 'trendtick') return runTrendTick(req, res);
+  if (req.query.op === 'trendbook') return runTrendBook(req, res);
   if (req.query.op === 'archive') return runArchive(req, res);
   if (req.query.op === 'insideringest') return runInsiderIngest(req, res);
   if (req.query.op === 'insider') return runInsider(req, res);

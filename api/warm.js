@@ -98,6 +98,14 @@ module.exports = async function handler(req, res) {
     fadetick = await r.json();
   } catch (e) { fadetick = { error: String(e && e.message || e) }; }
 
+  // Trend Rider: resolve matured picks → learn per-stock trend quality → log
+  // today's light + basket. Self-heals if a slow day skips it.
+  let trendtick = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=trendtick', { headers: { 'x-warm': '1' } });
+    trendtick = await r.json();
+  } catch (e) { trendtick = { error: String(e && e.message || e) }; }
+
   res.setHeader('Cache-Control', 'no-store');
-  return res.json({ ok: true, host: HOST, warmed: out, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, at: new Date().toISOString() });
+  return res.json({ ok: true, host: HOST, warmed: out, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, at: new Date().toISOString() });
 };
