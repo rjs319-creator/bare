@@ -11,6 +11,7 @@
 //   GET /api/tracker?op=fundamentals       → fundamentals coverage snapshot
 //   GET /api/tracker?op=cerntick           → run one CERN daily cycle (warm cron)
 //   GET /api/tracker?op=cern               → CERN engine state for the Events tab
+//   GET /api/tracker?op=cernlockprobe      → read-only lockup-feed liquidity probe
 //   GET /api/tracker?op=drift              → Apex model drift / health (Module 3)
 //   GET /api/tracker?op=recalibrate        → re-optimize pillar weights (Module 2)
 //   GET /api/tracker?op=model              → active model weights / version (for client)
@@ -1552,6 +1553,42 @@ async function runCernFsProbe(req, res) {
   });
 }
 
+// ── op=cernlockprobe : read-only health check for the LOCKUP_EXPIRY feed ───
+// Joins the IPO-lockup calendar with each name's trailing avg daily dollar
+// volume so the liquidity floor (lib/cern-run MIN_LOCKUP_DOLLAR_VOL) can be
+// tuned against real data. Does NOT touch CERN state. ?floor=<usd> to test a cut.
+async function runCernLockProbe(req, res) {
+  const { fetchLockupExpiries } = require('../lib/ipo');
+  res.setHeader('Cache-Control', 'no-store');
+  const floor = Number(req.query.floor) || 3_000_000;
+  let locks = [];
+  try { locks = await fetchLockupExpiries({ nowMs: Date.now() }); } catch (e) {}
+  const rows = [];
+  let i = 0;
+  const worker = async () => {
+    while (i < locks.length) {
+      const l = locks[i++];
+      try {
+        const d = await fetchDailyHistory(l.ticker, '1y');
+        if (!d || d.candles.length < 30) { rows.push({ t: l.ticker, lockupDate: l.lockupDate, advUsdM: null, bars: false }); continue; }
+        const w = d.candles.slice(-40);
+        const adv = w.reduce((s, b) => s + (b.close || 0) * (b.volume || 0), 0) / w.length;
+        rows.push({ t: l.ticker, lockupDate: l.lockupDate, advUsdM: +(adv / 1e6).toFixed(2), bars: true });
+      } catch { rows.push({ t: l.ticker, lockupDate: l.lockupDate, advUsdM: null, bars: false }); }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(12, locks.length) }, worker));
+  rows.sort((a, b) => (b.advUsdM || 0) - (a.advUsdM || 0));
+  const withBars = rows.filter(r => r.bars);
+  const countsByFloor = {};
+  for (const f of [1, 3, 5, 10]) countsByFloor['ge_' + f + 'M'] = withBars.filter(r => r.advUsdM >= f).length;
+  return res.json({
+    ok: true, found: locks.length, withBars: withBars.length,
+    floorUsd: floor, passFloor: withBars.filter(r => r.advUsdM * 1e6 >= floor).length,
+    countsByFloor, rows,
+  });
+}
+
 // ── op=drift : resolve outcomes + live-vs-baseline health (Module 3) ───────
 // Resolution runs against each signal's OWN logged stop/target (lib/outcome),
 // so the ledger measures the strategy you'd actually trade — not a fixed barrier.
@@ -2150,6 +2187,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'cerntick') return runCernTickOp(req, res);
   if (req.query.op === 'cern') return runCern(req, res);
   if (req.query.op === 'cernfsprobe') return runCernFsProbe(req, res);
+  if (req.query.op === 'cernlockprobe') return runCernLockProbe(req, res);
   if (req.query.op === 'drift') return runDrift(req, res);
   if (req.query.op === 'recalibrate') return runRecalibrate(req, res);
   if (req.query.op === 'backfill') return runBackfillOp(req, res);
