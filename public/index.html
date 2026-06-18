@@ -1608,6 +1608,33 @@
       .mom-col-head { font-size: 0.86rem; padding: 11px 13px; }
       .scr-tune-toggle { padding: 12px 14px; }
     }
+
+    /* Overheated (fade) tab */
+    .fade-head { margin-bottom: 14px; }
+    .fade-regime { font-size: 0.82rem; color: var(--text-dim); margin-bottom: 4px; }
+    .fade-tagline { font-size: 0.92rem; line-height: 1.5; color: var(--text); }
+    .fade-track { background: linear-gradient(135deg, #ff6b4a14, #ff6b4a06); border: 1px solid #ff6b4a44; border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; }
+    .fade-track-pending { background: var(--surface); border-color: var(--border); }
+    .fade-track-big { font-size: 1.9rem; font-weight: 700; color: #ff7a5c; line-height: 1.1; }
+    .fade-track-big span { display: block; font-size: 0.8rem; font-weight: 500; color: var(--text-dim); margin-top: 3px; }
+    .fade-track-pending .fade-track-big { font-size: 1.15rem; color: var(--text); }
+    .fade-track-sub { font-size: 0.78rem; color: var(--text-dim); margin-top: 8px; line-height: 1.5; }
+    .fade-list { display: grid; gap: 10px; margin-bottom: 18px; }
+    .fade-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 13px 15px; }
+    .fade-card-top { display: flex; gap: 14px; align-items: flex-start; }
+    .fade-score { flex: 0 0 auto; width: 52px; height: 52px; border-radius: 11px; background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--c); border: 1px solid color-mix(in srgb, var(--c) 45%, transparent); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 1.25rem; font-weight: 700; }
+    .fade-score span { font-size: 0.5rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.85; }
+    .fade-id { flex: 1; min-width: 0; }
+    .fade-tk { font-size: 0.98rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .fade-sec { font-size: 0.7rem; color: var(--text-dim); }
+    .fade-badge { font-size: 0.62rem; font-weight: 700; padding: 2px 7px; border-radius: 20px; letter-spacing: 0.03em; }
+    .fade-thesis { font-size: 0.8rem; color: var(--text-dim); margin-top: 4px; line-height: 1.45; }
+    .fade-card-stats { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border); font-size: 0.74rem; color: var(--text-dim); }
+    .fade-adv { margin-left: auto; }
+    .fade-adv summary { cursor: pointer; color: var(--accent, #7c5cff); font-size: 0.72rem; list-style: none; }
+    .fade-adv summary::-webkit-details-marker { display: none; }
+    .fade-adv-body { font-size: 0.72rem; color: var(--text-dim); line-height: 1.5; margin-top: 6px; max-width: 460px; }
+    .fade-caveats { font-size: 0.74rem; color: var(--text-dim); line-height: 1.6; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 13px 15px; }
   </style>
 </head>
 <body>
@@ -1627,6 +1654,7 @@
     <a class="nav-link" href="#ghost" data-tab="ghost">Ghost Accumulation</a>
     <a class="nav-link" href="#events" data-tab="events">Events (CERN)</a>
     <a class="nav-link" href="#edge" data-tab="edge">Edge Book</a>
+    <a class="nav-link" href="#fade" data-tab="fade">Overheated</a>
     <a class="nav-link" href="#xalerts" data-tab="xalerts">Trade Alerts</a>
     <a class="nav-link" href="#scoreboard" data-tab="scoreboard">Scoreboard</a>
     <a class="nav-link" href="#momentum" data-tab="momentum">Alerts</a>
@@ -1653,6 +1681,7 @@
   <a class="mtt-item" href="#ghost" data-tab="ghost"><span class="mtt-ic">👻</span>Ghost</a>
   <a class="mtt-item" href="#events" data-tab="events"><span class="mtt-ic">⚡</span>Events</a>
   <a class="mtt-item" href="#edge" data-tab="edge"><span class="mtt-ic">📓</span>Edge Book</a>
+  <a class="mtt-item" href="#fade" data-tab="fade"><span class="mtt-ic">🔥</span>Overheated</a>
   <a class="mtt-item" href="#xalerts" data-tab="xalerts"><span class="mtt-ic">🐦</span>Alerts+</a>
   <a class="mtt-item" href="#scoreboard" data-tab="scoreboard"><span class="mtt-ic">🏆</span>Scoreboard</a>
   <a class="mtt-item" href="#momentum" data-tab="momentum"><span class="mtt-ic">🔥</span>Alerts</a>
@@ -1943,6 +1972,22 @@
     </div>
     <div id="edge-container">
       <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load the Edge Book…</p></div>
+    </div>
+  </section>
+
+  <!-- OVERHEATED (self-improving inverted-V fade engine) -->
+  <section class="screener-section" id="fade">
+    <div class="section-label">
+      <div class="accent-bar" style="background:#ff6b4a"></div>
+      <h2 style="color:#ff6b4a">🔥 Overheated</h2>
+      <span class="label-meta" id="fade-meta">· names that spiked and are rolling over — avoid chasing / consider trimming</span>
+      <div class="label-action">
+        <span class="lbl-time" id="fade-gen-time"></span>
+        <button class="refresh-btn" style="color:#ff6b4a" id="fade-refresh-btn">⟳ Refresh</button>
+      </div>
+    </div>
+    <div id="fade-container">
+      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load Overheated names…</p></div>
     </div>
   </section>
 
@@ -2328,6 +2373,7 @@
     <a class="mbn-item" href="#ghost" data-tab="ghost"><span class="mbn-icon">👻</span><span class="mbn-label">Ghost</span></a>
     <a class="mbn-item" href="#events" data-tab="events"><span class="mbn-icon">⚡</span><span class="mbn-label">Events</span></a>
     <a class="mbn-item" href="#edge" data-tab="edge"><span class="mbn-icon">📓</span><span class="mbn-label">Edge</span></a>
+    <a class="mbn-item" href="#fade" data-tab="fade"><span class="mbn-icon">🔥</span><span class="mbn-label">Overheated</span></a>
     <a class="mbn-item" href="#xalerts" data-tab="xalerts"><span class="mbn-icon">🐦</span><span class="mbn-label">Alerts+</span></a>
     <a class="mbn-item" href="#scoreboard" data-tab="scoreboard"><span class="mbn-icon">🏆</span><span class="mbn-label">Score</span></a>
     <a class="mbn-item" href="#momentum" data-tab="momentum"><span class="mbn-icon">🔥</span><span class="mbn-label">Alerts</span></a>
@@ -2347,6 +2393,7 @@
     ghost:    ['ghost'],
     events:   ['events'],
     edge:     ['edge'],
+    fade:     ['fade'],
     xalerts:  ['xalerts'],
     scoreboard: ['scoreboard'],
     momentum: ['momentum'],
@@ -2402,6 +2449,7 @@
     if (sub === 'ghost' && typeof ensureGhost === 'function') ensureGhost();
     if (sub === 'events' && typeof ensureCern === 'function') ensureCern();
     if (sub === 'edge' && typeof ensureEdge === 'function') ensureEdge();
+    if (sub === 'fade' && typeof ensureFade === 'function') ensureFade();
     if (sub === 'xalerts' && typeof ensureXalerts === 'function') ensureXalerts();
 
     const act = document.querySelector('.mobile-top-tabs .mtt-item.active');
@@ -4968,6 +5016,109 @@
   }
 
   document.getElementById('edge-refresh-btn')?.addEventListener('click', runEdge);
+
+  // ── Overheated (self-improving inverted-V fade engine) ──────────────────────
+  // Novice-first: the engine flags names that spiked then started rolling over and,
+  // from its own learned per-stock history, expects to LAG the market over ~1 month.
+  // Primary action is AVOID / TRIM (no shorting needed); advanced short details are
+  // tucked behind a toggle. The live track record leads, because that's the trust.
+  let fadeLoaded = false;
+  function ensureFade() { if (!fadeLoaded) { fadeLoaded = true; runFade(); } }
+
+  async function runFade() {
+    const el = document.getElementById('fade-container');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading Overheated names…</p></div>`;
+    try {
+      const [sig, book] = await Promise.all([
+        fetch('/api/tracker?op=fadesignals&scope=large').then(r => r.json()).catch(() => null),
+        fetch('/api/tracker?op=fadebook').then(r => r.json()).catch(() => null),
+      ]);
+      renderFade(sig, book);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Overheated names.</p></div>`; }
+  }
+
+  const FADE_REGIME = {
+    'risk-on': ['Risk-On', 'var(--green)'], neutral: ['Neutral', 'var(--amber)'],
+    'risk-off': ['Risk-Off', 'var(--red)'], unknown: ['—', 'var(--text-dim)'],
+  };
+  const coolOffScore = r => Math.max(0, Math.min(100, Math.round(38 + (r.expAlpha || 0) * 14)));
+  const coolColor = s => (s >= 75 ? '#ff4a4a' : s >= 58 ? '#ff8a3a' : 'var(--amber)');
+
+  function renderFade(sig, book) {
+    const el = document.getElementById('fade-container');
+    if (!el) return;
+    if (!sig || !sig.ok) { el.innerHTML = `<div class="mom-status error"><p>Overheated engine unavailable.</p></div>`; return; }
+    if (sig.seeded === false) { el.innerHTML = `<div class="mom-status"><p>The engine is not seeded yet. (Admin: run <code>op=fadeseed</code>.)</p></div>`; return; }
+
+    const [rLabel, rColor] = FADE_REGIME[sig.regime] || FADE_REGIME.unknown;
+    const gated = sig.regime === 'risk-off';
+
+    // --- Live track record (the trust): lead with it. ---
+    const resolved = book && book.resolved || 0;
+    let trackHtml;
+    if (book && resolved >= 10) {
+      const o = book.overall || {};
+      const act = book.actionableOnly || {};
+      trackHtml = `<div class="fade-track">
+        <div class="fade-track-big">${o.beatRate}%<span>of flagged names underperformed the market</span></div>
+        <div class="fade-track-sub">over the next ~${sig.holdSessions} trading days · avg ${o.avgAlpha > 0 ? '+' : ''}${o.avgAlpha}% vs market · ${resolved} resolved (${book.stillOpen} still open)
+        ${act.n ? ` · the engine's top-rated picks: ${act.beatRate}% (LB ${act.wilsonLo}%)` : ''}</div></div>`;
+    } else {
+      trackHtml = `<div class="fade-track fade-track-pending">
+        <div class="fade-track-big">Building track record…<span>live results accrue automatically</span></div>
+        <div class="fade-track-sub">${book ? `${book.stillOpen || 0} picks logged, ${resolved} resolved so far.` : ''} Each flagged name is scored ~${sig.holdSessions} trading days later. Until then, expectations below come from back-testing (see caveat).</div></div>`;
+    }
+
+    // --- The Avoid/Trim list ---
+    const picks = (sig.recommendations || []).filter(r => (r.action === 'SHORT' || r.action === 'SHORT_LIGHT') && r.geomFavorable).slice(0, 20);
+    const cards = picks.map(r => {
+      const s = coolOffScore(r);
+      const g = r.geometry || {}; const ref = r.refLevels || {};
+      const thesis = `Ran up ${g.risePct != null ? '~' + Math.round(g.risePct) + '%' : 'sharply'} into a peak, now rolling over${g.dropOffHighPct != null ? ` (−${Math.round(g.dropOffHighPct)}% off the high)` : ''}.`;
+      const exp = r.netExpAlpha != null ? `${r.netExpAlpha > 0 ? '+' : ''}${r.netExpAlpha}%` : '—';
+      const strong = r.action === 'SHORT';
+      return `<div class="fade-card">
+        <div class="fade-card-top">
+          <div class="fade-score" style="--c:${coolColor(s)}">${s}<span>cool-off</span></div>
+          <div class="fade-id">
+            <div class="fade-tk"><b>${esc(r.ticker)}</b> <span class="fade-sec">${esc(r.sector || '')}</span>
+              <span class="fade-badge" style="background:${strong ? '#ff4a4a22' : '#ff8a3a22'};color:${strong ? '#ff6b6b' : '#ffa256'}">${strong ? 'AVOID / TRIM' : 'CAUTION'}</span></div>
+            <div class="fade-thesis">${thesis}</div>
+          </div>
+        </div>
+        <div class="fade-card-stats">
+          <span title="Historical avg market-lag for this name, net of costs">hist. lag ${exp}</span>
+          <span title="Engine confidence the edge is positive">confidence ${Math.round((r.conviction || 0) * 100)}%</span>
+          <span title="Times this name has set up before">${r.n || 0} priors</span>
+          <details class="fade-adv"><summary>advanced ▸ short trade</summary>
+            <div class="fade-adv-body">Short ${esc(r.ticker)} @ ~${ref.entry ?? '—'}, market-neutral vs SPY, hold ~${sig.holdSessions} sessions. Suggested weight ${r.sizePct}%. Reference stop ${ref.stop ?? '—'} / target ${ref.target ?? '—'} (the validated trade is the timed hold — don't manage the stop tightly).</div>
+          </details>
+        </div>
+      </div>`;
+    }).join('');
+
+    el.innerHTML = `
+      <div class="fade-head">
+        <div class="fade-regime">Market regime: <b style="color:${rColor}">${rLabel}</b></div>
+        <div class="fade-tagline">${gated
+          ? '⛔ Risk-off — the engine stands down. Fading overheated names does NOT work in risk-off, so no signals today.'
+          : `These names look <b>overheated</b> and historically lag the market over the next ~${sig.holdSessions} trading days. Simplest use: <b>don’t chase them</b>, and consider <b>trimming</b> if you hold them.`}</div>
+      </div>
+      ${trackHtml}
+      ${gated ? '' : `<div class="fade-list">${cards || '<div class="mom-status"><p>No overheated names clearing the bar right now.</p></div>'}</div>`}
+      <div class="fade-caveats">
+        <b>How to read this.</b> A high <b>cool-off score</b> means the engine, from this stock’s own past, expects it to lag the market over the next month. <b>Confidence</b> is how sure it is the edge is real. The engine <b>learns continuously</b> — names whose tops stop reverting are dropped automatically.
+        <br><b>Honest caveats.</b> The edge is real but <b>modest</b> (~+1%/month market-neutral on the top names, net of costs) and only works in <b>risk-on/neutral</b> markets. The "hist. lag" figures are back-tested averages and run optimistic — the <b>live track record above</b> is the number to trust as it fills in. This is research, not financial advice.
+      </div>`;
+
+    const meta = document.getElementById('fade-meta');
+    if (meta) meta.textContent = gated ? '· risk-off — engine standing down' : `· ${picks.length} overheated names · ${sig.actionable} actionable`;
+    const gt = document.getElementById('fade-gen-time');
+    if (gt && sig.generatedAt) gt.textContent = new Date(sig.generatedAt).toLocaleTimeString();
+  }
+
+  document.getElementById('fade-refresh-btn')?.addEventListener('click', runFade);
 
   // ── Trade Alerts (social, ranked by the external-collector pipeline) ──
   let xalertsLoaded = false;

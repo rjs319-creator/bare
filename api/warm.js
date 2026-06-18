@@ -89,6 +89,15 @@ module.exports = async function handler(req, res) {
     alertsgrade = await r.json();
   } catch (e) { alertsgrade = { error: String(e && e.message || e) }; }
 
+  // Self-improving fade engine: resolve matured logged shorts → update per-stock
+  // posteriors → log today's setups. Last (candle data is CDN-warm by now); a
+  // skipped slow day self-heals next run (it re-resolves all still-open signals).
+  let fadetick = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=fadetick', { headers: { 'x-warm': '1' } });
+    fadetick = await r.json();
+  } catch (e) { fadetick = { error: String(e && e.message || e) }; }
+
   res.setHeader('Cache-Control', 'no-store');
-  return res.json({ ok: true, host: HOST, warmed: out, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, at: new Date().toISOString() });
+  return res.json({ ok: true, host: HOST, warmed: out, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, at: new Date().toISOString() });
 };

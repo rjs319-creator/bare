@@ -18,14 +18,16 @@
 const { fetchOptionsBaseline } = require('../lib/options-baseline');
 const { fetchQuarterlySeries } = require('../lib/earnings');
 const { CERN } = require('../lib/cern');
-const { LARGE: UNI_LARGE, SMALL_CAPS: UNI_SMALL, MICRO_CAPS: UNI_MICRO } = require('../lib/universe');
+const { LARGE: UNI_LARGE, SMALL_CAPS: UNI_SMALL, MICRO_CAPS: UNI_MICRO, SECTOR_OF } = require('../lib/universe');
 const { writeDay, readAllPicks, hasStore, writeApexDay, readAllApex, writeGhostDay, readAllGhost, writeArchiveDay,
         readModel, writeModel, readNarrative, writeNarrative, readBackfill, writeBackfill,
         readResolved, writeResolved, readExits, writeExits, readLongShort, writeLongShort, readPead, writePead,
         readInsider, writeInsider, readFundamentals, writeFundShard, readCern, writeCern,
         writeEdgeDay, readAllEdge,
+        readFade, writeFade, writeFadeDay, readAllFade, readAllFadeDays,
         readJSON, writeJSON } = require('../lib/store');
 const { fetchDailyHistory } = require('../lib/screener');
+const { analyzeVReversal } = require('../lib/vreversal');
 const alerts = require('../lib/alerts');
 const apex = require('../lib/apex');
 const { recalibrate } = require('../lib/recalibrate');
@@ -419,6 +421,638 @@ async function runEdgeBook(req, res) {
     crossSleeve: { pairedDates: common.length, correlation,
       note: common.length >= 8 ? 'Pearson corr of daily mean excess — the overlay thesis wants this ~0 (uncorrelated streams diversify).' : 'Need ≥8 dates where BOTH sleeves traded — still accruing.' },
     generatedAt: new Date().toISOString() });
+}
+
+// ── op=vreversal : live scan for V-shaped reversals (tiered + buy/sell levels) ─
+// Scans the universe (default all scopes), runs the pure detector on each name's
+// daily candles, returns tiered candidates (CONFIRMED/EMERGING/WATCH) with entry,
+// stop, target and R:R. Time-boxed; cached behind the CDN like the screener.
+async function runVReversal(req, res) {
+  const scope = (req.query.scope || 'all').toLowerCase();
+  const lists = scope === 'large' ? UNI_LARGE : scope === 'small' ? UNI_SMALL : scope === 'micro' ? UNI_MICRO
+    : [...UNI_LARGE, ...UNI_SMALL, ...UNI_MICRO];
+  const tickers = [...new Set(lists)];
+  const t0 = Date.now(), deadline = 50000;
+  const out = []; let i = 0;
+  const worker = async () => {
+    while (i < tickers.length) {
+      const t = tickers[i++]; if (Date.now() - t0 > deadline) return;
+      try {
+        const d = await fetchDailyHistory(t);
+        if (d && d.candles.length >= 80) {
+          const v = analyzeVReversal(d.candles);
+          if (v) { v.ticker = t; v.price = +lastClose(d.candles).toFixed(2); out.push(v); }
+        }
+      } catch { /* skip */ }
+    }
+  };
+  await Promise.all(Array.from({ length: 18 }, worker));
+  const RANK = { CONFIRMED: 3, EMERGING: 2, WATCH: 1 };
+  out.sort((a, b) => (RANK[b.tier] - RANK[a.tier]) || (b.score - a.score));
+  res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=86400');
+  return res.json({
+    ok: true, scope, scanned: tickers.length, found: out.length,
+    tiers: { CONFIRMED: out.filter(x => x.tier === 'CONFIRMED').length, EMERGING: out.filter(x => x.tier === 'EMERGING').length, WATCH: out.filter(x => x.tier === 'WATCH').length },
+    results: out.slice(0, 80), elapsedMs: Date.now() - t0, generatedAt: new Date().toISOString(),
+  });
+}
+const lastClose = candles => candles[candles.length - 1].close;
+
+// ── op=vreversaltest : does the V-reversal pattern actually have edge? ───────
+// Replays the SAME detector over history; whenever a V fires, records the
+// forward H-day return and the excess vs SPY, aggregated by tier. ≥10-bar dedup
+// so one ongoing V isn't counted every day.
+//
+// The long side LOSES (falling-knife), so the live question is the FADE: short
+// the snapback (market-neutral vs SPY). On a 2y window that fade shows alpha —
+// but the whole edge-hunt has been burned 3× by risk-on-window artifacts, so
+// this defaults to range=5y and SPLITS THE FADE BY MACRO REGIME. A fade that is
+// real (not a bull-market beta accident) must keep alpha — beatsMkt Wilson LB
+// > 50% — in NEUTRAL and RISK-OFF too, not only risk-on.
+async function runVReversalTest(req, res) {
+  const scope = (req.query.scope || 'large').toLowerCase();
+  const limit = Math.max(0, parseInt(req.query.limit, 10) || 120);
+  const H = Math.max(5, parseInt(req.query.h, 10) || 21);
+  const range = /^(1y|2y|5y|10y|max)$/.test(req.query.range || '') ? req.query.range : '5y';
+  // pattern: 'v' (bottom; long-side, fade=short), 'invertedv' (top; short IS the
+  // primary trade — read the `fade` block), 'sweep' (bullish liquidity sweep; long
+  // primary), 'sweepshort' (bearish liquidity sweep; the short = `fade` block).
+  const p = (req.query.pattern || '').toLowerCase();
+  const KNOWN = ['invertedv', 'sweep', 'sweepshort', 'donchian', 'rsi2', 'pullback'];
+  const pattern = p === 'top' ? 'invertedv' : p === 'sweeptop' ? 'sweepshort' : KNOWN.includes(p) ? p : 'v';
+  const { analyzeInvertedV, analyzeLiquiditySweep } = require('../lib/vreversal');
+  const { donchianBreakout, rsi2Reversion, maPullback } = require('../lib/techstrats');
+  const DETECTORS = {
+    v: analyzeVReversal,
+    invertedv: analyzeInvertedV,
+    sweep: c => analyzeLiquiditySweep(c, { dir: 1 }),
+    sweepshort: c => analyzeLiquiditySweep(c, { dir: -1 }),
+    donchian: donchianBreakout,
+    rsi2: rsi2Reversion,
+    pullback: maPullback,
+  };
+  const detect = DETECTORS[pattern];
+  const lists = scope === 'small' ? UNI_SMALL : scope === 'micro' ? UNI_MICRO : UNI_LARGE;
+  let tickers = [...new Set(lists)]; if (limit > 0) tickers = tickers.slice(0, limit);
+
+  const { buildMacroLookup } = require('../lib/macro');
+  const [spyD, macro] = await Promise.all([
+    fetchDailyHistory('SPY', range),
+    buildMacroLookup(range).catch(() => null),
+  ]);
+  const spyClose = {};
+  if (spyD) spyD.candles.forEach(c => { spyClose[c.date] = c.close; });
+  const regimeAt = date => (macro ? (macro.at(date) || {}).regime || 'unknown' : 'unknown');
+
+  const t0 = Date.now(), deadline = 50000;
+  const blank = () => ({ CONFIRMED: [], EMERGING: [], WATCH: [] });
+  const byTier = blank();
+  const byRegime = { 'risk-on': blank(), neutral: blank(), 'risk-off': blank(), unknown: blank() };
+  let i = 0, signals = 0;
+  const worker = async () => {
+    while (i < tickers.length) {
+      const t = tickers[i++]; if (Date.now() - t0 > deadline) return;
+      let d; try { d = await fetchDailyHistory(t, range); } catch { continue; }
+      if (!d || d.candles.length < 120) continue;
+      const c = d.candles; let lastSig = -99;
+      for (let k = 80; k < c.length - H; k++) {
+        if (k - lastSig < 10) continue;                          // dedup overlapping signals
+        const v = detect(c.slice(0, k + 1)); if (!v) continue;
+        lastSig = k;
+        const entry = c[k].close, fwd = ((c[k + H].close - entry) / entry) * 100;
+        let exc = null;
+        if (spyClose[c[k].date] != null && spyClose[c[k + H].date] != null) {
+          const sret = ((spyClose[c[k + H].date] - spyClose[c[k].date]) / spyClose[c[k].date]) * 100;
+          exc = fwd - sret;
+        }
+        if (!byTier[v.tier]) continue;
+        const rec = { fwd, exc };
+        byTier[v.tier].push(rec);
+        byRegime[regimeAt(c[k].date)][v.tier].push(rec);
+        signals++;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 16 }, worker));
+
+  const avg = a => (a.length ? a.reduce((s, b) => s + b, 0) / a.length : null);
+  const summ = arr => {
+    const n = arr.length; if (!n) return { n: 0 };
+    const fwd = arr.map(x => x.fwd), exc = arr.filter(x => x.exc != null).map(x => x.exc);
+    const win = fwd.filter(x => x > 0).length;
+    const longBeat = exc.filter(x => x > 0).length, longCi = exc.length ? wilson(longBeat, exc.length) : { lo: 0 };
+    // FADE = short the signal (vs long SPY). Wins when the stock UNDERperforms SPY.
+    const fadeBeat = exc.filter(x => x < 0).length, fadeCi = exc.length ? wilson(fadeBeat, exc.length) : { lo: 0 };
+    const nakedShortWin = fwd.filter(x => x < 0).length;
+    return {
+      n,
+      long: {
+        winRate: +((win / n) * 100).toFixed(0), avgFwd: +avg(fwd).toFixed(2),
+        beatSpyRate: exc.length ? +((longBeat / exc.length) * 100).toFixed(0) : null, wilsonLo: +(longCi.lo * 100).toFixed(0),
+        avgExcessVsSpy: exc.length ? +avg(exc).toFixed(2) : null,
+      },
+      fade: {
+        beatsMktRate: exc.length ? +((fadeBeat / exc.length) * 100).toFixed(0) : null, wilsonLo: +(fadeCi.lo * 100).toFixed(0),
+        alpha: exc.length ? +(-avg(exc)).toFixed(2) : null,           // market-neutral: short stock + long SPY
+        nakedShortAvg: +(-avg(fwd)).toFixed(2), nakedShortWinRate: +((nakedShortWin / n) * 100).toFixed(0),
+      },
+    };
+  };
+  const tierSet = obj => ({ CONFIRMED: summ(obj.CONFIRMED), EMERGING: summ(obj.EMERGING), WATCH: summ(obj.WATCH) });
+
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({
+    ok: true, scope, range, pattern, horizonDays: H, namesScanned: tickers.length, totalSignals: signals,
+    primaryTrade: (pattern === 'invertedv' || pattern === 'sweepshort')
+      ? 'fade block = the primary SHORT (short stock vs long SPY)'
+      : 'long block = the primary trade (buy); fade = short it',
+    macroAvailable: !!macro,
+    byTier: tierSet(byTier),
+    byRegime: {
+      'risk-on': tierSet(byRegime['risk-on']),
+      neutral: tierSet(byRegime.neutral),
+      'risk-off': tierSet(byRegime['risk-off']),
+    },
+    note: 'Per tier: LONG = buying the V (loses); FADE = shorting it vs long SPY. fade.beatsMktRate Wilson LB > 50% = real relative edge. byRegime splits the SAME signals by the as-of macro regime — a durable fade must keep fade.wilsonLo > 50% in NEUTRAL and RISK-OFF, not only risk-on (the artifact that killed exits/PEAD/conviction). fade.nakedShortAvg = naked short P&L (negative in bull tape even with alpha).',
+    elapsedMs: Date.now() - t0, generatedAt: new Date().toISOString(),
+  });
+}
+
+// ── op=fadeopt : can the inverted-V SHORT be made to actually work? ─────────
+// Honest optimization of the fade: (A) does signal "stretch" (how extreme the top
+// is) predict bigger fade wins, and (B) does PER-STOCK selection generalize OUT
+// OF SAMPLE? Stock selection is tested with a PURGED train/test split + Bayesian
+// shrinkage of each stock's train hit-rate toward the global prior (so we don't
+// just chase in-sample winners). Regime-gated to risk-on/neutral throughout (the
+// proven lever). beatMkt for a SHORT = the stock UNDERperforms SPY (exc < 0).
+async function runFadeOpt(req, res) {
+  const scope = (req.query.scope || 'large').toLowerCase();
+  const limit = Math.max(0, parseInt(req.query.limit, 10) || 120);
+  const H = Math.max(5, parseInt(req.query.h, 10) || 21);
+  const range = /^(2y|5y|10y|max)$/.test(req.query.range || '') ? req.query.range : '5y';
+  const trainFrac = Math.min(0.8, Math.max(0.4, parseFloat(req.query.trainfrac) || 0.6));
+  const minTrainN = Math.max(3, parseInt(req.query.mintrain, 10) || 8);
+  const priorK = Math.max(1, parseInt(req.query.priork, 10) || 20);   // shrinkage strength (pseudo-obs)
+  const selThresh = Math.min(0.7, Math.max(0.5, parseFloat(req.query.sel) || 0.52));
+  const lists = scope === 'small' ? UNI_SMALL : scope === 'micro' ? UNI_MICRO : UNI_LARGE;
+  let tickers = [...new Set(lists)]; if (limit > 0) tickers = tickers.slice(0, limit);
+
+  const { analyzeInvertedV } = require('../lib/vreversal');
+  const { buildMacroLookup } = require('../lib/macro');
+  const [spyD, macro] = await Promise.all([fetchDailyHistory('SPY', range), buildMacroLookup(range).catch(() => null)]);
+  const spyClose = {}; const spyDates = [];
+  if (spyD) spyD.candles.forEach(c => { spyClose[c.date] = c.close; spyDates.push(c.date); });
+  spyDates.sort();
+  const datePos = {}; spyDates.forEach((d, i) => { datePos[d] = i; });
+  const regimeAt = date => (macro ? (macro.at(date) || {}).regime || 'unknown' : 'unknown');
+
+  // Trailing point-in-time beta of a stock vs SPY over the W bars ending at k
+  // (returns aligned by date; no lookahead). Used to BETA-NEUTRALIZE the excess so
+  // we separate genuine reversion alpha from a short-low-beta factor tilt.
+  const betaAt = (c, k, W = 252) => {
+    const lo = Math.max(1, k - W + 1); const sr = [], mr = [];
+    for (let j = lo; j <= k; j++) {
+      const sp = spyClose[c[j].date], sp1 = spyClose[c[j - 1].date]; if (sp == null || sp1 == null) continue;
+      sr.push(c[j].close / c[j - 1].close - 1); mr.push(sp / sp1 - 1);
+    }
+    const n = sr.length; if (n < 30) return 1;
+    const mm = mr.reduce((a, x) => a + x, 0) / n, ms = sr.reduce((a, x) => a + x, 0) / n;
+    let cov = 0, varm = 0; for (let j = 0; j < n; j++) { cov += (sr[j] - ms) * (mr[j] - mm); varm += (mr[j] - mm) ** 2; }
+    return varm > 0 ? cov / varm : 1;
+  };
+
+  const t0 = Date.now(), deadline = 50000;
+  const sigs = []; let i = 0;
+  const worker = async () => {
+    while (i < tickers.length) {
+      const t = tickers[i++]; if (Date.now() - t0 > deadline) return;
+      let d; try { d = await fetchDailyHistory(t, range); } catch { continue; }
+      if (!d || d.candles.length < 120) continue;
+      const c = d.candles; let lastSig = -99;
+      for (let k = 80; k < c.length - H; k++) {
+        if (k - lastSig < 10) continue;
+        const v = analyzeInvertedV(c.slice(0, k + 1)); if (!v) continue;
+        lastSig = k;
+        const date = c[k].date;
+        if (spyClose[date] == null || spyClose[c[k + H].date] == null) continue;
+        const fwd = ((c[k + H].close - c[k].close) / c[k].close) * 100;
+        const sret = ((spyClose[c[k + H].date] - spyClose[date]) / spyClose[date]) * 100;
+        const exc = fwd - sret;                       // raw vs SPY (1:1 — NOT beta-neutral)
+        const beta = betaAt(c, k);
+        const excB = fwd - beta * sret;               // beta-neutral residual alpha
+        const g = v.geometry;
+        sigs.push({
+          t, date, regime: regimeAt(date), beta: +beta.toFixed(2),
+          exc, beat: exc < 0 ? 1 : 0, shortAlpha: -exc,
+          excB, beatB: excB < 0 ? 1 : 0, shortAlphaB: -excB,
+          rsiPivot: g.rsiAtPivot, rise: g.risePct, vSharp: g.vSharpness, dropOff: g.dropOffHighPct, score: v.score,
+        });
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 16 }, worker));
+
+  const mean = a => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0);
+  const sd = a => { if (a.length < 2) return 1; const m = mean(a); return Math.sqrt(mean(a.map(x => (x - m) ** 2))) || 1; };
+  // beatKey/alphaKey let us score the SAME signals raw ('beat'/'shortAlpha') or
+  // beta-neutral ('beatB'/'shortAlphaB').
+  const beatStats = (arr, beatKey = 'beat', alphaKey = 'shortAlpha') => {
+    const n = arr.length; if (!n) return { n: 0 };
+    const b = arr.reduce((s, x) => s + x[beatKey], 0); const ci = wilson(b, n);
+    return { n, beatRate: +((b / n) * 100).toFixed(0), wilsonLo: +(ci.lo * 100).toFixed(0), alpha: +mean(arr.map(x => x[alphaKey])).toFixed(2) };
+  };
+  const bothStats = arr => ({ raw: beatStats(arr, 'beat', 'shortAlpha'), betaNeutral: beatStats(arr, 'beatB', 'shortAlphaB'), avgBeta: +mean(arr.map(x => x.beta)).toFixed(2) });
+  const byRegimeStats = (arr, bk = 'beat', ak = 'shortAlpha') => ({
+    'risk-on': beatStats(arr.filter(x => x.regime === 'risk-on'), bk, ak),
+    neutral: beatStats(arr.filter(x => x.regime === 'neutral'), bk, ak),
+    'risk-off': beatStats(arr.filter(x => x.regime === 'risk-off'), bk, ak),
+  });
+
+  // GATE: the proven lever — only fade tops in risk-on/neutral.
+  const gated = sigs.filter(s => s.regime === 'risk-on' || s.regime === 'neutral');
+
+  // (A) SIGNAL-FEATURE SELECTION — does a more extreme top fade harder?
+  // Composite "stretch" z-score: hotter RSI at the peak, steeper run-up, sharper
+  // rollover, deeper drop already = a more exhausted blow-off.
+  const feat = ['rsiPivot', 'rise', 'vSharp', 'dropOff'];
+  const stats = {}; feat.forEach(f => { const a = gated.map(s => s[f]); stats[f] = { m: mean(a), s: sd(a) }; });
+  gated.forEach(s => { s.stretch = feat.reduce((z, f) => z + (s[f] - stats[f].m) / stats[f].s, 0); });
+  const tercile = (arr, key) => {
+    const sorted = [...arr].sort((a, b) => a[key] - b[key]); const n = sorted.length;
+    return {
+      low: beatStats(sorted.slice(0, Math.floor(n / 3))),
+      mid: beatStats(sorted.slice(Math.floor(n / 3), Math.floor(2 * n / 3))),
+      high: beatStats(sorted.slice(Math.floor(2 * n / 3))),
+    };
+  };
+
+  // (B) PER-STOCK OOS SELECTION with purge + shrinkage.
+  const splitPos = Math.floor(trainFrac * spyDates.length);
+  const splitDate = spyDates[splitPos] || spyDates[spyDates.length - 1];
+  const purgeDate = spyDates[Math.max(0, splitPos - H)] || splitDate;       // train must end H bars before test
+  const train = gated.filter(s => s.date < purgeDate);
+  const test = gated.filter(s => s.date >= splitDate);
+  const p0 = train.length ? mean(train.map(s => s.beat)) : 0.5;             // global prior beat-prob
+  const a0 = p0 * priorK, b0 = (1 - p0) * priorK;
+  const perStock = {};
+  train.forEach(s => { (perStock[s.t] = perStock[s.t] || { n: 0, b: 0 }).n++; perStock[s.t].b += s.beat; });
+  const selected = new Set();
+  const stockTable = [];
+  Object.entries(perStock).forEach(([t, v]) => {
+    const post = (v.b + a0) / (v.n + a0 + b0);
+    const keep = v.n >= minTrainN && post > selThresh;
+    if (keep) selected.add(t);
+    stockTable.push({ t, trainN: v.n, trainBeat: +((v.b / v.n) * 100).toFixed(0), postMean: +(post * 100).toFixed(0), selected: keep });
+  });
+  const testSelected = test.filter(s => selected.has(s.t));
+  stockTable.sort((a, b) => b.postMean - a.postMean);
+
+  // COST/BORROW: the fade is a SHORT held ~H sessions, market-neutral (2 legs).
+  // Net per-trade cost ≈ borrow_annual·(H/252)  [stock short leg only]  +  round-trip
+  // transaction cost across BOTH legs (stock + SPY hedge). Subtract from gross short
+  // alpha and see if the edge survives. Large-caps are mostly general-collateral
+  // (cheap borrow); the stress row models a harder-to-borrow / wider-spread world.
+  const H_FRAC = H / 252;
+  const costScenarios = [
+    { name: 'retail-favorable', borrowAnnPct: 0.5, txnRoundTripPct: 0.08 },
+    { name: 'realistic', borrowAnnPct: 2.0, txnRoundTripPct: 0.15 },
+    { name: 'stress', borrowAnnPct: 6.0, txnRoundTripPct: 0.30 },
+  ];
+  const costOf = sc => +(sc.borrowAnnPct * H_FRAC + sc.txnRoundTripPct).toFixed(3);
+  const netStats = (arr, cost) => {
+    const n = arr.length; if (!n) return { n: 0 };
+    const wins = arr.filter(s => (s.shortAlpha - cost) > 0).length; const ci = wilson(wins, n);
+    return { n, netBeatRate: +((wins / n) * 100).toFixed(0), wilsonLo: +(ci.lo * 100).toFixed(0), netAlpha: +mean(arr.map(s => s.shortAlpha - cost)).toFixed(2) };
+  };
+  const costAnalysis = {
+    note: `Net of borrow (×${H}/252) + both-leg round-trip txn. grossAvgAlpha is the cushion. "gatedAll" = broad signal set; "selectedOOS" = the deployable high-conviction basket (per-stock selected, out-of-sample). Edge is actionable if selectedOOS netAlpha stays clearly positive.`,
+    horizonDays: H, grossAvgAlpha: { gatedAll: +mean(gated.map(s => s.shortAlpha)).toFixed(2), selectedOOS: +mean(testSelected.map(s => s.shortAlpha)).toFixed(2) },
+    scenarios: costScenarios.map(sc => ({ ...sc, totalCostPctPerTrade: costOf(sc), gatedAll: netStats(gated, costOf(sc)), selectedOOS: netStats(testSelected, costOf(sc)) })),
+  };
+
+  // Beta-neutral version of the per-stock selection: select on beta-neutral train
+  // edge, test on beta-neutral outcome. Does picking stocks survive once beta is
+  // removed (i.e. is it real selection, not a low-beta tilt)?
+  const p0B = train.length ? mean(train.map(s => s.beatB)) : 0.5;
+  const a0B = p0B * priorK, b0B = (1 - p0B) * priorK;
+  const perStockB = {};
+  train.forEach(s => { (perStockB[s.t] = perStockB[s.t] || { n: 0, b: 0 }).n++; perStockB[s.t].b += s.beatB; });
+  const selectedB = new Set();
+  Object.entries(perStockB).forEach(([t, v]) => { const post = (v.b + a0B) / (v.n + a0B + b0B); if (v.n >= minTrainN && post > selThresh) selectedB.add(t); });
+  const testSelectedB = test.filter(s => selectedB.has(s.t));
+
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({
+    ok: true, scope, range, horizonDays: H, namesScanned: tickers.length,
+    totalSignals: sigs.length, gatedSignals: gated.length, macroAvailable: !!macro,
+    gate: 'risk-on + neutral only (risk-off dropped)',
+    BETA_VERDICT: {
+      note: 'THE go/no-go. raw = excess vs SPY 1:1 (NOT beta-neutral); betaNeutral = stock_fwd − beta·SPY_fwd (residual alpha). If the edge is real selection it survives beta-neutralization; if betaNeutral beatRate/alpha collapse toward 50%/0, the "edge" was a short-low-beta factor tilt. avgBeta shows how low-beta the faded names are.',
+      gated: bothStats(gated),
+      gatedByRegimeRaw: byRegimeStats(gated, 'beat', 'shortAlpha'),
+      gatedByRegimeBetaNeutral: byRegimeStats(gated, 'beatB', 'shortAlphaB'),
+      fullUniverseByRegimeBetaNeutral: byRegimeStats(sigs, 'beatB', 'shortAlphaB'),
+    },
+    COST_ANALYSIS: costAnalysis,
+    baselineGated: beatStats(gated),
+    A_signalStretch: {
+      note: 'Terciles of a composite top-exhaustion z-score (RSI@peak + run-up steepness + rollover sharpness + drop-so-far). If selection helps, high-stretch beatRate/wilsonLo > low.',
+      byStretchTercile: tercile(gated, 'stretch'),
+      byDetectorScoreTercile: tercile(gated, 'score'),
+    },
+    B_stockSelection: {
+      note: 'PURGED train/test. Per-stock train hit-rate shrunk to the global prior (priorK pseudo-obs); select stocks with shrunk posterior > sel and trainN >= mintrain. Honest test: does TEST(selected) beat TEST(all)? If overfit, it will not.',
+      trainFrac, minTrainN, priorK, selThresh, splitDate, purgeDate,
+      globalTrainBeat: +(p0 * 100).toFixed(0),
+      stocksTotal: Object.keys(perStock).length, stocksSelected: selected.size,
+      testAll: beatStats(test), testAllByRegime: byRegimeStats(test),
+      testSelected: beatStats(testSelected), testSelectedByRegime: byRegimeStats(testSelected),
+      topStocks: stockTable.slice(0, 25),
+      betaNeutral: {
+        note: 'Same purged selection but on the BETA-NEUTRAL outcome. If testSelected here still beats testAll, selection is real alpha; if it flattens to ~50%, the picks were a beta artifact.',
+        globalTrainBeatBN: +(p0B * 100).toFixed(0), stocksSelectedBN: selectedB.size,
+        testAll: beatStats(test, 'beatB', 'shortAlphaB'),
+        testSelected: beatStats(testSelectedB, 'beatB', 'shortAlphaB'),
+        testSelectedByRegime: byRegimeStats(testSelectedB, 'beatB', 'shortAlphaB'),
+      },
+    },
+    elapsedMs: Date.now() - t0, generatedAt: new Date().toISOString(),
+  });
+}
+
+// ── Fade engine ops : seed from history, live recommendations, learning tick ──
+// The self-improving layer. fadeseed initializes per-stock posteriors from 5y of
+// resolved inverted-V shorts; fadesignals turns today's live setups + the learned
+// posteriors into ranked SHORT/cover recommendations; fadetick (cron) resolves
+// matured logged signals → updates the engine → logs today's setups (continuous
+// adaptation). All gated to risk-on/neutral (the proven lever).
+const FADE_H = 21;   // resolution horizon (trading sessions) — matches the validation
+
+// Scan a universe for CURRENT inverted-V short setups on the latest bar, tagging
+// each with its trailing beta (for the engine's beta-bucket grouping).
+async function scanFadeSetups(tickers, deadlineMs, t0, spyClose = {}) {
+  const { analyzeInvertedV } = require('../lib/vreversal');
+  const { betaVsSpy } = require('../lib/fade-engine');
+  const out = []; let i = 0;
+  const worker = async () => {
+    while (i < tickers.length) {
+      const t = tickers[i++]; if (Date.now() - t0 > deadlineMs) return;
+      let d; try { d = await fetchDailyHistory(t); } catch { continue; }
+      if (!d || d.candles.length < 120) continue;
+      const v = analyzeInvertedV(d.candles);
+      if (v) out.push({ ticker: t, date: d.candles[d.candles.length - 1].date, signal: v, beta: betaVsSpy(d.candles, spyClose) });
+    }
+  };
+  await Promise.all(Array.from({ length: 16 }, worker));
+  return out;
+}
+
+async function runFadeSeed(req, res) {
+  const scope = (req.query.scope || 'large').toLowerCase();
+  const limit = Math.max(0, parseInt(req.query.limit, 10) || 200);
+  const range = /^(2y|5y|10y|max)$/.test(req.query.range || '') ? req.query.range : '5y';
+  const lists = scope === 'small' ? UNI_SMALL : scope === 'micro' ? UNI_MICRO : UNI_LARGE;
+  let tickers = [...new Set(lists)]; if (limit > 0) tickers = tickers.slice(0, limit);
+  const fe = require('../lib/fade-engine');
+  const { analyzeInvertedV } = require('../lib/vreversal');
+  const { buildMacroLookup } = require('../lib/macro');
+
+  const [spyD, macro] = await Promise.all([fetchDailyHistory('SPY', range), buildMacroLookup(range).catch(() => null)]);
+  const spyClose = {}; if (spyD) spyD.candles.forEach(c => { spyClose[c.date] = c.close; });
+  const regimeAt = date => (macro ? (macro.at(date) || {}).regime || 'unknown' : 'unknown');
+
+  // Trailing point-in-time beta at bar k (no lookahead) for the engine's group bucket.
+  const betaAt = (c, k, W = 252) => {
+    const lo = Math.max(1, k - W + 1); const sr = [], mr = [];
+    for (let j = lo; j <= k; j++) { const sp = spyClose[c[j].date], sp1 = spyClose[c[j - 1].date]; if (sp == null || sp1 == null) continue; sr.push(c[j].close / c[j - 1].close - 1); mr.push(sp / sp1 - 1); }
+    const n = sr.length; if (n < 30) return 1;
+    const mm = mr.reduce((a, x) => a + x, 0) / n, ms = sr.reduce((a, x) => a + x, 0) / n;
+    let cov = 0, vm = 0; for (let j = 0; j < n; j++) { cov += (sr[j] - ms) * (mr[j] - mm); vm += (mr[j] - mm) ** 2; }
+    return vm > 0 ? +(cov / vm).toFixed(2) : 1;
+  };
+
+  const t0 = Date.now(), deadline = 50000;
+  const sigs = []; let i = 0;
+  const worker = async () => {
+    while (i < tickers.length) {
+      const t = tickers[i++]; if (Date.now() - t0 > deadline) return;
+      let d; try { d = await fetchDailyHistory(t, range); } catch { continue; }
+      if (!d || d.candles.length < 120) continue;
+      const c = d.candles; let lastSig = -99;
+      for (let k = 80; k < c.length - FADE_H; k++) {
+        if (k - lastSig < 10) continue;
+        const v = analyzeInvertedV(c.slice(0, k + 1)); if (!v) continue;
+        lastSig = k;
+        const date = c[k].date, regime = regimeAt(date);
+        if (regime !== 'risk-on' && regime !== 'neutral') continue;        // gate
+        if (spyClose[date] == null || spyClose[c[k + FADE_H].date] == null) continue;
+        const fwd = (c[k + FADE_H].close - c[k].close) / c[k].close;
+        const sret = (spyClose[c[k + FADE_H].date] - spyClose[date]) / spyClose[date];
+        const shortAlpha = -((fwd - sret) * 100);                           // market-neutral short alpha %
+        sigs.push({ ticker: t, date, alpha: shortAlpha, sector: SECTOR_OF[t] || '?', beta: betaAt(c, k) });
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 16 }, worker));
+
+  // Feed chronologically, grouped by month (a meaningful time-step for the decay/CUSUM
+  // without over-forgetting across 5y).
+  sigs.sort((a, b) => (a.date < b.date ? -1 : 1));
+  const byMonth = {};
+  sigs.forEach(s => { (byMonth[s.date.slice(0, 7)] = byMonth[s.date.slice(0, 7)] || []).push(s); });
+  const state = fe.emptyState();
+  Object.keys(byMonth).sort().forEach(m => fe.update(state, byMonth[m]));
+  if (hasStore()) await writeFade(fe.serialize(state));
+
+  const table = Object.keys(state.stocks).map(t => fe.posterior(state, t)).sort((a, b) => b.expAlpha - a.expAlpha);
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({
+    ok: true, scope, range, namesScanned: tickers.length, gatedSignals: sigs.length,
+    months: Object.keys(byMonth).length, ...fe.summary(state), saved: hasStore(),
+    topShortable: table.filter(x => x.expAlpha > 0.3).slice(0, 25),
+    weakest: table.slice(-10).reverse(),
+    elapsedMs: Date.now() - t0, generatedAt: new Date().toISOString(),
+  });
+}
+
+async function runFadeSignals(req, res) {
+  const scope = (req.query.scope || 'large').toLowerCase();
+  const lists = scope === 'small' ? UNI_SMALL : scope === 'micro' ? UNI_MICRO
+    : scope === 'all' ? [...UNI_LARGE, ...UNI_SMALL, ...UNI_MICRO] : UNI_LARGE;
+  const tickers = [...new Set(lists)];
+  const fe = require('../lib/fade-engine');
+  const { fetchMacro } = require('../lib/macro');
+
+  const [stateJson, macro, spyD] = await Promise.all([readFade(), fetchMacro().catch(() => null), fetchDailyHistory('SPY')]);
+  if (!stateJson) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: true, seeded: false, message: 'Engine not seeded yet — run op=fadeseed first.', recommendations: [] });
+  }
+  const state = fe.load(stateJson);
+  const regime = macro ? macro.regime : 'unknown';
+  const spyClose = {}; if (spyD) spyD.candles.forEach(c => { spyClose[c.date] = c.close; });
+
+  const t0 = Date.now();
+  const setups = await scanFadeSetups(tickers, 50000, t0, spyClose);
+  const recs = setups.map(s => {
+    const sector = SECTOR_OF[s.ticker] || '?';
+    const r = fe.recommend(state, { ticker: s.ticker, regime, signal: s.signal.signals, sector, beta: s.beta });
+    const sig = s.signal.signals;
+    // The VALIDATED trade is a ~21-session market-neutral hold (short stock vs SPY);
+    // stop/target are pattern REFERENCE only (the exits study found stop mgmt leaks).
+    const geomOk = sig.target != null && sig.entry != null && sig.target < sig.entry && sig.stop > sig.entry;
+    return { ...r, sector, beta: s.beta, tier: s.signal.tier, score: s.signal.score, geometry: s.signal.geometry, refLevels: sig, geomFavorable: geomOk };
+  });
+  const rank = { SHORT: 3, SHORT_LIGHT: 2, WATCH: 1, SKIP: 0 };
+  recs.sort((a, b) => (rank[b.action] - rank[a.action]) || (b.expAlpha - a.expAlpha));
+  const actionable = recs.filter(r => (r.action === 'SHORT' || r.action === 'SHORT_LIGHT') && r.geomFavorable);
+
+  res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=86400');
+  return res.json({
+    ok: true, seeded: true, regime, holdSessions: FADE_H, ...fe.summary(state),
+    updatedAt: state.updatedAt, setupsFound: setups.length, actionable: actionable.length,
+    gateNote: regime === 'risk-off' ? 'Risk-off regime — ALL fades gated out (no edge here).' : 'Fades active (risk-on/neutral).',
+    tradePlan: `Validated trade: SHORT the name, hold ~${FADE_H} sessions, market-neutral vs SPY; exit at horizon. expAlpha = expected per-trade short alpha %; netExpAlpha = after ~0.32% assumed cost. refLevels (stop/target) are pattern reference only. Size = conviction-scaled weight (capped 5%, halved in risk-on).`,
+    recommendations: recs.slice(0, 40),
+    elapsedMs: Date.now() - t0, generatedAt: new Date().toISOString(),
+  });
+}
+
+async function runFadeTick(req, res) {
+  if (!hasStore()) return res.json({ ok: false, error: 'Blob storage not configured.' });
+  const fe = require('../lib/fade-engine');
+  const { fetchMacro } = require('../lib/macro');
+  const t0 = Date.now();
+
+  // One-off maintenance: ?prune=YYYY-MM-DD wipes a stale/duplicate day file.
+  if (req.query.prune && /^\d{4}-\d{2}-\d{2}$/.test(req.query.prune)) {
+    await writeFadeDay(req.query.prune, []);
+    return res.json({ ok: true, pruned: req.query.prune });
+  }
+
+  // 1) Resolve matured, still-open logged signals → learn ONCE, then PERSIST the
+  //    resolution back to the ledger (resolve-once: never re-feed an outcome).
+  //    Dedup by ticker|setupDate so a key never feeds the engine twice even if it
+  //    appears in two files (defensive against any day-key collision).
+  const days = await readAllFadeDays();
+  const resolvedKeys = new Set();
+  days.forEach(d => d.signals.forEach(s => { if (s.resolved) resolvedKeys.add(`${s.ticker}|${s.date}`); }));
+  const openByTicker = {};
+  days.forEach(d => d.signals.forEach(s => { if (!s.resolved) (openByTicker[s.ticker] = openByTicker[s.ticker] || []).push(s); }));
+  const tickersToResolve = [...new Set(Object.keys(openByTicker).concat('SPY'))];
+  const hist = new Map(); let i = 0;
+  const rw = async () => { while (i < tickersToResolve.length) { const t = tickersToResolve[i++]; try { const d = await fetchDailyHistory(t); if (d) hist.set(t, d.candles); } catch {} } };
+  await Promise.all(Array.from({ length: 12 }, rw));
+  const spy = hist.get('SPY') || [];
+  const afterN = (candles, entryDate, n) => {        // bar n sessions after entryDate
+    const idx = candles.findIndex(c => c.date >= entryDate);
+    if (idx < 0 || idx + n >= candles.length) return null;
+    return { close: candles[idx + n].close, entryClose: candles[idx].close, date: candles[idx + n].date };
+  };
+  const outcomes = []; let resolvedNow = 0;
+  const changedDays = new Set();
+  for (const d of days) {
+    for (const s of d.signals) {
+      if (s.resolved) continue;
+      const key = `${s.ticker}|${s.date}`;
+      const candles = hist.get(s.ticker); if (!candles) continue;
+      const r = afterN(candles, s.date, FADE_H); if (!r) continue;        // not matured yet
+      const sp = afterN(spy, s.date, FADE_H); if (!sp) continue;
+      const dup = resolvedKeys.has(key);                                   // already resolved elsewhere → mark only, don't re-feed
+      const fwd = (r.close - r.entryClose) / r.entryClose;
+      const sret = (sp.close - sp.entryClose) / sp.entryClose;
+      const exc = (fwd - sret) * 100;                                     // short alpha = -exc
+      s.resolved = true; s.exitDate = r.date;
+      s.fwdPct = +(fwd * 100).toFixed(2); s.spyPct = +(sret * 100).toFixed(2);
+      s.excPct = +exc.toFixed(2); s.shortAlpha = +(-exc).toFixed(2); s.beat = exc < 0 ? 1 : 0;
+      changedDays.add(d.date);
+      if (!dup) { outcomes.push({ ticker: s.ticker, alpha: s.shortAlpha, sector: s.sector || SECTOR_OF[s.ticker] || '?', beta: s.beta }); resolvedKeys.add(key); resolvedNow++; }
+    }
+  }
+  const state = fe.load(await readFade());
+  if (outcomes.length) fe.update(state, outcomes);
+  // Persist resolved day files.
+  await Promise.all([...changedDays].map(date => {
+    const day = days.find(x => x.date === date);
+    return writeFadeDay(date, day.signals);
+  }));
+
+  // 2) Log today's setups (gated) for future resolution — with the engine's
+  //    recommendation stamped on each so the track record can be sliced by action.
+  const macro = await fetchMacro().catch(() => null);
+  const regime = macro ? macro.regime : 'unknown';
+  let logged = 0, logDate = null;
+  if (regime === 'risk-on' || regime === 'neutral') {
+    const spyClose = {}; spy.forEach(c => { spyClose[c.date] = c.close; });
+    const setups = await scanFadeSetups([...new Set(UNI_LARGE)], 35000, t0, spyClose);
+    if (setups.length) {
+      logDate = setups[0].date;                                          // last trading date (consistent file key)
+      const rows = setups.map(s => {
+        const sector = SECTOR_OF[s.ticker] || '?';
+        const rec = fe.recommend(state, { ticker: s.ticker, regime, signal: s.signal.signals, sector, beta: s.beta });
+        return { ticker: s.ticker, date: s.date, entry: s.signal.signals.entry, regime, tier: s.signal.tier,
+          sector, beta: s.beta, action: rec.action, conviction: rec.conviction, expAlpha: rec.expAlpha, resolved: false };
+      });
+      await writeFadeDay(logDate, rows); logged = rows.length;
+    }
+  }
+
+  await writeFade(fe.serialize(state));
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({
+    ok: true, openBefore: Object.values(openByTicker).reduce((a, b) => a + b.length, 0), resolvedNow,
+    beatRateResolved: outcomes.length ? +((outcomes.filter(o => (o.alpha || 0) > 0).length / outcomes.length) * 100).toFixed(0) : null,
+    regime, loggedToday: logged, logDate, ...fe.summary(state),
+    elapsedMs: Date.now() - t0, generatedAt: new Date().toISOString(),
+  });
+}
+
+// ── op=fadebook : the live TRACK RECORD of the engine's actual recommendations ──
+// Reads the resolved fade ledger and reports how the picks REALLY did forward:
+// overall beat-SPY rate (+Wilson LB) + market-neutral alpha, broken down by the
+// recommendation the engine made at log time (SHORT vs SHORT_LIGHT vs WATCH) and
+// by regime. This is the honest, hands-off scorecard — distinct from the backtest.
+async function runFadeBook(req, res) {
+  const days = await readAllFadeDays();
+  // Dedup by ticker|setupDate (defensive against day-key collisions), prefer resolved.
+  const uniq = new Map();
+  days.forEach(d => d.signals.forEach(s => {
+    const k = `${s.ticker}|${s.date}`; const prev = uniq.get(k);
+    if (!prev || (s.resolved && !prev.resolved)) uniq.set(k, s);
+  }));
+  const all = [...uniq.values()];
+  const resolved = all.filter(s => s.resolved && s.excPct != null);
+  const open = all.filter(s => !s.resolved);
+
+  const wil = arr => {
+    const n = arr.length; if (!n) return { n: 0 };
+    const beats = arr.filter(s => s.beat).length; const ci = wilson(beats, n);
+    const alpha = arr.reduce((a, s) => a + (s.shortAlpha || 0), 0) / n;
+    return { n, beatRate: +((beats / n) * 100).toFixed(0), wilsonLo: +(ci.lo * 100).toFixed(0), avgAlpha: +alpha.toFixed(2) };
+  };
+  const byAction = {};
+  ['SHORT', 'SHORT_LIGHT', 'WATCH', 'SKIP'].forEach(a => { byAction[a] = wil(resolved.filter(s => s.action === a)); });
+  const byRegime = {};
+  ['risk-on', 'neutral'].forEach(r => { byRegime[r] = wil(resolved.filter(s => s.regime === r)); });
+  // Equity-style cumulative market-neutral alpha (sum of per-pick short alpha), chronological.
+  const chrono = [...resolved].sort((a, b) => (a.exitDate < b.exitDate ? -1 : 1));
+  let cum = 0; const curve = chrono.map(s => { cum += s.shortAlpha || 0; return { date: s.exitDate, cumAlpha: +cum.toFixed(1) }; });
+  // Best/worst individual picks (by short alpha).
+  const ranked = [...resolved].sort((a, b) => (b.shortAlpha || 0) - (a.shortAlpha || 0));
+  const slim = s => ({ ticker: s.ticker, logDate: s.date, exitDate: s.exitDate, action: s.action, shortAlpha: s.shortAlpha, beat: s.beat });
+
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({
+    ok: true, totalLogged: all.length, resolved: resolved.length, stillOpen: open.length,
+    overall: wil(resolved),
+    actionableOnly: wil(resolved.filter(s => s.action === 'SHORT' || s.action === 'SHORT_LIGHT')),
+    byAction, byRegime,
+    cumAlphaPts: curve.length ? curve[curve.length - 1].cumAlpha : 0,
+    equityCurveTail: curve.slice(-30),
+    best: ranked.slice(0, 8).map(slim), worst: ranked.slice(-8).reverse().map(slim),
+    note: 'LIVE forward track record of logged inverted-V short setups (resolved at the 21-session horizon). beat = stock underperformed SPY (the short won market-neutral). byAction shows whether the engine\'s SHORT-rated picks beat its WATCH/SKIP picks = does the conviction actually rank. This is hands-off & accrues daily via the warm cron; it is NOT the backtest. Empty/thin until ~21 sessions after the first fadetick.',
+    generatedAt: new Date().toISOString(),
+  });
 }
 
 // ── op=archive : snapshot today's per-ticker mention counts + options ───────
@@ -1239,6 +1873,13 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'ghostlog') return runGhostLog(req, res);
   if (req.query.op === 'edgelog') return runEdgeLog(req, res);
   if (req.query.op === 'edgebook') return runEdgeBook(req, res);
+  if (req.query.op === 'vreversal') return runVReversal(req, res);
+  if (req.query.op === 'vreversaltest') return runVReversalTest(req, res);
+  if (req.query.op === 'fadeopt') return runFadeOpt(req, res);
+  if (req.query.op === 'fadeseed') return runFadeSeed(req, res);
+  if (req.query.op === 'fadesignals') return runFadeSignals(req, res);
+  if (req.query.op === 'fadetick') return runFadeTick(req, res);
+  if (req.query.op === 'fadebook') return runFadeBook(req, res);
   if (req.query.op === 'archive') return runArchive(req, res);
   if (req.query.op === 'insideringest') return runInsiderIngest(req, res);
   if (req.query.op === 'insider') return runInsider(req, res);
