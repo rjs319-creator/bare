@@ -1116,6 +1116,9 @@
 
     /* Sector rotation panel */
     .rot-panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+    .rot-dw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .rot-dw-grid .rot-panel { margin-bottom: 0; }
+    @media (max-width: 760px) { .rot-dw-grid { grid-template-columns: 1fr; } }
     .rot-head { font-size: 0.78rem; font-weight: 800; color: var(--text); margin-bottom: 4px; }
     .rot-sub { font-size: 0.62rem; color: var(--text-dim); margin-bottom: 12px; }
     .rot-row { display: grid; grid-template-columns: 120px 1fr 70px; align-items: center; gap: 10px; padding: 4px 0; cursor: pointer; border-radius: 6px; }
@@ -2206,6 +2209,7 @@
     </div>
     <div id="screener-rotation"><div class="mom-status"><div class="mom-spinner"></div><p>Computing sector rotation…</p></div></div>
     <div id="screener-rottrend"></div>
+    <div id="screener-rotdw"></div>
   </section>
 
   <hr class="section-divider" />
@@ -2449,6 +2453,7 @@
     if (sub === 'ghost' && typeof ensureGhost === 'function') ensureGhost();
     if (sub === 'events' && typeof ensureCern === 'function') ensureCern();
     if (sub === 'edge' && typeof ensureEdge === 'function') ensureEdge();
+    if (sub === 'rotation' && typeof ensureRotationDW === 'function') ensureRotationDW();
     if (sub === 'fade' && typeof ensureFade === 'function') ensureFade();
     if (sub === 'xalerts' && typeof ensureXalerts === 'function') ensureXalerts();
 
@@ -3826,6 +3831,49 @@
     }).join('');
     el.innerHTML = `<div class="rot-panel"><div class="rot-head">📈 Rotation Trend${startDate ? ` <span style="font-weight:600;color:var(--text-dim);font-size:0.66rem">· since ${startDate}</span>` : ''}</div><div class="rot-sub">Sector tilt over the selected window (left = older, right = today). Above the dashed line = overweight. Replayed from daily price history.</div>${rows}<div class="rt-axis"><span>${startDate}</span><span>Today · ${endDate}</span></div></div>`;
     el.querySelectorAll('.rot-row').forEach(row => row.onclick = () => setSectorFilter(row.dataset.sec));
+  }
+
+  // ── Daily & weekly sector rotation trends (relative strength vs SPY) ──
+  let rotDWLoaded = false;
+  function ensureRotationDW() { if (!rotDWLoaded) { rotDWLoaded = true; loadRotationDW(); } }
+  async function loadRotationDW() {
+    const el = document.getElementById('screener-rotdw');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading daily &amp; weekly rotation…</p></div>`;
+    try {
+      const d = await fetch('/api/sectors?mode=rotation').then(r => r.json());
+      renderRotationDW(d);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load rotation trends.</p></div>`; }
+  }
+
+  function rotPanel(title, sub, rows, list, cumKey, headKey, headLabel) {
+    // global y-range across the shown sectors so sparklines are comparable
+    let gMin = 0, gMax = 0;
+    list.forEach(s => (s[cumKey] || []).forEach(v => { if (v < gMin) gMin = v; if (v > gMax) gMax = v; }));
+    const body = list.map(s => {
+      const series = s[cumKey] || [];
+      const inFlow = (series[series.length - 1] ?? 0) >= 0;
+      const hv = s[headKey] ?? 0, hp = hv >= 0;
+      return `<div class="rot-row">
+        <span class="rot-name">${esc(s.name)} <span style="color:var(--text-dim);font-weight:600">${esc(s.symbol)}</span></span>
+        <div class="rt-spark">${sparkSvg(series, gMin, gMax, inFlow)}</div>
+        <span class="rot-val ${hp ? 'ow' : 'uw'}">${hp ? '+' : '−'}${Math.abs(hv).toFixed(2)}%</span>
+      </div>`;
+    }).join('');
+    return `<div class="rot-panel"><div class="rot-head">${title}</div><div class="rot-sub">${sub}</div>${body}
+      <div class="rt-axis"><span>${rows} ago</span><span>${headLabel}</span></div></div>`;
+  }
+
+  function renderRotationDW(d) {
+    const el = document.getElementById('screener-rotdw');
+    if (!el) return;
+    if (!d || !d.rotation || !d.rotation.length) { el.innerHTML = ''; return; }
+    // Daily: rank by cumulative excess over the window (the rotation leaders/laggards).
+    const daily = [...d.rotation].sort((a, b) => b.dailyTotal - a.dailyTotal);
+    const weekly = [...d.rotation].sort((a, b) => b.weeklyTotal - a.weeklyTotal);
+    const dailyPanel = rotPanel('📅 Daily Rotation', `Relative strength vs SPY, cumulative over the last ${d.sessions} sessions. Rising line = money rotating <b style="color:var(--green)">in</b>. Right value = today vs SPY.`, `${d.sessions} sessions`, daily, 'dailyCum', 'daily1d', 'Today');
+    const weeklyPanel = rotPanel('🗓️ Weekly Rotation', `Relative strength vs SPY, cumulative over the last ${d.weeks} weeks. Right value = this week vs SPY.`, `${d.weeks} weeks`, weekly, 'weeklyCum', 'weekly1w', 'This week');
+    el.innerHTML = `<div class="rot-dw-grid">${dailyPanel}${weeklyPanel}</div>`;
   }
 
   function buildSecBar(results) {
