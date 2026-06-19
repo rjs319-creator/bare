@@ -1154,6 +1154,29 @@ async function runTrendOpt(req, res) {
   const oosPick = picks.filter(p => p.date >= splitDate);
   const dayMix = { green: 0, yellow: 0, red: 0 }; Object.values(climate).forEach(c => { if (dayMix[c.color] != null) dayMix[c.color]++; });
 
+  // Episode-clustering check: are a climate's picks spread across many independent
+  // selloffs, or concentrated in one V-recovery (low EFFECTIVE N → a Wilson LB on
+  // pick count is a mirage)? Group entry dates into episodes (gap > gapDays = new
+  // episode). A real timing edge beats SPY across MULTIPLE separate episodes.
+  function episodeBreakdown(arr, gapDays = 21) {
+    const byDate = {}; arr.forEach(p => (byDate[p.date] = byDate[p.date] || []).push(p));
+    const ds = Object.keys(byDate).sort(); const eps = []; let cur = null;
+    for (const dt of ds) {
+      const ms = Date.parse(dt);
+      if (cur && (ms - cur.lastMs) / 86400000 <= gapDays) { cur.dates.push(dt); cur.lastMs = ms; }
+      else { cur = { start: dt, lastMs: ms, dates: [dt] }; eps.push(cur); }
+    }
+    return eps.map(e => {
+      const ps = e.dates.flatMap(dt => byDate[dt]); const beats = ps.filter(p => p.exc > 0).length;
+      return { start: e.start, end: e.dates[e.dates.length - 1], tradingDates: e.dates.length, picks: ps.length,
+        beatRate: +((beats / ps.length) * 100).toFixed(0), avgExc: +mean(ps.map(p => p.exc)).toFixed(2), avgExcBetaAdj: +mean(ps.map(p => p.excB)).toFixed(2) };
+    });
+  }
+  const climColor = /^(green|yellow|red)$/.test(req.query.climate || '') ? req.query.climate : 'red';
+  const climPicks = picks.filter(p => p.color === climColor);
+  const climEpisodes = episodeBreakdown(climPicks);
+  const posEps = climEpisodes.filter(e => e.avgExc > 0).length;
+
   res.setHeader('Cache-Control', 'no-store');
   return res.json({
     ok: true, scope, range, horizonDays: H, namesScanned: tickers.length, candidates: recs.length, picks: picks.length,
@@ -1161,7 +1184,13 @@ async function runTrendOpt(req, res) {
     strategyOverall: agg(picks),
     byClimate: { green: agg(picks.filter(p => p.color === 'green')), yellow: agg(picks.filter(p => p.color === 'yellow')), red: agg(picks.filter(p => p.color === 'red')) },
     oosByClimate: { splitDate, green: agg(oosPick.filter(p => p.color === 'green')), yellow: agg(oosPick.filter(p => p.color === 'yellow')), red: agg(oosPick.filter(p => p.color === 'red')) },
-    note: `Trend+momentum longs, ${H}-session forward return & excess vs SPY. avgRet = raw forward return (what you actually make long); avgExc = vs SPY; avgExcBetaAdj = alpha after beta. THE test: green avgRet/beatRate should clearly exceed red. oosByClimate confirms it holds out-of-sample.`,
+    clustering: {
+      climate: climColor, picks: climPicks.length, distinctDates: new Set(climPicks.map(p => p.date)).size,
+      episodeCount: climEpisodes.length, positiveEpisodes: posEps,
+      note: `Effective N for the ${climColor} climate = independent episodes, NOT pick count. If picks cluster into 1-2 episodes, the Wilson LB on pick count is a mirage. A real timing edge is positive across MOST episodes.`,
+      episodes: climEpisodes,
+    },
+    note: `Trend+momentum longs, ${H}-session forward return & excess vs SPY. avgRet = raw forward return (what you actually make long); avgExc = vs SPY; avgExcBetaAdj = alpha after beta. THE test: green avgRet/beatRate should clearly exceed red. oosByClimate confirms it holds out-of-sample. clustering = is a climate's edge real (many episodes) or one V-recovery (?climate=red|green).`,
     generatedAt: new Date().toISOString(),
   });
 }
