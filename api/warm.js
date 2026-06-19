@@ -27,6 +27,15 @@ module.exports = async function handler(req, res) {
   async function worker() { while (queue.length) out.push(await warmOne(queue.shift())); }
   await Promise.all([worker(), worker(), worker()]); // 3 at a time
 
+  // Warm the heavier non-default screener lookbacks (3M/6M) in the BACKGROUND,
+  // concurrently with the sequential logging below. These are separate function
+  // invocations that populate the CDN cache on their own, so switching the
+  // Screener's 1M/3M/6M selector isn't a ~23s cold scan. We don't block the cron's
+  // critical path on them — they're awaited at the very end (by then already done,
+  // since the logging tail runs longer than a single scan).
+  const EXTRA = ['/api/screener?scope=large&lookback=3M', '/api/screener?scope=large&lookback=6M'];
+  const extraWarm = Promise.all(EXTRA.map(warmOne)).catch(() => []);
+
   // Once caches are fresh, snapshot today's picks for the scoreboard (one cron
   // does both — warm then log — so we stay within Vercel cron limits).
   let track = null;
@@ -106,6 +115,7 @@ module.exports = async function handler(req, res) {
     trendtick = await r.json();
   } catch (e) { trendtick = { error: String(e && e.message || e) }; }
 
+  const warmedExtra = await extraWarm;   // already resolved — ran during the tail above
   res.setHeader('Cache-Control', 'no-store');
-  return res.json({ ok: true, host: HOST, warmed: out, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, at: new Date().toISOString() });
+  return res.json({ ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, at: new Date().toISOString() });
 };

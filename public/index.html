@@ -2490,6 +2490,7 @@
     SECTION_IDS.forEach(s => document.getElementById(s)?.classList.toggle('tab-active', s === sub));
     document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('active', el.dataset.tab === top));
     renderHubSubnav(top, sub);
+    if (sub === 'screener' && typeof ensureScreener === 'function') ensureScreener();
     if (sub === 'backtest' && typeof ensureBacktest === 'function') ensureBacktest();
     if (sub === 'custom' && typeof ensureCustom === 'function') ensureCustom();
     if (sub === 'ghost' && typeof ensureGhost === 'function') ensureGhost();
@@ -2518,7 +2519,12 @@
   });
 
   document.body.classList.add('tabs');
-  showTab(currentTop, { instant: true, noScroll: true });
+  // NOTE: the initial showTab() is deferred to the END of this script (see bottom).
+  // Its tab-switch dispatch calls the lazy-loaders (ensureScreener/ensureBacktest/…),
+  // whose `let` flags are declared further down — calling it here threw a TDZ error
+  // ("Cannot access 'btLoaded' before initialization") for anyone whose last sub-tab
+  // used a loader. Deferring to the end (still before first paint — parse-blocking
+  // inline script) means every loader is initialized when the boot tab is shown.
 
   // ── Live clock & market status ──
   function updateClock() {
@@ -3732,8 +3738,16 @@
   }
 
   screenerRefreshBtn.addEventListener('click', refreshScreeners);
-  refreshScreeners();
-  setInterval(refreshScreeners, 30 * 60 * 1000); // 30 min — daily breakouts move slowly
+  // Lazy-load: only scan when the Screener tab is actually opened (ensureScreener is
+  // called from showTab). Previously this fired all 3 scopes on EVERY page load — even
+  // on unrelated tabs — and a non-warmed lookback/filter made each a ~23s cold scan.
+  let screenerLoaded = false;
+  function ensureScreener() {
+    if (screenerLoaded) return;
+    screenerLoaded = true;
+    refreshScreeners();
+    setInterval(refreshScreeners, 30 * 60 * 1000); // 30 min — daily breakouts move slowly
+  }
 
   function refreshScreeners() {
     fetchScreenerScope('large', screenerContainer, screenerMeta, true);
@@ -6084,6 +6098,10 @@
   function esc(s) {
     return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
+
+  // Boot the initial tab LAST, so every lazy-loader (let-scoped) is initialized
+  // before its tab-switch dispatch runs. Still executes before first paint.
+  showTab(currentTop, { instant: true, noScroll: true });
 </script>
 </body>
 </html>
