@@ -5,6 +5,8 @@ const { fetchFundamentals, fetchInsiders } = require('../lib/fundamentals');
 const { runGhostAccumulationIndex, REGIME_WEIGHTS: GHOST_WEIGHTS, PILLAR_LABEL: GHOST_PILLAR_LABEL } = require('../lib/ghost');
 const { convictionScore, convictionWeights, longOk } = require('../lib/conviction');
 const { fetchMacro } = require('../lib/macro');
+const { loadCandleCache, cacheState, cacheGet, saveCandleCache } = require('../lib/candle-cache');
+const { readJSON, writeJSON, hasStore } = require('../lib/store');
 
 const NARRATIVE_TOOL = {
   name: 'submit_narratives',
@@ -82,7 +84,8 @@ function composite(pct, w) {
   return Math.round(s);
 }
 
-async function enrichWithNarrative(candidates) {
+// The raw LLM call (Anthropic haiku) — one request covering the given candidates.
+async function callNarrativeLLM(candidates) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key || !candidates.length) return {};
   try {
@@ -107,7 +110,63 @@ async function enrichWithNarrative(candidates) {
   } catch { return {}; }
 }
 
+// Cached candidate enrichment (narrative + fundamentals + insider). These were the
+// screener's dominant cost: the LLM narrative call is ~20s and the Finnhub calls are
+// flaky (insider data flips run-to-run, jittering ghost scores). All three are
+// per-ticker and slowly-changing, so we cache them per scope in Blob:
+//   • USER requests read the cache only → fast AND deterministic (no LLM, no Finnhub).
+//   • The WARM cron LLM-calls just missing/stale narratives, re-fetches Finnhub
+//     (keeping last-known-good on transient failures), and persists.
+// Per-scope keys avoid a read-modify-write race between concurrent large/small/micro
+// warm requests; brand-new names stay null until the next warm fills them (the
+// technical signal doesn't depend on enrichment).
+const ENRICH_STALE_MS = 7 * 24 * 60 * 60 * 1000;
+const enrichKey = scope => `enrich/${scope}.json`;
+
+async function enrichCandidates(candidates, isWarm, scope) {
+  if (!candidates.length) return;
+  let cache = {};
+  if (hasStore()) { try { const d = await readJSON(enrichKey(scope), null); if (d && d.data) cache = d.data; } catch {} }
+  const now = Date.now();
+
+  if (isWarm) {
+    // Narratives: LLM only the missing/stale names (one batched call).
+    const needNarr = candidates.filter(c => { const e = cache[c.ticker.toUpperCase()]; return !(e && e.nv && now - (e.nvTs || 0) < ENRICH_STALE_MS); });
+    const llm = (needNarr.length && process.env.ANTHROPIC_API_KEY) ? await callNarrativeLLM(needNarr) : {};
+    for (const [t, v] of Object.entries(llm)) { const e = cache[t] || {}; e.nv = v; e.nvTs = now; cache[t] = e; }
+    // Fundamentals + insider: refresh names whose cached copy is >6h old (so the
+    // daily cron refreshes once, but the 1M/3M/6M variants in one run don't each
+    // re-hit Finnhub). Keep last-known-good on a failed call.
+    if (process.env.FINNHUB_API_KEY) {
+      const needFi = candidates.filter(c => { const e = cache[c.ticker.toUpperCase()]; return !(e && e.fiTs && now - e.fiTs < 6 * 60 * 60 * 1000); });
+      await mapLimit(needFi, 8, async (c) => {
+        const t = c.ticker.toUpperCase();
+        try {
+          const [f, ins] = await Promise.all([fetchFundamentals(c.ticker), fetchInsiders(c.ticker)]);
+          const e = cache[t] || {};
+          if (f) e.fund = f;
+          if (ins) e.ins = ins;
+          e.fiTs = now; cache[t] = e;
+        } catch {}
+      });
+    }
+    if (hasStore()) { try { await writeJSON(enrichKey(scope), { updatedAt: now, n: Object.keys(cache).length, data: cache }, 0); } catch {} }
+  }
+
+  // Attach cached enrichment onto each candidate (null where not yet built).
+  for (const c of candidates) {
+    const e = cache[c.ticker.toUpperCase()] || {};
+    c.fundamentals = e.fund || null;
+    c.insider = e.ins || null;
+    c.narrative = e.nv ? e.nv.narrative : null;
+    c.narrativeStrength = e.nv ? e.nv.narrativeStrength : null;
+    c.theme = e.nv ? e.nv.theme : null;
+  }
+}
+
 module.exports = async function handler(req, res) {
+  const reqT0 = Date.now();
+  const mark = {};
   const scope = (req.query.scope || 'large').toLowerCase();
   const isMicro = scope === 'micro';
   const isSmallScope = scope === 'small' || isMicro;
@@ -147,10 +206,21 @@ module.exports = async function handler(req, res) {
     return [...new Set(a)];
   })();
 
+  // Candle cache: read the pre-built per-scope candle doc (one fast Blob download)
+  // instead of ~515 latency-bound Yahoo calls. The daily warm cron (x-warm header)
+  // rebuilds it; user requests only read. Sector-filtered requests still read the
+  // full-scope cache and subset it — only the unfiltered universe may WRITE it.
+  const isWarm = !!(req.headers['x-warm'] || req.query.warm);
+  const isFullUniverse = sectorFilter === 'all';
+
   try {
     // Kick off the macro (VIX + credit) read immediately so it overlaps the scan
     // instead of adding latency at the end.
     const macroPromise = fetchMacro().catch(() => null);
+    const cacheDoc = await loadCandleCache(scope);
+    mark.cacheLoad = Date.now() - reqT0;
+    const { use: useCache } = cacheState(cacheDoc, isWarm);
+    const freshFetched = new Map();   // tickers we hit Yahoo for this request
     // Benchmark (SPY) once — drives the RS line and the market-regime read.
     let spyCandles = null, spyByDate = null;
     try {
@@ -159,10 +229,11 @@ module.exports = async function handler(req, res) {
     } catch {}
     const baseOpts = spyByDate ? { ...screenOpts, spyByDate } : screenOpts;
 
-    // 1. Scan
+    // 1. Scan — prefer cached candles; fall back to a live Yahoo fetch per miss.
     const scored = await mapLimit(universe, 18, async ({ t, tier }) => {
       try {
-        const data = await fetchDailyHistory(t);
+        let data = useCache ? cacheGet(cacheDoc, t) : null;
+        if (!data) { data = await fetchDailyHistory(t); if (data) freshFetched.set(t, data); }
         if (!data) return null;
         const r = screenTicker(data.candles, { ...data.meta, symbol: t }, wantHistory ? { ...baseOpts, history: HIST_OFFSETS } : baseOpts);
         if (!r) return null;
@@ -173,6 +244,19 @@ module.exports = async function handler(req, res) {
     });
 
     let valid = scored.filter(Boolean);
+
+    // Persist the (re)built candle cache on warm cron requests so every later
+    // request — and the other cron lookback variants — reads it instead of
+    // re-scanning Yahoo. Only the full unfiltered universe writes.
+    if (isWarm && isFullUniverse && freshFetched.size) {
+      const fullMap = new Map();
+      for (const { t } of universe) {
+        const d = freshFetched.get(t) || (useCache ? cacheGet(cacheDoc, t) : null);
+        if (d) fullMap.set(t, d);
+      }
+      try { await saveCandleCache(scope, fullMap); } catch {}
+    }
+    mark.scan = Date.now() - reqT0;
 
     // Liquidity floor so results are actually tradeable
     if (isSmallScope) {
@@ -255,34 +339,20 @@ module.exports = async function handler(req, res) {
     //    ALL IN PARALLEL (independent calls). Previously serialized, which made a
     //    cold screener ~26s once picks started flowing; parallel cuts it to ~the
     //    slowest single leg. Fundamentals + insider attach to the pre-map objects.
-    const hasFinnhub = !!process.env.FINNHUB_API_KEY;
-    const [narratives] = await Promise.all([
-      enrichWithNarrative(candidates),
-      hasFinnhub ? mapLimit(candidates, 8, async (c) => {
-        try {
-          const [f, ins] = await Promise.all([fetchFundamentals(c.ticker), fetchInsiders(c.ticker)]);
-          c.fundamentals = f; c.insider = ins;
-        } catch {}
-      }) : Promise.resolve(),
-    ]);
-    candidates = candidates.map(c => {
-      const nv = narratives[c.ticker];
-      const strength = nv ? nv.narrativeStrength : null;
-      return {
-        ticker: c.ticker, company: c.company, capTier: c.capTier,
-        sector: c.sector, exchange: c.exchange, aboveSma200: c.aboveSma200,
-        status: c.status, qualifies: c.qualifies,
-        price: c.price, changePct: c.changePct,
-        filters: c.filters,
-        criteria: { ...c.criteria, narrative: strength != null ? strength >= 6 : false },
-        metrics: c.metrics, levels: c.levels, factors: c.factors,
-        pct: c.pct, quant: c.quant, reasons: c.reasons,
-        fundamentals: c.fundamentals || null, insider: c.insider || null,
-        narrative: nv ? nv.narrative : null,
-        narrativeStrength: strength,
-        theme: nv ? nv.theme : null,
-      };
-    });
+    await enrichCandidates(candidates, isWarm, scope);
+    mark.enrich = Date.now() - reqT0;
+    candidates = candidates.map(c => ({
+      ticker: c.ticker, company: c.company, capTier: c.capTier,
+      sector: c.sector, exchange: c.exchange, aboveSma200: c.aboveSma200,
+      status: c.status, qualifies: c.qualifies,
+      price: c.price, changePct: c.changePct,
+      filters: c.filters,
+      criteria: { ...c.criteria, narrative: c.narrativeStrength != null ? c.narrativeStrength >= 6 : false },
+      metrics: c.metrics, levels: c.levels, factors: c.factors,
+      pct: c.pct, quant: c.quant, reasons: c.reasons,
+      fundamentals: c.fundamentals || null, insider: c.insider || null,
+      narrative: c.narrative, narrativeStrength: c.narrativeStrength, theme: c.theme,
+    }));
 
     // ── Market regime (large/unfiltered only): SPY vs 200-DMA + breadth ──
     let regime = null;
@@ -359,11 +429,14 @@ module.exports = async function handler(req, res) {
       rotationHistory,
       regime,
       lookback,
+      candleSource: useCache ? 'cache' : 'live',
+      candlesFetched: freshFetched.size,
+      timings: { cacheLoadMs: mark.cacheLoad, scanMs: mark.scan, enrichMs: (mark.enrich || 0) - (mark.scan || 0), totalMs: Date.now() - reqT0 },
       results: candidates,
       defaultWeights: DEFAULT_WEIGHTS,
       scannedCount: valid.length,
       breakoutCount: valid.filter(c => c.qualifies).length,
-      narrativeEnabled: Object.keys(narratives).length > 0,
+      narrativeEnabled: candidates.some(c => c.narrative),
       generatedAt: new Date().toISOString(),
     });
   } catch (e) {
