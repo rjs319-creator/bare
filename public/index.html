@@ -1653,6 +1653,13 @@
     .tr-light-cmp span.off { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, transparent); }
     .rot-panel-pending { opacity: 0.9; }
     @media (max-width: 520px) { .tr-light-wrap { flex-direction: column; align-items: flex-start; gap: 14px; } .tr-light { flex-direction: row; } }
+    /* Trend Rider how-to caption */
+    .tr-howto { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; }
+    .tr-howto-head { font-weight: 700; font-size: 0.9rem; margin-bottom: 9px; }
+    .tr-howto-now { font-size: 0.88rem; font-weight: 600; padding: 8px 12px; border-radius: 8px; border: 1px solid; margin-bottom: 11px; }
+    .tr-howto ol { margin: 0; padding-left: 20px; }
+    .tr-howto li { font-size: 0.82rem; color: var(--text-dim); margin: 5px 0; line-height: 1.5; }
+    .tr-howto li b { color: var(--text); }
   </style>
 </head>
 <body>
@@ -5228,6 +5235,12 @@
     yellow: ['#eab308', 'YELLOW', 'Mixed — be selective, size down'],
     red: ['#ef4444', 'RED', 'Stand down — avoid new trend longs'],
   };
+  // Plain-English "what to do right now" per light colour.
+  const TR_NOW = {
+    green: ['Ride trends', 'The market climate favors trend-following — pick names from the ride list below.'],
+    yellow: ['Be selective', 'Mixed climate — take only the strongest trends and size down.'],
+    red: ['Stand down', "Don't add new trend longs — protect capital and wait for the light to turn green."],
+  };
 
   function renderTrendRider(t, book) {
     const el = document.getElementById('trendr-container');
@@ -5253,6 +5266,19 @@
           <span class="${cmp.regime === 'risk-on' ? 'on' : cmp.regime === 'risk-off' ? 'off' : ''}">${cmp.regime || '—'}</span>
         </div>
       </div></div>`;
+
+    // Easy-to-follow how-to caption — what the light is and what to do right now.
+    const [nowLbl, nowDesc] = TR_NOW[col] || TR_NOW.yellow;
+    const howToHtml = `<div class="tr-howto">
+      <div class="tr-howto-head">📖 How to use this tab</div>
+      <div class="tr-howto-now" style="color:${c};border-color:${c}55;background:${c}14">Right now → <b>${lbl}: ${nowLbl}.</b> ${nowDesc}</div>
+      <ol>
+        <li><b>Read the light first.</b> It scores today's whole-market climate 0–100 for trend-following — it tells you <i>when</i> to ride trends, not which single stock will win.</li>
+        <li><b>Act on the colour.</b> <b style="color:${TR_LIGHT.green[0]}">Green</b> = ride · <b style="color:${TR_LIGHT.yellow[0]}">Yellow</b> = be selective, size down · <b style="color:${TR_LIGHT.red[0]}">Red</b> = stand down on new longs.</li>
+        <li><b>Pick from the ride list.</b> When green or yellow, choose from the diversified top-momentum names below (capped at 3 per sector).</li>
+        <li><b>Hold &amp; trail.</b> Stay in while a name holds above its trailing 50DMA; the engine automatically drops names that stop trending.</li>
+      </ol>
+    </div>`;
 
     // Live track record by light color (the proof).
     let trackHtml = '';
@@ -5281,7 +5307,7 @@
         ${rows || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No qualifying uptrends right now.</span></div>'}</div>`;
     }
 
-    el.innerHTML = `${lightHtml}${basketHtml}${trackHtml}
+    el.innerHTML = `${lightHtml}${howToHtml}${basketHtml}${trackHtml}
       <div class="fade-caveats"><b>How to use.</b> Trend-following works when markets trend and fails when they chop or fall. The light blends SPY's trend, how <i>clean</i> the trend is (efficiency), market breadth, and the risk regime. <b>Green/Yellow</b> = the climate that historically rewarded riding trends; <b>Red</b> = stand down.
       <br><b>Honest caveat.</b> This is a market-timing + trend-capture system, not a stock-alpha engine — the proven edge is the <b>timing light</b> (when to be on vs off), not beating the market on selection. The basket largely captures the uptrend (beta) when it's safe to. Research, not financial advice.</div>`;
 
