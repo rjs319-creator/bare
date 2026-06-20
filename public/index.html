@@ -5391,18 +5391,20 @@
       <ol>
         <li><b>What this is.</b> A list of stocks making a <b>big move TODAY on unusually heavy volume</b> — the day's "movers."</li>
         <li><b>Check the regime first.</b> <b style="color:#22c55e">Risk-On</b>/<b style="color:#eab308">Neutral</b> = these setups are worth watching. <b style="color:#ef4444">Risk-Off</b> = the list is hidden — stand down (momentum fails in scary markets).</li>
-        <li><b>Read each name's plan.</b> 🎯 <b>Entry</b> = price to buy near · 🛑 <b>Stop</b> = sell here if it goes wrong (caps your loss) · 🏁 <b>Target</b> = where to take profit.</li>
+        <li><b>Pick your entry.</b> ↩️ <b>Pullback</b> = wait to buy lower on a dip (safer, may not fill) · 🎯 <b>Breakout</b> = buy now (chasing, fills for sure). Each shows 🛑 <b>Stop</b> (sell here if wrong) and 🏁 <b>Target</b> (take profit).</li>
         <li><b>Size by risk, not by gut.</b> Shares ≈ (1% of your account) ÷ (Entry − Stop). Example: $10k account, risk $100, Entry $10 / Stop $9 → ~100 shares.</li>
         <li><b>Always confirm on a chart</b> (TradingView: MACD / RSI) before buying. This is a <b>watchlist, not advice</b>.</li>
       </ol>
     </div>`;
 
+    const pb = r => r.pullback || null;
     const card = r => `<div class="dt-card">
         <div class="dt-card-top">
           <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span></span>
           <span class="dt-mv">+${r.pctChange}% <span class="dt-dim">· RVOL ${r.relVol}×${r.beta != null ? ' · β ' + r.beta : ''}${r.gapPct != null ? ' · gap ' + r.gapPct + '%' : ''}</span></span>
         </div>
-        <div class="dt-card-plan">🎯 Entry <b>$${r.entry}</b> &nbsp;·&nbsp; 🛑 Stop <b>$${r.stop != null ? r.stop : '—'}</b>${r.riskPct != null ? ` <span class="dt-dim">(−${r.riskPct}% risk)</span>` : ''} &nbsp;·&nbsp; 🏁 Target <b>$${r.target != null ? r.target : '—'}</b>${r.rr ? ` <span class="dt-dim">R:R 1:${r.rr}</span>` : ''}</div>
+        ${pb(r) ? `<div class="dt-card-plan">↩️ <b>Pullback entry</b> (wait for the dip) <b>$${pb(r).entry}</b> &nbsp;·&nbsp; 🛑 Stop <b>$${pb(r).stop}</b> <span class="dt-dim">(−${pb(r).riskPct}%)</span> &nbsp;·&nbsp; 🏁 Target <b>$${pb(r).target}</b> <span class="dt-dim">R:R 1:${pb(r).rr}</span></div>` : ''}
+        <div class="dt-card-plan">🎯 Breakout entry (buy now) <b>$${r.entry}</b> &nbsp;·&nbsp; 🛑 Stop <b>$${r.stop != null ? r.stop : '—'}</b>${r.riskPct != null ? ` <span class="dt-dim">(−${r.riskPct}%)</span>` : ''} &nbsp;·&nbsp; 🏁 Target <b>$${r.target != null ? r.target : '—'}</b>${r.rr ? ` <span class="dt-dim">R:R 1:${r.rr}</span>` : ''}</div>
       </div>`;
     const list = (title, rows, sub, extra) => {
       if (t.riskOff) return `<div class="rot-panel"><div class="rot-head">${title}</div><div class="rot-sub">🛑 Risk-off — suppressed (these setups underperform in risk-off; validated).</div></div>`;

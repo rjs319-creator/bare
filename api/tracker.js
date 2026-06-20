@@ -1375,7 +1375,7 @@ async function scanDaytradeUniverse(tickers, params, ctx) {
         last: m.last, pctChange: m.pctChange, relVol: m.relVol, gapPct: m.gapPct,
         excessPct: m.excessPct, avgDollarVol: m.avgDollarVol, beta,
         entry: lv ? lv.entry : m.last, stop: lv ? lv.stop : null, target: lv ? lv.target : null,
-        rr: lv ? lv.rr : null, riskPct: lv ? lv.riskPct : null,
+        rr: lv ? lv.rr : null, riskPct: lv ? lv.riskPct : null, pullback: lv ? lv.pullback : null,
         learnedExcess: p.expAlpha, confidence: p.pPos, nPriors: p.n,
       });
     }
