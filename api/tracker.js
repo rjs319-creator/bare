@@ -1367,11 +1367,15 @@ async function scanDaytradeUniverse(tickers, params, ctx) {
       if (!m || !dt.passesScan(m, params)) continue;
       const p = ctx.fe.posterior(ctx.state, t, { sector: SECTOR_OF[t] || '?' });
       if (p.drifted) continue;   // learner: this name's momentum picks stopped working
+      const lv = dt.tradeLevels(candles);                       // entry / stop / target / R:R
+      const beta = ctx.fe.betaVsSpy(candles, ctx.spyByDate);    // for the beta-neutral view + sizing
       out.push({
         ticker: t, sector: SECTOR_OF[t] || '?', scan: params.key,
         date: candles[candles.length - 1].date, score: dt.rankScore(m),
         last: m.last, pctChange: m.pctChange, relVol: m.relVol, gapPct: m.gapPct,
-        excessPct: m.excessPct, avgDollarVol: m.avgDollarVol,
+        excessPct: m.excessPct, avgDollarVol: m.avgDollarVol, beta,
+        entry: lv ? lv.entry : m.last, stop: lv ? lv.stop : null, target: lv ? lv.target : null,
+        rr: lv ? lv.rr : null, riskPct: lv ? lv.riskPct : null,
         learnedExcess: p.expAlpha, confidence: p.pPos, nPriors: p.n,
       });
     }
@@ -1515,6 +1519,16 @@ async function runDaytradeOpt(req, res) {
   if (!spyD || spyD.candles.length < 60) return res.status(502).json({ ok: false, error: 'No benchmark data' });
   const spyByDate = {}; spyD.candles.forEach(c => { spyByDate[c.date] = c.close; });
   const W = dt.AVG_VOL_WINDOW;
+  // Point-in-time trailing-252d beta vs SPY → the beta-neutral residual (strips the
+  // part of the move that was just the market). Answers "is the edge alpha or beta?"
+  const betaAt = (c, k, BW = 252) => {
+    const lo = Math.max(1, k - BW + 1); const sr = [], mr = [];
+    for (let j = lo; j <= k; j++) { const sp = spyByDate[c[j].date], sp1 = spyByDate[c[j - 1].date]; if (sp == null || sp1 == null) continue; sr.push(c[j].close / c[j - 1].close - 1); mr.push(sp / sp1 - 1); }
+    const n = sr.length; if (n < 30) return 1;
+    const mm = mr.reduce((a, x) => a + x, 0) / n, ms = sr.reduce((a, x) => a + x, 0) / n;
+    let cov = 0, vm = 0; for (let j = 0; j < n; j++) { cov += (sr[j] - ms) * (mr[j] - mm); vm += (mr[j] - mm) ** 2; }
+    return vm > 0 ? cov / vm : 1;
+  };
   const t0 = Date.now(), deadline = 50000; const recs = []; let i = 0;
   const worker = async () => {
     while (i < tickers.length) {
@@ -1527,8 +1541,8 @@ async function runDaytradeOpt(req, res) {
         if (!m || !dt.passesScan(m, params)) continue;
         const date = c[k].date; if (spyByDate[date] == null || spyByDate[c[k + H].date] == null) continue;
         const fwd = (c[k + H].close / c[k].close - 1) * 100, sfwd = (spyByDate[c[k + H].date] / spyByDate[date] - 1) * 100;
-        const regime = macro ? (macro.at(date) || {}).regime || 'neutral' : 'neutral';
-        recs.push({ date, exc: fwd - sfwd, fwd, regime });
+        const beta = betaAt(c, k);
+        recs.push({ date, exc: fwd - sfwd, excB: fwd - beta * sfwd, fwd, beta, regime: macro ? (macro.at(date) || {}).regime || 'neutral' : 'neutral' });
       }
     }
   };
@@ -1538,7 +1552,14 @@ async function runDaytradeOpt(req, res) {
   const agg = arr => {
     const n = arr.length; if (!n) return { n: 0 };
     const exc = arr.map(x => x.exc), beats = exc.filter(x => x > 0).length, ci = wilson(beats, n);
-    return { n, avgExc: +mean(exc).toFixed(2), avgRet: +mean(arr.map(x => x.fwd)).toFixed(2), beatRate: +((beats / n) * 100).toFixed(0), wilsonLo: +((ci.lo) * 100).toFixed(0) };
+    const beatsBN = arr.filter(x => x.excB > 0).length, ciBN = wilson(beatsBN, n);
+    return {
+      n, avgExc: +mean(exc).toFixed(2), avgRet: +mean(arr.map(x => x.fwd)).toFixed(2),
+      beatRate: +((beats / n) * 100).toFixed(0), wilsonLo: +((ci.lo) * 100).toFixed(0),
+      avgBeta: +mean(arr.map(x => x.beta)).toFixed(2),
+      avgExcBN: +mean(arr.map(x => x.excB)).toFixed(2),
+      beatRateBN: +((beatsBN / n) * 100).toFixed(0), wilsonLoBN: +((ciBN.lo) * 100).toFixed(0),
+    };
   };
   const dates = [...new Set(recs.map(r => r.date))].sort();
   const split = dates[Math.floor(0.6 * dates.length)] || dates[dates.length - 1];
