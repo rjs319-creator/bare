@@ -27,6 +27,7 @@ const { writeDay, readAllPicks, hasStore, writeApexDay, readAllApex, writeGhostD
         writeEdgeDay, readAllEdge,
         readFade, writeFade, writeFadeDay, readAllFade, readAllFadeDays,
         readTrendEng, writeTrendEng, writeTrendDay, readAllTrendDays,
+        readDaytradeEng, writeDaytradeEng, writeDaytradeDay, readAllDaytradeDays,
         readJSON, writeJSON } = require('../lib/store');
 const { fetchDailyHistory } = require('../lib/screener');
 const { analyzeVReversal } = require('../lib/vreversal');
@@ -1343,6 +1344,217 @@ async function runTrendBook(req, res) {
   });
 }
 
+// ── Day-Trade momentum / relative-volume screener ──────────────────────────
+// The EOD realization of the two Finviz day-trading setups (lib/daytrade.js):
+// Scan 1 (Momentum & Liquid) over LARGE, Scan 2 (Explosive Small-Cap) over
+// SMALL+MICRO. Self-learns per-stock via the shared fade-engine posterior, gates
+// on the macro regime (the app's #1 proven lever), and is validated OOS by
+// op=daytradeopt before any live claim. Forward horizon = a few sessions.
+const DAYTRADE_H = 3;
+
+async function scanDaytradeUniverse(tickers, params, ctx) {
+  const dt = require('../lib/daytrade');
+  const { cacheGet } = require('../lib/candle-cache');
+  const out = []; let i = 0;
+  const worker = async () => {
+    while (i < tickers.length) {
+      const t = tickers[i++]; if (Date.now() - ctx.t0 > ctx.deadline) return;
+      let candles = null;
+      for (const doc of ctx.caches) { if (doc) { const e = cacheGet(doc, t); if (e && e.candles) { candles = e.candles; break; } } }
+      if (!candles) { try { const d = await fetchDailyHistory(t); candles = d && d.candles; } catch {} }
+      if (!candles || candles.length < dt.AVG_VOL_WINDOW + 5) continue;
+      const m = dt.dayMetrics(candles, ctx.spyByDate);
+      if (!m || !dt.passesScan(m, params)) continue;
+      const p = ctx.fe.posterior(ctx.state, t, { sector: SECTOR_OF[t] || '?' });
+      if (p.drifted) continue;   // learner: this name's momentum picks stopped working
+      out.push({
+        ticker: t, sector: SECTOR_OF[t] || '?', scan: params.key,
+        date: candles[candles.length - 1].date, score: dt.rankScore(m),
+        last: m.last, pctChange: m.pctChange, relVol: m.relVol, gapPct: m.gapPct,
+        excessPct: m.excessPct, avgDollarVol: m.avgDollarVol,
+        learnedExcess: p.expAlpha, confidence: p.pPos, nPriors: p.n,
+      });
+    }
+  };
+  await Promise.all(Array.from({ length: 16 }, worker));
+  // Rank by composite score, nudged by the per-stock learned tilt.
+  out.sort((a, b) => (b.score + 8 * b.learnedExcess) - (a.score + 8 * a.learnedExcess));
+  return out;
+}
+
+async function computeDaytradeLive(t0, deadline) {
+  const { loadCandleCache } = require('../lib/candle-cache');
+  const fe = require('../lib/fade-engine');
+  const { fetchMacro } = require('../lib/macro');
+  const dt = require('../lib/daytrade');
+  const spyD = await fetchDailyHistory('SPY');
+  if (!spyD) return null;
+  const spyByDate = {}; spyD.candles.forEach(c => { spyByDate[c.date] = c.close; });
+  let regime = 'neutral';
+  try { const macro = await fetchMacro(); if (macro) regime = macro.regime; } catch {}
+  const state = fe.load(await readDaytradeEng());
+  const [cacheL, cacheS, cacheM] = await Promise.all([
+    loadCandleCache('large').catch(() => null),
+    loadCandleCache('small').catch(() => null),
+    loadCandleCache('micro').catch(() => null),
+  ]);
+  const ctx = { spyByDate, t0, deadline, fe, state };
+  const scan1 = await scanDaytradeUniverse([...new Set(UNI_LARGE)], dt.SCANS.momentum_liquid, { ...ctx, caches: [cacheL] });
+  const scan2 = await scanDaytradeUniverse([...new Set([...UNI_SMALL, ...UNI_MICRO])], dt.SCANS.explosive_small, { ...ctx, caches: [cacheS, cacheM] });
+  return { regime, scan1, scan2, state, spyLastDate: spyD.candles[spyD.candles.length - 1].date };
+}
+
+// op=daytrade — live screener (regime-gated display).
+async function runDaytrade(req, res) {
+  const t0 = Date.now();
+  const live = await computeDaytradeLive(t0, 45000);
+  if (!live) return res.status(502).json({ ok: false, error: 'No market data' });
+  const riskOff = live.regime === 'risk-off';
+  res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=86400');
+  return res.json({
+    ok: true, regime: live.regime, riskOff, horizon: DAYTRADE_H,
+    // Momentum/breakout fails in risk-off (the project's core finding) → stand down.
+    momentumLiquid: riskOff ? [] : live.scan1.slice(0, 20),
+    explosiveSmall: riskOff ? [] : live.scan2.slice(0, 20),
+    counts: { momentumLiquid: live.scan1.length, explosiveSmall: live.scan2.length },
+    learnerUpdatedAt: live.state.updatedAt, generatedAt: new Date().toISOString(),
+  });
+}
+
+// op=daytradetick — cron: resolve matured picks → learn → log today's picks.
+async function runDaytradeTick(req, res) {
+  if (!hasStore()) return res.json({ ok: false, error: 'Blob storage not configured.' });
+  const fe = require('../lib/fade-engine');
+  const t0 = Date.now();
+  try {
+    if (req.query.prune && /^\d{4}-\d{2}-\d{2}$/.test(req.query.prune)) {
+      await writeDaytradeDay(req.query.prune, { picks: [] });
+      return res.json({ ok: true, pruned: req.query.prune });
+    }
+    // 1) Resolve matured picks (forward H-session excess vs SPY) → learn.
+    const days = await readAllDaytradeDays();
+    const openTk = new Set(); days.forEach(dd => (dd.picks || []).forEach(p => { if (!p.resolved) openTk.add(p.ticker); }));
+    const tk = [...openTk, 'SPY'];
+    const hist = new Map(); let i = 0;
+    const rw = async () => { while (i < tk.length) { if (Date.now() - t0 > 15000) return; const t = tk[i++]; try { const d = await fetchDailyHistory(t); if (d) hist.set(t, d.candles); } catch {} } };
+    await Promise.all(Array.from({ length: 12 }, rw));
+    const spy = hist.get('SPY') || [];
+    const afterN = (cands, date, n) => { const idx = cands.findIndex(c => c.date >= date); if (idx < 0 || idx + n >= cands.length) return null; return { c1: cands[idx + n].close, c0: cands[idx].close, date: cands[idx + n].date }; };
+    const outcomes = []; const changed = new Set(); let resolvedNow = 0;
+    for (const dd of days) {
+      for (const p of (dd.picks || [])) {
+        if (p.resolved) continue;
+        const cands = hist.get(p.ticker); if (!cands) continue;
+        const r = afterN(cands, p.date, DAYTRADE_H); if (!r) continue;
+        const sp = afterN(spy, p.date, DAYTRADE_H); if (!sp) continue;
+        const fwd = (r.c1 / r.c0 - 1) * 100, sfwd = (sp.c1 / sp.c0 - 1) * 100;
+        p.resolved = true; p.fwdPct = +fwd.toFixed(2); p.excPct = +(fwd - sfwd).toFixed(2); p.exitDate = r.date;
+        outcomes.push({ ticker: p.ticker, alpha: p.excPct, sector: p.sector || SECTOR_OF[p.ticker] || '?' });
+        changed.add(dd.date); resolvedNow++;
+      }
+    }
+    const state = fe.load(await readDaytradeEng());
+    if (outcomes.length) fe.update(state, outcomes);
+    await Promise.all([...changed].map(dt2 => { const dd = days.find(x => x.date === dt2); return writeDaytradeDay(dt2, { regime: dd.regime, picks: dd.picks }); }));
+
+    // 2) Log today's picks (counterfactually — ALL regimes — so the learner sees
+    //    risk-off outcomes too; dedup by candle date).
+    const live = await computeDaytradeLive(t0, 40000);
+    let logged = 0, logDate = null;
+    if (live) {
+      logDate = live.spyLastDate;
+      const picks = [...live.scan1.slice(0, 15), ...live.scan2.slice(0, 15)]
+        .map(c => ({ ticker: c.ticker, scan: c.scan, date: logDate, entry: c.last, score: c.score, sector: c.sector, resolved: false }));
+      if (picks.length) { await writeDaytradeDay(logDate, { regime: live.regime, picks }); logged = picks.length; }
+    }
+    await writeDaytradeEng(fe.serialize(state));
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: true, resolvedNow, loggedToday: logged, logDate, ...fe.summary(state), elapsedMs: Date.now() - t0 });
+  } catch (e) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: false, error: String(e && e.message || e), elapsedMs: Date.now() - t0 });
+  }
+}
+
+// op=daytradebook — live forward track record by scan + regime.
+async function runDaytradeBook(req, res) {
+  const days = await readAllDaytradeDays();
+  const picks = [];
+  days.forEach(dd => (dd.picks || []).forEach(p => { if (p.resolved && p.excPct != null) picks.push({ ...p, regime: dd.regime || 'neutral' }); }));
+  const agg = arr => {
+    const n = arr.length; if (!n) return { n: 0 };
+    const beats = arr.filter(p => p.excPct > 0).length, ci = wilson(beats, n);
+    return { n, avgRet: +(arr.reduce((s, p) => s + (p.fwdPct || 0), 0) / n).toFixed(2), avgExc: +(arr.reduce((s, p) => s + p.excPct, 0) / n).toFixed(2), beatRate: +((beats / n) * 100).toFixed(0), wilsonLo: +(ci.lo * 100).toFixed(0) };
+  };
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({
+    ok: true, daysLogged: days.length, resolved: picks.length,
+    stillOpen: days.reduce((a, dd) => a + (dd.picks || []).filter(p => !p.resolved).length, 0),
+    overall: agg(picks),
+    byScan: { momentum_liquid: agg(picks.filter(p => p.scan === 'momentum_liquid')), explosive_small: agg(picks.filter(p => p.scan === 'explosive_small')) },
+    byRegime: { 'risk-on': agg(picks.filter(p => p.regime === 'risk-on')), neutral: agg(picks.filter(p => p.regime === 'neutral')), 'risk-off': agg(picks.filter(p => p.regime === 'risk-off')) },
+    note: `Live forward (${DAYTRADE_H}-session) excess-vs-SPY record of logged day-trade picks, by scan and macro regime. Accrues via the warm cron; thin until ~${DAYTRADE_H} sessions after the first tick.`,
+    generatedAt: new Date().toISOString(),
+  });
+}
+
+// op=daytradeopt — VALIDATION harness (validate-first). Replays a scan point-in-time
+// over multi-year history → forward H-session excess vs SPY, split by regime + OOS.
+async function runDaytradeOpt(req, res) {
+  const dt = require('../lib/daytrade');
+  const { buildMacroLookup } = require('../lib/macro');
+  const scope = (req.query.scope || 'large').toLowerCase();
+  const H = Math.max(1, parseInt(req.query.h, 10) || DAYTRADE_H);
+  const range = /^(2y|5y|10y|max)$/.test(req.query.range || '') ? req.query.range : '5y';
+  const limit = Math.max(0, parseInt(req.query.limit, 10) || 150);
+  const params = (scope === 'small' || scope === 'micro') ? dt.SCANS.explosive_small : dt.SCANS.momentum_liquid;
+  const lists = scope === 'small' ? UNI_SMALL : scope === 'micro' ? UNI_MICRO : UNI_LARGE;
+  let tickers = [...new Set(lists)]; if (limit > 0) tickers = tickers.slice(0, limit);
+
+  const [spyD, macro] = await Promise.all([fetchDailyHistory('SPY', range), buildMacroLookup(range).catch(() => null)]);
+  if (!spyD || spyD.candles.length < 60) return res.status(502).json({ ok: false, error: 'No benchmark data' });
+  const spyByDate = {}; spyD.candles.forEach(c => { spyByDate[c.date] = c.close; });
+  const W = dt.AVG_VOL_WINDOW;
+  const t0 = Date.now(), deadline = 50000; const recs = []; let i = 0;
+  const worker = async () => {
+    while (i < tickers.length) {
+      const t = tickers[i++]; if (Date.now() - t0 > deadline) return;
+      let d; try { d = await fetchDailyHistory(t, range); } catch { continue; }
+      if (!d || d.candles.length < W + H + 5) continue;
+      const c = d.candles;
+      for (let k = W + 1; k < c.length - H; k++) {
+        const m = dt.dayMetrics(c.slice(k - W - 1, k + 1), spyByDate);   // metrics as-of day k
+        if (!m || !dt.passesScan(m, params)) continue;
+        const date = c[k].date; if (spyByDate[date] == null || spyByDate[c[k + H].date] == null) continue;
+        const fwd = (c[k + H].close / c[k].close - 1) * 100, sfwd = (spyByDate[c[k + H].date] / spyByDate[date] - 1) * 100;
+        const regime = macro ? (macro.at(date) || {}).regime || 'neutral' : 'neutral';
+        recs.push({ date, exc: fwd - sfwd, fwd, regime });
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 14 }, worker));
+
+  const mean = a => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0);
+  const agg = arr => {
+    const n = arr.length; if (!n) return { n: 0 };
+    const exc = arr.map(x => x.exc), beats = exc.filter(x => x > 0).length, ci = wilson(beats, n);
+    return { n, avgExc: +mean(exc).toFixed(2), avgRet: +mean(arr.map(x => x.fwd)).toFixed(2), beatRate: +((beats / n) * 100).toFixed(0), wilsonLo: +((ci.lo) * 100).toFixed(0) };
+  };
+  const dates = [...new Set(recs.map(r => r.date))].sort();
+  const split = dates[Math.floor(0.6 * dates.length)] || dates[dates.length - 1];
+  const oos = recs.filter(r => r.date >= split);
+  const byReg = arr => ({ 'risk-on': agg(arr.filter(r => r.regime === 'risk-on')), neutral: agg(arr.filter(r => r.regime === 'neutral')), 'risk-off': agg(arr.filter(r => r.regime === 'risk-off')) });
+
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({
+    ok: true, scope, scan: params.key, range, horizonDays: H, namesScanned: tickers.length, signals: recs.length,
+    overall: agg(recs), byRegime: byReg(recs),
+    oos: { split, all: agg(oos), ...byReg(oos) },
+    note: `Day-trade ${params.key} scan replayed point-in-time; forward ${H}-session excess vs SPY. Honest test: does the setup beat the market, hold OOS, and survive across regimes? (The project's prior: momentum is weak + regime-dependent.)`,
+    generatedAt: new Date().toISOString(),
+  });
+}
+
 // ── op=archive : snapshot today's per-ticker mention counts + options ───────
 // THE unrecoverable data capture. Social-mention counts (StockTwits trending)
 // and option-chain snapshots can't be reconstructed historically, so we persist
@@ -2201,6 +2413,10 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'vreversaltest') return runVReversalTest(req, res);
   if (req.query.op === 'fadeopt') return runFadeOpt(req, res);
   if (req.query.op === 'fadeseed') return runFadeSeed(req, res);
+  if (req.query.op === 'daytrade') return runDaytrade(req, res);
+  if (req.query.op === 'daytradetick') return runDaytradeTick(req, res);
+  if (req.query.op === 'daytradebook') return runDaytradeBook(req, res);
+  if (req.query.op === 'daytradeopt') return runDaytradeOpt(req, res);
   if (req.query.op === 'fadesignals') return runFadeSignals(req, res);
   if (req.query.op === 'fadetick') return runFadeTick(req, res);
   if (req.query.op === 'fadebook') return runFadeBook(req, res);

@@ -1681,6 +1681,7 @@
     <a class="nav-link" href="#edge" data-tab="edge">Edge Book</a>
     <a class="nav-link" href="#fade" data-tab="fade">Overheated</a>
     <a class="nav-link" href="#trendrider" data-tab="trendrider">Trend Rider</a>
+    <a class="nav-link" href="#daytrade" data-tab="daytrade">Day Trade</a>
     <a class="nav-link" href="#xalerts" data-tab="xalerts">Trade Alerts</a>
     <a class="nav-link" href="#scoreboard" data-tab="scoreboard">Scoreboard</a>
     <a class="nav-link" href="#momentum" data-tab="momentum">Alerts</a>
@@ -1709,6 +1710,7 @@
   <a class="mtt-item" href="#edge" data-tab="edge"><span class="mtt-ic">📓</span>Edge Book</a>
   <a class="mtt-item" href="#fade" data-tab="fade"><span class="mtt-ic">🔥</span>Overheated</a>
   <a class="mtt-item" href="#trendrider" data-tab="trendrider"><span class="mtt-ic">🚦</span>Trend Rider</a>
+  <a class="mtt-item" href="#daytrade" data-tab="daytrade"><span class="mtt-ic">⚡</span>Day Trade</a>
   <a class="mtt-item" href="#xalerts" data-tab="xalerts"><span class="mtt-ic">🐦</span>Alerts+</a>
   <a class="mtt-item" href="#scoreboard" data-tab="scoreboard"><span class="mtt-ic">🏆</span>Scoreboard</a>
   <a class="mtt-item" href="#momentum" data-tab="momentum"><span class="mtt-ic">🔥</span>Alerts</a>
@@ -2031,6 +2033,22 @@
     </div>
     <div id="trendr-container">
       <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load the market-climate light…</p></div>
+    </div>
+  </section>
+
+  <!-- DAY TRADE (momentum / relative-volume movers, self-learning) -->
+  <section class="screener-section" id="daytrade">
+    <div class="section-label">
+      <div class="accent-bar" style="background:#f59e0b"></div>
+      <h2 style="color:#f59e0b">⚡ Day Trade</h2>
+      <span class="label-meta" id="dt-meta">· relative-volume + momentum movers · regime-gated</span>
+      <div class="label-action">
+        <span class="lbl-time" id="dt-gen-time"></span>
+        <button class="refresh-btn" style="color:#f59e0b" id="dt-refresh-btn">⟳ Refresh</button>
+      </div>
+    </div>
+    <div id="dt-container">
+      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load today's movers…</p></div>
     </div>
   </section>
 
@@ -2419,6 +2437,7 @@
     <a class="mbn-item" href="#edge" data-tab="edge"><span class="mbn-icon">📓</span><span class="mbn-label">Edge</span></a>
     <a class="mbn-item" href="#fade" data-tab="fade"><span class="mbn-icon">🔥</span><span class="mbn-label">Overheated</span></a>
     <a class="mbn-item" href="#trendrider" data-tab="trendrider"><span class="mbn-icon">🚦</span><span class="mbn-label">Trend</span></a>
+    <a class="mbn-item" href="#daytrade" data-tab="daytrade"><span class="mbn-icon">⚡</span><span class="mbn-label">DayTrade</span></a>
     <a class="mbn-item" href="#xalerts" data-tab="xalerts"><span class="mbn-icon">🐦</span><span class="mbn-label">Alerts+</span></a>
     <a class="mbn-item" href="#scoreboard" data-tab="scoreboard"><span class="mbn-icon">🏆</span><span class="mbn-label">Score</span></a>
     <a class="mbn-item" href="#momentum" data-tab="momentum"><span class="mbn-icon">🔥</span><span class="mbn-label">Alerts</span></a>
@@ -2440,6 +2459,7 @@
     edge:     ['edge'],
     fade:     ['fade'],
     trendrider: ['trendrider'],
+    daytrade: ['daytrade'],
     xalerts:  ['xalerts'],
     scoreboard: ['scoreboard'],
     momentum: ['momentum'],
@@ -2499,6 +2519,7 @@
     if (sub === 'rotation' && typeof ensureRotationDW === 'function') ensureRotationDW();
     if (sub === 'fade' && typeof ensureFade === 'function') ensureFade();
     if (sub === 'trendrider' && typeof ensureTrendRider === 'function') ensureTrendRider();
+    if (sub === 'daytrade' && typeof ensureDaytrade === 'function') ensureDaytrade();
     if (sub === 'xalerts' && typeof ensureXalerts === 'function') ensureXalerts();
 
     const act = document.querySelector('.mobile-top-tabs .mtt-item.active');
@@ -5332,6 +5353,50 @@
   }
 
   document.getElementById('trendr-refresh-btn')?.addEventListener('click', runTrendRider);
+
+  // ── Day Trade (momentum / relative-volume movers, regime-gated, self-learning) ──
+  let daytradeLoaded = false;
+  function ensureDaytrade() { if (!daytradeLoaded) { daytradeLoaded = true; runDaytradeUI(); } }
+  async function runDaytradeUI() {
+    const el = document.getElementById('dt-container');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning movers…</p></div>`;
+    try {
+      const [t, book] = await Promise.all([
+        fetch('/api/tracker?op=daytrade').then(r => r.json()),
+        fetch('/api/tracker?op=daytradebook').then(r => r.json()).catch(() => null),
+      ]);
+      renderDaytrade(t, book);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Day Trade.</p></div>`; }
+  }
+  function renderDaytrade(t, book) {
+    const el = document.getElementById('dt-container');
+    if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Day Trade unavailable.</p></div>`; return; }
+    const REG = { 'risk-on': ['#22c55e', 'RISK-ON', 'Hunt momentum'], neutral: ['#eab308', 'NEUTRAL', 'Be selective'], 'risk-off': ['#ef4444', 'RISK-OFF', 'Stand down — momentum fails here'] };
+    const [rc, rlbl, rdesc] = REG[t.regime] || REG.neutral;
+    const banner = `<div class="rot-panel" style="border-color:${rc}55"><div class="rot-head" style="color:${rc}">Regime: ${rlbl}</div><div class="rot-sub">${rdesc}. Forward horizon ~${t.horizon} sessions. Picks are logged daily and the engine learns which names' momentum actually continues.</div></div>`;
+    const list = (title, rows, sub) => {
+      if (t.riskOff) return `<div class="rot-panel"><div class="rot-head">${title}</div><div class="rot-sub">🛑 Risk-off — suppressed (these setups underperform in risk-off; validated).</div></div>`;
+      const body = (rows || []).map(r => `<div class="bt-ic-row"><span><b>${esc(r.ticker)}</b> <span style="color:var(--text-dim)">${esc(r.sector || '')}</span></span><span style="color:var(--green)">+${r.pctChange}% <span style="color:var(--text-dim)">gap ${r.gapPct != null ? r.gapPct + '%' : '—'}</span></span><span>RVOL ${r.relVol}x</span></div>`).join('');
+      return `<div class="rot-panel"><div class="rot-head">${title}</div><div class="rot-sub">${sub}</div>${body || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No movers right now.</span></div>'}</div>`;
+    };
+    const ml = list('🚀 Momentum &amp; Liquid ($5–$50)', t.momentumLiquid, 'Liquid names up &gt;5% on &gt;1.5× relative volume, ranked by the volume anomaly + learned tilt.');
+    const es = list('💥 Explosive Small-Cap ($1–$20)', t.explosiveSmall, 'Small caps up &gt;8% on &gt;2× relative volume — higher reward, lower hit-rate.');
+    let track;
+    if (book && book.resolved >= 10) {
+      const row = (n, s) => s && s.n ? `<div class="bt-ic-row"><span>${n} <span style="color:var(--text-dim)">${s.n}</span></span><span>exc ${s.avgExc > 0 ? '+' : ''}${s.avgExc}%</span><span>beat ${s.beatRate}% <span style="color:var(--text-dim)">(LB ${s.wilsonLo}%)</span></span></div>` : '';
+      track = `<div class="rot-panel"><div class="rot-head">📊 Live track record — forward ${t.horizon}-session excess vs SPY</div>${row('🚀 Momentum-Liquid', book.byScan.momentum_liquid)}${row('💥 Explosive-Small', book.byScan.explosive_small)}${row('All picks', book.overall)}<div class="bt-ic-row" style="border-top:1px solid var(--border);margin-top:4px"><span></span><span></span><span>${book.resolved} resolved · ${book.stillOpen} open</span></div></div>`;
+    } else {
+      track = `<div class="rot-panel rot-panel-pending"><div class="rot-head">📊 Live track record — building…</div><div class="rot-sub">${book ? `${book.stillOpen || 0} open, ${book.resolved || 0} resolved` : ''}. Each pick is scored ~${t.horizon} sessions later; accrues automatically via the daily cron.</div></div>`;
+    }
+    el.innerHTML = banner + ml + es + track +
+      `<div class="fade-caveats"><b>How to use.</b> Today's relative-volume + momentum movers (the EOD version of the Finviz day-trade scans), regime-gated and self-learning. <b>Honest validation</b> (5y, forward 3-session excess vs SPY): large-cap momentum-chasing does <b>not</b> beat the market (it mean-reverts, −1.3% out-of-sample); explosive small-caps carry a <b>positive average excess</b> (~+1.7–2.3% in risk-on/neutral) but a <b>sub-50% hit-rate</b> — a few big runners carry it, and it dies in risk-off. So treat these as a <b>ranked movers watchlist</b>, not a win-rate edge; the per-stock learner tilts toward names whose momentum actually continues and drops the rest. Confirm entries in TradingView (MACD / RSI / Smart-Money). Research, not advice.</div>`;
+    const meta = document.getElementById('dt-meta');
+    if (meta) meta.textContent = `· ${t.regime} · ${(t.counts ? t.counts.momentumLiquid + t.counts.explosiveSmall : 0)} movers`;
+    const gt = document.getElementById('dt-gen-time');
+    if (gt && t.generatedAt) gt.textContent = new Date(t.generatedAt).toLocaleTimeString();
+  }
+  document.getElementById('dt-refresh-btn')?.addEventListener('click', runDaytradeUI);
 
   // ── Trade Alerts (social, ranked by the external-collector pipeline) ──
   let xalertsLoaded = false;

@@ -115,7 +115,15 @@ module.exports = async function handler(req, res) {
     trendtick = await r.json();
   } catch (e) { trendtick = { error: String(e && e.message || e) }; }
 
+  // Day-Trade momentum/rel-vol screener: resolve matured picks → learn per-stock →
+  // log today's picks. Reads the candle caches the screener warm just built.
+  let daytradetick = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=daytradetick', { headers: { 'x-warm': '1' } });
+    daytradetick = await r.json();
+  } catch (e) { daytradetick = { error: String(e && e.message || e) }; }
+
   const warmedExtra = await extraWarm;   // already resolved — ran during the tail above
   res.setHeader('Cache-Control', 'no-store');
-  return res.json({ ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, at: new Date().toISOString() });
+  return res.json({ ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, at: new Date().toISOString() });
 };
