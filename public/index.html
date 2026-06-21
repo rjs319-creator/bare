@@ -1472,6 +1472,9 @@
     #tape-badge b { color: var(--text); }
     #tape-badge .tb-desc { color: var(--text-dim); }
     #tape-badge .tb-reg { margin-left: auto; font-size: 0.66rem; color: var(--text-dim); border: 1px solid var(--border); border-radius: 20px; padding: 2px 9px; }
+    #tape-badge .tb-fit { display: block; margin-top: 3px; font-size: 0.72rem; font-weight: 600; }
+    #tape-badge .tb-fit.good { color: var(--green); }
+    #tape-badge .tb-fit.bad { color: var(--amber, #f59e0b); }
     @media (max-width: 640px) {
       .hub-sub { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 6px; }
       .hub-sub::-webkit-scrollbar { display: none; }
@@ -2398,7 +2401,7 @@
     SECTION_IDS.forEach(s => document.getElementById(s)?.classList.toggle('tab-active', s === sub));
     document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('active', el.dataset.tab === top));
     renderHubSubnav(top, sub);
-    if (typeof updateTapeBadge === 'function') updateTapeBadge(top === 'screeners');
+    if (typeof updateTapeBadge === 'function') updateTapeBadge(top === 'screeners' ? sub : null);
     if (sub === 'screener' && typeof ensureScreener === 'function') ensureScreener();
     if (sub === 'backtest' && typeof ensureBacktest === 'function') ensureBacktest();
     if (sub === 'custom' && typeof ensureCustom === 'function') ensureCustom();
@@ -2423,22 +2426,44 @@
 
   // Shared market-tape badge across all screener tabs (op=tape, cached ~5 min).
   const TAPE_INFO = {
-    trending: ['📈', 'Trending tape', 'clean directional market — trend & breakout setups favored'],
-    choppy: ['🌊', 'Choppy / ranging tape', 'breakouts fail more here (false breakouts) — favor mean-reversion & tighter stops'],
-    mixed: ['🤝', 'Mixed tape', 'no tape clearly favors a style — be selective'],
-    riskoff: ['🛑', 'Risk-off tape', 'stand down on new longs'],
+    trending: ['📈', 'Trending tape', 'clean directional market'],
+    choppy: ['🌊', 'Choppy / ranging tape', 'low trend efficiency — whippy'],
+    mixed: ['🤝', 'Mixed tape', 'no tape clearly favors a style'],
+    riskoff: ['🛑', 'Risk-off tape', 'defensive market'],
+  };
+  // Each screener's strategy STYLE and the tape it works best in. The badge tells
+  // you whether today's tape FITS the screener you're looking at (condition-aware
+  // per screener): trend/breakout/momentum favor trending tapes; mean-reversion
+  // (Fade) favors choppy tapes — the opposite.
+  const SCREENER_STYLE = { screener: 'breakout', custom: 'momentum', daytrade: 'momentum', confluence: 'adaptive', ghost: 'breakout', trendrider: 'trend', fade: 'meanrev' };
+  const STYLE = {
+    breakout: { favor: 'trending', name: 'breakouts', good: 'have the wind at their back', bad: 'fail more often (false breakouts) — be selective' },
+    momentum: { favor: 'trending', name: 'momentum setups', good: 'tend to follow through', bad: 'stall and reverse — be selective, tighten stops' },
+    trend: { favor: 'trending', name: 'trend-following', good: 'is in its element', bad: 'gets chopped up — stand down (see the traffic light)' },
+    meanrev: { favor: 'choppy', name: 'fades / mean-reversion', good: 'are in their element (price reverts in ranges)', bad: 'is dangerous — never fade a strong trend' },
+    adaptive: null,   // Confluence adapts internally (★ marks in-element strategies)
   };
   let _tapeCache = null, _tapeAt = 0;
-  async function updateTapeBadge(show) {
+  async function updateTapeBadge(sub) {
     const el = document.getElementById('tape-badge');
     if (!el) return;
-    if (!show) { el.style.display = 'none'; return; }
+    if (!sub) { el.style.display = 'none'; return; }
     el.style.display = '';
     const render = () => {
       const t = _tapeCache;
       if (!t || !t.ok) { el.innerHTML = `<span class="tb-desc">Reading the market tape…</span>`; return; }
       const [ic, lbl, desc] = TAPE_INFO[t.condition] || TAPE_INFO.mixed;
-      el.innerHTML = `<span class="tb-ic">${ic}</span><span><b>${lbl}</b> <span class="tb-desc">— ${desc}</span></span>`
+      // Per-screener fit: does this tape suit the active screener's style?
+      let fit = '';
+      const sty = STYLE[SCREENER_STYLE[sub]];
+      if (sty && t.condition !== 'mixed') {
+        if (t.condition === 'riskoff') fit = `<span class="tb-fit bad">⚠ risk-off — stand down on new longs</span>`;
+        else if (t.condition === sty.favor) fit = `<span class="tb-fit good">✓ ${sty.name} ${sty.good}</span>`;
+        else fit = `<span class="tb-fit bad">⚠ ${sty.name} ${sty.bad}</span>`;
+      } else if (SCREENER_STYLE[sub] === 'confluence' || SCREENER_STYLE[sub] === 'adaptive') {
+        fit = `<span class="tb-fit">this screener adapts to the tape automatically</span>`;
+      }
+      el.innerHTML = `<span class="tb-ic">${ic}</span><span><b>${lbl}</b> <span class="tb-desc">— ${desc}</span>${fit}</span>`
         + `<span class="tb-reg">${(t.regime || '').toUpperCase()}${t.efficiency != null ? ` · trend-eff ${t.efficiency}` : ''}</span>`;
     };
     render();
