@@ -2339,7 +2339,7 @@
   <hr class="section-divider" />
 
   <!-- TRENDS & PREDICTIONS -->
-  <section class="trends-section" id="trends">
+  <section class="trends-section" id="trends" style="display:none">
     <div class="section-label">
       <div class="accent-bar" style="background:var(--purple)"></div>
       <h2 style="color:var(--purple)">Market Trends &amp; Predictions</h2>
@@ -2432,7 +2432,7 @@
   const TAB_GROUPS = {
     start:     ['start'],
     screeners: ['screener', 'custom', 'daytrade', 'ghost', 'trendrider', 'fade'],
-    markets:   ['rotation', 'sectors', 'momentum', 'trends', 'news', 'options', 'picks'],
+    markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
     research:  ['backtest', 'events', 'edge'],
     track:     ['scoreboard', 'xalerts'],
   };
@@ -2440,7 +2440,7 @@
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
     screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', daytrade: '⚡ Day Trade', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
-    rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', trends: '📈 Trends', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
+    rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
     scoreboard: '🏆 Scoreboard', xalerts: '🐦 Trade Alerts',
   };
@@ -2503,7 +2503,6 @@
     if (sub === 'daytrade' && typeof ensureDaytrade === 'function') ensureDaytrade();
     if (sub === 'xalerts' && typeof ensureXalerts === 'function') ensureXalerts();
     if (sub === 'momentum' && typeof ensureMomentum === 'function') ensureMomentum();
-    if (sub === 'trends' && typeof ensureTrends === 'function') ensureTrends();
     if (sub === 'options' && typeof ensureOptions === 'function') ensureOptions();
     if (sub === 'picks' && typeof ensurePicks === 'function') ensurePicks();
 
