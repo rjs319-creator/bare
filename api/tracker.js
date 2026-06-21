@@ -28,6 +28,7 @@ const { writeDay, readAllPicks, hasStore, writeApexDay, readAllApex, writeGhostD
         readFade, writeFade, writeFadeDay, readAllFade, readAllFadeDays,
         readTrendEng, writeTrendEng, writeTrendDay, readAllTrendDays,
         readDaytradeEng, writeDaytradeEng, writeDaytradeDay, readAllDaytradeDays,
+        readConfluenceEng, writeConfluenceEng, writeConfluenceDay, readAllConfluenceDays,
         readJSON, writeJSON } = require('../lib/store');
 const { fetchDailyHistory } = require('../lib/screener');
 const { analyzeVReversal } = require('../lib/vreversal');
@@ -1576,6 +1577,257 @@ async function runDaytradeOpt(req, res) {
   });
 }
 
+// ── Confluence screener (5 classic strategies, self-learning) ──────────────
+// Runs EMA-cross / Supertrend / RSI-MR / MACD / price-action over the universe and
+// ranks names by how many strategies AGREE bullish. Two self-learners: a per-STOCK
+// fade-engine posterior (which names' confluence actually continues) AND per-STRATEGY
+// weights learned from realized edge (the algo re-weights what works). Regime-gated;
+// validated OOS by op=confluenceopt. Forward horizon = 21 sessions (trend strategies).
+const CONFLUENCE_H = 21;
+const CONFLUENCE_MIN_BULL = 3;        // need a majority of the 5 strategies to agree
+const STRAT_K = 0.1;                  // +1% avg realized excess → +0.1 confluence weight
+const STRAT_DECAY = 0.95;             // EWMA decay for per-strategy edge
+const CONFLUENCE_STRAT_KEY = 'apex/confluence-strat.json';
+
+function confluenceStratWeights(stratState) {
+  const cf = require('../lib/confluence');
+  const w = {};
+  for (const s of cf.STRATEGIES) {
+    const e = stratState && stratState[s] ? stratState[s].ewma : 0;
+    w[s] = +Math.max(0.3, Math.min(2, 1 + e * STRAT_K)).toFixed(2);   // learned, clamped
+  }
+  return w;
+}
+function stratEdgeSummary(stratState) {
+  const cf = require('../lib/confluence');
+  return cf.STRATEGIES.map(s => ({ strategy: s, ewmaExc: stratState[s] ? +stratState[s].ewma.toFixed(2) : 0, n: stratState[s] ? stratState[s].n : 0 }));
+}
+
+async function scanConfluenceUniverse(tickers, ctx) {
+  const cf = require('../lib/confluence');
+  const dt = require('../lib/daytrade');
+  const { cacheGet } = require('../lib/candle-cache');
+  const out = []; let i = 0;
+  const worker = async () => {
+    while (i < tickers.length) {
+      const t = tickers[i++]; if (Date.now() - ctx.t0 > ctx.deadline) return;
+      let candles = null;
+      for (const doc of ctx.caches) { if (doc) { const e = cacheGet(doc, t); if (e && e.candles) { candles = e.candles; break; } } }
+      if (!candles) { try { const d = await fetchDailyHistory(t); candles = d && d.candles; } catch {} }
+      if (!candles || candles.length < cf.MIN_BARS) continue;
+      const r = cf.confluence(candles, ctx.weights);
+      if (!r || r.bullishCount < ctx.minBull) continue;
+      const p = ctx.fe.posterior(ctx.state, t, { sector: SECTOR_OF[t] || '?' });
+      if (p.drifted) continue;                                  // per-stock learner drop
+      const di = candles.length - 1, dj = di - CONFLUENCE_H;
+      const last = candles[di].close;
+      let exc = null;
+      if (dj >= 0 && ctx.spyByDate[candles[di].date] != null && ctx.spyByDate[candles[dj].date] != null) {
+        exc = +(((last / candles[dj].close - 1) - (ctx.spyByDate[candles[di].date] / ctx.spyByDate[candles[dj].date] - 1)) * 100).toFixed(2);
+      }
+      const lv = dt.tradeLevels(candles);
+      out.push({
+        ticker: t, sector: SECTOR_OF[t] || '?', date: candles[di].date, last: +last.toFixed(2),
+        score: r.score, maxScore: r.maxScore, bullishCount: r.bullishCount, bull: r.bull,
+        perStrategy: r.perStrategy, freshTriggers: r.freshTriggers, excess21d: exc,
+        beta: ctx.fe.betaVsSpy(candles, ctx.spyByDate),
+        entry: lv ? lv.entry : last, stop: lv ? lv.stop : null, target: lv ? lv.target : null,
+        rr: lv ? lv.rr : null, riskPct: lv ? lv.riskPct : null, pullback: lv ? lv.pullback : null,
+        learnedExcess: p.expAlpha, confidence: p.pPos, nPriors: p.n,
+      });
+    }
+  };
+  await Promise.all(Array.from({ length: 16 }, worker));
+  out.sort((a, b) => (b.score + 8 * b.learnedExcess) - (a.score + 8 * a.learnedExcess));
+  return out;
+}
+
+async function computeConfluenceLive(t0, deadline) {
+  const { loadCandleCache } = require('../lib/candle-cache');
+  const fe = require('../lib/fade-engine');
+  const { fetchMacro } = require('../lib/macro');
+  const spyD = await fetchDailyHistory('SPY');
+  if (!spyD) return null;
+  const spyByDate = {}; spyD.candles.forEach(c => { spyByDate[c.date] = c.close; });
+  let regime = 'neutral';
+  try { const m = await fetchMacro(); if (m) regime = m.regime; } catch {}
+  const state = fe.load(await readConfluenceEng());
+  const stratState = (await readJSON(CONFLUENCE_STRAT_KEY, null)) || {};
+  const weights = confluenceStratWeights(stratState);
+  const [cL, cS, cM] = await Promise.all([
+    loadCandleCache('large').catch(() => null), loadCandleCache('small').catch(() => null), loadCandleCache('micro').catch(() => null),
+  ]);
+  const ctx = { spyByDate, t0, deadline, fe, state, weights, minBull: CONFLUENCE_MIN_BULL };
+  const large = await scanConfluenceUniverse([...new Set(UNI_LARGE)], { ...ctx, caches: [cL] });
+  const small = await scanConfluenceUniverse([...new Set([...UNI_SMALL, ...UNI_MICRO])], { ...ctx, caches: [cS, cM] });
+  return { regime, large, small, state, stratState, weights, spyLastDate: spyD.candles[spyD.candles.length - 1].date };
+}
+
+// op=confluence — live screener (regime-gated display).
+async function runConfluence(req, res) {
+  const t0 = Date.now();
+  const live = await computeConfluenceLive(t0, 45000);
+  if (!live) return res.status(502).json({ ok: false, error: 'No market data' });
+  const riskOff = live.regime === 'risk-off';
+  const picks = [...live.large, ...live.small].sort((a, b) => (b.score + 8 * b.learnedExcess) - (a.score + 8 * a.learnedExcess)).slice(0, 25);
+  res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=86400');
+  return res.json({
+    ok: true, regime: live.regime, riskOff, horizon: CONFLUENCE_H, minBull: CONFLUENCE_MIN_BULL,
+    weights: live.weights, strategyEdge: stratEdgeSummary(live.stratState),
+    picks: riskOff ? [] : picks, count: picks.length,
+    learnerUpdatedAt: live.state.updatedAt, generatedAt: new Date().toISOString(),
+  });
+}
+
+// op=confluencetick — cron: resolve matured picks → learn (per-stock + per-strategy) → log.
+async function runConfluenceTick(req, res) {
+  if (!hasStore()) return res.json({ ok: false, error: 'Blob storage not configured.' });
+  const fe = require('../lib/fade-engine');
+  const t0 = Date.now();
+  try {
+    if (req.query.prune && /^\d{4}-\d{2}-\d{2}$/.test(req.query.prune)) {
+      await writeConfluenceDay(req.query.prune, { picks: [] });
+      return res.json({ ok: true, pruned: req.query.prune });
+    }
+    const days = await readAllConfluenceDays();
+    const openTk = new Set(); days.forEach(dd => (dd.picks || []).forEach(p => { if (!p.resolved) openTk.add(p.ticker); }));
+    const tk = [...openTk, 'SPY'];
+    const hist = new Map(); let i = 0;
+    const rw = async () => { while (i < tk.length) { if (Date.now() - t0 > 15000) return; const t = tk[i++]; try { const d = await fetchDailyHistory(t); if (d) hist.set(t, d.candles); } catch {} } };
+    await Promise.all(Array.from({ length: 12 }, rw));
+    const spy = hist.get('SPY') || [];
+    const afterN = (cands, date, n) => { const idx = cands.findIndex(c => c.date >= date); if (idx < 0 || idx + n >= cands.length) return null; return { c1: cands[idx + n].close, c0: cands[idx].close, date: cands[idx + n].date }; };
+    const outcomes = []; const changed = new Set(); let resolvedNow = 0;
+    const stratState = (await readJSON(CONFLUENCE_STRAT_KEY, null)) || {};
+    for (const dd of days) {
+      for (const p of (dd.picks || [])) {
+        if (p.resolved) continue;
+        const cands = hist.get(p.ticker); if (!cands) continue;
+        const r = afterN(cands, p.date, CONFLUENCE_H); if (!r) continue;
+        const sp = afterN(spy, p.date, CONFLUENCE_H); if (!sp) continue;
+        const fwd = (r.c1 / r.c0 - 1) * 100, sfwd = (sp.c1 / sp.c0 - 1) * 100;
+        p.resolved = true; p.fwdPct = +fwd.toFixed(2); p.excPct = +(fwd - sfwd).toFixed(2); p.exitDate = r.date;
+        outcomes.push({ ticker: p.ticker, alpha: p.excPct, sector: p.sector || SECTOR_OF[p.ticker] || '?' });
+        // per-STRATEGY learning: attribute this pick's excess to each strategy that voted bullish.
+        for (const s of (p.bull || [])) {
+          const cur = stratState[s] || { ewma: 0, n: 0 };
+          cur.ewma = STRAT_DECAY * cur.ewma + (1 - STRAT_DECAY) * p.excPct; cur.n++;
+          stratState[s] = cur;
+        }
+        changed.add(dd.date); resolvedNow++;
+      }
+    }
+    const state = fe.load(await readConfluenceEng());
+    if (outcomes.length) {
+      fe.update(state, outcomes);
+      stratState.updatedAt = new Date().toISOString();
+      await writeJSON(CONFLUENCE_STRAT_KEY, stratState, 0);
+    }
+    await Promise.all([...changed].map(dt2 => { const dd = days.find(x => x.date === dt2); return writeConfluenceDay(dt2, { regime: dd.regime, picks: dd.picks }); }));
+
+    // Log today's picks (counterfactually, all regimes) with the firing strategies.
+    const live = await computeConfluenceLive(t0, 40000);
+    let logged = 0, logDate = null;
+    if (live) {
+      logDate = live.spyLastDate;
+      const picks = [...live.large.slice(0, 15), ...live.small.slice(0, 15)]
+        .map(c => ({ ticker: c.ticker, date: logDate, entry: c.last, score: c.score, bull: c.bull, sector: c.sector, resolved: false }));
+      if (picks.length) { await writeConfluenceDay(logDate, { regime: live.regime, picks }); logged = picks.length; }
+    }
+    await writeConfluenceEng(fe.serialize(state));
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: true, resolvedNow, loggedToday: logged, logDate, ...fe.summary(state), strategyEdge: stratEdgeSummary(stratState), elapsedMs: Date.now() - t0 });
+  } catch (e) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: false, error: String(e && e.message || e), elapsedMs: Date.now() - t0 });
+  }
+}
+
+// op=confluencebook — live forward track record overall + by strategy + regime.
+async function runConfluenceBook(req, res) {
+  const cf = require('../lib/confluence');
+  const days = await readAllConfluenceDays();
+  const picks = [];
+  days.forEach(dd => (dd.picks || []).forEach(p => { if (p.resolved && p.excPct != null) picks.push({ ...p, regime: dd.regime || 'neutral' }); }));
+  const agg = arr => {
+    const n = arr.length; if (!n) return { n: 0 };
+    const beats = arr.filter(p => p.excPct > 0).length, ci = wilson(beats, n);
+    return { n, avgExc: +(arr.reduce((s, p) => s + p.excPct, 0) / n).toFixed(2), beatRate: +((beats / n) * 100).toFixed(0), wilsonLo: +(ci.lo * 100).toFixed(0) };
+  };
+  const byStrategy = {};
+  for (const s of cf.STRATEGIES) byStrategy[s] = agg(picks.filter(p => (p.bull || []).includes(s)));
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({
+    ok: true, daysLogged: days.length, resolved: picks.length, stillOpen: days.reduce((a, dd) => a + (dd.picks || []).filter(p => !p.resolved).length, 0),
+    overall: agg(picks), byStrategy,
+    byRegime: { 'risk-on': agg(picks.filter(p => p.regime === 'risk-on')), neutral: agg(picks.filter(p => p.regime === 'neutral')), 'risk-off': agg(picks.filter(p => p.regime === 'risk-off')) },
+    note: `Live forward (${CONFLUENCE_H}-session) excess-vs-SPY record of logged confluence picks, sliced by the strategies that voted for each. Accrues via the warm cron; thin until ~${CONFLUENCE_H} sessions after the first tick.`,
+    generatedAt: new Date().toISOString(),
+  });
+}
+
+// op=confluenceopt — VALIDATION harness. Replays the confluence rule AND each strategy
+// individually, point-in-time over multi-year history → forward excess vs SPY, regime +
+// OOS split. Answers: does confluence beat the market, and which strategies carry it?
+async function runConfluenceOpt(req, res) {
+  const cf = require('../lib/confluence');
+  const { buildMacroLookup } = require('../lib/macro');
+  const scope = (req.query.scope || 'large').toLowerCase();
+  const H = Math.max(1, parseInt(req.query.h, 10) || CONFLUENCE_H);
+  const range = /^(2y|5y|10y|max)$/.test(req.query.range || '') ? req.query.range : '5y';
+  const limit = Math.max(0, parseInt(req.query.limit, 10) || 120);
+  const minBull = Math.max(1, parseInt(req.query.minbull, 10) || CONFLUENCE_MIN_BULL);
+  const lists = scope === 'small' ? UNI_SMALL : scope === 'micro' ? UNI_MICRO : UNI_LARGE;
+  let tickers = [...new Set(lists)]; if (limit > 0) tickers = tickers.slice(0, limit);
+  const [spyD, macro] = await Promise.all([fetchDailyHistory('SPY', range), buildMacroLookup(range).catch(() => null)]);
+  if (!spyD || spyD.candles.length < 250) return res.status(502).json({ ok: false, error: 'No benchmark data' });
+  const spyByDate = {}; spyD.candles.forEach(c => { spyByDate[c.date] = c.close; });
+
+  const t0 = Date.now(), deadline = 50000;
+  const recs = [];                       // confluence (>=minBull) signals
+  const perStrat = {}; cf.STRATEGIES.forEach(s => perStrat[s] = []);   // each strategy's bullish-bar fwd excess
+  let i = 0;
+  const worker = async () => {
+    while (i < tickers.length) {
+      const t = tickers[i++]; if (Date.now() - t0 > deadline) return;
+      let d; try { d = await fetchDailyHistory(t, range); } catch { continue; }
+      if (!d || d.candles.length < cf.MIN_BARS + H + 5) continue;
+      const c = d.candles, ind = cf.computeIndicators(c);
+      for (let k = 205; k < c.length - H; k++) {
+        const s = cf.strategyScoresAt(ind, c, k); if (!s) continue;
+        const date = c[k].date; if (spyByDate[date] == null || spyByDate[c[k + H].date] == null) continue;
+        const fwd = (c[k + H].close / c[k].close - 1) * 100, sfwd = (spyByDate[c[k + H].date] / spyByDate[date] - 1) * 100;
+        const exc = fwd - sfwd, regime = macro ? (macro.at(date) || {}).regime || 'neutral' : 'neutral';
+        const bull = cf.STRATEGIES.filter(st => s[st] === 1);
+        for (const st of bull) perStrat[st].push({ exc, regime });
+        if (bull.length >= minBull) recs.push({ date, exc, fwd, regime, nBull: bull.length });
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 14 }, worker));
+
+  const mean = a => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0);
+  const agg = arr => {
+    const n = arr.length; if (!n) return { n: 0 };
+    const beats = arr.filter(x => x.exc > 0).length, ci = wilson(beats, n);
+    return { n, avgExc: +mean(arr.map(x => x.exc)).toFixed(2), beatRate: +((beats / n) * 100).toFixed(0), wilsonLo: +(ci.lo * 100).toFixed(0) };
+  };
+  const byReg = arr => ({ 'risk-on': agg(arr.filter(r => r.regime === 'risk-on')), neutral: agg(arr.filter(r => r.regime === 'neutral')), 'risk-off': agg(arr.filter(r => r.regime === 'risk-off')) });
+  const dates = [...new Set(recs.map(r => r.date))].sort();
+  const split = dates[Math.floor(0.6 * dates.length)] || dates[dates.length - 1];
+  const oos = recs.filter(r => r.date >= split);
+  const perStrategy = {}; cf.STRATEGIES.forEach(s => perStrategy[s] = { overall: agg(perStrat[s]), byRegime: byReg(perStrat[s]) });
+
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({
+    ok: true, scope, range, horizonDays: H, minBull, namesScanned: tickers.length, confluenceSignals: recs.length,
+    confluence: { overall: agg(recs), byRegime: byReg(recs), oos: { split, all: agg(oos), ...byReg(oos) } },
+    perStrategy,
+    note: `Confluence (>=${minBull}/5 strategies bullish) + each strategy alone, replayed point-in-time; forward ${H}-session excess vs SPY. Does agreement beat the market / individual strategies, and does it hold OOS + across regimes?`,
+    generatedAt: new Date().toISOString(),
+  });
+}
+
 // ── op=archive : snapshot today's per-ticker mention counts + options ───────
 // THE unrecoverable data capture. Social-mention counts (StockTwits trending)
 // and option-chain snapshots can't be reconstructed historically, so we persist
@@ -2438,6 +2690,10 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'daytradetick') return runDaytradeTick(req, res);
   if (req.query.op === 'daytradebook') return runDaytradeBook(req, res);
   if (req.query.op === 'daytradeopt') return runDaytradeOpt(req, res);
+  if (req.query.op === 'confluence') return runConfluence(req, res);
+  if (req.query.op === 'confluencetick') return runConfluenceTick(req, res);
+  if (req.query.op === 'confluencebook') return runConfluenceBook(req, res);
+  if (req.query.op === 'confluenceopt') return runConfluenceOpt(req, res);
   if (req.query.op === 'fadesignals') return runFadeSignals(req, res);
   if (req.query.op === 'fadetick') return runFadeTick(req, res);
   if (req.query.op === 'fadebook') return runFadeBook(req, res);

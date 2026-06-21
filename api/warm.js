@@ -123,7 +123,14 @@ module.exports = async function handler(req, res) {
     daytradetick = await r.json();
   } catch (e) { daytradetick = { error: String(e && e.message || e) }; }
 
+  // Confluence screener: resolve matured picks → learn (per-stock + per-strategy) → log.
+  let confluencetick = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=confluencetick', { headers: { 'x-warm': '1' } });
+    confluencetick = await r.json();
+  } catch (e) { confluencetick = { error: String(e && e.message || e) }; }
+
   const warmedExtra = await extraWarm;   // already resolved — ran during the tail above
   res.setHeader('Cache-Control', 'no-store');
-  return res.json({ ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, at: new Date().toISOString() });
+  return res.json({ ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, at: new Date().toISOString() });
 };

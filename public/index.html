@@ -1945,6 +1945,22 @@
     </div>
   </section>
 
+  <!-- CONFLUENCE (5 classic strategies agree, self-learning) -->
+  <section class="screener-section" id="confluence">
+    <div class="section-label">
+      <div class="accent-bar" style="background:#06c4d4"></div>
+      <h2 style="color:#06c4d4">⚙️ Confluence</h2>
+      <span class="label-meta" id="cfl-meta">· 5 classic strategies agree · self-learning</span>
+      <div class="label-action">
+        <span class="lbl-time" id="cfl-gen-time"></span>
+        <button class="refresh-btn" style="color:#06c4d4" id="cfl-refresh-btn">⟳ Refresh</button>
+      </div>
+    </div>
+    <div id="cfl-container">
+      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to run the multi-strategy scan…</p></div>
+    </div>
+  </section>
+
   <!-- TRADE ALERTS (social) -->
   <section class="screener-section" id="xalerts">
     <div class="section-label">
@@ -2315,7 +2331,7 @@
   // ── App tabs with a "Markets" hub (Screener / Rotation / Sectors) ──
   const TAB_GROUPS = {
     start:     ['start'],
-    screeners: ['screener', 'custom', 'daytrade', 'ghost', 'trendrider', 'fade'],
+    screeners: ['screener', 'custom', 'daytrade', 'confluence', 'ghost', 'trendrider', 'fade'],
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
     research:  ['backtest', 'events', 'edge'],
     track:     ['scoreboard', 'xalerts'],
@@ -2323,7 +2339,7 @@
   const TOP_TABS = Object.keys(TAB_GROUPS);
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
-    screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', daytrade: '⚡ Day Trade', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
+    screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', daytrade: '⚡ Day Trade', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
     scoreboard: '🏆 Scoreboard', xalerts: '🐦 Trade Alerts',
@@ -2385,6 +2401,7 @@
     if (sub === 'fade' && typeof ensureFade === 'function') ensureFade();
     if (sub === 'trendrider' && typeof ensureTrendRider === 'function') ensureTrendRider();
     if (sub === 'daytrade' && typeof ensureDaytrade === 'function') ensureDaytrade();
+    if (sub === 'confluence' && typeof ensureConfluence === 'function') ensureConfluence();
     if (sub === 'xalerts' && typeof ensureXalerts === 'function') ensureXalerts();
     if (sub === 'momentum' && typeof ensureMomentum === 'function') ensureMomentum();
     if (sub === 'options' && typeof ensureOptions === 'function') ensureOptions();
@@ -5179,6 +5196,109 @@
     } catch { /* keep last good prices */ }
   }
   document.getElementById('dt-refresh-btn')?.addEventListener('click', runDaytradeUI);
+
+  // ── Confluence (5 classic strategies agree, regime-gated, self-learning) ──
+  const CFL_STRAT = { ema: '9/21 EMA', supertrend: 'Supertrend', rsi: 'RSI dip', macd: 'MACD', priceAction: 'Structure' };
+  let confluenceLoaded = false;
+  function ensureConfluence() { if (!confluenceLoaded) { confluenceLoaded = true; runConfluenceUI(); } }
+  async function runConfluenceUI() {
+    const el = document.getElementById('cfl-container');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Running 5-strategy scan…</p></div>`;
+    try {
+      const [t, book] = await Promise.all([
+        fetch('/api/tracker?op=confluence').then(r => r.json()),
+        fetch('/api/tracker?op=confluencebook').then(r => r.json()).catch(() => null),
+      ]);
+      renderConfluence(t, book);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Confluence.</p></div>`; }
+  }
+  function renderConfluence(t, book) {
+    const el = document.getElementById('cfl-container');
+    if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Confluence unavailable.</p></div>`; return; }
+    const REG = { 'risk-on': ['#22c55e', 'RISK-ON', 'Trends favored'], neutral: ['#eab308', 'NEUTRAL', 'Be selective'], 'risk-off': ['#ef4444', 'RISK-OFF', 'Stand down — trend signals fail here'] };
+    const [rc, rlbl, rdesc] = REG[t.regime] || REG.neutral;
+    const banner = `<div class="rot-panel" style="border-color:${rc}55"><div class="rot-head" style="color:${rc}">Regime: ${rlbl}</div><div class="rot-sub">${rdesc}. A name lists when <b>≥${t.minBull} of 5</b> classic strategies agree it's bullish. Horizon ~${t.horizon} sessions.</div></div>`;
+
+    const howto = `<div class="tr-howto">
+      <div class="tr-howto-head">📖 What this is — in plain English</div>
+      <ol>
+        <li><b>5 classic strategies vote.</b> 9/21-EMA trend · Supertrend · RSI dip-buy · MACD · price-structure. A name shows up only when <b>${t.minBull}+ agree</b> it's bullish — that's "confluence."</li>
+        <li><b>Self-learning.</b> Each strategy's weight and each stock's tilt adjust from real outcomes over time (see the weights panel). The engine leans toward what's actually working.</li>
+        <li><b>Each card</b> shows the agreeing strategies, a 📈 chart, and a trade plan (↩️ pullback / 🎯 breakout entry, 🛑 stop, 🏁 target). Size by risk: shares ≈ (1% of account) ÷ (Entry − Stop).</li>
+        <li><b>Honest truth (5y backtest below):</b> these well-known signals — alone or in confluence — <b>do not beat the market</b> (~48% win rate). Use this as a <b>confirmation / watchlist</b> overlay, not a buy button. The live track record is the number to trust.</li>
+      </ol>
+    </div>`;
+
+    // Self-improving: per-strategy learned weights + realized edge.
+    const we = (t.strategyEdge || []).map(s => {
+      const w = (t.weights || {})[s.strategy];
+      return `<div class="bt-ic-row"><span>${esc(CFL_STRAT[s.strategy] || s.strategy)}</span><span>weight ${w != null ? w : '—'}×</span><span>edge ${s.ewmaExc > 0 ? '+' : ''}${s.ewmaExc}% <span style="color:var(--text-dim)">(${s.n})</span></span></div>`;
+    }).join('');
+    const weightsPanel = `<div class="rot-panel"><div class="rot-head">🧠 Self-learning — strategy weights</div><div class="rot-sub">Weights start at 1× and drift with each strategy's realized forward edge. (Thin until picks resolve.)</div>${we}</div>`;
+
+    const card = r => {
+      const badges = (r.bull || []).map(s => `<span class="chip cyan">${esc(CFL_STRAT[s] || s)}</span>`).join(' ');
+      const pb = r.pullback;
+      return `<div class="dt-card" data-ticker="${esc(r.ticker)}">
+        <div class="dt-card-top">
+          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> <span class="dt-dim">${r.score}/${r.maxScore}</span></span>
+          <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
+        </div>
+        <div class="dt-card-sub">${badges} <span class="dt-dim">${r.excess21d != null ? '· 1mo vs SPY ' + (r.excess21d > 0 ? '+' : '') + r.excess21d + '%' : ''}${r.beta != null ? ' · β ' + r.beta : ''}</span></div>
+        ${pb ? `<div class="dt-card-plan">↩️ <b>Pullback</b> <b>$${pb.entry}</b> · 🛑 <b>$${pb.stop}</b> <span class="dt-dim">(−${pb.riskPct}%)</span> · 🏁 <b>$${pb.target}</b> <span class="dt-dim">R:R 1:${pb.rr}</span></div>` : ''}
+        <div class="dt-card-plan">🎯 <b>Breakout</b> <b>$${r.entry}</b> · 🛑 <b>$${r.stop != null ? r.stop : '—'}</b>${r.riskPct != null ? ` <span class="dt-dim">(−${r.riskPct}%)</span>` : ''} · 🏁 <b>$${r.target != null ? r.target : '—'}</b>${r.rr ? ` <span class="dt-dim">R:R 1:${r.rr}</span>` : ''}</div>
+        <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
+        <div class="chart-panel" data-chart-panel style="display:none"></div>
+      </div>`;
+    };
+    let picksPanel;
+    if (t.riskOff) picksPanel = `<div class="rot-panel"><div class="rot-head">🛑 Risk-off — list suppressed</div><div class="rot-sub">Trend/confluence signals underperform in risk-off (validated). Stand down on new longs.</div></div>`;
+    else picksPanel = `<div class="rot-panel"><div class="rot-head">⚙️ Confluence longs (${t.count})</div><div class="rot-sub">Ranked by agreement strength + the per-stock learner. Chips = strategies that agree.</div>${(t.picks || []).map(card).join('') || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No confluence right now.</span></div>'}</div>`;
+
+    let track;
+    if (book && book.resolved >= 10) {
+      const row = (n, s) => s && s.n ? `<div class="bt-ic-row"><span>${n} <span style="color:var(--text-dim)">${s.n}</span></span><span>exc ${s.avgExc > 0 ? '+' : ''}${s.avgExc}%</span><span>beat ${s.beatRate}% <span style="color:var(--text-dim)">(LB ${s.wilsonLo}%)</span></span></div>` : '';
+      track = `<div class="rot-panel"><div class="rot-head">📊 Live track record — forward ${t.horizon}-session excess vs SPY</div>${row('All confluence', book.overall)}${Object.keys(book.byStrategy || {}).map(s => row(CFL_STRAT[s] || s, book.byStrategy[s])).join('')}<div class="bt-ic-row" style="border-top:1px solid var(--border);margin-top:4px"><span></span><span></span><span>${book.resolved} resolved · ${book.stillOpen} open</span></div></div>`;
+    } else {
+      track = `<div class="rot-panel rot-panel-pending"><div class="rot-head">📊 Live track record — building…</div><div class="rot-sub">${book ? `${book.stillOpen || 0} open, ${book.resolved || 0} resolved` : ''}. Each pick scored ~${t.horizon} sessions later; accrues via the daily cron.</div></div>`;
+    }
+
+    el.innerHTML = banner + howto + weightsPanel + picksPanel + track +
+      `<div class="fade-caveats"><b>Honest validation</b> (5y, fwd ${t.horizon}-session excess vs SPY): confluence (≥3/5 agree) averaged −0.2% with a ~48% win rate; tightening to 4/5 only flattens it to ~0%; <b>no regime and no single strategy beats the market</b>. That's the efficient-market reality for well-known indicators — so treat this as a <b>multi-strategy confirmation/watchlist</b> tool, not an edge. What it adds: one place to see when classic signals align, a self-learning weight on each, and a live track record. Confirm on the chart. Research, not advice.</div>`;
+
+    el.querySelectorAll('.dt-card[data-ticker]').forEach(cardEl => {
+      const tk = cardEl.dataset.ticker;
+      const btn = cardEl.querySelector('[data-chart-toggle]');
+      if (btn) btn.addEventListener('click', () => toggleChart(cardEl, tk));
+    });
+    startConfluencePrices([...new Set((t.picks || []).map(r => r.ticker))]);
+    const meta = document.getElementById('cfl-meta');
+    if (meta) meta.textContent = `· ${t.regime} · ${t.count || 0} confluence longs`;
+    const gt = document.getElementById('cfl-gen-time');
+    if (gt && t.generatedAt) gt.textContent = new Date(t.generatedAt).toLocaleTimeString();
+  }
+  let cflPriceTimer = null;
+  function startConfluencePrices(tickers) {
+    if (cflPriceTimer) { clearInterval(cflPriceTimer); cflPriceTimer = null; }
+    if (!tickers.length) return;
+    const upd = async () => {
+      try {
+        const res = await fetch('/api/price?tickers=' + encodeURIComponent(tickers.join(',')));
+        if (!res.ok) return;
+        const data = await res.json();
+        document.querySelectorAll('#confluence .dt-card[data-ticker]').forEach(cardEl => {
+          const q = data[cardEl.dataset.ticker]; if (!q) return;
+          const shown = q.afterHours ? q.afterHours.price : q.regularPrice;
+          const pe = cardEl.querySelector('[data-dt-price]'), ce = cardEl.querySelector('[data-dt-change]');
+          if (pe && shown != null && pe.textContent !== '$' + shown) { pe.textContent = '$' + shown; pe.classList.remove('price-flash'); void pe.offsetWidth; pe.classList.add('price-flash'); }
+          if (ce) { const pct = q.afterHours ? q.afterHours.changePct : q.changePct; const up = parseFloat(pct) >= 0; ce.textContent = `${q.afterHours ? (q.afterHours.session === 'pre' ? 'PRE ' : 'AH ') : ''}${up ? '▲ +' : '▼ '}${pct}%`; ce.style.color = up ? 'var(--green)' : 'var(--red)'; }
+        });
+      } catch {}
+    };
+    upd(); cflPriceTimer = setInterval(upd, 30 * 1000);
+  }
+  document.getElementById('cfl-refresh-btn')?.addEventListener('click', runConfluenceUI);
 
   // ── Trade Alerts (social, ranked by the external-collector pipeline) ──
   let xalertsLoaded = false;
