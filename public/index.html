@@ -1394,6 +1394,17 @@
     .cx-help-ol, .cx-help-ul { font-size: 0.8rem; color: var(--text-dim); line-height: 1.55; padding-left: 20px; margin: 4px 0; }
     .cx-help-ol li, .cx-help-ul li { margin-bottom: 7px; }
     .cx-help-card b { color: var(--text); }
+    /* 📚 Learn teaching layer */
+    .learn-term { border-bottom: 1px dotted var(--cyan); cursor: help; }
+    .learn-term:hover { color: var(--cyan); }
+    .lrn-group-h { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--cyan); margin: 20px 0 2px; font-weight: 800; }
+    .lrn-item { border-top: 1px solid var(--border); padding: 11px 4px; border-radius: 8px; }
+    .lrn-item h4 { font-size: 0.9rem; color: var(--text); margin: 0 0 4px; }
+    .lrn-plain { font-size: 0.82rem; color: var(--text); line-height: 1.5; }
+    .lrn-why, .lrn-pro { font-size: 0.78rem; color: var(--text-dim); line-height: 1.5; margin-top: 4px; }
+    .lrn-why b { color: var(--amber, #f59e0b); }
+    .lrn-pro b { color: var(--green); }
+    .lrn-item.hl { background: var(--cyan-dim); border-color: transparent; }
     .cx-help-foot { font-size: 0.8rem; color: var(--text); font-weight: 600; line-height: 1.55; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
     .cx-help-p { font-size: 0.8rem; color: var(--text-dim); line-height: 1.55; margin: 6px 0; }
     .cx-cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
@@ -1610,6 +1621,7 @@
       <span id="market-status-text">–</span>
     </div>
     <span id="live-clock"></span>
+    <button class="hdr-btn" id="learn-btn" title="Learn every concept — novice to expert">📚 Learn</button>
     <button class="hdr-btn" id="refresh-btn">⟳ Refresh</button>
   </div>
 </header>
@@ -1988,6 +2000,16 @@
   <hr class="section-divider" />
 
   <!-- How-to-use guide modal -->
+  <!-- 📚 Learn glossary modal (teaching layer: every concept, novice → expert) -->
+  <div class="cx-help-backdrop" id="learn-modal" hidden>
+    <div class="cx-help-card" role="dialog" aria-modal="true" aria-label="Learn the concepts">
+      <button class="cx-help-x" id="learn-close" aria-label="Close">✕</button>
+      <h2>📚 Learn — from novice to expert</h2>
+      <p class="cx-help-lead">Every concept this app uses, in plain English — <b>what it is</b>, <b>why it matters</b>, and <b>how pros use it</b>. Tap any <span class="learn-term">dotted term</span> anywhere in the app to jump straight here. Read a few each day and you'll be reading the market like a pro.</p>
+      <div id="learn-body"></div>
+    </div>
+  </div>
+
   <div class="cx-help-backdrop" id="cx-help-modal" hidden>
     <div class="cx-help-card" role="dialog" aria-modal="true" aria-label="How to use this app">
       <button class="cx-help-x" id="cx-help-close" aria-label="Close">✕</button>
@@ -2463,8 +2485,8 @@
       } else if (SCREENER_STYLE[sub] === 'confluence' || SCREENER_STYLE[sub] === 'adaptive') {
         fit = `<span class="tb-fit">this screener adapts to the tape automatically</span>`;
       }
-      el.innerHTML = `<span class="tb-ic">${ic}</span><span><b>${lbl}</b> <span class="tb-desc">— ${desc}</span>${fit}</span>`
-        + `<span class="tb-reg">${(t.regime || '').toUpperCase()}${t.efficiency != null ? ` · trend-eff ${t.efficiency}` : ''}</span>`;
+      el.innerHTML = `<span class="tb-ic">${ic}</span><span><b class="learn-term" data-learn="tape">${lbl}</b> <span class="tb-desc">— ${desc}</span>${fit}</span>`
+        + `<span class="tb-reg"><span class="learn-term" data-learn="regime">${(t.regime || '').toUpperCase()}</span>${t.efficiency != null ? ` · <span class="learn-term" data-learn="trendEff">trend-eff ${t.efficiency}</span>` : ''}</span>`;
     };
     render();
     if (!_tapeCache || Date.now() - _tapeAt > 5 * 60 * 1000) {
@@ -4532,6 +4554,66 @@
     document.getElementById('cx-help-close')?.addEventListener('click', close);
     modal?.addEventListener('click', e => { if (e.target === modal) close(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) close(); });
+  })();
+
+  // ── 📚 LEARN teaching layer — every concept in plain English (novice → expert) ──
+  const LEARN = {
+    // Reading the market
+    regime: { g: 'Reading the market', t: 'Market Regime (Risk-On / Risk-Off)', plain: 'Whether the whole market is in a calm uptrend (Risk-On) or a fearful downtrend (Risk-Off) — read from the S&P 500 vs its 200-day average plus the VIX "fear gauge" and credit stress.', why: 'It is the single biggest factor in whether to trade at all: almost every long strategy works in Risk-On and fails in Risk-Off.', pro: 'Experts gate every new long on it — in Risk-Off they stand down and protect capital instead of fighting the tape.' },
+    tape: { g: 'Reading the market', t: 'The Tape (Trending vs Choppy)', plain: 'The texture of the market right now — Trending (clean, directional moves) or Choppy (whippy, sideways, range-bound).', why: 'It decides WHICH style works: breakouts and momentum need trending tapes; fades and mean-reversion need choppy ones.', pro: 'Match the strategy to the tape — the app ★-marks which strategies are "in their element" today.' },
+    trendEff: { g: 'Reading the market', t: 'Trend Efficiency', plain: 'How much of the market\'s movement is one-directional: 1.0 = a clean straight line, 0 = pure noise. Above ~0.35 = trending, below ~0.22 = choppy.', why: 'It is the number behind the Trending/Choppy label.', pro: 'A falling efficiency warns that a trend is tiring and chop is coming — time to tighten up.' },
+    // The screeners
+    breakout: { g: 'The screeners', t: 'Breakout', plain: 'A stock pushing above a prior high or resistance level, usually on rising volume — a bet the move keeps going.', why: 'Breakouts work when buyers are in control (trending tapes); in chop they "fail" and trap you (false breakouts).', pro: 'Only take breakouts with the regime and tape behind them; in a choppy tape the app downgrades them automatically.' },
+    momentum: { g: 'The screeners', t: 'Momentum', plain: 'Buying what is already moving up hard — big % gains and strong relative strength vs the market.', why: 'Winners tend to keep winning… briefly. It is a real but weak, regime-dependent effect.', pro: 'Treat momentum as a tilt, not a sure thing — always pair it with a stop and a regime gate.' },
+    meanrev: { g: 'The screeners', t: 'Mean-Reversion / Fading', plain: 'Betting an overextended move snaps back. The Overheated screen fades blow-off tops (a short).', why: 'It works in ranging/choppy tapes where price reverts — and is dangerous in strong trends.', pro: 'The golden rule: never fade a strong trend. Only fade in choppy or neutral tapes.' },
+    confluence: { g: 'The screeners', t: 'Confluence', plain: 'When several independent strategies (EMA, Supertrend, RSI, MACD, price-action) all agree on the same stock.', why: 'Agreement filters out noise — but the app\'s own tests show even agreement does not beat the market here.', pro: 'Use confluence to CONFIRM a thesis you already have, not as a standalone buy button.' },
+    accumulation: { g: 'The screeners', t: 'Accumulation (Ghost)', plain: 'Quiet buying by big players BEFORE a breakout — flat price, rising volume, insider purchases.', why: 'It tries to get you in early, before the obvious move shows up on the chart.', pro: 'It is a watchlist of names "coiling" — wait for the breakout to confirm before committing.' },
+    // Entering a trade
+    entry: { g: 'Entering a trade', t: 'Entry', plain: 'The price you plan to buy at. Each card shows two: a Pullback entry and a Breakout entry.', why: 'A disciplined entry caps your risk and improves your reward-to-risk before you even click buy.', pro: 'Never chase. A patient entry beats a FOMO fill almost every time.' },
+    pullback: { g: 'Entering a trade', t: 'Pullback vs Breakout entry', plain: 'Pullback = wait to buy lower on a dip toward support. Breakout = buy now as it moves up.', why: 'Pullback gives a better price (but may not fill); breakout is a sure fill (but you are chasing).', pro: 'Pros favor the pullback — a lower entry means a tighter stop and a bigger reward:risk.' },
+    stop: { g: 'Entering a trade', t: 'Stop-Loss', plain: 'The price where you admit the trade is wrong and sell to cap the loss.', why: 'The single most important habit in trading — it turns a bad trade into a small, survivable loss.', pro: 'Place it where the setup is invalidated (below the structure), and never move it down to avoid being stopped.' },
+    target: { g: 'Entering a trade', t: 'Target (Take-Profit)', plain: 'Where you plan to take profit.', why: 'Knowing it up front lets you measure reward:risk before entering.', pro: 'Scale out near the target and let a runner ride with a trailing stop.' },
+    // Managing risk
+    rr: { g: 'Managing risk', t: 'Reward : Risk (R:R)', plain: 'How much you stand to make versus lose — e.g. 1:2 means risking $1 to make $2.', why: 'With 1:2, you can be right less than half the time and still make money.', pro: 'Skip trades under ~1:2; the price-action setup in this app demands 1:2.5 or better.' },
+    sizing: { g: 'Managing risk', t: 'Position Sizing (1% risk)', plain: 'How many shares to buy. The rule: risk only ~1% of your account per trade. Shares ≈ (1% of account) ÷ (Entry − Stop).', why: 'It is what keeps a losing streak from blowing up your account — the #1 thing separating survivors from blowups.', pro: 'Fixed-fractional risk is non-negotiable. A wider stop automatically means a smaller position.' },
+    beta: { g: 'Managing risk', t: 'Beta', plain: 'How much a stock moves relative to the market — β 2 swings about twice as much as the S&P 500.', why: 'High-beta names need smaller positions, and "beating the market" can secretly just be extra beta.', pro: 'Experts check beta-adjusted returns to tell whether an edge is real skill (alpha) or just leverage.' },
+    // Trusting a signal
+    beatRate: { g: 'Trusting a signal', t: 'Beat Rate', plain: 'The % of a strategy\'s past picks that beat the market. 50% is a coin flip.', why: 'It tells you whether a signal actually has skill, not just luck.', pro: 'Always read it next to the sample size — a great rate on 5 trades means nothing.' },
+    wilsonLB: { g: 'Trusting a signal', t: 'Confidence Floor (Wilson LB)', plain: 'A conservative "floor" on the beat rate that accounts for how few trades there are. A floor below 50% means we cannot yet trust it beats the market.', why: 'It stops you fooling yourself with a small, lucky sample.', pro: 'Pros require the lower bound — not just the average — to clear 50% before sizing up.' },
+    selflearning: { g: 'Trusting a signal', t: 'Self-Learning', plain: 'The engine logs every pick, scores it weeks later, and re-weights what is working — per strategy and per stock.', why: 'The app adapts to what actually pays instead of trusting theory forever.', pro: 'Watch the live track record and the strategy-weight panel — that is the real evidence, not the backtest.' },
+    backtest: { g: 'Trusting a signal', t: 'Backtest & Out-of-Sample', plain: 'Replaying a strategy across years of history to measure its edge — including "out-of-sample" data it never saw during tuning.', why: 'In-sample results flatter you; out-of-sample is the honest test of whether an edge is real.', pro: 'The app validates every screen this way — and most "edges" vanish out-of-sample, which is why it is upfront about what does not work.' },
+  };
+  const LEARN_GROUPS = ['Reading the market', 'The screeners', 'Entering a trade', 'Managing risk', 'Trusting a signal'];
+  function renderLearn(highlight) {
+    const body = document.getElementById('learn-body'); if (!body) return;
+    let html = '';
+    for (const g of LEARN_GROUPS) {
+      html += `<div class="lrn-group-h">${g}</div>`;
+      for (const [k, v] of Object.entries(LEARN)) {
+        if (v.g !== g) continue;
+        html += `<div class="lrn-item${k === highlight ? ' hl' : ''}" id="lrn-${k}"><h4>${v.t}</h4>`
+          + `<div class="lrn-plain">${v.plain}</div>`
+          + `<div class="lrn-why"><b>Why it matters:</b> ${v.why}</div>`
+          + `<div class="lrn-pro"><b>How pros use it:</b> ${v.pro}</div></div>`;
+      }
+    }
+    body.innerHTML = html;
+  }
+  function openLearn(term) {
+    const modal = document.getElementById('learn-modal'); if (!modal) return;
+    renderLearn(LEARN[term] ? term : null);
+    modal.hidden = false; document.body.style.overflow = 'hidden';
+    if (LEARN[term]) { const el = document.getElementById('lrn-' + term); if (el) setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 60); }
+  }
+  (() => {
+    const modal = document.getElementById('learn-modal');
+    const close = () => { if (modal) { modal.hidden = true; document.body.style.overflow = ''; } };
+    document.getElementById('learn-btn')?.addEventListener('click', () => openLearn());
+    document.getElementById('learn-close')?.addEventListener('click', close);
+    modal?.addEventListener('click', e => { if (e.target === modal) close(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal && !modal.hidden) close(); });
+    // Any [data-learn] element anywhere opens the glossary at that concept.
+    document.addEventListener('click', e => { const t = e.target.closest('[data-learn]'); if (t) { e.preventDefault(); openLearn(t.dataset.learn); } });
   })();
 
   document.getElementById('custom-refresh-btn').addEventListener('click', () => { runApex(); fetchApexDrift(); });
