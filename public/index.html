@@ -2502,6 +2502,10 @@
     if (sub === 'trendrider' && typeof ensureTrendRider === 'function') ensureTrendRider();
     if (sub === 'daytrade' && typeof ensureDaytrade === 'function') ensureDaytrade();
     if (sub === 'xalerts' && typeof ensureXalerts === 'function') ensureXalerts();
+    if (sub === 'momentum' && typeof ensureMomentum === 'function') ensureMomentum();
+    if (sub === 'trends' && typeof ensureTrends === 'function') ensureTrends();
+    if (sub === 'options' && typeof ensureOptions === 'function') ensureOptions();
+    if (sub === 'picks' && typeof ensurePicks === 'function') ensurePicks();
 
     const act = document.querySelector('.mobile-top-tabs .mtt-item.active');
     if (act) act.scrollIntoView({ inline: 'center', block: 'nearest', behavior: opts.instant ? 'auto' : 'smooth' });
@@ -2822,8 +2826,9 @@
   const picksSourceCount = document.getElementById('picks-source-count');
 
   picksRefreshBtn.addEventListener('click', fetchPicks);
-  fetchPicks();
-  setInterval(fetchPicks, 4 * 60 * 60 * 1000);
+  // Lazy-load: only fetch when the Picks tab opens (it hits a ~20s LLM endpoint).
+  let picksLoaded = false;
+  function ensurePicks() { if (picksLoaded) return; picksLoaded = true; fetchPicks(); setInterval(fetchPicks, 4 * 60 * 60 * 1000); }
 
   async function fetchPicks() {
     picksRefreshBtn.disabled = true;
@@ -2949,8 +2954,9 @@
   const trendsRefreshBtn = document.getElementById('trends-refresh-btn');
 
   trendsRefreshBtn.addEventListener('click', fetchTrends);
-  fetchTrends();
-  setInterval(fetchTrends, 4 * 60 * 60 * 1000);
+  // Lazy-load: only fetch when the Trends tab opens (it hits a ~30s LLM endpoint).
+  let trendsLoaded = false;
+  function ensureTrends() { if (trendsLoaded) return; trendsLoaded = true; fetchTrends(); setInterval(fetchTrends, 4 * 60 * 60 * 1000); }
 
   async function fetchTrends() {
     trendsRefreshBtn.disabled = true;
@@ -3059,8 +3065,9 @@
   const optionsMeta       = document.getElementById('options-meta');
 
   optionsRefreshBtn.addEventListener('click', fetchOptions);
-  fetchOptions();
-  setInterval(fetchOptions, 4 * 60 * 60 * 1000);
+  // Lazy-load: only fetch when the Options tab opens (it hits a ~20s LLM endpoint).
+  let optionsLoaded = false;
+  function ensureOptions() { if (optionsLoaded) return; optionsLoaded = true; fetchOptions(); setInterval(fetchOptions, 4 * 60 * 60 * 1000); }
 
   async function fetchOptions() {
     optionsRefreshBtn.disabled = true;
@@ -5515,8 +5522,9 @@
   const momentumMeta       = document.getElementById('momentum-meta');
 
   momentumRefreshBtn.addEventListener('click', fetchMomentum);
-  fetchMomentum();
-  setInterval(fetchMomentum, 5 * 60 * 1000); // refresh every 5 min — signals are time-sensitive
+  // Lazy-load: only start polling when the Momentum tab opens.
+  let momentumLoaded = false;
+  function ensureMomentum() { if (momentumLoaded) return; momentumLoaded = true; fetchMomentum(); setInterval(fetchMomentum, 5 * 60 * 1000); }
 
   async function fetchMomentum() {
     momentumRefreshBtn.disabled = true;
