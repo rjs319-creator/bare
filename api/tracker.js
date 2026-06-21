@@ -31,6 +31,7 @@ const { writeDay, readAllPicks, hasStore, writeApexDay, readAllApex, writeGhostD
         readConfluenceEng, writeConfluenceEng, writeConfluenceDay, readAllConfluenceDays,
         writePredictDay, readAllPredictDays,
         writePredmktDay, readAllPredmktDays,
+        readSharpEvents, writeSharpEvents,
         readJSON, writeJSON } = require('../lib/store');
 const { fetchDailyHistory } = require('../lib/screener');
 const { analyzeVReversal } = require('../lib/vreversal');
@@ -2004,10 +2005,11 @@ const todayUTC = () => new Date().toISOString().slice(0, 10);
 async function runCrowd(req, res) {
   const pm = require('../lib/predmarkets');
   try {
-    const [k, p, days] = await Promise.all([
+    const [k, p, days, evLog] = await Promise.all([
       pm.fetchKalshi().catch(() => []),
       pm.fetchPolymarket().catch(() => []),
       readAllPredmktDays().catch(() => []),
+      readSharpEvents().catch(() => ({ events: [] })),
     ]);
     const today = todayUTC();
     const all = [...k, ...p];
@@ -2025,6 +2027,7 @@ async function runCrowd(req, res) {
       top: scored.slice(0, 25),
       sharp: sharp.slice(0, 20),
       sharpTop: sharpScored.slice(0, 12),
+      recentEvents: (evLog.events || []).slice(0, 15),
       counts: { kalshi: k.length, polymarket: p.length, scanned: scored.length, unusual: unusual.length, sharp: sharp.length },
       baselineDays, baselineReady: baselineDays >= 3, oiBaseline: Object.keys(prevOI).length > 0,
       generatedAt: new Date().toISOString(),
@@ -2035,20 +2038,55 @@ async function runCrowd(req, res) {
   }
 }
 
-// op=crowdtick — cron: snapshot today's 24h volume per market (builds the baseline).
+// Dedup-merge flagged sharp markets into the rolling event log (one entry per
+// market per day; refreshes peak score / notional while the flag persists).
+async function logSharpEvents(flagged, today) {
+  if (!flagged.length) return { added: 0, updated: 0 };
+  const log = await readSharpEvents();
+  const events = log.events || [];
+  const byKey = new Map(events.map(e => [e.id + '|' + e.date, e]));
+  let added = 0, updated = 0; const now = new Date().toISOString();
+  for (const m of flagged) {
+    const key = m.id + '|' + today, ex = byKey.get(key);
+    if (ex) {
+      ex.lastSeen = now; ex.peakSharp = Math.max(ex.peakSharp || 0, m.sharp);
+      ex.notional = Math.max(ex.notional || 0, m.notional); ex.prob = m.prob; ex.tells = m.tells; updated++;
+    } else {
+      const e = { id: m.id, date: today, venue: m.venue, title: m.title, group: m.group, sharp: m.sharp, peakSharp: m.sharp,
+        notional: m.notional, prob: m.prob, side: m.side, daysToClose: m.daysToClose, tells: m.tells, url: m.url, firstSeen: now, lastSeen: now };
+      events.unshift(e); byKey.set(key, e); added++;
+    }
+  }
+  log.events = events.slice(0, 120);   // rolling cap
+  await writeSharpEvents(log);
+  return { added, updated };
+}
+
+// op=crowdtick — cron: snapshot today's volume+OI (baseline) AND durably log any
+// flagged sharp-money events, so flags are captured even when nobody's watching.
 async function runCrowdTick(req, res) {
   if (!hasStore()) return res.json({ ok: false, error: 'Blob storage not configured.' });
   const pm = require('../lib/predmarkets');
   const t0 = Date.now();
   try {
-    const [k, p] = await Promise.all([pm.fetchKalshi().catch(() => []), pm.fetchPolymarket().catch(() => [])]);
+    const [k, p, days] = await Promise.all([
+      pm.fetchKalshi().catch(() => []),
+      pm.fetchPolymarket().catch(() => []),
+      readAllPredmktDays().catch(() => []),
+    ]);
     const all = [...k, ...p];
+    const today = todayUTC();
+    // 1) snapshot today's 24h volume + open interest (builds the baselines)
     const snap = {};
     for (const m of all) if (m.vol24 > 0) snap[m.id] = { v: +m.vol24.toFixed(2), oi: m.oi ? +m.oi.toFixed(2) : 0 };
-    const date = todayUTC();
-    await writePredmktDay(date, { snap, n: Object.keys(snap).length });
+    await writePredmktDay(today, { snap, n: Object.keys(snap).length });
+    // 2) score sharp against the PRIOR baseline + log any flagged events (always-on)
+    const baseline = pm.buildBaseline(days, today);
+    const prevOI = pm.buildPrevOI(days, today);
+    const flagged = pm.scoreSharp(all, baseline, prevOI).filter(m => m.sharpFlag);
+    const logged = await logSharpEvents(flagged, today);
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({ ok: true, date, snapshot: Object.keys(snap).length, kalshi: k.length, polymarket: p.length, elapsedMs: Date.now() - t0 });
+    return res.json({ ok: true, date: today, snapshot: Object.keys(snap).length, kalshi: k.length, polymarket: p.length, flagged: flagged.length, logged, elapsedMs: Date.now() - t0 });
   } catch (e) {
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ ok: false, error: String(e && e.message || e), elapsedMs: Date.now() - t0 });

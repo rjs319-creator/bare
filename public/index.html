@@ -4972,8 +4972,25 @@
       body = `<div class="dt-note" style="border-left-color:#e11d48;margin-top:14px">🟢 <b>No clear sharp-money signal right now.</b> Nothing combines real size with a conviction pattern — which is the normal state. Below are the closest candidates (below the bar), shown for context:</div>`
         + top.map(m => sharpRow(m, false)).join('');
     }
+    // Durable history — flagged events logged by the daily cron, persist after the live flag fades.
+    const ev = d.recentEvents || [];
+    let history = '';
+    if (ev.length) {
+      history = `<div class="rot-head" style="margin-top:16px">🗂 Recent sharp events <span class="dt-dim">· auto-logged, last ${ev.length}</span></div>`
+        + ev.map(e => {
+            const col = VENUE_COL[e.venue] || '#e11d48';
+            const when = (e.date || '').slice(5);   // MM-DD
+            const tells = (e.tells || []).slice(0, 2).map(t => `<span class="crowd-chip">${esc(t)}</span>`).join('');
+            const title = e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener" class="crowd-link">${esc(e.title)}</a>` : esc(e.title);
+            return `<div class="rot-panel crowd-row" style="margin-top:8px"><div class="crowd-head">`
+              + `<span class="crowd-venue" style="background:${col}22;color:${col}">${esc(e.venue)} · ${when}</span>`
+              + `<span class="crowd-heat" style="color:var(--text-dim)">peak 🕵️ ${e.peakSharp || e.sharp}</span></div>`
+              + `<div class="crowd-title">${title}</div>`
+              + `<div class="rot-sub"><b>${fmtMoney(e.notional)}</b> · ${Math.round((e.prob || 0) * 100)}% odds ${tells}</div></div>`;
+          }).join('');
+    }
     const caveat = `<div class="fade-caveats" style="margin-top:14px"><p>⚠️ <b>Hallmarks, not proof.</b> This flags statistical fingerprints of informed betting — it does <i>not</i> detect actual insider trading, and most hits are coincidence, hedging, or rumor. A lead to investigate, never a signal to follow. Real money, real markets — but speculative.</p></div>`;
-    el.innerHTML = banner + trust + body + caveat;
+    el.innerHTML = banner + trust + body + history + caveat;
     const gt = document.getElementById('sharp-gen-time'); if (gt && d.generatedAt) gt.textContent = new Date(d.generatedAt).toLocaleTimeString();
   }
   document.getElementById('sharp-refresh-btn')?.addEventListener('click', runSharpUI);
