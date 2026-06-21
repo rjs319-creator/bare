@@ -1403,10 +1403,11 @@ async function computeDaytradeLive(t0, deadline) {
     loadCandleCache('small').catch(() => null),
     loadCandleCache('micro').catch(() => null),
   ]);
+  const condition = require('../lib/confluence').marketCondition(spyD.candles, regime);
   const ctx = { spyByDate, t0, deadline, fe, state };
   const scan1 = await scanDaytradeUniverse([...new Set(UNI_LARGE)], dt.SCANS.momentum_liquid, { ...ctx, caches: [cacheL] });
   const scan2 = await scanDaytradeUniverse([...new Set([...UNI_SMALL, ...UNI_MICRO])], dt.SCANS.explosive_small, { ...ctx, caches: [cacheS, cacheM] });
-  return { regime, scan1, scan2, state, spyLastDate: spyD.candles[spyD.candles.length - 1].date };
+  return { regime, condition, scan1, scan2, state, spyLastDate: spyD.candles[spyD.candles.length - 1].date };
 }
 
 // op=daytrade — live screener (regime-gated display).
@@ -1417,7 +1418,7 @@ async function runDaytrade(req, res) {
   const riskOff = live.regime === 'risk-off';
   res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=86400');
   return res.json({
-    ok: true, regime: live.regime, riskOff, horizon: DAYTRADE_H,
+    ok: true, regime: live.regime, condition: live.condition, riskOff, horizon: DAYTRADE_H,
     // Momentum/breakout fails in risk-off (the project's core finding) → stand down.
     momentumLiquid: riskOff ? [] : live.scan1.slice(0, 20),
     explosiveSmall: riskOff ? [] : live.scan2.slice(0, 20),
