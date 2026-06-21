@@ -1498,6 +1498,13 @@
     .today-link:hover { border-color: var(--border-hi); }
     .today-idea { cursor: pointer; }
     .today-idea:hover { background: var(--card-hover); }
+    /* Simple/Expert progressive disclosure — Simple hides the dense expert surfaces */
+    body.simple .fade-caveats,
+    body.simple .expert-only,
+    body.simple .header-nav [data-tab="research"],
+    body.simple .mobile-top-tabs [data-tab="research"],
+    body.simple .mobile-bottom-nav [data-tab="research"] { display: none !important; }
+    body.expert #mode-btn { color: var(--cyan); border-color: #06c4d455; }
     @media (max-width: 640px) {
       .hub-sub { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 6px; }
       .hub-sub::-webkit-scrollbar { display: none; }
@@ -1633,6 +1640,7 @@
       <span id="market-status-text">–</span>
     </div>
     <span id="live-clock"></span>
+    <button class="hdr-btn" id="mode-btn" title="Simple hides the dense stats & research; Expert shows everything">🌱 Simple</button>
     <button class="hdr-btn" id="learn-btn" title="Learn every concept — novice to expert">📚 Learn</button>
     <button class="hdr-btn" id="refresh-btn">⟳ Refresh</button>
   </div>
@@ -3975,7 +3983,7 @@
             <div class="scr-company">${esc(c.company || c.ticker)}${c.sector ? ` · ${esc(c.sector)}` : ''}${c.exchange ? ` · ${esc(c.exchange)}` : ''}${c.theme ? ` · <span class="scr-theme">${esc(c.theme)}</span>` : ''}</div>
           </div>
           <div class="scr-score-col">
-            <div class="scr-score${c._downgraded ? ' downgraded' : ''}">${score}<small>/100 Q</small></div>
+            <div class="scr-score${c._downgraded ? ' downgraded' : ''}">${L('score', score + '<small>/100 Q</small>')}</div>
             ${c._downgraded === 'bear' ? `<div class="scr-bear-tag" title="Bearish regime: long breakout score downgraded ${Math.round((1 - REGIME_PENALTY) * 100)}%">⚠ bear −${Math.round((1 - REGIME_PENALTY) * 100)}%</div>` : c._downgraded === 'chop' ? `<div class="scr-bear-tag" style="color:var(--cyan);background:var(--cyan-dim);border-color:#06c4d444" title="Choppy tape: breakout score downgraded ${Math.round((1 - CHOP_PENALTY) * 100)}%">🌊 chop −${Math.round((1 - CHOP_PENALTY) * 100)}%</div>` : ''}
             <div class="scr-price" data-price>$${esc(c.price)}</div>
             <div class="scr-chg ${up ? 'up' : 'down'}" data-change>${c.changePct != null ? (up ? '▲ +' : '▼ ') + c.changePct + '%' : ''}</div>
@@ -4602,6 +4610,10 @@
     meanrev: { g: 'The screeners', t: 'Mean-Reversion / Fading', plain: 'Betting an overextended move snaps back. The Overheated screen fades blow-off tops (a short).', why: 'It works in ranging/choppy tapes where price reverts — and is dangerous in strong trends.', pro: 'The golden rule: never fade a strong trend. Only fade in choppy or neutral tapes.' },
     confluence: { g: 'The screeners', t: 'Confluence', plain: 'When several independent strategies (EMA, Supertrend, RSI, MACD, price-action) all agree on the same stock.', why: 'Agreement filters out noise — but the app\'s own tests show even agreement does not beat the market here.', pro: 'Use confluence to CONFIRM a thesis you already have, not as a standalone buy button.' },
     accumulation: { g: 'The screeners', t: 'Accumulation (Ghost)', plain: 'Quiet buying by big players BEFORE a breakout — flat price, rising volume, insider purchases.', why: 'It tries to get you in early, before the obvious move shows up on the chart.', pro: 'It is a watchlist of names "coiling" — wait for the breakout to confirm before committing.' },
+    rvol: { g: 'The screeners', t: 'Relative Volume (RVOL)', plain: 'How today\'s trading volume compares to the stock\'s normal — 2× means twice the usual activity.', why: 'A volume spike is the clearest sign that something (a catalyst, big buyers) is happening right now.', pro: 'Relative volume is the heartbeat of a mover — pros want >1.5–2× before trusting a breakout or momentum signal.' },
+    relStrength: { g: 'The screeners', t: 'Relative Strength (vs the market)', plain: 'Whether a stock is outperforming the S&P 500 — rising faster, or falling less, than the index.', why: 'Leaders lead: the strongest names tend to keep leading and hold up best when the market dips.', pro: 'Buy strength, not weakness — pros favor names already beating the market over "cheap" laggards.' },
+    score: { g: 'The screeners', t: 'Composite Score', plain: 'A single 0–100 number that blends a screen\'s many factors (trend, volume, momentum, structure) into one rank.', why: 'It lets you compare and rank candidates at a glance instead of juggling a dozen metrics.', pro: 'Use the score to triage, then confirm the top few by hand — never trade a number blindly.' },
+    conviction: { g: 'Trusting a signal', t: 'Conviction', plain: 'How strongly the engine rates an idea — higher means more factors agree and the name has a better track record.', why: 'Position size should scale with conviction: bet more on the strongest setups, less on the marginal ones.', pro: 'Top-conviction baskets beat the market more often in the app\'s tests — but even the best only narrowly clears the bar.' },
     // Entering a trade
     entry: { g: 'Entering a trade', t: 'Entry', plain: 'The price you plan to buy at. Each card shows two: a Pullback entry and a Breakout entry.', why: 'A disciplined entry caps your risk and improves your reward-to-risk before you even click buy.', pro: 'Never chase. A patient entry beats a FOMO fill almost every time.' },
     pullback: { g: 'Entering a trade', t: 'Pullback vs Breakout entry', plain: 'Pullback = wait to buy lower on a dip toward support. Breakout = buy now as it moves up.', why: 'Pullback gives a better price (but may not fill); breakout is a sure fill (but you are chasing).', pro: 'Pros favor the pullback — a lower entry means a tighter stop and a bigger reward:risk.' },
@@ -4721,6 +4733,24 @@
     const meta = document.getElementById('today-meta'); if (meta) meta.textContent = `· ${regLbl} · ${clbl} tape`;
   }
   document.getElementById('today-refresh-btn')?.addEventListener('click', runTodayUI);
+
+  // ── Simple / Expert mode — progressive disclosure (Simple hides dense surfaces) ──
+  function applyUiMode(m) {
+    const expert = m === 'expert';
+    document.body.classList.toggle('expert', expert);
+    document.body.classList.toggle('simple', !expert);
+    const btn = document.getElementById('mode-btn');
+    if (btn) btn.textContent = expert ? '🎓 Expert' : '🌱 Simple';
+  }
+  let uiMode = (() => { try { return localStorage.getItem('uiMode') === 'expert' ? 'expert' : 'simple'; } catch { return 'simple'; } })();
+  applyUiMode(uiMode);   // Simple by default (novice-first); the choice persists
+  document.getElementById('mode-btn')?.addEventListener('click', () => {
+    uiMode = uiMode === 'expert' ? 'simple' : 'expert';
+    try { localStorage.setItem('uiMode', uiMode); } catch {}
+    applyUiMode(uiMode);
+    // If we just hid the tab the user is on (Research), bounce to a visible one.
+    if (uiMode === 'simple' && currentTop === 'research' && typeof showTab === 'function') showTab('screeners');
+  });
 
   document.getElementById('custom-refresh-btn').addEventListener('click', () => { runApex(); fetchApexDrift(); });
   document.getElementById('cx-scope').addEventListener('change', runApex);
@@ -4863,7 +4893,7 @@
           <div class="cx-company">${esc(c.company || c.ticker)}${c.sector ? ` · ${esc(c.sector)}` : ''}${scopeTag}${c.theme ? ` · ${esc(c.theme)}` : ''}</div>
         </div>
         <div class="cx-score-col">
-          <div class="cx-score">${g.score}<small>/100</small></div>
+          <div class="cx-score">${L('accumulation', g.score + '<small>/100</small>')}</div>
           <div class="cx-price">$${esc(c.price)}</div>
           <div class="cx-chg ${up ? 'up' : 'down'}">${c.changePct != null ? (up ? '▲ +' : '▼ ') + c.changePct + '%' : ''}</div>
         </div>
@@ -5392,7 +5422,7 @@
           <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span></span>
           <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
         </div>
-        <div class="dt-card-sub">+${r.pctChange}% today <span class="dt-dim">· RVOL ${r.relVol}×${r.beta != null ? ' · ' + L('beta', 'β') + ' ' + r.beta : ''}${r.gapPct != null ? ' · gap ' + r.gapPct + '%' : ''}</span></div>
+        <div class="dt-card-sub">+${r.pctChange}% today <span class="dt-dim">· ${L('rvol', 'RVOL')} ${r.relVol}×${r.beta != null ? ' · ' + L('beta', 'β') + ' ' + r.beta : ''}${r.gapPct != null ? ' · gap ' + r.gapPct + '%' : ''}</span></div>
         ${pb(r) ? `<div class="dt-card-plan">↩️ <b>${L('pullback', 'Pullback entry')}</b> (wait for the dip) <b>$${pb(r).entry}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${pb(r).stop}</b> <span class="dt-dim">(−${pb(r).riskPct}%)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${pb(r).target}</b> <span class="dt-dim">${L('rr', 'R:R')} 1:${pb(r).rr}</span></div>` : ''}
         <div class="dt-card-plan">🎯 ${L('pullback', 'Breakout entry')} (buy now) <b>$${r.entry}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${r.stop != null ? r.stop : '—'}</b>${r.riskPct != null ? ` <span class="dt-dim">(−${r.riskPct}%)</span>` : ''} &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${r.target != null ? r.target : '—'}</b>${r.rr ? ` <span class="dt-dim">${L('rr', 'R:R')} 1:${r.rr}</span>` : ''}</div>
         <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
@@ -5508,17 +5538,17 @@
       const w = (t.weights || {})[s.strategy];
       return `<div class="bt-ic-row"><span>${esc(CFL_STRAT[s.strategy] || s.strategy)}</span><span>weight ${w != null ? w : '—'}×</span><span>edge ${s.ewmaExc > 0 ? '+' : ''}${s.ewmaExc}% <span style="color:var(--text-dim)">(${s.n})</span></span></div>`;
     }).join('');
-    const weightsPanel = `<div class="rot-panel"><div class="rot-head">🧠 Self-learning — strategy weights</div><div class="rot-sub">Weights start at 1× and drift with each strategy's realized forward edge. (Thin until picks resolve.)</div>${we}</div>`;
+    const weightsPanel = `<div class="rot-panel expert-only"><div class="rot-head">🧠 Self-learning — strategy weights</div><div class="rot-sub">Weights start at 1× and drift with each strategy's realized forward edge. (Thin until picks resolve.)</div>${we}</div>`;
 
     const card = r => {
       const badges = (r.bull || []).map(s => { const m = (r.matched || []).includes(s); return `<span class="chip ${m ? 'cyan' : 'gray'}">${m ? '★ ' : ''}${esc(CFL_STRAT[s] || s)}</span>`; }).join(' ');
       const pb = r.pullback;
       return `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
-          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> <span class="dt-dim">${r.score}/${r.maxScore}</span></span>
+          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> <span class="dt-dim">${L('confluence', r.score + '/' + r.maxScore)}</span></span>
           <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
         </div>
-        <div class="dt-card-sub">${badges} <span class="dt-dim">${r.excess21d != null ? '· 1mo vs SPY ' + (r.excess21d > 0 ? '+' : '') + r.excess21d + '%' : ''}${r.beta != null ? ' · β ' + r.beta : ''}</span></div>
+        <div class="dt-card-sub">${badges} <span class="dt-dim">${r.excess21d != null ? '· ' + L('relStrength', '1mo vs SPY') + ' ' + (r.excess21d > 0 ? '+' : '') + r.excess21d + '%' : ''}${r.beta != null ? ' · ' + L('beta', 'β') + ' ' + r.beta : ''}</span></div>
         ${pb ? `<div class="dt-card-plan">↩️ <b>${L('pullback', 'Pullback')}</b> <b>$${pb.entry}</b> · 🛑 ${L('stop', '<b>$' + pb.stop + '</b>')} <span class="dt-dim">(−${pb.riskPct}%)</span> · 🏁 ${L('target', '<b>$' + pb.target + '</b>')} <span class="dt-dim">${L('rr', 'R:R')} 1:${pb.rr}</span></div>` : ''}
         <div class="dt-card-plan">🎯 <b>${L('pullback', 'Breakout')}</b> <b>$${r.entry}</b> · 🛑 ${L('stop', '<b>$' + (r.stop != null ? r.stop : '—') + '</b>')}${r.riskPct != null ? ` <span class="dt-dim">(−${r.riskPct}%)</span>` : ''} · 🏁 ${L('target', '<b>$' + (r.target != null ? r.target : '—') + '</b>')}${r.rr ? ` <span class="dt-dim">${L('rr', 'R:R')} 1:${r.rr}</span>` : ''}</div>
         <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
