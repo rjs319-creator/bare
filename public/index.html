@@ -436,67 +436,6 @@
       border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px;
     }
 
-    /* ── TRENDS & PREDICTIONS ── */
-    .trends-section { margin-bottom: 32px; }
-    .trends-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    @media (max-width: 900px) { .trends-grid { grid-template-columns: 1fr; } }
-
-    .trends-col-head {
-      display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
-    }
-    .trends-col-head h3 {
-      font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
-    }
-
-    .trends-status { text-align: center; padding: 48px 0; color: var(--text-dim); font-size: 0.88rem; }
-    .trends-status.error { color: var(--red); }
-    .trends-spinner {
-      width: 26px; height: 26px; border: 2px solid var(--border); border-top-color: var(--purple);
-      border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px;
-    }
-
-    .trend-list, .pred-list { display: flex; flex-direction: column; gap: 8px; }
-
-    .trend-card {
-      background: var(--card); border: 1px solid var(--border);
-      border-radius: 9px; padding: 14px 16px;
-      display: grid; grid-template-columns: 50px 1fr; gap: 14px;
-      transition: border-color 0.15s, background 0.15s;
-    }
-    .trend-card:hover { background: var(--card-hover); border-color: #8b6cf033; }
-
-    .pred-card {
-      background: var(--card); border: 1px solid var(--border);
-      border-radius: 9px; padding: 14px 16px;
-      display: grid; grid-template-columns: 50px 1fr; gap: 14px;
-      transition: border-color 0.15s, background 0.15s;
-    }
-    .pred-card:hover { background: var(--card-hover); border-color: #06c4d433; }
-
-    .t-score-col, .p-score-col { text-align: center; }
-    .t-circle {
-      width: 44px; height: 44px; border-radius: 50%; border: 2px solid;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 0.92rem; font-weight: 800; margin: 0 auto;
-    }
-    .t-circle.hi  { color: var(--purple); border-color: var(--purple); background: var(--purple-dim); }
-    .t-circle.mid { color: #a897f0;       border-color: #a897f088;    background: var(--purple-dim); }
-    .p-circle.hi  { color: var(--cyan);   border-color: var(--cyan);   background: var(--cyan-dim); }
-    .p-circle.mid { color: #5ce0ea;       border-color: #5ce0ea88;    background: var(--cyan-dim); }
-    .t-sublabel   { font-size: 0.58rem; color: var(--text-muted); margin-top: 4px; }
-
-    .momentum-pill {
-      display: inline-block; border-radius: 3px; padding: 2px 7px;
-      font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 5px; border: 1px solid;
-    }
-    .momentum-pill.accel  { color: var(--green);  border-color: #10d98a44; background: var(--green-dim); }
-    .momentum-pill.stable { color: var(--amber);  border-color: #f0a83244; background: var(--amber-dim); }
-    .momentum-pill.fading { color: var(--red);    border-color: #ef505044; background: var(--red-dim); }
-
-    .t-theme, .p-statement { font-size: 0.87rem; font-weight: 700; color: var(--text); line-height: 1.35; margin-bottom: 5px; }
-    .t-desc, .p-basis      { font-size: 0.75rem; color: var(--text-dim); line-height: 1.5; margin-bottom: 8px; }
-    .t-tags, .p-tags       { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 7px; }
-
     .chip {
       font-size: 0.62rem; font-weight: 600; border-radius: 3px; padding: 2px 6px;
       border: 1px solid; text-transform: uppercase; letter-spacing: 0.03em;
@@ -504,42 +443,6 @@
     .chip.purple { color: var(--purple); border-color: #8b6cf044; background: var(--purple-dim); }
     .chip.cyan   { color: var(--cyan);   border-color: #06c4d444;  background: var(--cyan-dim); }
     .chip.gray   { color: var(--text-dim); border-color: var(--border); background: var(--bg); }
-
-    .t-impl { font-size: 0.73rem; color: var(--text-dim); display: flex; gap: 5px; align-items: flex-start; }
-    .t-impl span:first-child { color: var(--purple); flex-shrink: 0; }
-
-    .timeframe-chip {
-      display: inline-block; background: var(--cyan-dim); border: 1px solid #06c4d433;
-      color: var(--cyan); border-radius: 3px; padding: 2px 8px;
-      font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; margin-bottom: 5px;
-    }
-    .p-risk { font-size: 0.73rem; color: var(--text-dim); display: flex; gap: 5px; align-items: flex-start; }
-    .p-risk span:first-child { color: var(--amber); flex-shrink: 0; }
-
-    /* Prediction accuracy */
-    .accuracy-bar {
-      display: flex; align-items: center; gap: 10px;
-      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
-      padding: 9px 14px; margin-bottom: 12px; flex-wrap: wrap;
-    }
-    .acc-score { font-size: 1.15rem; font-weight: 900; }
-    .acc-score.good { color: var(--green); }
-    .acc-score.ok   { color: var(--amber); }
-    .acc-score.bad  { color: var(--red); }
-    .acc-label { font-size: 0.7rem; color: var(--text-dim); }
-    .acc-detail { font-size: 0.66rem; color: var(--text-muted); margin-left: auto; }
-
-    .pred-actions { display: flex; gap: 5px; margin-top: 8px; flex-wrap: wrap; }
-    .pred-btn {
-      border: 1px solid; border-radius: 4px; padding: 3px 10px;
-      font-size: 0.65rem; font-weight: 600; cursor: pointer; background: transparent; transition: background 0.15s;
-    }
-    .pred-btn.correct   { color: var(--green); border-color: #10d98a44; }
-    .pred-btn.correct.active   { background: var(--green-dim); }
-    .pred-btn.incorrect { color: var(--red);   border-color: #ef505044; }
-    .pred-btn.incorrect.active { background: var(--red-dim); }
-    .pred-btn.pending   { color: var(--text-dim); border-color: var(--border); }
-    .pred-btn.pending.active   { background: var(--surface); }
 
     /* ── OPTIONS FLOW ── */
     .options-section { margin-bottom: 32px; }
@@ -2080,7 +1983,7 @@
         <li><b>📊 Markets</b> — Breakout Screener (idea generation), Sector Rotation (where money flows), Sectors (today's leaders), Backtest (expectations).</li>
         <li><b>🏆 Scoreboard</b> — your reality check. Open it weekly; let it (not your memory) tell you which signals are actually working, and disable the ones that aren't.</li>
         <li><b>🔥 Alerts</b> — real-time momentum flips; good for <i>timing</i> a name you already like.</li>
-        <li><b>⭐ Picks · ⚡ Options · 📈 Trends · 📰 News</b> — context to <i>understand</i> a name, not to decide on one.</li>
+        <li><b>⭐ Picks · ⚡ Options · 📰 News</b> — context to <i>understand</i> a name, not to decide on one.</li>
       </ul>
 
       <h3>🚫 What not to do (lessons the back-testing paid for)</h3>
@@ -2338,25 +2241,6 @@
 
   <hr class="section-divider" />
 
-  <!-- TRENDS & PREDICTIONS -->
-  <section class="trends-section" id="trends" style="display:none">
-    <div class="section-label">
-      <div class="accent-bar" style="background:var(--purple)"></div>
-      <h2 style="color:var(--purple)">Market Trends &amp; Predictions</h2>
-      <span class="label-meta" id="trends-meta">· 2-week rolling analysis · Claude</span>
-      <div class="label-action">
-        <button class="refresh-btn" style="color:var(--purple)" id="trends-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="trends-container">
-      <div class="trends-status">
-        <div class="trends-spinner"></div>
-        <p>Running deep trend analysis across 2 weeks of news…</p>
-      </div>
-    </div>
-  </section>
-
-  <hr class="section-divider" />
 
   <!-- AI STOCK PICKS -->
   <section class="picks-section" id="picks">
@@ -2675,56 +2559,6 @@
   loadSectorHeatmap();
   setInterval(loadSectorHeatmap, 5 * 60 * 1000);
 
-  // ── Prediction Accuracy ──
-  const PRED_KEY = 'prediction_accuracy_v1';
-  const loadPredHistory   = () => JSON.parse(localStorage.getItem(PRED_KEY) || '[]');
-  const savePredHistory   = h  => localStorage.setItem(PRED_KEY, JSON.stringify(h));
-
-  function storePredictions(predictions) {
-    const history = loadPredHistory();
-    const today = new Date().toISOString().slice(0, 10);
-    let changed = false;
-    predictions.forEach(p => {
-      const key = p.prediction.slice(0, 60);
-      if (!history.find(h => h.key === key)) {
-        history.push({ id: Date.now() + Math.random(), date: today, key, text: p.prediction, timeframe: p.timeframe, confidence: p.confidence, status: 'pending' });
-        changed = true;
-      }
-    });
-    if (changed) savePredHistory(history);
-    return history;
-  }
-
-  function setPredStatus(id, status) {
-    const h = loadPredHistory();
-    const e = h.find(x => x.id === id);
-    if (e) { e.status = status; savePredHistory(h); }
-  }
-
-  function getAccuracyStats() {
-    const h = loadPredHistory();
-    const resolved = h.filter(x => x.status !== 'pending');
-    const correct  = resolved.filter(x => x.status === 'correct').length;
-    return { total: h.length, resolved: resolved.length, correct, rate: resolved.length ? Math.round(correct / resolved.length * 100) : null };
-  }
-
-  function buildAccuracyBar() {
-    const s = getAccuracyStats();
-    if (!s.total) return '';
-    const cls = s.rate === null ? '' : s.rate >= 70 ? 'good' : s.rate >= 50 ? 'ok' : 'bad';
-    return `<div class="accuracy-bar">
-      <span class="acc-score ${cls}">${s.rate !== null ? s.rate + '%' : '–'}</span>
-      <span class="acc-label">accuracy</span>
-      <span class="acc-detail">${s.correct}/${s.resolved} resolved · ${s.total - s.resolved} pending</span>
-    </div>`;
-  }
-
-  function buildPredActions(entry) {
-    const labels = { correct: '✓ Correct', incorrect: '✗ Incorrect', pending: '⟳ Pending' };
-    return `<div class="pred-actions">${['correct','incorrect','pending'].map(s =>
-      `<button class="pred-btn ${s}${entry.status === s ? ' active' : ''}" data-pred-id="${entry.id}" data-status="${s}">${labels[s]}</button>`
-    ).join('')}</div>`;
-  }
 
   // ── Price tracking ──
   const PRICE_KEY = 'pick_price_history';
@@ -2947,115 +2781,6 @@
     picksContainer.innerHTML = `<div class="picks-status error"><p>${esc(msg)}</p></div>`;
   }
 
-  // ── Trends & Predictions ──
-  const trendsContainer  = document.getElementById('trends-container');
-  const trendsMeta       = document.getElementById('trends-meta');
-  const trendsRefreshBtn = document.getElementById('trends-refresh-btn');
-
-  trendsRefreshBtn.addEventListener('click', fetchTrends);
-  // Lazy-load: only fetch when the Trends tab opens (it hits a ~30s LLM endpoint).
-  let trendsLoaded = false;
-  function ensureTrends() { if (trendsLoaded) return; trendsLoaded = true; fetchTrends(); setInterval(fetchTrends, 4 * 60 * 60 * 1000); }
-
-  async function fetchTrends() {
-    trendsRefreshBtn.disabled = true;
-    trendsContainer.innerHTML = `<div class="trends-status"><div class="trends-spinner"></div><p>Running deep trend analysis across 2 weeks of news…</p></div>`;
-    try {
-      const res = await fetch('/api/trends');
-      const data = await res.json();
-      if (data.error) { showTrendsError(data.error); return; }
-      renderTrends(data);
-    } catch { showTrendsError('Could not load trend analysis. Please try again.'); }
-    finally { trendsRefreshBtn.disabled = false; }
-  }
-
-  function renderTrends(data) {
-    const { trends = [], predictions = [], coverageWindow, generatedAt } = data;
-    if (generatedAt) trendsMeta.textContent = `· ${coverageWindow || '2-week'} · Generated ${new Date(generatedAt).toLocaleTimeString()}`;
-
-    const body = document.createElement('div');
-    body.className = 'trends-grid';
-
-    // Trends column
-    const tCol = document.createElement('div');
-    tCol.innerHTML = `<div class="trends-col-head"><div class="col-dot" style="background:var(--purple)"></div><h3 style="color:var(--purple)">Market Trends</h3></div>`;
-    const tList = document.createElement('div');
-    tList.className = 'trend-list';
-    trends.slice(0, 10).forEach((t, idx) => {
-      const cls = t.strength >= 8 ? 'hi' : 'mid';
-      const momCls = t.momentum === 'Accelerating' ? 'accel' : t.momentum === 'Fading' ? 'fading' : 'stable';
-      const frameworkTags = (t.frameworks || []).slice(0, 2).map(f => `<span class="chip purple">${esc(f)}</span>`).join('');
-      const sectorTags    = (t.relatedSectors || []).slice(0, 2).map(s => `<span class="chip gray">${esc(s)}</span>`).join('');
-      const card = document.createElement('div');
-      card.className = 'trend-card fade-in';
-      card.style.animationDelay = `${idx * 40}ms`;
-      card.innerHTML = `
-        <div class="t-score-col">
-          <div class="t-circle ${cls}">${t.strength}</div>
-          <div class="t-sublabel">strength</div>
-        </div>
-        <div>
-          <div class="momentum-pill ${momCls}">${esc(t.momentum || 'Stable')}</div>
-          <div class="t-theme">${esc(t.theme)}</div>
-          <div class="t-desc">${esc(t.description)}</div>
-          <div class="t-tags">${frameworkTags}${sectorTags}${t.evidenceCount ? `<span class="chip gray">📰 ${t.evidenceCount}</span>` : ''}</div>
-          <div class="t-impl"><span>→</span><span>${esc(t.investmentImplication || '')}</span></div>
-        </div>`;
-      tList.appendChild(card);
-    });
-    tCol.appendChild(tList);
-
-    // Predictions column
-    const pCol = document.createElement('div');
-    const history = storePredictions(predictions);
-    pCol.innerHTML = `<div class="trends-col-head"><div class="col-dot" style="background:var(--cyan)"></div><h3 style="color:var(--cyan)">Predictions</h3></div>${buildAccuracyBar()}`;
-    const pList = document.createElement('div');
-    pList.className = 'pred-list';
-    predictions.slice(0, 10).forEach((p, idx) => {
-      const cls  = p.confidence >= 7 ? 'hi' : 'mid';
-      const tags = (p.supportingTrends || []).slice(0, 2).map(s => `<span class="chip cyan">${esc(s)}</span>`).join('');
-      const entry = history.find(h => h.key === p.prediction.slice(0, 60));
-      const card = document.createElement('div');
-      card.className = 'pred-card fade-in';
-      card.style.animationDelay = `${idx * 40}ms`;
-      card.innerHTML = `
-        <div class="p-score-col">
-          <div class="t-circle p-circle ${cls}">${p.confidence}</div>
-          <div class="t-sublabel">confidence</div>
-        </div>
-        <div>
-          <div class="timeframe-chip">${esc(p.timeframe || '')}</div>
-          <div class="p-statement">${esc(p.prediction)}</div>
-          <div class="p-basis">${esc(p.basis)}</div>
-          <div class="p-tags">${tags}</div>
-          <div class="p-risk"><span>⚠</span><span>${esc(p.keyRisk || '')}</span></div>
-          ${entry ? buildPredActions(entry) : ''}
-        </div>`;
-      pList.appendChild(card);
-    });
-
-    pList.addEventListener('click', e => {
-      const btn = e.target.closest('.pred-btn');
-      if (!btn) return;
-      const id = parseFloat(btn.dataset.predId), status = btn.dataset.status;
-      setPredStatus(id, status);
-      btn.closest('.pred-actions').querySelectorAll('.pred-btn').forEach(b => b.classList.toggle('active', b.dataset.status === status));
-      pCol.querySelector('.accuracy-bar')?.remove();
-      const nb = document.createElement('div');
-      nb.innerHTML = buildAccuracyBar();
-      if (nb.firstElementChild) pCol.insertBefore(nb.firstElementChild, pList);
-    });
-
-    pCol.appendChild(pList);
-    body.appendChild(tCol);
-    body.appendChild(pCol);
-    trendsContainer.innerHTML = '';
-    trendsContainer.appendChild(body);
-  }
-
-  function showTrendsError(msg) {
-    trendsContainer.innerHTML = `<div class="trends-status error"><p>${esc(msg)}</p></div>`;
-  }
 
   // ── Options Flow ──
   const optionsContainer  = document.getElementById('options-container');

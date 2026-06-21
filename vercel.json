@@ -1,6 +1,5 @@
 {
   "functions": {
-    "api/trends.js":   { "maxDuration": 60 },
     "api/picks.js":    { "maxDuration": 60 },
     "api/options.js":  { "maxDuration": 60 },
     "api/momentum.js": { "maxDuration": 60 },
