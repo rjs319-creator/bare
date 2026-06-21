@@ -1490,6 +1490,14 @@
     #trust-badge { border: 1px solid var(--border); border-radius: 10px; padding: 9px 13px; margin-bottom: 12px; background: var(--card); font-size: 0.78rem; line-height: 1.5; }
     #trust-badge .trust-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
     #trust-badge .trust-one { color: var(--text-dim); }
+    /* 🏠 Today home */
+    .today-cta { background: transparent; border: 1px solid var(--cyan); color: var(--cyan); border-radius: 6px; padding: 3px 10px; font-size: 0.74rem; font-weight: 700; cursor: pointer; margin-left: 6px; }
+    .today-cta:hover { background: var(--cyan-dim); }
+    .today-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .today-link { background: var(--card); border: 1px solid var(--border); color: var(--text); border-radius: 9px; padding: 10px 14px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+    .today-link:hover { border-color: var(--border-hi); }
+    .today-idea { cursor: pointer; }
+    .today-idea:hover { background: var(--card-hover); }
     @media (max-width: 640px) {
       .hub-sub { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 6px; }
       .hub-sub::-webkit-scrollbar { display: none; }
@@ -1612,7 +1620,7 @@
   </div>
 
   <nav class="header-nav">
-    <a class="nav-link" href="#start" data-tab="start">📘 Start</a>
+    <a class="nav-link" href="#today" data-tab="start">🏠 Home</a>
     <a class="nav-link" href="#screener" data-tab="screeners">🔎 Screeners</a>
     <a class="nav-link" href="#rotation" data-tab="markets">📊 Markets</a>
     <a class="nav-link" href="#backtest" data-tab="research">🔬 Research</a>
@@ -1631,7 +1639,7 @@
 </header>
 
 <nav class="mobile-top-tabs" id="mobile-top-tabs">
-  <a class="mtt-item" href="#start" data-tab="start"><span class="mtt-ic">📘</span>Start</a>
+  <a class="mtt-item" href="#today" data-tab="start"><span class="mtt-ic">🏠</span>Home</a>
   <a class="mtt-item" href="#screener" data-tab="screeners"><span class="mtt-ic">🔎</span>Screeners</a>
   <a class="mtt-item" href="#rotation" data-tab="markets"><span class="mtt-ic">📊</span>Markets</a>
   <a class="mtt-item" href="#backtest" data-tab="research"><span class="mtt-ic">🔬</span>Research</a>
@@ -1821,6 +1829,22 @@
   </div>
 
   <!-- START HERE — plain-English beginner's guide to picking stocks with the app -->
+  <!-- 🏠 TODAY — guided home: reads the tape and routes you to what suits -->
+  <section class="screener-section" id="today">
+    <div class="section-label">
+      <div class="accent-bar" style="background:#34c759"></div>
+      <h2 style="color:#34c759">🏠 Today</h2>
+      <span class="label-meta" id="today-meta">· your daily starting point</span>
+      <div class="label-action">
+        <span class="lbl-time" id="today-gen-time"></span>
+        <button class="refresh-btn" style="color:#34c759" id="today-refresh-btn">⟳ Refresh</button>
+      </div>
+    </div>
+    <div id="today-container">
+      <div class="mom-status"><div class="mom-spinner"></div><p>Reading today's market…</p></div>
+    </div>
+  </section>
+
   <section class="screener-section" id="start">
     <div class="section-label">
       <div class="accent-bar" style="background:#34c759"></div>
@@ -2356,7 +2380,7 @@
 
 <nav class="mobile-bottom-nav" id="mobile-bottom-nav">
   <div class="nav-items">
-    <a class="mbn-item" href="#start" data-tab="start"><span class="mbn-icon">📘</span><span class="mbn-label">Start</span></a>
+    <a class="mbn-item" href="#today" data-tab="start"><span class="mbn-icon">🏠</span><span class="mbn-label">Home</span></a>
     <a class="mbn-item" href="#screener" data-tab="screeners"><span class="mbn-icon">🔎</span><span class="mbn-label">Screeners</span></a>
     <a class="mbn-item" href="#rotation" data-tab="markets"><span class="mbn-icon">📊</span><span class="mbn-label">Markets</span></a>
     <a class="mbn-item" href="#backtest" data-tab="research"><span class="mbn-icon">🔬</span><span class="mbn-label">Research</span></a>
@@ -2367,7 +2391,7 @@
 <script>
   // ── App tabs with a "Markets" hub (Screener / Rotation / Sectors) ──
   const TAB_GROUPS = {
-    start:     ['start'],
+    start:     ['today', 'start'],
     screeners: ['screener', 'custom', 'daytrade', 'confluence', 'ghost', 'trendrider', 'fade'],
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
     research:  ['backtest', 'events', 'edge'],
@@ -2376,6 +2400,7 @@
   const TOP_TABS = Object.keys(TAB_GROUPS);
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
+    today: '🏠 Today', start: '📘 Guide',
     screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', daytrade: '⚡ Day Trade', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
@@ -2386,7 +2411,7 @@
   // Mark each section as a switchable screen
   SECTION_IDS.forEach(id => document.getElementById(id)?.classList.add('tabbable'));
 
-  let hubSub = { screeners: 'screener', markets: 'rotation', research: 'backtest', track: 'scoreboard' };
+  let hubSub = { start: 'today', screeners: 'screener', markets: 'rotation', research: 'backtest', track: 'scoreboard' };
   try { const hs = JSON.parse(localStorage.getItem('hubSub')); if (hs) hubSub = { ...hubSub, ...hs }; } catch {}
   // Sanitize stored hubSub: after the nav regrouping a saved sub may no longer
   // belong to its group (e.g. markets→screener). Reset any stale entry to the
@@ -2435,6 +2460,7 @@
     if (sub === 'ghost' && typeof ensureGhost === 'function') ensureGhost();
     if (sub === 'events' && typeof ensureCern === 'function') ensureCern();
     if (sub === 'edge' && typeof ensureEdge === 'function') ensureEdge();
+    if (sub === 'today' && typeof ensureToday === 'function') ensureToday();
     if (sub === 'rotation' && typeof ensureRotationDW === 'function') ensureRotationDW();
     if (sub === 'fade' && typeof ensureFade === 'function') ensureFade();
     if (sub === 'trendrider' && typeof ensureTrendRider === 'function') ensureTrendRider();
@@ -4649,6 +4675,52 @@
     // Any [data-learn] element anywhere opens the glossary at that concept.
     document.addEventListener('click', e => { const t = e.target.closest('[data-learn]'); if (t) { e.preventDefault(); openLearn(t.dataset.learn); } });
   })();
+
+  // ── 🏠 TODAY — guided home: read the tape, say what suits, route the novice ──
+  let todayLoaded = false;
+  function ensureToday() { if (!todayLoaded) { todayLoaded = true; runTodayUI(); } }
+  async function runTodayUI() {
+    const el = document.getElementById('today-container');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Reading today's market…</p></div>`;
+    try {
+      const [tape, dt] = await Promise.all([
+        fetch('/api/tracker?op=tape').then(r => r.json()).catch(() => null),
+        fetch('/api/tracker?op=daytrade').then(r => r.json()).catch(() => null),
+      ]);
+      renderToday(tape, dt);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Today.</p></div>`; }
+  }
+  const TODAY_COND = { trending: ['📈', 'trending', 'A calm, directional market — a good environment for trend and breakout setups.'], choppy: ['🌊', 'choppy / ranging', 'A whippy, sideways market — trends get chopped up, so be careful.'], mixed: ['🤝', 'mixed', 'Direction is unclear right now — the safest play is patience and selectivity.'], riskoff: ['🛑', 'risk-off', 'A defensive, fearful market — new longs are risky.'] };
+  const TODAY_REC = {
+    riskoff: { e: '🛑', col: 'var(--red)', h: 'Best move today: usually NOT trading new longs', b: 'The market is risk-off — almost every long setup fails here. Protect your capital and wait for it to calm down.', cta: null },
+    trending: { e: '📈', col: 'var(--green)', h: 'Momentum & breakouts are favored', b: 'Clean directional tape — trend and breakout setups are in their element.', cta: { l: "See today's movers →", s: 'daytrade' } },
+    choppy: { e: '🌊', col: 'var(--amber,#f59e0b)', h: 'Favor mean-reversion, not breakouts', b: 'Whippy, ranging tape — breakouts fail more (false breakouts). Fades suit it; be selective with tight stops.', cta: { l: 'Open the Overheated screen →', s: 'fade' } },
+    mixed: { e: '🤝', col: 'var(--amber,#f59e0b)', h: 'Be selective — no clear edge today', b: 'No tape clearly favors a style. Stick to only the highest-conviction setups and size down.', cta: { l: 'Browse the Breakout screen →', s: 'screener' } },
+  };
+  function renderToday(tape, dt) {
+    const el = document.getElementById('today-container'); if (!el) return;
+    const ok = tape && tape.ok;
+    const cond = ok ? tape.condition : 'mixed', regime = ok ? tape.regime : 'neutral', eff = ok ? tape.efficiency : null;
+    const [ci, clbl, cdesc] = TODAY_COND[cond] || TODAY_COND.mixed;
+    const regLbl = (regime || '').toUpperCase();
+    const read = `<div class="rot-panel"><div class="rot-head">${ci} Today's market read</div><div class="rot-sub">The market is <b>${L('regime', regLbl)}</b> and the tape is <b>${L('tape', clbl)}</b>${eff != null ? ` <span class="dt-dim">(${L('trendEff', 'trend-eff ' + eff)})</span>` : ''}. ${cdesc}</div></div>`;
+    const r = TODAY_REC[cond] || TODAY_REC.mixed;
+    const rec = `<div class="dt-note" style="border-left-color:${r.col}"><b>${r.e} ${r.h}.</b> ${r.b}${r.cta ? ` <button class="today-cta" data-go="${r.cta.s}">${r.cta.l}</button>` : ''}</div>`;
+    let ideas = '';
+    if (cond !== 'riskoff' && dt && dt.ok) {
+      const picks = [...(dt.momentumLiquid || []), ...(dt.explosiveSmall || [])].slice(0, 4);
+      if (picks.length) ideas = `<div class="rot-panel"><div class="rot-head">👀 A few names moving today</div><div class="rot-sub">Today's biggest movers on heavy volume — a starting watchlist, not advice. Tap a row to open the full Day Trade view.</div>`
+        + picks.map(p => `<div class="bt-ic-row today-idea" data-go="daytrade"><span><b>${esc(p.ticker)}</b> <span style="color:var(--text-dim)">${esc(p.sector || '')}</span></span><span style="color:var(--green)">+${p.pctChange}%</span><span>RVOL ${p.relVol}×</span></div>`).join('') + `</div>`;
+    }
+    const links = `<div class="today-links"><button class="today-link" data-go="start">📘 New here? Read the 2-min guide</button><button class="today-link" id="today-learn">📚 Learn the basics</button><button class="today-link" data-go="screener">🔎 All screeners</button></div>`;
+    el.innerHTML = read + rec + ideas + links;
+    el.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => { if (typeof showTab === 'function') showTab(b.dataset.go); }));
+    el.querySelector('#today-learn')?.addEventListener('click', () => openLearn());
+    const gt = document.getElementById('today-gen-time'); if (gt && ok && tape.generatedAt) gt.textContent = new Date(tape.generatedAt).toLocaleTimeString();
+    const meta = document.getElementById('today-meta'); if (meta) meta.textContent = `· ${regLbl} · ${clbl} tape`;
+  }
+  document.getElementById('today-refresh-btn')?.addEventListener('click', runTodayUI);
 
   document.getElementById('custom-refresh-btn').addEventListener('click', () => { runApex(); fetchApexDrift(); });
   document.getElementById('cx-scope').addEventListener('change', runApex);
