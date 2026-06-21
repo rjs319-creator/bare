@@ -1777,6 +1777,12 @@ async function runConfluenceOpt(req, res) {
   const range = /^(2y|5y|10y|max)$/.test(req.query.range || '') ? req.query.range : '5y';
   const limit = Math.max(0, parseInt(req.query.limit, 10) || 120);
   const minBull = Math.max(1, parseInt(req.query.minbull, 10) || CONFLUENCE_MIN_BULL);
+  // IMPROVEMENT LEVERS (test whether anything creates edge over raw confluence):
+  const useRs = req.query.rs === '1';                  // require the name to be OUTPERFORMING SPY (rel-strength)
+  const regimeGate = req.query.regimegate === '1';     // drop risk-off signals (the app's #1 proven lever)
+  const freshOnly = req.query.fresh === '1';           // require a FRESH trigger this bar (not just persistent state)
+  const topFrac = Math.min(1, Math.max(0, parseFloat(req.query.topfrac) || 1));   // per-date keep top-fraction by momentum
+  const MOM = 63;
   const lists = scope === 'small' ? UNI_SMALL : scope === 'micro' ? UNI_MICRO : UNI_LARGE;
   let tickers = [...new Set(lists)]; if (limit > 0) tickers = tickers.slice(0, limit);
   const [spyD, macro] = await Promise.all([fetchDailyHistory('SPY', range), buildMacroLookup(range).catch(() => null)]);
@@ -1784,7 +1790,7 @@ async function runConfluenceOpt(req, res) {
   const spyByDate = {}; spyD.candles.forEach(c => { spyByDate[c.date] = c.close; });
 
   const t0 = Date.now(), deadline = 50000;
-  const recs = [];                       // confluence (>=minBull) signals
+  const recs = [];                       // confluence (>=minBull) signals, with lever fields
   const perStrat = {}; cf.STRATEGIES.forEach(s => perStrat[s] = []);   // each strategy's bullish-bar fwd excess
   let i = 0;
   const worker = async () => {
@@ -1800,7 +1806,15 @@ async function runConfluenceOpt(req, res) {
         const exc = fwd - sfwd, regime = macro ? (macro.at(date) || {}).regime || 'neutral' : 'neutral';
         const bull = cf.STRATEGIES.filter(st => s[st] === 1);
         for (const st of bull) perStrat[st].push({ exc, regime });
-        if (bull.length >= minBull) recs.push({ date, exc, fwd, regime, nBull: bull.length });
+        if (bull.length < minBull) continue;
+        // lever inputs: relative strength (name vs SPY over MOM) + fresh trigger.
+        const kp = k - MOM; let mom = null, rs = false;
+        if (kp >= 0 && spyByDate[c[kp].date] != null) {
+          mom = c[k].close / c[kp].close - 1;
+          rs = mom > (spyByDate[c[k].date] / spyByDate[c[kp].date] - 1);
+        }
+        const fresh = !!(s.emaFresh || s.stFlip || s.macdFresh);
+        recs.push({ date, exc, fwd, regime, nBull: bull.length, mom, rs, fresh });
       }
     }
   };
@@ -1813,17 +1827,28 @@ async function runConfluenceOpt(req, res) {
     return { n, avgExc: +mean(arr.map(x => x.exc)).toFixed(2), beatRate: +((beats / n) * 100).toFixed(0), wilsonLo: +(ci.lo * 100).toFixed(0) };
   };
   const byReg = arr => ({ 'risk-on': agg(arr.filter(r => r.regime === 'risk-on')), neutral: agg(arr.filter(r => r.regime === 'neutral')), 'risk-off': agg(arr.filter(r => r.regime === 'risk-off')) });
-  const dates = [...new Set(recs.map(r => r.date))].sort();
-  const split = dates[Math.floor(0.6 * dates.length)] || dates[dates.length - 1];
-  const oos = recs.filter(r => r.date >= split);
+  const oosOf = arr => { const ds = [...new Set(arr.map(r => r.date))].sort(); const sp = ds[Math.floor(0.6 * ds.length)] || ds[ds.length - 1]; return { split: sp, all: agg(arr.filter(r => r.date >= sp)) }; };
+
+  // Apply the improvement levers to build the "improved" signal set.
+  let improved = recs;
+  if (regimeGate) improved = improved.filter(r => r.regime !== 'risk-off');
+  if (useRs) improved = improved.filter(r => r.rs);
+  if (freshOnly) improved = improved.filter(r => r.fresh);
+  if (topFrac < 1) {
+    const byDate = {}; improved.forEach(r => (byDate[r.date] = byDate[r.date] || []).push(r));
+    improved = [];
+    Object.values(byDate).forEach(arr => { arr.sort((a, b) => (b.mom || -9) - (a.mom || -9)); const keep = Math.max(1, Math.floor(arr.length * topFrac)); for (let j = 0; j < keep; j++) improved.push(arr[j]); });
+  }
   const perStrategy = {}; cf.STRATEGIES.forEach(s => perStrategy[s] = { overall: agg(perStrat[s]), byRegime: byReg(perStrat[s]) });
 
   res.setHeader('Cache-Control', 'no-store');
   return res.json({
     ok: true, scope, range, horizonDays: H, minBull, namesScanned: tickers.length, confluenceSignals: recs.length,
-    confluence: { overall: agg(recs), byRegime: byReg(recs), oos: { split, all: agg(oos), ...byReg(oos) } },
+    levers: { rs: useRs, regimeGate, freshOnly, topFrac },
+    confluence: { overall: agg(recs), byRegime: byReg(recs), oos: oosOf(recs) },
+    improved: { n: improved.length, overall: agg(improved), byRegime: byReg(improved), oos: oosOf(improved) },
     perStrategy,
-    note: `Confluence (>=${minBull}/5 strategies bullish) + each strategy alone, replayed point-in-time; forward ${H}-session excess vs SPY. Does agreement beat the market / individual strategies, and does it hold OOS + across regimes?`,
+    note: `Confluence (>=${minBull}/5) replayed point-in-time; fwd ${H}-session excess vs SPY. 'improved' applies levers (rs/regimegate/fresh/topfrac) — does any combo finally beat the market OOS?`,
     generatedAt: new Date().toISOString(),
   });
 }

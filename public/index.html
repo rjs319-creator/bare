@@ -5265,7 +5265,7 @@
     }
 
     el.innerHTML = banner + howto + weightsPanel + picksPanel + track +
-      `<div class="fade-caveats"><b>Honest validation</b> (5y, fwd ${t.horizon}-session excess vs SPY): confluence (≥3/5 agree) averaged −0.2% with a ~48% win rate; tightening to 4/5 only flattens it to ~0%; <b>no regime and no single strategy beats the market</b>. That's the efficient-market reality for well-known indicators — so treat this as a <b>multi-strategy confirmation/watchlist</b> tool, not an edge. What it adds: one place to see when classic signals align, a self-learning weight on each, and a live track record. Confirm on the chart. Research, not advice.</div>`;
+      `<div class="fade-caveats"><b>Honest validation</b> (5y, fwd ${t.horizon}-session excess vs SPY): confluence (≥3/5 agree) averaged −0.2% with a ~48% win rate. I then <b>tested every sensible improvement</b> — regime gating, a relative-strength filter, fresh-trigger-only, and taking only the top-momentum names — and the best stack (4/5 + relative-strength + regime + top-20%) only reached ~breakeven (+0.1% out-of-sample) with a <b>still-sub-50% win rate</b> (Wilson LB 44%). <b>No combination confidently beats the market</b> — the efficient-market reality for well-known indicators. So treat this as a <b>multi-strategy confirmation/watchlist</b> tool, not an edge. What it adds: one place to see when classic signals align, a self-learning weight on each, and a live track record. Confirm on the chart. Research, not advice.</div>`;
 
     el.querySelectorAll('.dt-card[data-ticker]').forEach(cardEl => {
       const tk = cardEl.dataset.ticker;
