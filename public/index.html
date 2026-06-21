@@ -1486,6 +1486,10 @@
     #tape-badge .tb-fit { display: block; margin-top: 3px; font-size: 0.72rem; font-weight: 600; }
     #tape-badge .tb-fit.good { color: var(--green); }
     #tape-badge .tb-fit.bad { color: var(--amber, #f59e0b); }
+    /* Per-screener trust badge */
+    #trust-badge { border: 1px solid var(--border); border-radius: 10px; padding: 9px 13px; margin-bottom: 12px; background: var(--card); font-size: 0.78rem; line-height: 1.5; }
+    #trust-badge .trust-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+    #trust-badge .trust-one { color: var(--text-dim); }
     @media (max-width: 640px) {
       .hub-sub { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 6px; }
       .hub-sub::-webkit-scrollbar { display: none; }
@@ -1637,6 +1641,7 @@
 <div class="page">
 
   <div id="hub-subnav"></div>
+  <div id="trust-badge" style="display:none"></div>
   <div id="tape-badge" style="display:none"></div>
 
   <!-- SIGNAL SCOREBOARD -->
@@ -2467,6 +2472,9 @@
   };
   let _tapeCache = null, _tapeAt = 0;
   async function updateTapeBadge(sub) {
+    // Per-screener trust badge (same shared header area as the tape badge).
+    const trust = document.getElementById('trust-badge');
+    if (trust) { const h = sub ? trustBadgeHTML(sub) : ''; trust.innerHTML = h; trust.style.display = h ? '' : 'none'; }
     const el = document.getElementById('tape-badge');
     if (!el) return;
     if (!sub) { el.style.display = 'none'; return; }
@@ -4599,6 +4607,32 @@
     }
     body.innerHTML = html;
   }
+  // Wrap any label as a tap-to-learn term.
+  function L(term, txt) { return `<span class="learn-term" data-learn="${term}">${txt}</span>`; }
+
+  // Per-screener TRUST verdict (one-glance confidence, grounded in the app's own
+  // validation findings) — turns the honest caveats into a glyph + expandable detail.
+  const TRUST_META = {
+    validated: ['#22c55e', 'Validated edge'],
+    building: ['#eab308', 'Building track record'],
+    confirm: ['#06c4d4', 'Confirmation tool'],
+    noedge: ['#ef4444', 'No proven edge'],
+  };
+  const TRUST = {
+    screener: { level: 'confirm', one: `Breakouts have no standalone edge in 5y tests — the ${L('regime', 'regime')} + ${L('tape', 'tape')} gates do the real work. Use it to find candidates, not as a buy signal.` },
+    custom: { level: 'building', one: `The conviction ranker has real, out-of-sample selection power (top names beat SPY more often) but narrowly misses the confident-edge bar (${L('wilsonLB', 'confidence floor')} ~48%); the regime gate is the proven lever.` },
+    daytrade: { level: 'confirm', one: `A ${L('regime', 'regime')}-gated movers watchlist, not a win-rate edge. Large-cap ${L('momentum', 'momentum')} doesn't beat SPY; small-cap explosive is positive-expectancy but wins <50% (a few big runners carry it).` },
+    confluence: { level: 'confirm', one: `~48% win rate in 5y tests — no strategy or ${L('confluence', 'confluence')} combination confidently beats the market. A multi-strategy confirmation overlay.` },
+    ghost: { level: 'building', one: `An early-${L('accumulation', 'accumulation')} watchlist. The price core is mostly weak ${L('momentum', 'momentum')} (~0.08 IC); insider/fundamentals add little. Live record still accruing.` },
+    trendrider: { level: 'validated', one: `The "stand down when red" timing is validated across 5 independent selloffs — the project's strongest finding. But green = riding ${L('beta', 'beta')}, not stock-picking skill: it tells you WHEN, not WHAT.` },
+    fade: { level: 'building', one: `A choppy/neutral-tape ${L('meanrev', 'mean-reversion')} fade. The selected high-conviction basket showed ~+0.9%/mo net out-of-sample (${L('beta', 'beta')}-neutral, after costs) — the most promising result, but the live ${L('backtest', 'track record')} is still building.` },
+  };
+  function trustBadgeHTML(sub) {
+    const tr = TRUST[sub]; if (!tr) return '';
+    const [col, lbl] = TRUST_META[tr.level] || TRUST_META.confirm;
+    return `<span class="trust-dot" style="background:${col}"></span><b style="color:${col}">${lbl}</b> <span class="trust-one">— ${tr.one}</span>`;
+  }
+
   function openLearn(term) {
     const modal = document.getElementById('learn-modal'); if (!modal) return;
     renderLearn(LEARN[term] ? term : null);
@@ -5205,7 +5239,7 @@
     // Live track record by light color (the proof).
     let trackHtml = '';
     if (book && book.resolved >= 10) {
-      const row = (name, s) => s && s.n ? `<div class="bt-ic-row"><span>${name} <span style="color:var(--text-dim)">${s.n} picks</span></span><span>avg ${s.avgRet > 0 ? '+' : ''}${s.avgRet}%</span><span>beat SPY ${s.beatRate}% <span style="color:var(--text-dim)">(LB ${s.wilsonLo}%)</span></span></div>` : '';
+      const row = (name, s) => s && s.n ? `<div class="bt-ic-row"><span>${name} <span style="color:var(--text-dim)">${s.n} picks</span></span><span>avg ${s.avgRet > 0 ? '+' : ''}${s.avgRet}%</span><span>${L('beatRate', 'beat SPY')} ${s.beatRate}% <span style="color:var(--text-dim)">(${L('wilsonLB', 'LB')} ${s.wilsonLo}%)</span></span></div>` : '';
       trackHtml = `<div class="rot-panel"><div class="rot-head">📊 Live track record — does the light work?</div>
         <div class="rot-sub">Forward ${book.note.includes('21') ? '~1-month' : ''} returns of logged picks, split by the light when they were picked. Green should beat red.</div>
         ${row('🟢 Green', book.byClimate.green)}${row('🟡 Yellow', book.byClimate.yellow)}${row('🔴 Red', book.byClimate.red)}
@@ -5286,9 +5320,9 @@
           <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span></span>
           <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
         </div>
-        <div class="dt-card-sub">+${r.pctChange}% today <span class="dt-dim">· RVOL ${r.relVol}×${r.beta != null ? ' · β ' + r.beta : ''}${r.gapPct != null ? ' · gap ' + r.gapPct + '%' : ''}</span></div>
-        ${pb(r) ? `<div class="dt-card-plan">↩️ <b>Pullback entry</b> (wait for the dip) <b>$${pb(r).entry}</b> &nbsp;·&nbsp; 🛑 Stop <b>$${pb(r).stop}</b> <span class="dt-dim">(−${pb(r).riskPct}%)</span> &nbsp;·&nbsp; 🏁 Target <b>$${pb(r).target}</b> <span class="dt-dim">R:R 1:${pb(r).rr}</span></div>` : ''}
-        <div class="dt-card-plan">🎯 Breakout entry (buy now) <b>$${r.entry}</b> &nbsp;·&nbsp; 🛑 Stop <b>$${r.stop != null ? r.stop : '—'}</b>${r.riskPct != null ? ` <span class="dt-dim">(−${r.riskPct}%)</span>` : ''} &nbsp;·&nbsp; 🏁 Target <b>$${r.target != null ? r.target : '—'}</b>${r.rr ? ` <span class="dt-dim">R:R 1:${r.rr}</span>` : ''}</div>
+        <div class="dt-card-sub">+${r.pctChange}% today <span class="dt-dim">· RVOL ${r.relVol}×${r.beta != null ? ' · ' + L('beta', 'β') + ' ' + r.beta : ''}${r.gapPct != null ? ' · gap ' + r.gapPct + '%' : ''}</span></div>
+        ${pb(r) ? `<div class="dt-card-plan">↩️ <b>${L('pullback', 'Pullback entry')}</b> (wait for the dip) <b>$${pb(r).entry}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${pb(r).stop}</b> <span class="dt-dim">(−${pb(r).riskPct}%)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${pb(r).target}</b> <span class="dt-dim">${L('rr', 'R:R')} 1:${pb(r).rr}</span></div>` : ''}
+        <div class="dt-card-plan">🎯 ${L('pullback', 'Breakout entry')} (buy now) <b>$${r.entry}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${r.stop != null ? r.stop : '—'}</b>${r.riskPct != null ? ` <span class="dt-dim">(−${r.riskPct}%)</span>` : ''} &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${r.target != null ? r.target : '—'}</b>${r.rr ? ` <span class="dt-dim">${L('rr', 'R:R')} 1:${r.rr}</span>` : ''}</div>
         <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
         <div class="chart-panel" data-chart-panel style="display:none"></div>
       </div>`;
@@ -5302,7 +5336,7 @@
     const es = list('💥 Explosive Small-Cap ($1–$20)', t.explosiveSmall, 'Small caps up &gt;8% on &gt;2× relative volume — higher reward, lower hit-rate.', betaNote);
     let track;
     if (book && book.resolved >= 10) {
-      const row = (n, s) => s && s.n ? `<div class="bt-ic-row"><span>${n} <span style="color:var(--text-dim)">${s.n}</span></span><span>exc ${s.avgExc > 0 ? '+' : ''}${s.avgExc}%</span><span>beat ${s.beatRate}% <span style="color:var(--text-dim)">(LB ${s.wilsonLo}%)</span></span></div>` : '';
+      const row = (n, s) => s && s.n ? `<div class="bt-ic-row"><span>${n} <span style="color:var(--text-dim)">${s.n}</span></span><span>exc ${s.avgExc > 0 ? '+' : ''}${s.avgExc}%</span><span>${L('beatRate', 'beat')} ${s.beatRate}% <span style="color:var(--text-dim)">(${L('wilsonLB', 'LB')} ${s.wilsonLo}%)</span></span></div>` : '';
       track = `<div class="rot-panel"><div class="rot-head">📊 Live track record — forward ${t.horizon}-session excess vs SPY</div>${row('🚀 Momentum-Liquid', book.byScan.momentum_liquid)}${row('💥 Explosive-Small', book.byScan.explosive_small)}${row('All picks', book.overall)}<div class="bt-ic-row" style="border-top:1px solid var(--border);margin-top:4px"><span></span><span></span><span>${book.resolved} resolved · ${book.stillOpen} open</span></div></div>`;
     } else {
       track = `<div class="rot-panel rot-panel-pending"><div class="rot-head">📊 Live track record — building…</div><div class="rot-sub">${book ? `${book.stillOpen || 0} open, ${book.resolved || 0} resolved` : ''}. Each pick is scored ~${t.horizon} sessions later; accrues automatically via the daily cron.</div></div>`;
@@ -5413,8 +5447,8 @@
           <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
         </div>
         <div class="dt-card-sub">${badges} <span class="dt-dim">${r.excess21d != null ? '· 1mo vs SPY ' + (r.excess21d > 0 ? '+' : '') + r.excess21d + '%' : ''}${r.beta != null ? ' · β ' + r.beta : ''}</span></div>
-        ${pb ? `<div class="dt-card-plan">↩️ <b>Pullback</b> <b>$${pb.entry}</b> · 🛑 <b>$${pb.stop}</b> <span class="dt-dim">(−${pb.riskPct}%)</span> · 🏁 <b>$${pb.target}</b> <span class="dt-dim">R:R 1:${pb.rr}</span></div>` : ''}
-        <div class="dt-card-plan">🎯 <b>Breakout</b> <b>$${r.entry}</b> · 🛑 <b>$${r.stop != null ? r.stop : '—'}</b>${r.riskPct != null ? ` <span class="dt-dim">(−${r.riskPct}%)</span>` : ''} · 🏁 <b>$${r.target != null ? r.target : '—'}</b>${r.rr ? ` <span class="dt-dim">R:R 1:${r.rr}</span>` : ''}</div>
+        ${pb ? `<div class="dt-card-plan">↩️ <b>${L('pullback', 'Pullback')}</b> <b>$${pb.entry}</b> · 🛑 ${L('stop', '<b>$' + pb.stop + '</b>')} <span class="dt-dim">(−${pb.riskPct}%)</span> · 🏁 ${L('target', '<b>$' + pb.target + '</b>')} <span class="dt-dim">${L('rr', 'R:R')} 1:${pb.rr}</span></div>` : ''}
+        <div class="dt-card-plan">🎯 <b>${L('pullback', 'Breakout')}</b> <b>$${r.entry}</b> · 🛑 ${L('stop', '<b>$' + (r.stop != null ? r.stop : '—') + '</b>')}${r.riskPct != null ? ` <span class="dt-dim">(−${r.riskPct}%)</span>` : ''} · 🏁 ${L('target', '<b>$' + (r.target != null ? r.target : '—') + '</b>')}${r.rr ? ` <span class="dt-dim">${L('rr', 'R:R')} 1:${r.rr}</span>` : ''}</div>
         <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
         <div class="chart-panel" data-chart-panel style="display:none"></div>
       </div>`;
@@ -5425,7 +5459,7 @@
 
     let track;
     if (book && book.resolved >= 10) {
-      const row = (n, s) => s && s.n ? `<div class="bt-ic-row"><span>${n} <span style="color:var(--text-dim)">${s.n}</span></span><span>exc ${s.avgExc > 0 ? '+' : ''}${s.avgExc}%</span><span>beat ${s.beatRate}% <span style="color:var(--text-dim)">(LB ${s.wilsonLo}%)</span></span></div>` : '';
+      const row = (n, s) => s && s.n ? `<div class="bt-ic-row"><span>${n} <span style="color:var(--text-dim)">${s.n}</span></span><span>exc ${s.avgExc > 0 ? '+' : ''}${s.avgExc}%</span><span>${L('beatRate', 'beat')} ${s.beatRate}% <span style="color:var(--text-dim)">(${L('wilsonLB', 'LB')} ${s.wilsonLo}%)</span></span></div>` : '';
       track = `<div class="rot-panel"><div class="rot-head">📊 Live track record — forward ${t.horizon}-session excess vs SPY</div>${row('All confluence', book.overall)}${Object.keys(book.byStrategy || {}).map(s => row(CFL_STRAT[s] || s, book.byStrategy[s])).join('')}<div class="bt-ic-row" style="border-top:1px solid var(--border);margin-top:4px"><span></span><span></span><span>${book.resolved} resolved · ${book.stillOpen} open</span></div></div>`;
     } else {
       track = `<div class="rot-panel rot-panel-pending"><div class="rot-head">📊 Live track record — building…</div><div class="rot-sub">${book ? `${book.stillOpen || 0} open, ${book.resolved || 0} resolved` : ''}. Each pick scored ~${t.horizon} sessions later; accrues via the daily cron.</div></div>`;
