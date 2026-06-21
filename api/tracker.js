@@ -1893,6 +1893,27 @@ async function runConfluenceOpt(req, res) {
   });
 }
 
+// ── op=tape : the current MARKET CONDITION (shared badge across all screeners) ──
+// Lightweight: one SPY read + macro → trending / choppy / mixed / risk-off, so every
+// screener tab can show the same tape context (and adapt to it).
+async function runTape(req, res) {
+  const cf = require('../lib/confluence');
+  const { fetchMacro } = require('../lib/macro');
+  const spy = await fetchDailyHistory('SPY');
+  let regime = 'neutral';
+  try { const m = await fetchMacro(); if (m) regime = m.regime; } catch {}
+  const cl = spy ? spy.candles.map(c => c.close) : [];
+  const i = cl.length - 1;
+  const er = (spy && i >= 63) ? cf.efficiencyRatio(cl, i, 63) : 0;
+  let s200 = null; if (i >= 199) { let s = 0; for (let j = i - 199; j <= i; j++) s += cl[j]; s200 = s / 200; }
+  const condition = spy ? cf.marketCondition(spy.candles, regime) : 'mixed';
+  res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=86400');
+  return res.json({
+    ok: true, condition, regime, efficiency: +er.toFixed(2),
+    spyAbove200: s200 != null && cl[i] > s200, generatedAt: new Date().toISOString(),
+  });
+}
+
 // ── op=archive : snapshot today's per-ticker mention counts + options ───────
 // THE unrecoverable data capture. Social-mention counts (StockTwits trending)
 // and option-chain snapshots can't be reconstructed historically, so we persist
@@ -2759,6 +2780,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'confluencetick') return runConfluenceTick(req, res);
   if (req.query.op === 'confluencebook') return runConfluenceBook(req, res);
   if (req.query.op === 'confluenceopt') return runConfluenceOpt(req, res);
+  if (req.query.op === 'tape') return runTape(req, res);
   if (req.query.op === 'fadesignals') return runFadeSignals(req, res);
   if (req.query.op === 'fadetick') return runFadeTick(req, res);
   if (req.query.op === 'fadebook') return runFadeBook(req, res);

@@ -379,6 +379,11 @@ module.exports = async function handler(req, res) {
     let macro = null;
     try { macro = await macroPromise; } catch {}
     const macroRiskOff = !!(macro && macro.riskOff);
+    // Market TAPE (trend vs chop) from SPY efficiency ratio — breakouts fail in
+    // choppy tapes too, so the UI downgrades them there (in addition to bearish).
+    if (regime && spyCandles) {
+      try { regime.condition = require('../lib/confluence').marketCondition(spyCandles, (regime.bearish || macroRiskOff) ? 'risk-off' : 'neutral'); } catch {}
+    }
     const ghostRegimeInput = {
       bearish: !!(regime && regime.bearish) || macroRiskOff,
       riskOn: !!(regime && regime.riskOn) && (!macro || macro.riskOn),

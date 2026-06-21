@@ -1466,6 +1466,12 @@
     }
     .hub-sub-btn:hover { color: var(--text); border-color: var(--border-hi); }
     .hub-sub-btn.active { background: #10d98a; color: #06121f; border-color: #10d98a; }
+    /* Shared market-tape badge (shown on all screener tabs) */
+    #tape-badge { display: flex; align-items: center; gap: 9px; border: 1px solid var(--border); border-radius: 10px; padding: 8px 13px; margin-bottom: 16px; background: var(--card); font-size: 0.78rem; flex-wrap: wrap; }
+    #tape-badge .tb-ic { font-size: 1.05rem; }
+    #tape-badge b { color: var(--text); }
+    #tape-badge .tb-desc { color: var(--text-dim); }
+    #tape-badge .tb-reg { margin-left: auto; font-size: 0.66rem; color: var(--text-dim); border: 1px solid var(--border); border-radius: 20px; padding: 2px 9px; }
     @media (max-width: 640px) {
       .hub-sub { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 6px; }
       .hub-sub::-webkit-scrollbar { display: none; }
@@ -1616,6 +1622,7 @@
 <div class="page">
 
   <div id="hub-subnav"></div>
+  <div id="tape-badge" style="display:none"></div>
 
   <!-- SIGNAL SCOREBOARD -->
   <section class="scoreboard-section" id="scoreboard">
@@ -2391,6 +2398,7 @@
     SECTION_IDS.forEach(s => document.getElementById(s)?.classList.toggle('tab-active', s === sub));
     document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('active', el.dataset.tab === top));
     renderHubSubnav(top, sub);
+    if (typeof updateTapeBadge === 'function') updateTapeBadge(top === 'screeners');
     if (sub === 'screener' && typeof ensureScreener === 'function') ensureScreener();
     if (sub === 'backtest' && typeof ensureBacktest === 'function') ensureBacktest();
     if (sub === 'custom' && typeof ensureCustom === 'function') ensureCustom();
@@ -2411,6 +2419,32 @@
     if (act) act.scrollIntoView({ inline: 'center', block: 'nearest', behavior: opts.instant ? 'auto' : 'smooth' });
     if (!opts.noScroll) window.scrollTo({ top: 0, behavior: opts.instant ? 'auto' : 'smooth' });
     try { history.replaceState(null, '', '#' + sub); } catch {}
+  }
+
+  // Shared market-tape badge across all screener tabs (op=tape, cached ~5 min).
+  const TAPE_INFO = {
+    trending: ['📈', 'Trending tape', 'clean directional market — trend & breakout setups favored'],
+    choppy: ['🌊', 'Choppy / ranging tape', 'breakouts fail more here (false breakouts) — favor mean-reversion & tighter stops'],
+    mixed: ['🤝', 'Mixed tape', 'no tape clearly favors a style — be selective'],
+    riskoff: ['🛑', 'Risk-off tape', 'stand down on new longs'],
+  };
+  let _tapeCache = null, _tapeAt = 0;
+  async function updateTapeBadge(show) {
+    const el = document.getElementById('tape-badge');
+    if (!el) return;
+    if (!show) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    const render = () => {
+      const t = _tapeCache;
+      if (!t || !t.ok) { el.innerHTML = `<span class="tb-desc">Reading the market tape…</span>`; return; }
+      const [ic, lbl, desc] = TAPE_INFO[t.condition] || TAPE_INFO.mixed;
+      el.innerHTML = `<span class="tb-ic">${ic}</span><span><b>${lbl}</b> <span class="tb-desc">— ${desc}</span></span>`
+        + `<span class="tb-reg">${(t.regime || '').toUpperCase()}${t.efficiency != null ? ` · trend-eff ${t.efficiency}` : ''}</span>`;
+    };
+    render();
+    if (!_tapeCache || Date.now() - _tapeAt > 5 * 60 * 1000) {
+      try { const r = await fetch('/api/tracker?op=tape'); _tapeCache = await r.json(); _tapeAt = Date.now(); render(); } catch {}
+    }
   }
 
   // Header, top-strip and bottom-bar tabs all switch screens (every size)
@@ -2996,14 +3030,19 @@
     const cap = scrCaps[scope] || 10;
     const w = SCR_W[scope] || SCR_DEFAULT_W;
     const bear = !!(lastRegime && lastRegime.bearish);
-    // In a bearish regime, downgrade Breakout-tier scores only — confirmed
-    // breakouts fail at much higher rates in downtrends. (Setup/Early are
+    // Choppy tape (low trend efficiency) — breakouts fail there too (false
+    // breakouts spike), so downgrade them, lighter than the bearish penalty.
+    const choppy = !bear && lastRegime && lastRegime.condition === 'choppy';
+    // Downgrade Breakout-tier scores in unfavorable tapes — confirmed breakouts
+    // fail at much higher rates in downtrends AND in chop. (Setup/Early are
     // pre-breakout and left untouched.)
     let arr = raw.map(c => {
-      let _score = scrComposite(c.pct, w);
-      const dg = bear && c.status === 'Breakout';
-      if (dg) _score = Math.round(_score * REGIME_PENALTY);
-      return { ...c, _score, _downgraded: dg };
+      let _score = scrComposite(c.pct, w), _downgraded = null;
+      if (c.status === 'Breakout') {
+        if (bear) { _score = Math.round(_score * REGIME_PENALTY); _downgraded = 'bear'; }
+        else if (choppy) { _score = Math.round(_score * CHOP_PENALTY); _downgraded = 'chop'; }
+      }
+      return { ...c, _score, _downgraded };
     });
     arr = arr.filter(c => !isSignalDisabled('screener', c.status)); // hide tiers disabled on the scoreboard
     if (scrHC) arr = arr.filter(isHighConviction);
@@ -3548,22 +3587,34 @@
   // Score haircut applied to long breakout candidates in a bearish regime —
   // breakouts fail at much higher rates in downtrends.
   const REGIME_PENALTY = 0.65;
+  const CHOP_PENALTY = 0.80;   // lighter downgrade for choppy (vs bearish) tapes
   let lastRegime = null;
 
   // Prominent warning banner shown on both Screener and Momentum tabs when the
   // market regime is bearish (SPY < 200-DMA or breadth < 40%).
   function regimeBannerHTML(rg) {
-    if (!rg || !rg.bearish) return '';
-    const reasons = [];
-    if (rg.indexAbove200 === false) reasons.push('S&P 500 is below its 200-day average');
-    if (rg.breadthPct != null && rg.breadthPct < 40) reasons.push(`only ${rg.breadthPct}% of names are above their 50-day average`);
-    return `<div class="regime-banner">
+    if (!rg) return '';
+    if (rg.bearish) {
+      const reasons = [];
+      if (rg.indexAbove200 === false) reasons.push('S&P 500 is below its 200-day average');
+      if (rg.breadthPct != null && rg.breadthPct < 40) reasons.push(`only ${rg.breadthPct}% of names are above their 50-day average`);
+      return `<div class="regime-banner">
         <span class="rb-ic">⚠️</span>
         <div class="rb-body">
           <b>Risk-Off market — ${reasons.join(' · ')}.</b>
           Breakouts fail at much higher rates in downtrends. Breakout-tier scores are <b>downgraded ${Math.round((1 - REGIME_PENALTY) * 100)}%</b> — be selective and size down.
         </div>
       </div>`;
+    }
+    if (rg.condition === 'choppy') {
+      return `<div class="regime-banner" style="border-color:#06c4d455;background:var(--cyan-dim)">
+        <span class="rb-ic">🌊</span>
+        <div class="rb-body" style="color:var(--text)">
+          <b>Choppy / ranging tape</b> (low trend efficiency). Breakouts fail more often here (false breakouts), so breakout-tier scores are <b>downgraded ${Math.round((1 - CHOP_PENALTY) * 100)}%</b> — favor confirmed strength and tighter stops.
+        </div>
+      </div>`;
+    }
+    return '';
   }
 
   function renderRegime(rg) {
@@ -3844,7 +3895,7 @@
           </div>
           <div class="scr-score-col">
             <div class="scr-score${c._downgraded ? ' downgraded' : ''}">${score}<small>/100 Q</small></div>
-            ${c._downgraded ? `<div class="scr-bear-tag" title="Bearish regime: long breakout score downgraded ${Math.round((1 - REGIME_PENALTY) * 100)}%">⚠ bear −${Math.round((1 - REGIME_PENALTY) * 100)}%</div>` : ''}
+            ${c._downgraded === 'bear' ? `<div class="scr-bear-tag" title="Bearish regime: long breakout score downgraded ${Math.round((1 - REGIME_PENALTY) * 100)}%">⚠ bear −${Math.round((1 - REGIME_PENALTY) * 100)}%</div>` : c._downgraded === 'chop' ? `<div class="scr-bear-tag" style="color:var(--cyan);background:var(--cyan-dim);border-color:#06c4d444" title="Choppy tape: breakout score downgraded ${Math.round((1 - CHOP_PENALTY) * 100)}%">🌊 chop −${Math.round((1 - CHOP_PENALTY) * 100)}%</div>` : ''}
             <div class="scr-price" data-price>$${esc(c.price)}</div>
             <div class="scr-chg ${up ? 'up' : 'down'}" data-change>${c.changePct != null ? (up ? '▲ +' : '▼ ') + c.changePct + '%' : ''}</div>
           </div>
