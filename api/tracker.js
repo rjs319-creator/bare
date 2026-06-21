@@ -2010,17 +2010,23 @@ async function runCrowd(req, res) {
       readAllPredmktDays().catch(() => []),
     ]);
     const today = todayUTC();
+    const all = [...k, ...p];
     const baseline = pm.buildBaseline(days, today);
+    const prevOI = pm.buildPrevOI(days, today);
     const baselineDays = days.filter(d => d.date !== today).length;
-    const scored = pm.scoreMarkets([...k, ...p], baseline);
+    const scored = pm.scoreMarkets(all, baseline);
     const unusual = scored.filter(m => m.unusual);
+    const sharpScored = pm.scoreSharp(all, baseline, prevOI);
+    const sharp = sharpScored.filter(m => m.sharpFlag);
     res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=86400');
     return res.json({
       ok: true,
       unusual: unusual.slice(0, 20),
       top: scored.slice(0, 25),
-      counts: { kalshi: k.length, polymarket: p.length, scanned: scored.length, unusual: unusual.length },
-      baselineDays, baselineReady: baselineDays >= 3,
+      sharp: sharp.slice(0, 20),
+      sharpTop: sharpScored.slice(0, 12),
+      counts: { kalshi: k.length, polymarket: p.length, scanned: scored.length, unusual: unusual.length, sharp: sharp.length },
+      baselineDays, baselineReady: baselineDays >= 3, oiBaseline: Object.keys(prevOI).length > 0,
       generatedAt: new Date().toISOString(),
     });
   } catch (e) {
@@ -2038,7 +2044,7 @@ async function runCrowdTick(req, res) {
     const [k, p] = await Promise.all([pm.fetchKalshi().catch(() => []), pm.fetchPolymarket().catch(() => [])]);
     const all = [...k, ...p];
     const snap = {};
-    for (const m of all) if (m.vol24 > 0) snap[m.id] = +m.vol24.toFixed(2);
+    for (const m of all) if (m.vol24 > 0) snap[m.id] = { v: +m.vol24.toFixed(2), oi: m.oi ? +m.oi.toFixed(2) : 0 };
     const date = todayUTC();
     await writePredmktDay(date, { snap, n: Object.keys(snap).length });
     res.setHeader('Cache-Control', 'no-store');

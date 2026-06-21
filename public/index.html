@@ -1639,6 +1639,7 @@
     <a class="nav-link" href="#today" data-tab="start">🏠 Home</a>
     <a class="nav-link" href="#screener" data-tab="screeners">🔎 Screeners</a>
     <a class="nav-link" href="#rotation" data-tab="markets">📊 Markets</a>
+    <a class="nav-link" href="#forecast" data-tab="predict">🔮 Predict</a>
     <a class="nav-link" href="#backtest" data-tab="research">🔬 Research</a>
     <a class="nav-link" href="#scoreboard" data-tab="track">🏆 Track</a>
   </nav>
@@ -1659,6 +1660,7 @@
   <a class="mtt-item" href="#today" data-tab="start"><span class="mtt-ic">🏠</span>Home</a>
   <a class="mtt-item" href="#screener" data-tab="screeners"><span class="mtt-ic">🔎</span>Screeners</a>
   <a class="mtt-item" href="#rotation" data-tab="markets"><span class="mtt-ic">📊</span>Markets</a>
+  <a class="mtt-item" href="#forecast" data-tab="predict"><span class="mtt-ic">🔮</span>Predict</a>
   <a class="mtt-item" href="#backtest" data-tab="research"><span class="mtt-ic">🔬</span>Research</a>
   <a class="mtt-item" href="#scoreboard" data-tab="track"><span class="mtt-ic">🏆</span>Track</a>
 </nav>
@@ -2409,6 +2411,24 @@
 
   <hr class="section-divider" />
 
+  <!-- 🕵️ SHARP MONEY — informed-activity hallmarks in prediction markets -->
+  <section class="momentum-section" id="sharp">
+    <div class="section-label">
+      <div class="accent-bar" style="background:#e11d48"></div>
+      <h2 style="color:#e11d48">🕵️ Sharp Money</h2>
+      <span class="label-meta">· hallmarks of potentially-informed betting (size + conviction)</span>
+      <div class="label-action">
+        <span class="lbl-time" id="sharp-gen-time"></span>
+        <button class="refresh-btn" style="color:#e11d48" id="sharp-refresh-btn">⟳ Refresh</button>
+      </div>
+    </div>
+    <div id="sharp-container">
+      <div class="mom-status"><div class="mom-spinner"></div><p>Scanning for size + conviction fingerprints…</p></div>
+    </div>
+  </section>
+
+  <hr class="section-divider" />
+
   <!-- OPTIONS FLOW -->
   <section class="options-section" id="options">
     <div class="section-label">
@@ -2436,6 +2456,7 @@
     <a class="mbn-item" href="#today" data-tab="start"><span class="mbn-icon">🏠</span><span class="mbn-label">Home</span></a>
     <a class="mbn-item" href="#screener" data-tab="screeners"><span class="mbn-icon">🔎</span><span class="mbn-label">Screeners</span></a>
     <a class="mbn-item" href="#rotation" data-tab="markets"><span class="mbn-icon">📊</span><span class="mbn-label">Markets</span></a>
+    <a class="mbn-item" href="#forecast" data-tab="predict"><span class="mbn-icon">🔮</span><span class="mbn-label">Predict</span></a>
     <a class="mbn-item" href="#backtest" data-tab="research"><span class="mbn-icon">🔬</span><span class="mbn-label">Research</span></a>
     <a class="mbn-item" href="#scoreboard" data-tab="track"><span class="mbn-icon">🏆</span><span class="mbn-label">Track</span></a>
   </div>
@@ -2446,7 +2467,8 @@
   const TAB_GROUPS = {
     start:     ['today', 'start'],
     screeners: ['screener', 'custom', 'daytrade', 'confluence', 'ghost', 'trendrider', 'fade'],
-    markets:   ['rotation', 'sectors', 'momentum', 'forecast', 'crowd', 'news', 'options', 'picks'],
+    markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
+    predict:   ['forecast', 'crowd', 'sharp'],
     research:  ['backtest', 'events', 'edge'],
     track:     ['scoreboard', 'xalerts'],
   };
@@ -2455,7 +2477,8 @@
   const SUB_LABEL = {
     today: '🏠 Today', start: '📘 Guide',
     screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', daytrade: '⚡ Day Trade', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
-    rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', forecast: '🔮 Forecast', crowd: '🎲 Crowd', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
+    rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
+    forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
     scoreboard: '🏆 Scoreboard', xalerts: '🐦 Trade Alerts',
   };
@@ -2464,7 +2487,7 @@
   // Mark each section as a switchable screen
   SECTION_IDS.forEach(id => document.getElementById(id)?.classList.add('tabbable'));
 
-  let hubSub = { start: 'today', screeners: 'screener', markets: 'rotation', research: 'backtest', track: 'scoreboard' };
+  let hubSub = { start: 'today', screeners: 'screener', markets: 'rotation', predict: 'forecast', research: 'backtest', track: 'scoreboard' };
   try { const hs = JSON.parse(localStorage.getItem('hubSub')); if (hs) hubSub = { ...hubSub, ...hs }; } catch {}
   // Sanitize stored hubSub: after the nav regrouping a saved sub may no longer
   // belong to its group (e.g. markets→screener). Reset any stale entry to the
@@ -2525,6 +2548,7 @@
     if (sub === 'picks' && typeof ensurePicks === 'function') ensurePicks();
     if (sub === 'forecast' && typeof ensureForecast === 'function') ensureForecast();
     if (sub === 'crowd' && typeof ensureCrowd === 'function') ensureCrowd();
+    if (sub === 'sharp' && typeof ensureSharp === 'function') ensureSharp();
 
     const act = document.querySelector('.mobile-top-tabs .mtt-item.active');
     if (act) act.scrollIntoView({ inline: 'center', block: 'nearest', behavior: opts.instant ? 'auto' : 'smooth' });
@@ -4677,6 +4701,7 @@
     backtest: { g: 'Trusting a signal', t: 'Backtest & Out-of-Sample', plain: 'Replaying a strategy across years of history to measure its edge — including "out-of-sample" data it never saw during tuning.', why: 'In-sample results flatter you; out-of-sample is the honest test of whether an edge is real.', pro: 'The app validates every screen this way — and most "edges" vanish out-of-sample, which is why it is upfront about what does not work.' },
     forecast: { g: 'Trusting a signal', t: 'Falsifiable Forecast', plain: 'A market call written so it can be proven right or wrong — a specific subject (SPY, ^VIX, a sector), direction, size, and deadline (e.g. "QQQ +3% in 10 days"). The app grades every one against real prices automatically.', why: 'Vague calls ("stocks look strong") can never be wrong, so they teach you nothing. A falsifiable forecast keeps an honest scoreboard.', pro: 'Pros write falsifiable theses and track their hit rate. Short-term prediction is genuinely hard — expect the live accuracy to hover near a coin flip, which is the real lesson.' },
     predmarket: { g: 'Reading the market', t: 'Prediction Markets (the Crowd)', plain: 'Real-money betting markets (Kalshi, Polymarket) where people trade contracts on outcomes — "S&P above 7850 Friday", "Fed cuts in July", "CPI above 3%". The price is the crowd\'s live probability (8¢ = 8% odds).', why: 'Because real money is on the line, the prices aggregate what informed bettors actually expect — a fast read on how the crowd is pricing macro events that move stocks.', pro: 'Pros watch them as a sentiment radar: a sudden volume burst or a sharp odds swing flags that the crowd is repricing a catalyst — often confirming news, not predicting it.' },
+    sharpmoney: { g: 'Trusting a signal', t: 'Sharp Money (Informed-Activity Hallmarks)', plain: 'The prediction-market version of "unusual options activity" — patterns a well-informed bettor tends to leave: putting real size on a cheap longshot that\'s rising, volume exceeding the open positions, fresh open-interest building, or a big late bet right before resolution.', why: 'When size and conviction line up on one outcome, it can mean someone is betting on knowledge the crowd doesn\'t have yet — an early tell on a catalyst that could move stocks.', pro: 'Treat it as a lead to investigate, never proof. It flags statistical FINGERPRINTS, not actual insider trading — most hits are coincidence, hedging, or rumor. The screen demands real money behind the bet before flagging it.' },
   };
   const LEARN_GROUPS = ['Reading the market', 'The screeners', 'Entering a trade', 'Managing risk', 'Trusting a signal'];
   function renderLearn(highlight) {
@@ -4715,6 +4740,7 @@
     fade: { level: 'building', one: `A choppy/neutral-tape ${L('meanrev', 'mean-reversion')} fade. The selected high-conviction basket showed ~+0.9%/mo net out-of-sample (${L('beta', 'beta')}-neutral, after costs) — the most promising result, but the live ${L('backtest', 'track record')} is still building.` },
     forecast: { level: 'building', one: `AI ${L('forecast', 'falsifiable forecasts')} on the market, ${L('tape', 'tape')}/${L('regime', 'regime')}-aware and auto-graded against real prices — no self-scoring. Short-term prediction is hard; expect the live accuracy to sit near a coin flip. Educational, not a signal.` },
     crowd: { level: 'confirm', one: `A ${L('predmarket', 'prediction-market')} sentiment radar (Kalshi + Polymarket) — flags unusual volume and sharp odds swings on macro/equity contracts. It shows what the crowd is suddenly repricing (often confirming news), not a tradeable edge. The volume baseline sharpens over the first few days.` },
+    sharp: { level: 'confirm', one: `Flags ${L('sharpmoney', 'informed-activity hallmarks')} — size + conviction lining up on a ${L('predmarket', 'prediction-market')} outcome. A lead to investigate, NOT proof of insider info: it surfaces statistical fingerprints, and most hits are coincidence or hedging. Speculative and educational.` },
   };
   function trustBadgeHTML(sub) {
     const tr = TRUST[sub]; if (!tr) return '';
@@ -4902,6 +4928,55 @@
     const gt = document.getElementById('crowd-gen-time'); if (gt && d.generatedAt) gt.textContent = new Date(d.generatedAt).toLocaleTimeString();
   }
   document.getElementById('crowd-refresh-btn')?.addEventListener('click', runCrowdUI);
+
+  // ── 🕵️ SHARP MONEY — informed-activity hallmarks (shares op=crowd's data) ──────
+  let sharpLoaded = false;
+  function ensureSharp() { if (!sharpLoaded) { sharpLoaded = true; runSharpUI(); } }
+  async function runSharpUI() {
+    const el = document.getElementById('sharp-container'); if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning for size + conviction fingerprints…</p></div>`;
+    try {
+      const d = await fetch('/api/tracker?op=crowd').then(r => r.json()).catch(() => null);
+      renderSharp(d);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load prediction-market data.</p></div>`; }
+  }
+  function fmtMoney(n) { n = n || 0; return n >= 1000 ? '$' + (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : '$' + Math.round(n); }
+  function sharpRow(m, flagged) {
+    const col = VENUE_COL[m.venue] || '#e11d48';
+    const sCol = m.sharp >= 60 ? 'var(--red)' : m.sharp >= 45 ? 'var(--amber,#f59e0b)' : 'var(--text-dim)';
+    const prob = Math.round((m.prob || 0) * 100);
+    const tells = (m.tells || []).map(t => `<span class="crowd-chip">${esc(t)}</span>`).join('');
+    const title = m.url ? `<a href="${esc(m.url)}" target="_blank" rel="noopener" class="crowd-link">${esc(m.title)}</a>` : esc(m.title);
+    const days = m.daysToClose != null ? (m.daysToClose < 1 ? '<1d' : Math.round(m.daysToClose) + 'd') : '—';
+    return `<div class="rot-panel crowd-row" style="margin-top:8px${flagged ? ';border-color:#e11d48aa' : ''}">`
+      + `<div class="crowd-head"><span class="crowd-venue" style="background:${col}22;color:${col}">${esc(m.venue)}</span>`
+      + `<span class="crowd-heat" style="color:${sCol}">🕵️ ${m.sharp}</span></div>`
+      + `<div class="crowd-title">${title}</div>`
+      + `<div class="rot-sub"><b>${fmtMoney(m.notional)}</b> traded 24h · <b>${prob}%</b> odds <span class="dt-dim">· resolves ${days}</span></div>`
+      + (tells ? `<div style="margin-top:5px">${tells}</div>` : '') + `</div>`;
+  }
+  function renderSharp(d) {
+    const el = document.getElementById('sharp-container'); if (!el) return;
+    if (!d || !d.ok) { el.innerHTML = `<div class="mom-status error"><p>Prediction-market data unavailable right now.</p></div>`; return; }
+    const c = d.counts || {};
+    const oiTxt = d.oiBaseline ? 'Open-interest build (new money) is active.' : 'Open-interest tracking warms up after the first daily snapshot.';
+    const banner = `<div class="rot-panel"><div class="rot-head">🕵️ Informed-activity scan</div>`
+      + `<div class="rot-sub">Looking for ${L('sharpmoney', 'sharp-money hallmarks')} — real size lining up with conviction (cheap longshots being loaded, volume exceeding open positions, fresh ${L('predmarket', 'open interest')}, late surges). Scanned <b>${c.scanned || 0}</b> contracts. ${oiTxt}</div></div>`;
+    const trust = `<div class="trust-badge" style="margin-top:8px">${trustBadgeHTML('sharp')}</div>`;
+    const sharp = d.sharp || [];
+    let body;
+    if (sharp.length) {
+      body = `<div class="rot-head" style="margin-top:14px">🚩 Flagged — size + conviction <span class="dt-dim">· ${sharp.length}</span></div>` + sharp.map(m => sharpRow(m, true)).join('');
+    } else {
+      const top = (d.sharpTop || []).slice(0, 5);
+      body = `<div class="dt-note" style="border-left-color:#e11d48;margin-top:14px">🟢 <b>No clear sharp-money signal right now.</b> Nothing combines real size with a conviction pattern — which is the normal state. Below are the closest candidates (below the bar), shown for context:</div>`
+        + top.map(m => sharpRow(m, false)).join('');
+    }
+    const caveat = `<div class="fade-caveats" style="margin-top:14px"><p>⚠️ <b>Hallmarks, not proof.</b> This flags statistical fingerprints of informed betting — it does <i>not</i> detect actual insider trading, and most hits are coincidence, hedging, or rumor. A lead to investigate, never a signal to follow. Real money, real markets — but speculative.</p></div>`;
+    el.innerHTML = banner + trust + body + caveat;
+    const gt = document.getElementById('sharp-gen-time'); if (gt && d.generatedAt) gt.textContent = new Date(d.generatedAt).toLocaleTimeString();
+  }
+  document.getElementById('sharp-refresh-btn')?.addEventListener('click', runSharpUI);
 
   // ── Simple / Expert mode — progressive disclosure (Simple hides dense surfaces) ──
   function applyUiMode(m) {
