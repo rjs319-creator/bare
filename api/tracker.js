@@ -1615,7 +1615,7 @@ async function scanConfluenceUniverse(tickers, ctx) {
       for (const doc of ctx.caches) { if (doc) { const e = cacheGet(doc, t); if (e && e.candles) { candles = e.candles; break; } } }
       if (!candles) { try { const d = await fetchDailyHistory(t); candles = d && d.candles; } catch {} }
       if (!candles || candles.length < cf.MIN_BARS) continue;
-      const r = cf.confluence(candles, ctx.weights);
+      const r = cf.confluence(candles, ctx.weights, ctx.condition);
       if (!r || r.bullishCount < ctx.minBull) continue;
       const p = ctx.fe.posterior(ctx.state, t, { sector: SECTOR_OF[t] || '?' });
       if (p.drifted) continue;                                  // per-stock learner drop
@@ -1628,7 +1628,7 @@ async function scanConfluenceUniverse(tickers, ctx) {
       const lv = dt.tradeLevels(candles);
       out.push({
         ticker: t, sector: SECTOR_OF[t] || '?', date: candles[di].date, last: +last.toFixed(2),
-        score: r.score, maxScore: r.maxScore, bullishCount: r.bullishCount, bull: r.bull,
+        score: r.score, maxScore: r.maxScore, bullishCount: r.bullishCount, bull: r.bull, matched: r.matched,
         perStrategy: r.perStrategy, freshTriggers: r.freshTriggers, excess21d: exc,
         beta: ctx.fe.betaVsSpy(candles, ctx.spyByDate),
         entry: lv ? lv.entry : last, stop: lv ? lv.stop : null, target: lv ? lv.target : null,
@@ -1654,13 +1654,14 @@ async function computeConfluenceLive(t0, deadline) {
   const state = fe.load(await readConfluenceEng());
   const stratState = (await readJSON(CONFLUENCE_STRAT_KEY, null)) || {};
   const weights = confluenceStratWeights(stratState);
+  const condition = require('../lib/confluence').marketCondition(spyD.candles, regime);
   const [cL, cS, cM] = await Promise.all([
     loadCandleCache('large').catch(() => null), loadCandleCache('small').catch(() => null), loadCandleCache('micro').catch(() => null),
   ]);
-  const ctx = { spyByDate, t0, deadline, fe, state, weights, minBull: CONFLUENCE_MIN_BULL };
+  const ctx = { spyByDate, t0, deadline, fe, state, weights, condition, minBull: CONFLUENCE_MIN_BULL };
   const large = await scanConfluenceUniverse([...new Set(UNI_LARGE)], { ...ctx, caches: [cL] });
   const small = await scanConfluenceUniverse([...new Set([...UNI_SMALL, ...UNI_MICRO])], { ...ctx, caches: [cS, cM] });
-  return { regime, large, small, state, stratState, weights, spyLastDate: spyD.candles[spyD.candles.length - 1].date };
+  return { regime, condition, large, small, state, stratState, weights, spyLastDate: spyD.candles[spyD.candles.length - 1].date };
 }
 
 // op=confluence — live screener (regime-gated display).
@@ -1672,7 +1673,8 @@ async function runConfluence(req, res) {
   const picks = [...live.large, ...live.small].sort((a, b) => (b.score + 8 * b.learnedExcess) - (a.score + 8 * a.learnedExcess)).slice(0, 25);
   res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=86400');
   return res.json({
-    ok: true, regime: live.regime, riskOff, horizon: CONFLUENCE_H, minBull: CONFLUENCE_MIN_BULL,
+    ok: true, regime: live.regime, condition: live.condition, favor: require('../lib/confluence').COND_FAVOR,
+    riskOff, horizon: CONFLUENCE_H, minBull: CONFLUENCE_MIN_BULL,
     weights: live.weights, strategyEdge: stratEdgeSummary(live.stratState),
     picks: riskOff ? [] : picks, count: picks.length,
     learnerUpdatedAt: live.state.updatedAt, generatedAt: new Date().toISOString(),
@@ -1789,9 +1791,29 @@ async function runConfluenceOpt(req, res) {
   if (!spyD || spyD.candles.length < 250) return res.status(502).json({ ok: false, error: 'No benchmark data' });
   const spyByDate = {}; spyD.candles.forEach(c => { spyByDate[c.date] = c.close; });
 
+  // MARKET CONDITION from SPY: efficiency ratio (trend vs chop) + 200DMA + macro regime.
+  // The top-trader thesis: each strategy only works in ITS condition — trend-followers
+  // in trending tapes, RSI mean-reversion in choppy tapes.
+  const spyCl = spyD.candles.map(c => c.close);
+  const smaAtIdx = (arr, p, idx) => { if (idx + 1 < p) return null; let s = 0; for (let j = idx - p + 1; j <= idx; j++) s += arr[j]; return s / p; };
+  const erAt = (idx, n = 63) => { if (idx < n) return 0; let den = 0; for (let j = idx - n + 1; j <= idx; j++) den += Math.abs(spyCl[j] - spyCl[j - 1]); return den > 0 ? Math.abs(spyCl[idx] - spyCl[idx - n]) / den : 0; };
+  const spyCond = {};
+  spyD.candles.forEach((c, idx) => { const s200 = smaAtIdx(spyCl, 200, idx); spyCond[c.date] = { er: erAt(idx), above200: s200 != null && c.close > s200 }; });
+  const ER_TREND = 0.35, ER_CHOP = 0.22;
+  const marketCond = (date, regime) => {
+    if (regime === 'risk-off') return 'riskoff';
+    const sc = spyCond[date]; if (!sc) return 'mixed';
+    if (sc.er >= ER_TREND && sc.above200) return 'trending';
+    if (sc.er < ER_CHOP) return 'choppy';
+    return 'mixed';
+  };
+  const FAVOR = { ema: 'trending', supertrend: 'trending', macd: 'trending', priceAction: 'trending', rsi: 'choppy' };
+
   const t0 = Date.now(), deadline = 50000;
   const recs = [];                       // confluence (>=minBull) signals, with lever fields
+  const condRecs = [];                   // CONDITION-MATCHED signals (right strategy, right tape)
   const perStrat = {}; cf.STRATEGIES.forEach(s => perStrat[s] = []);   // each strategy's bullish-bar fwd excess
+  const perStratCond = {}; cf.STRATEGIES.forEach(s => perStratCond[s] = {});   // ...split by market condition
   let i = 0;
   const worker = async () => {
     while (i < tickers.length) {
@@ -1804,8 +1826,14 @@ async function runConfluenceOpt(req, res) {
         const date = c[k].date; if (spyByDate[date] == null || spyByDate[c[k + H].date] == null) continue;
         const fwd = (c[k + H].close / c[k].close - 1) * 100, sfwd = (spyByDate[c[k + H].date] / spyByDate[date] - 1) * 100;
         const exc = fwd - sfwd, regime = macro ? (macro.at(date) || {}).regime || 'neutral' : 'neutral';
+        const cond = marketCond(date, regime);
         const bull = cf.STRATEGIES.filter(st => s[st] === 1);
-        for (const st of bull) perStrat[st].push({ exc, regime });
+        for (const st of bull) { perStrat[st].push({ exc, regime }); (perStratCond[st][cond] = perStratCond[st][cond] || []).push(exc); }
+        // condition-matched signal: only count strategies bullish IN their favorable tape.
+        const matched = bull.filter(st => FAVOR[st] === cond);
+        if ((cond === 'trending' && matched.length >= 2) || (cond === 'choppy' && matched.length >= 1)) {
+          condRecs.push({ date, exc, fwd, regime, cond, matchedN: matched.length });
+        }
         if (bull.length < minBull) continue;
         // lever inputs: relative strength (name vs SPY over MOM) + fresh trigger.
         const kp = k - MOM; let mom = null, rs = false;
@@ -1841,10 +1869,22 @@ async function runConfluenceOpt(req, res) {
   }
   const perStrategy = {}; cf.STRATEGIES.forEach(s => perStrategy[s] = { overall: agg(perStrat[s]), byRegime: byReg(perStrat[s]) });
 
+  // THE top-trader test: each strategy IN its favorable tape vs OUT of it.
+  const aggE = arr => agg((arr || []).map(exc => ({ exc })));
+  const byCondition = {};
+  cf.STRATEGIES.forEach(s => {
+    const favor = FAVOR[s], pc = perStratCond[s];
+    const inFavor = pc[favor] || [];
+    const outFavor = Object.keys(pc).filter(k => k !== favor).flatMap(k => pc[k]);
+    byCondition[s] = { favorCond: favor, inFavor: aggE(inFavor), outOfFavor: aggE(outFavor), trending: aggE(pc.trending), choppy: aggE(pc.choppy), riskoff: aggE(pc.riskoff), mixed: aggE(pc.mixed) };
+  });
+  const condMatched = { n: condRecs.length, overall: agg(condRecs), oos: oosOf(condRecs), byCond: { trending: agg(condRecs.filter(r => r.cond === 'trending')), choppy: agg(condRecs.filter(r => r.cond === 'choppy')) } };
+
   res.setHeader('Cache-Control', 'no-store');
   return res.json({
     ok: true, scope, range, horizonDays: H, minBull, namesScanned: tickers.length, confluenceSignals: recs.length,
     levers: { rs: useRs, regimeGate, freshOnly, topFrac },
+    byCondition, conditionMatched: condMatched,
     confluence: { overall: agg(recs), byRegime: byReg(recs), oos: oosOf(recs) },
     improved: { n: improved.length, overall: agg(improved), byRegime: byReg(improved), oos: oosOf(improved) },
     perStrategy,

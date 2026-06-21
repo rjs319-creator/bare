@@ -5219,6 +5219,10 @@
     const REG = { 'risk-on': ['#22c55e', 'RISK-ON', 'Trends favored'], neutral: ['#eab308', 'NEUTRAL', 'Be selective'], 'risk-off': ['#ef4444', 'RISK-OFF', 'Stand down — trend signals fail here'] };
     const [rc, rlbl, rdesc] = REG[t.regime] || REG.neutral;
     const banner = `<div class="rot-panel" style="border-color:${rc}55"><div class="rot-head" style="color:${rc}">Regime: ${rlbl}</div><div class="rot-sub">${rdesc}. A name lists when <b>≥${t.minBull} of 5</b> classic strategies agree it's bullish. Horizon ~${t.horizon} sessions.</div></div>`;
+    // Condition-aware: which strategies suit today's tape (the top-trader edge).
+    const COND = { trending: ['📈', 'Trending tape', 'Trend strategies (EMA · Supertrend · MACD · Structure) are in their element — they get full weight; RSI dip is down-weighted.'], choppy: ['🌊', 'Choppy / ranging tape', 'Mean-reversion (RSI dip) is in its element — it gets full weight; trend strategies are down-weighted.'], mixed: ['🤝', 'Mixed tape', 'No tape clearly favors any strategy — all weighted equally.'], riskoff: ['🛑', 'Risk-off', 'Stand down on new longs.'] };
+    const [ci, clbl, cdesc] = COND[t.condition] || COND.mixed;
+    const condBanner = `<div class="dt-note"><b>${ci} ${clbl}.</b> ${cdesc} <span class="dt-dim">★ = strategy in its element. (Validated: each strategy does better in its favorable tape; condition-matching raises the floor toward breakeven — not a confident edge, but the right way to use them.)</span></div>`;
 
     const howto = `<div class="tr-howto">
       <div class="tr-howto-head">📖 What this is — in plain English</div>
@@ -5238,7 +5242,7 @@
     const weightsPanel = `<div class="rot-panel"><div class="rot-head">🧠 Self-learning — strategy weights</div><div class="rot-sub">Weights start at 1× and drift with each strategy's realized forward edge. (Thin until picks resolve.)</div>${we}</div>`;
 
     const card = r => {
-      const badges = (r.bull || []).map(s => `<span class="chip cyan">${esc(CFL_STRAT[s] || s)}</span>`).join(' ');
+      const badges = (r.bull || []).map(s => { const m = (r.matched || []).includes(s); return `<span class="chip ${m ? 'cyan' : 'gray'}">${m ? '★ ' : ''}${esc(CFL_STRAT[s] || s)}</span>`; }).join(' ');
       const pb = r.pullback;
       return `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
@@ -5264,7 +5268,7 @@
       track = `<div class="rot-panel rot-panel-pending"><div class="rot-head">📊 Live track record — building…</div><div class="rot-sub">${book ? `${book.stillOpen || 0} open, ${book.resolved || 0} resolved` : ''}. Each pick scored ~${t.horizon} sessions later; accrues via the daily cron.</div></div>`;
     }
 
-    el.innerHTML = banner + howto + weightsPanel + picksPanel + track +
+    el.innerHTML = banner + condBanner + howto + weightsPanel + picksPanel + track +
       `<div class="fade-caveats"><b>Honest validation</b> (5y, fwd ${t.horizon}-session excess vs SPY): confluence (≥3/5 agree) averaged −0.2% with a ~48% win rate. I then <b>tested every sensible improvement</b> — regime gating, a relative-strength filter, fresh-trigger-only, and taking only the top-momentum names — and the best stack (4/5 + relative-strength + regime + top-20%) only reached ~breakeven (+0.1% out-of-sample) with a <b>still-sub-50% win rate</b> (Wilson LB 44%). <b>No combination confidently beats the market</b> — the efficient-market reality for well-known indicators. So treat this as a <b>multi-strategy confirmation/watchlist</b> tool, not an edge. What it adds: one place to see when classic signals align, a self-learning weight on each, and a live track record. Confirm on the chart. Research, not advice.</div>`;
 
     el.querySelectorAll('.dt-card[data-ticker]').forEach(cardEl => {
