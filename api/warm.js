@@ -130,7 +130,14 @@ module.exports = async function handler(req, res) {
     confluencetick = await r.json();
   } catch (e) { confluencetick = { error: String(e && e.message || e) }; }
 
+  // 🔮 Forecast — resolve matured predictions + (weekly) generate a fresh batch.
+  let predicttick = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=predicttick', { headers: { 'x-warm': '1' } });
+    predicttick = await r.json();
+  } catch (e) { predicttick = { error: String(e && e.message || e) }; }
+
   const warmedExtra = await extraWarm;   // already resolved — ran during the tail above
   res.setHeader('Cache-Control', 'no-store');
-  return res.json({ ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, at: new Date().toISOString() });
+  return res.json({ ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, predicttick, at: new Date().toISOString() });
 };

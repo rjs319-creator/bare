@@ -2364,6 +2364,24 @@
 
   <hr class="section-divider" />
 
+  <!-- 🔮 FORECAST — falsifiable, auto-graded market predictions -->
+  <section class="momentum-section" id="forecast">
+    <div class="section-label">
+      <div class="accent-bar" style="background:#a855f7"></div>
+      <h2 style="color:#a855f7">🔮 Forecast</h2>
+      <span class="label-meta">· falsifiable AI calls, auto-graded against real prices</span>
+      <div class="label-action">
+        <span class="lbl-time" id="forecast-gen-time"></span>
+        <button class="refresh-btn" style="color:#a855f7" id="forecast-refresh-btn">⟳ Refresh</button>
+      </div>
+    </div>
+    <div id="forecast-container">
+      <div class="mom-status"><div class="mom-spinner"></div><p>Loading forecasts &amp; the auto-graded track record…</p></div>
+    </div>
+  </section>
+
+  <hr class="section-divider" />
+
   <!-- OPTIONS FLOW -->
   <section class="options-section" id="options">
     <div class="section-label">
@@ -2401,7 +2419,7 @@
   const TAB_GROUPS = {
     start:     ['today', 'start'],
     screeners: ['screener', 'custom', 'daytrade', 'confluence', 'ghost', 'trendrider', 'fade'],
-    markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
+    markets:   ['rotation', 'sectors', 'momentum', 'forecast', 'news', 'options', 'picks'],
     research:  ['backtest', 'events', 'edge'],
     track:     ['scoreboard', 'xalerts'],
   };
@@ -2410,7 +2428,7 @@
   const SUB_LABEL = {
     today: '🏠 Today', start: '📘 Guide',
     screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', daytrade: '⚡ Day Trade', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
-    rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
+    rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', forecast: '🔮 Forecast', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
     scoreboard: '🏆 Scoreboard', xalerts: '🐦 Trade Alerts',
   };
@@ -2478,6 +2496,7 @@
     if (sub === 'momentum' && typeof ensureMomentum === 'function') ensureMomentum();
     if (sub === 'options' && typeof ensureOptions === 'function') ensureOptions();
     if (sub === 'picks' && typeof ensurePicks === 'function') ensurePicks();
+    if (sub === 'forecast' && typeof ensureForecast === 'function') ensureForecast();
 
     const act = document.querySelector('.mobile-top-tabs .mtt-item.active');
     if (act) act.scrollIntoView({ inline: 'center', block: 'nearest', behavior: opts.instant ? 'auto' : 'smooth' });
@@ -4628,6 +4647,7 @@
     wilsonLB: { g: 'Trusting a signal', t: 'Confidence Floor (Wilson LB)', plain: 'A conservative "floor" on the beat rate that accounts for how few trades there are. A floor below 50% means we cannot yet trust it beats the market.', why: 'It stops you fooling yourself with a small, lucky sample.', pro: 'Pros require the lower bound — not just the average — to clear 50% before sizing up.' },
     selflearning: { g: 'Trusting a signal', t: 'Self-Learning', plain: 'The engine logs every pick, scores it weeks later, and re-weights what is working — per strategy and per stock.', why: 'The app adapts to what actually pays instead of trusting theory forever.', pro: 'Watch the live track record and the strategy-weight panel — that is the real evidence, not the backtest.' },
     backtest: { g: 'Trusting a signal', t: 'Backtest & Out-of-Sample', plain: 'Replaying a strategy across years of history to measure its edge — including "out-of-sample" data it never saw during tuning.', why: 'In-sample results flatter you; out-of-sample is the honest test of whether an edge is real.', pro: 'The app validates every screen this way — and most "edges" vanish out-of-sample, which is why it is upfront about what does not work.' },
+    forecast: { g: 'Trusting a signal', t: 'Falsifiable Forecast', plain: 'A market call written so it can be proven right or wrong — a specific subject (SPY, ^VIX, a sector), direction, size, and deadline (e.g. "QQQ +3% in 10 days"). The app grades every one against real prices automatically.', why: 'Vague calls ("stocks look strong") can never be wrong, so they teach you nothing. A falsifiable forecast keeps an honest scoreboard.', pro: 'Pros write falsifiable theses and track their hit rate. Short-term prediction is genuinely hard — expect the live accuracy to hover near a coin flip, which is the real lesson.' },
   };
   const LEARN_GROUPS = ['Reading the market', 'The screeners', 'Entering a trade', 'Managing risk', 'Trusting a signal'];
   function renderLearn(highlight) {
@@ -4664,6 +4684,7 @@
     ghost: { level: 'building', one: `An early-${L('accumulation', 'accumulation')} watchlist. The price core is mostly weak ${L('momentum', 'momentum')} (~0.08 IC); insider/fundamentals add little. Live record still accruing.` },
     trendrider: { level: 'validated', one: `The "stand down when red" timing is validated across 5 independent selloffs — the project's strongest finding. But green = riding ${L('beta', 'beta')}, not stock-picking skill: it tells you WHEN, not WHAT.` },
     fade: { level: 'building', one: `A choppy/neutral-tape ${L('meanrev', 'mean-reversion')} fade. The selected high-conviction basket showed ~+0.9%/mo net out-of-sample (${L('beta', 'beta')}-neutral, after costs) — the most promising result, but the live ${L('backtest', 'track record')} is still building.` },
+    forecast: { level: 'building', one: `AI ${L('forecast', 'falsifiable forecasts')} on the market, ${L('tape', 'tape')}/${L('regime', 'regime')}-aware and auto-graded against real prices — no self-scoring. Short-term prediction is hard; expect the live accuracy to sit near a coin flip. Educational, not a signal.` },
   };
   function trustBadgeHTML(sub) {
     const tr = TRUST[sub]; if (!tr) return '';
@@ -4733,6 +4754,76 @@
     const meta = document.getElementById('today-meta'); if (meta) meta.textContent = `· ${regLbl} · ${clbl} tape`;
   }
   document.getElementById('today-refresh-btn')?.addEventListener('click', runTodayUI);
+
+  // ── 🔮 FORECAST — falsifiable AI predictions, auto-graded against real prices ──
+  let forecastLoaded = false;
+  function ensureForecast() { if (!forecastLoaded) { forecastLoaded = true; runForecastUI(); } }
+  async function runForecastUI() {
+    const el = document.getElementById('forecast-container'); if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading forecasts &amp; the auto-graded track record…</p></div>`;
+    try {
+      const [pred, tape] = await Promise.all([
+        fetch('/api/tracker?op=predict').then(r => r.json()).catch(() => null),
+        fetch('/api/tracker?op=tape').then(r => r.json()).catch(() => null),
+      ]);
+      renderForecast(pred, tape);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load forecasts.</p></div>`; }
+  }
+  const FC_COND = { trending: ['📈', 'trending'], choppy: ['🌊', 'choppy'], mixed: ['🤝', 'mixed'], riskoff: ['🛑', 'risk-off'] };
+  const FC_STATUS = { pending: ['⏳', 'var(--text-dim)', 'pending'], correct: ['✓', 'var(--green)', 'correct'], incorrect: ['✗', 'var(--red)', 'missed'] };
+  function fcCard(p) {
+    const conf = p.confidence ? `<span class="dt-dim">· conviction ${p.confidence}/10</span>` : '';
+    const rat = p.rationale ? `<div class="rot-sub" style="margin-top:4px">${esc(p.rationale)}</div>` : '';
+    return `<div class="rot-panel" style="margin-top:8px"><div class="bt-ic-row" style="border:0;padding:0 0 4px">`
+      + `<span><b>${esc(p.claim)}</b></span><span style="color:var(--text-dim)">${FC_STATUS.pending[0]} ${FC_STATUS.pending[2]}</span></div>`
+      + `<div class="rot-sub">${esc(p.text)} ${conf}</div>${rat}</div>`;
+  }
+  function renderForecast(pred, tape) {
+    const el = document.getElementById('forecast-container'); if (!el) return;
+    if (!pred || !pred.ok) { el.innerHTML = `<div class="mom-status error"><p>Forecasts unavailable right now.</p></div>`; return; }
+    const tok = tape && tape.ok;
+    const regime = tok ? tape.regime : (pred.open[0]?.regime || 'neutral');
+    const cond = tok ? tape.condition : 'mixed';
+    const [ci, clbl] = FC_COND[cond] || FC_COND.mixed;
+    const banner = `<div class="rot-panel"><div class="rot-head">${ci} The tape these calls are made into</div>`
+      + `<div class="rot-sub">Market is <b>${L('regime', (regime || '').toUpperCase())}</b>, tape is <b>${L('tape', clbl)}</b>${tok && tape.efficiency != null ? ` <span class="dt-dim">(${L('trendEff', 'trend-eff ' + tape.efficiency)})</span>` : ''}. Every forecast below is ${L('forecast', 'falsifiable')} and graded automatically when its deadline passes.</div></div>`;
+
+    // Honest auto-graded track record + trust badge.
+    const n = pred.resolvedCount || 0;
+    let track;
+    if (n >= 5) {
+      const acc = pred.accuracy, lo = pred.wilsonLo;
+      const col = lo != null && lo >= 50 ? 'var(--green)' : (acc >= 50 ? 'var(--amber,#f59e0b)' : 'var(--red)');
+      const bh = [5, 10, 21].map(h => { const b = pred.byHorizon[h]; return b && b.n ? `${h}d ${Math.round(b.correct / b.n * 100)}% (${b.n})` : null; }).filter(Boolean).join(' · ');
+      track = `<div class="dt-note" style="border-left-color:${col}"><b>📊 Auto-graded accuracy: <span style="color:${col}">${acc}%</span></b> of ${n} resolved calls beat their bar `
+        + `<span class="dt-dim">(${L('wilsonLB', 'floor ' + (lo != null ? lo + '%' : '—'))})</span>.${bh ? ` <span class="dt-dim">By horizon: ${bh}.</span>` : ''}</div>`;
+    } else {
+      track = `<div class="dt-note"><b>📊 Track record building.</b> ${n} call${n === 1 ? '' : 's'} resolved so far — accuracy shows once ≥5 have matured. Every call is graded against real prices, never self-scored.</div>`;
+    }
+    const trust = `<div class="trust-badge" style="margin-top:8px">${trustBadgeHTML('forecast')}</div>`;
+
+    // Open (pending) predictions.
+    const open = pred.open || [];
+    const openHtml = open.length
+      ? `<div class="rot-head" style="margin-top:14px">🔮 Open forecasts <span class="dt-dim">· generated ${pred.lastGenerated || '—'}</span></div>` + open.map(fcCard).join('')
+      : `<div class="dt-note" style="margin-top:14px">No open forecasts yet — a fresh weekly batch is generated automatically. Check back shortly.</div>`;
+
+    // Recently graded.
+    const recent = pred.recent || [];
+    const recentHtml = recent.length
+      ? `<div class="rot-head" style="margin-top:14px">🧾 Recently graded</div>` + recent.map(r => {
+          const [gl, gc, gt] = FC_STATUS[r.status] || FC_STATUS.pending;
+          const mv = r.actualPct != null ? `<span class="dt-dim">${r.actualPct > 0 ? '+' : ''}${r.actualPct}%</span>` : '';
+          return `<div class="bt-ic-row"><span><b>${esc(r.claim)}</b></span><span style="color:${gc}">${gl} ${gt}</span><span>${mv}</span></div>`;
+        }).join('')
+      : '';
+
+    const caveat = `<div class="fade-caveats" style="margin-top:14px"><p>⚠️ <b>Educational, not signals.</b> Short-term market prediction is genuinely hard — expect the live accuracy to hover near a coin flip. The point is the honest scoreboard: ${L('forecast', 'falsifiable calls')} you can learn from, not tips to trade.</p></div>`;
+
+    el.innerHTML = banner + track + trust + openHtml + recentHtml + caveat;
+    const gt = document.getElementById('forecast-gen-time'); if (gt && pred.lastGenerated) gt.textContent = pred.lastGenerated;
+  }
+  document.getElementById('forecast-refresh-btn')?.addEventListener('click', runForecastUI);
 
   // ── Simple / Expert mode — progressive disclosure (Simple hides dense surfaces) ──
   function applyUiMode(m) {

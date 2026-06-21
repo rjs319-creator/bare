@@ -29,6 +29,7 @@ const { writeDay, readAllPicks, hasStore, writeApexDay, readAllApex, writeGhostD
         readTrendEng, writeTrendEng, writeTrendDay, readAllTrendDays,
         readDaytradeEng, writeDaytradeEng, writeDaytradeDay, readAllDaytradeDays,
         readConfluenceEng, writeConfluenceEng, writeConfluenceDay, readAllConfluenceDays,
+        writePredictDay, readAllPredictDays,
         readJSON, writeJSON } = require('../lib/store');
 const { fetchDailyHistory } = require('../lib/screener');
 const { analyzeVReversal } = require('../lib/vreversal');
@@ -1894,6 +1895,105 @@ async function runConfluenceOpt(req, res) {
   });
 }
 
+// ── 🔮 FORECAST — modernized predictions (falsifiable, AUTO-resolved) ──────────
+// Unlike the old manual "click correct" tracker, every prediction is measurable and
+// resolved against real price data; the accuracy is honest, not self-graded.
+async function buildPredictContext() {
+  const { fetchMacro } = require('../lib/macro');
+  const cf = require('../lib/confluence');
+  const SEC = { XLK: 'Tech', XLF: 'Financials', XLE: 'Energy', XLV: 'Health Care', XLY: 'Cons Disc', XLP: 'Cons Staples', XLI: 'Industrials', XLU: 'Utilities', XLRE: 'Real Estate', XLB: 'Materials', XLC: 'Comm Svcs' };
+  const spy = await fetchDailyHistory('SPY');
+  let regime = 'neutral'; try { const m = await fetchMacro(); if (m) regime = m.regime; } catch {}
+  const condition = spy ? cf.marketCondition(spy.candles, regime) : 'mixed';
+  const asOf = spy ? spy.candles[spy.candles.length - 1].date : new Date().toISOString().slice(0, 10);
+  const ret = (c, n) => (!c || c.length <= n) ? null : +((c[c.length - 1].close / c[c.length - 1 - n].close - 1) * 100).toFixed(1);
+  const sectors = [];
+  await Promise.all(Object.keys(SEC).map(async e => { try { const d = await fetchDailyHistory(e); if (d) sectors.push({ sector: SEC[e], etf: e, r1m: ret(d.candles, 21) }); } catch {} }));
+  sectors.sort((a, b) => (b.r1m || 0) - (a.r1m || 0));
+  return { asOf, regime, condition, spy1w: ret(spy && spy.candles, 5), spy1m: ret(spy && spy.candles, 21), sectors };
+}
+async function generatePredictions(ctx) {
+  if (!process.env.ANTHROPIC_API_KEY) return [];
+  const Anthropic = require('@anthropic-ai/sdk');
+  const pr = require('../lib/predict');
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const lead = ctx.sectors.slice(0, 3).map(s => `${s.sector} ${s.r1m > 0 ? '+' : ''}${s.r1m}%`).join(', ');
+  const lag = ctx.sectors.slice(-3).map(s => `${s.sector} ${s.r1m > 0 ? '+' : ''}${s.r1m}%`).join(', ');
+  try {
+    const msg = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001', max_tokens: 1500, tools: [pr.PREDICT_TOOL], tool_choice: { type: 'tool', name: 'submit_predictions' },
+      messages: [{ role: 'user', content: `Make 5 FALSIFIABLE market predictions for the next 1-3 weeks, each measurable against price data. Context as of ${ctx.asOf}: macro regime ${ctx.regime}, tape ${ctx.condition}; SPY ${ctx.spy1w > 0 ? '+' : ''}${ctx.spy1w}% past week, ${ctx.spy1m > 0 ? '+' : ''}${ctx.spy1m}% past month. Leading sectors (1mo): ${lead}. Lagging: ${lag}. Use subjects like SPY, QQQ, ^VIX, sector ETFs, or liquid stocks. Mix directions (up/down/outperform/underperform) and horizons (5/10/21 days). Be specific and honest about uncertainty.` }],
+    });
+    const tool = msg.content.find(b => b.type === 'tool_use');
+    return (tool?.input?.items || []).filter(p => p.subject && p.direction && p.horizon).slice(0, 5);
+  } catch { return []; }
+}
+
+// op=predict — live read: open predictions + the honest auto-graded track record.
+async function runPredict(req, res) {
+  const pr = require('../lib/predict');
+  const days = await readAllPredictDays();
+  const all = []; days.forEach(dd => (dd.predictions || []).forEach(p => all.push({ ...p, regime: dd.regime, condition: dd.condition })));
+  const open = all.filter(p => !p.status || p.status === 'pending').sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 12);
+  const resolved = all.filter(p => p.status === 'correct' || p.status === 'incorrect');
+  const correct = resolved.filter(p => p.status === 'correct').length;
+  const ci = wilson(correct, resolved.length);
+  const byHorizon = {}; [5, 10, 21].forEach(h => { const a = resolved.filter(p => p.horizon === h); byHorizon[h] = { n: a.length, correct: a.filter(p => p.status === 'correct').length }; });
+  res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=86400');
+  return res.json({
+    ok: true,
+    open: open.map(p => ({ id: p.id, text: p.text, claim: pr.claimLabel(p), subject: p.subject, horizon: p.horizon, confidence: p.confidence, rationale: p.rationale, date: p.date })),
+    resolvedCount: resolved.length,
+    accuracy: resolved.length ? Math.round((correct / resolved.length) * 100) : null,
+    wilsonLo: resolved.length ? Math.round(ci.lo * 100) : null,
+    recent: resolved.slice(-8).reverse().map(p => ({ text: p.text, claim: pr.claimLabel(p), status: p.status, actualPct: p.actualPct })),
+    byHorizon, lastGenerated: days.length ? days[days.length - 1].date : null, generatedAt: new Date().toISOString(),
+  });
+}
+
+// op=predicttick — cron: resolve matured predictions, then generate a fresh weekly batch.
+async function runPredictTick(req, res) {
+  if (!hasStore()) return res.json({ ok: false, error: 'Blob storage not configured.' });
+  const pr = require('../lib/predict');
+  const t0 = Date.now();
+  try {
+    const days = await readAllPredictDays();
+    // 1) Resolve matured predictions.
+    const subjects = new Set(['SPY']); days.forEach(dd => (dd.predictions || []).forEach(p => { if (!p.status || p.status === 'pending') subjects.add(p.subject); }));
+    const subjList = [...subjects]; const cand = new Map(); let i = 0;
+    const rw = async () => { while (i < subjList.length) { if (Date.now() - t0 > 15000) return; const s = subjList[i++]; try { const d = await fetchDailyHistory(s); if (d) cand.set(s, d.candles); } catch {} } };
+    await Promise.all(Array.from({ length: 8 }, rw));
+    const spy = cand.get('SPY') || [];
+    let resolvedNow = 0; const changed = new Set();
+    for (const dd of days) for (const p of (dd.predictions || [])) {
+      if (p.status && p.status !== 'pending') continue;
+      const subj = cand.get(p.subject); if (!subj) continue;
+      const r = pr.resolvePrediction(p, subj, spy); if (!r) continue;
+      p.status = r.status; p.actualPct = r.actualPct; p.excPct = r.excPct; p.exitDate = r.exitDate; resolvedNow++; changed.add(dd.date);
+    }
+    await Promise.all([...changed].map(dt => { const dd = days.find(x => x.date === dt); return writePredictDay(dt, { regime: dd.regime, condition: dd.condition, predictions: dd.predictions }); }));
+
+    // 2) Generate a fresh batch weekly (≥6 days since the last one).
+    let generated = 0, genDate = null;
+    const lastGen = days.length ? days[days.length - 1].date : null;
+    const stale = !lastGen || (Date.now() - Date.parse(lastGen + 'T00:00:00Z')) / 86400000 >= 6;
+    if (stale && (req.query.gen !== '0')) {
+      const ctx = await buildPredictContext();
+      const preds = await generatePredictions(ctx);
+      if (preds.length && ctx.asOf !== lastGen) {
+        const stamped = preds.map((p, idx) => ({ id: ctx.asOf + '-' + idx, date: ctx.asOf, status: 'pending', ...p }));
+        await writePredictDay(ctx.asOf, { regime: ctx.regime, condition: ctx.condition, predictions: stamped });
+        generated = stamped.length; genDate = ctx.asOf;
+      }
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: true, resolvedNow, generated, genDate, elapsedMs: Date.now() - t0 });
+  } catch (e) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: false, error: String(e && e.message || e), elapsedMs: Date.now() - t0 });
+  }
+}
+
 // ── op=tape : the current MARKET CONDITION (shared badge across all screeners) ──
 // Lightweight: one SPY read + macro → trending / choppy / mixed / risk-off, so every
 // screener tab can show the same tape context (and adapt to it).
@@ -2781,6 +2881,8 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'confluencetick') return runConfluenceTick(req, res);
   if (req.query.op === 'confluencebook') return runConfluenceBook(req, res);
   if (req.query.op === 'confluenceopt') return runConfluenceOpt(req, res);
+  if (req.query.op === 'predict') return runPredict(req, res);
+  if (req.query.op === 'predicttick') return runPredictTick(req, res);
   if (req.query.op === 'tape') return runTape(req, res);
   if (req.query.op === 'fadesignals') return runFadeSignals(req, res);
   if (req.query.op === 'fadetick') return runFadeTick(req, res);
