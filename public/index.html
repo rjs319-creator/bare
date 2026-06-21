@@ -1614,6 +1614,15 @@
     .dt-card-plan { font-size: 0.8rem; color: var(--text); margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); line-height: 1.5; }
     .dt-card-plan b { color: var(--amber, #f59e0b); }
     .dt-note { font-size: 0.78rem; color: var(--text-dim); background: var(--surface); border-left: 3px solid #f59e0b; border-radius: 6px; padding: 8px 11px; margin: 8px 0; line-height: 1.5; }
+    /* 🎲 Crowd — prediction-market rows */
+    .crowd-row { padding: 11px 14px; }
+    .crowd-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+    .crowd-venue { font-size: 0.66rem; font-weight: 700; letter-spacing: .02em; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; }
+    .crowd-heat { font-size: 0.82rem; font-weight: 700; white-space: nowrap; }
+    .crowd-title { font-size: 0.9rem; font-weight: 600; line-height: 1.35; margin-bottom: 4px; }
+    .crowd-link { color: var(--text); text-decoration: none; border-bottom: 1px dotted var(--border); }
+    .crowd-link:hover { color: #14b8a6; }
+    .crowd-chip { display: inline-block; font-size: 0.68rem; font-weight: 600; color: var(--text-dim); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; margin: 2px 4px 0 0; white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -2382,6 +2391,24 @@
 
   <hr class="section-divider" />
 
+  <!-- 🎲 CROWD — unusual activity in real-money prediction markets -->
+  <section class="momentum-section" id="crowd">
+    <div class="section-label">
+      <div class="accent-bar" style="background:#14b8a6"></div>
+      <h2 style="color:#14b8a6">🎲 Crowd</h2>
+      <span class="label-meta">· unusual bets &amp; volume in real-money prediction markets</span>
+      <div class="label-action">
+        <span class="lbl-time" id="crowd-gen-time"></span>
+        <button class="refresh-btn" style="color:#14b8a6" id="crowd-refresh-btn">⟳ Refresh</button>
+      </div>
+    </div>
+    <div id="crowd-container">
+      <div class="mom-status"><div class="mom-spinner"></div><p>Scanning Kalshi &amp; Polymarket for unusual activity…</p></div>
+    </div>
+  </section>
+
+  <hr class="section-divider" />
+
   <!-- OPTIONS FLOW -->
   <section class="options-section" id="options">
     <div class="section-label">
@@ -2419,7 +2446,7 @@
   const TAB_GROUPS = {
     start:     ['today', 'start'],
     screeners: ['screener', 'custom', 'daytrade', 'confluence', 'ghost', 'trendrider', 'fade'],
-    markets:   ['rotation', 'sectors', 'momentum', 'forecast', 'news', 'options', 'picks'],
+    markets:   ['rotation', 'sectors', 'momentum', 'forecast', 'crowd', 'news', 'options', 'picks'],
     research:  ['backtest', 'events', 'edge'],
     track:     ['scoreboard', 'xalerts'],
   };
@@ -2428,7 +2455,7 @@
   const SUB_LABEL = {
     today: '🏠 Today', start: '📘 Guide',
     screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', daytrade: '⚡ Day Trade', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
-    rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', forecast: '🔮 Forecast', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
+    rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', forecast: '🔮 Forecast', crowd: '🎲 Crowd', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
     scoreboard: '🏆 Scoreboard', xalerts: '🐦 Trade Alerts',
   };
@@ -2497,6 +2524,7 @@
     if (sub === 'options' && typeof ensureOptions === 'function') ensureOptions();
     if (sub === 'picks' && typeof ensurePicks === 'function') ensurePicks();
     if (sub === 'forecast' && typeof ensureForecast === 'function') ensureForecast();
+    if (sub === 'crowd' && typeof ensureCrowd === 'function') ensureCrowd();
 
     const act = document.querySelector('.mobile-top-tabs .mtt-item.active');
     if (act) act.scrollIntoView({ inline: 'center', block: 'nearest', behavior: opts.instant ? 'auto' : 'smooth' });
@@ -4648,6 +4676,7 @@
     selflearning: { g: 'Trusting a signal', t: 'Self-Learning', plain: 'The engine logs every pick, scores it weeks later, and re-weights what is working — per strategy and per stock.', why: 'The app adapts to what actually pays instead of trusting theory forever.', pro: 'Watch the live track record and the strategy-weight panel — that is the real evidence, not the backtest.' },
     backtest: { g: 'Trusting a signal', t: 'Backtest & Out-of-Sample', plain: 'Replaying a strategy across years of history to measure its edge — including "out-of-sample" data it never saw during tuning.', why: 'In-sample results flatter you; out-of-sample is the honest test of whether an edge is real.', pro: 'The app validates every screen this way — and most "edges" vanish out-of-sample, which is why it is upfront about what does not work.' },
     forecast: { g: 'Trusting a signal', t: 'Falsifiable Forecast', plain: 'A market call written so it can be proven right or wrong — a specific subject (SPY, ^VIX, a sector), direction, size, and deadline (e.g. "QQQ +3% in 10 days"). The app grades every one against real prices automatically.', why: 'Vague calls ("stocks look strong") can never be wrong, so they teach you nothing. A falsifiable forecast keeps an honest scoreboard.', pro: 'Pros write falsifiable theses and track their hit rate. Short-term prediction is genuinely hard — expect the live accuracy to hover near a coin flip, which is the real lesson.' },
+    predmarket: { g: 'Reading the market', t: 'Prediction Markets (the Crowd)', plain: 'Real-money betting markets (Kalshi, Polymarket) where people trade contracts on outcomes — "S&P above 7850 Friday", "Fed cuts in July", "CPI above 3%". The price is the crowd\'s live probability (8¢ = 8% odds).', why: 'Because real money is on the line, the prices aggregate what informed bettors actually expect — a fast read on how the crowd is pricing macro events that move stocks.', pro: 'Pros watch them as a sentiment radar: a sudden volume burst or a sharp odds swing flags that the crowd is repricing a catalyst — often confirming news, not predicting it.' },
   };
   const LEARN_GROUPS = ['Reading the market', 'The screeners', 'Entering a trade', 'Managing risk', 'Trusting a signal'];
   function renderLearn(highlight) {
@@ -4685,6 +4714,7 @@
     trendrider: { level: 'validated', one: `The "stand down when red" timing is validated across 5 independent selloffs — the project's strongest finding. But green = riding ${L('beta', 'beta')}, not stock-picking skill: it tells you WHEN, not WHAT.` },
     fade: { level: 'building', one: `A choppy/neutral-tape ${L('meanrev', 'mean-reversion')} fade. The selected high-conviction basket showed ~+0.9%/mo net out-of-sample (${L('beta', 'beta')}-neutral, after costs) — the most promising result, but the live ${L('backtest', 'track record')} is still building.` },
     forecast: { level: 'building', one: `AI ${L('forecast', 'falsifiable forecasts')} on the market, ${L('tape', 'tape')}/${L('regime', 'regime')}-aware and auto-graded against real prices — no self-scoring. Short-term prediction is hard; expect the live accuracy to sit near a coin flip. Educational, not a signal.` },
+    crowd: { level: 'confirm', one: `A ${L('predmarket', 'prediction-market')} sentiment radar (Kalshi + Polymarket) — flags unusual volume and sharp odds swings on macro/equity contracts. It shows what the crowd is suddenly repricing (often confirming news), not a tradeable edge. The volume baseline sharpens over the first few days.` },
   };
   function trustBadgeHTML(sub) {
     const tr = TRUST[sub]; if (!tr) return '';
@@ -4824,6 +4854,54 @@
     const gt = document.getElementById('forecast-gen-time'); if (gt && pred.lastGenerated) gt.textContent = pred.lastGenerated;
   }
   document.getElementById('forecast-refresh-btn')?.addEventListener('click', runForecastUI);
+
+  // ── 🎲 CROWD — unusual activity in real-money prediction markets (Kalshi + Poly) ──
+  let crowdLoaded = false;
+  function ensureCrowd() { if (!crowdLoaded) { crowdLoaded = true; runCrowdUI(); } }
+  async function runCrowdUI() {
+    const el = document.getElementById('crowd-container'); if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning Kalshi &amp; Polymarket for unusual activity…</p></div>`;
+    try {
+      const d = await fetch('/api/tracker?op=crowd').then(r => r.json()).catch(() => null);
+      renderCrowd(d);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load prediction-market data.</p></div>`; }
+  }
+  const VENUE_COL = { Kalshi: '#14b8a6', Polymarket: '#8b5cf6' };
+  function crowdRow(m) {
+    const col = VENUE_COL[m.venue] || '#14b8a6';
+    const heatCol = m.heat >= 80 ? 'var(--red)' : m.heat >= 65 ? 'var(--amber,#f59e0b)' : 'var(--text-dim)';
+    const prob = Math.round((m.prob || 0) * 100);
+    const chips = (m.reasons || []).map(r => `<span class="crowd-chip">${esc(r)}</span>`).join('');
+    const title = m.url ? `<a href="${esc(m.url)}" target="_blank" rel="noopener" class="crowd-link">${esc(m.title)}</a>` : esc(m.title);
+    return `<div class="rot-panel crowd-row" style="margin-top:8px">`
+      + `<div class="crowd-head"><span class="crowd-venue" style="background:${col}22;color:${col}">${esc(m.venue)}</span>`
+      + `<span class="crowd-heat" style="color:${heatCol}">🔥 ${m.heat}</span></div>`
+      + `<div class="crowd-title">${title}</div>`
+      + `<div class="rot-sub"><b>${prob}%</b> implied odds <span class="dt-dim">· ${esc(m.group || '')}</span> ${chips}</div></div>`;
+  }
+  function renderCrowd(d) {
+    const el = document.getElementById('crowd-container'); if (!el) return;
+    if (!d || !d.ok) { el.innerHTML = `<div class="mom-status error"><p>Prediction-market data unavailable right now.</p></div>`; return; }
+    const c = d.counts || {};
+    const baseTxt = d.baselineReady
+      ? `Volume is judged against each market's own ${d.baselineDays}-day baseline.`
+      : `Building the volume baseline (day ${d.baselineDays || 0} of 3) — for now, unusual is driven by sharp odds swings; volume z-scores sharpen in a few days.`;
+    const banner = `<div class="rot-panel"><div class="rot-head">🎲 What the crowd is repricing</div>`
+      + `<div class="rot-sub">Scanned <b>${c.scanned || 0}</b> ${L('predmarket', 'prediction-market')} contracts (Kalshi ${c.kalshi || 0} · Polymarket ${c.polymarket || 0}). ${baseTxt}</div></div>`;
+    const trust = `<div class="trust-badge" style="margin-top:8px">${trustBadgeHTML('crowd')}</div>`;
+    const unusual = d.unusual || [];
+    let body;
+    if (unusual.length) {
+      body = `<div class="rot-head" style="margin-top:14px">⚡ Unusual activity <span class="dt-dim">· ${unusual.length} flagged</span></div>` + unusual.map(crowdRow).join('');
+    } else {
+      const top = (d.top || []).slice(0, 6);
+      body = `<div class="dt-note" style="margin-top:14px">😴 Nothing unusual right now — no big volume bursts or odds swings on the macro board. The most active contracts:</div>` + top.map(crowdRow).join('');
+    }
+    const caveat = `<div class="fade-caveats" style="margin-top:14px"><p>⚠️ <b>A sentiment radar, not a signal.</b> A volume burst or odds swing usually means the crowd is repricing a <i>known</i> catalyst (often after the news) — it tells you what macro events are in play, not what to trade. Real money, but not a stock edge.</p></div>`;
+    el.innerHTML = banner + trust + body + caveat;
+    const gt = document.getElementById('crowd-gen-time'); if (gt && d.generatedAt) gt.textContent = new Date(d.generatedAt).toLocaleTimeString();
+  }
+  document.getElementById('crowd-refresh-btn')?.addEventListener('click', runCrowdUI);
 
   // ── Simple / Expert mode — progressive disclosure (Simple hides dense surfaces) ──
   function applyUiMode(m) {

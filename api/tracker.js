@@ -30,6 +30,7 @@ const { writeDay, readAllPicks, hasStore, writeApexDay, readAllApex, writeGhostD
         readDaytradeEng, writeDaytradeEng, writeDaytradeDay, readAllDaytradeDays,
         readConfluenceEng, writeConfluenceEng, writeConfluenceDay, readAllConfluenceDays,
         writePredictDay, readAllPredictDays,
+        writePredmktDay, readAllPredmktDays,
         readJSON, writeJSON } = require('../lib/store');
 const { fetchDailyHistory } = require('../lib/screener');
 const { analyzeVReversal } = require('../lib/vreversal');
@@ -1994,6 +1995,60 @@ async function runPredictTick(req, res) {
   }
 }
 
+// ── 🎲 CROWD — scan real-money prediction markets for UNUSUAL activity ─────────
+// Kalshi + Polymarket macro/equity contracts: volume bursts + sharp odds swings.
+// A crowd-sentiment radar, not a proven edge (see the trust badge in the UI).
+const todayUTC = () => new Date().toISOString().slice(0, 10);
+
+// op=crowd — live read: scored markets (unusual first) + baseline status.
+async function runCrowd(req, res) {
+  const pm = require('../lib/predmarkets');
+  try {
+    const [k, p, days] = await Promise.all([
+      pm.fetchKalshi().catch(() => []),
+      pm.fetchPolymarket().catch(() => []),
+      readAllPredmktDays().catch(() => []),
+    ]);
+    const today = todayUTC();
+    const baseline = pm.buildBaseline(days, today);
+    const baselineDays = days.filter(d => d.date !== today).length;
+    const scored = pm.scoreMarkets([...k, ...p], baseline);
+    const unusual = scored.filter(m => m.unusual);
+    res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=86400');
+    return res.json({
+      ok: true,
+      unusual: unusual.slice(0, 20),
+      top: scored.slice(0, 25),
+      counts: { kalshi: k.length, polymarket: p.length, scanned: scored.length, unusual: unusual.length },
+      baselineDays, baselineReady: baselineDays >= 3,
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (e) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: false, error: String(e && e.message || e) });
+  }
+}
+
+// op=crowdtick — cron: snapshot today's 24h volume per market (builds the baseline).
+async function runCrowdTick(req, res) {
+  if (!hasStore()) return res.json({ ok: false, error: 'Blob storage not configured.' });
+  const pm = require('../lib/predmarkets');
+  const t0 = Date.now();
+  try {
+    const [k, p] = await Promise.all([pm.fetchKalshi().catch(() => []), pm.fetchPolymarket().catch(() => [])]);
+    const all = [...k, ...p];
+    const snap = {};
+    for (const m of all) if (m.vol24 > 0) snap[m.id] = +m.vol24.toFixed(2);
+    const date = todayUTC();
+    await writePredmktDay(date, { snap, n: Object.keys(snap).length });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: true, date, snapshot: Object.keys(snap).length, kalshi: k.length, polymarket: p.length, elapsedMs: Date.now() - t0 });
+  } catch (e) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: false, error: String(e && e.message || e), elapsedMs: Date.now() - t0 });
+  }
+}
+
 // ── op=tape : the current MARKET CONDITION (shared badge across all screeners) ──
 // Lightweight: one SPY read + macro → trending / choppy / mixed / risk-off, so every
 // screener tab can show the same tape context (and adapt to it).
@@ -2883,6 +2938,8 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'confluenceopt') return runConfluenceOpt(req, res);
   if (req.query.op === 'predict') return runPredict(req, res);
   if (req.query.op === 'predicttick') return runPredictTick(req, res);
+  if (req.query.op === 'crowd') return runCrowd(req, res);
+  if (req.query.op === 'crowdtick') return runCrowdTick(req, res);
   if (req.query.op === 'tape') return runTape(req, res);
   if (req.query.op === 'fadesignals') return runFadeSignals(req, res);
   if (req.query.op === 'fadetick') return runFadeTick(req, res);
