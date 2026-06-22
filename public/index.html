@@ -4747,6 +4747,8 @@
     wilsonLB: { g: 'Trusting a signal', t: 'Confidence Floor (Wilson LB)', plain: 'A conservative "floor" on the beat rate that accounts for how few trades there are. A floor below 50% means we cannot yet trust it beats the market.', why: 'It stops you fooling yourself with a small, lucky sample.', pro: 'Pros require the lower bound — not just the average — to clear 50% before sizing up.' },
     selflearning: { g: 'Trusting a signal', t: 'Self-Learning', plain: 'The engine logs every pick, scores it weeks later, and re-weights what is working — per strategy and per stock.', why: 'The app adapts to what actually pays instead of trusting theory forever.', pro: 'Watch the live track record and the strategy-weight panel — that is the real evidence, not the backtest.' },
     backtest: { g: 'Trusting a signal', t: 'Backtest & Out-of-Sample', plain: 'Replaying a strategy across years of history to measure its edge — including "out-of-sample" data it never saw during tuning.', why: 'In-sample results flatter you; out-of-sample is the honest test of whether an edge is real.', pro: 'The app validates every screen this way — and most "edges" vanish out-of-sample, which is why it is upfront about what does not work.' },
+    calibration: { g: 'Trusting a signal', t: 'Calibration', plain: 'Whether a forecaster\'s confidence is honest: of all the calls it made with "70% confidence," did about 70% actually come true? A calibrated forecaster\'s stated odds match reality across the board.', why: 'Accuracy alone hides overconfidence. A model can be "right 55% of the time" while wildly overstating its certainty — calibration catches that.', pro: 'Pros trust calibrated sources and discount overconfident ones. The classic failure is overconfidence: claiming 80% and hitting 60%.' },
+    brier: { g: 'Trusting a signal', t: 'Brier Score', plain: 'A single number scoring probability forecasts: the average squared gap between the stated probability and what happened (1 or 0). Lower is better — 0 is perfect, 0.25 is what you get always guessing 50%.', why: 'It rewards being both accurate AND honestly confident in one number, punishing confident-but-wrong calls hardest.', pro: 'Below 0.25 means real skill over a coin flip; pros track it to compare forecasters.' },
     forecast: { g: 'Trusting a signal', t: 'Falsifiable Forecast', plain: 'A market call written so it can be proven right or wrong — a specific subject (SPY, ^VIX, a sector), direction, size, and deadline (e.g. "QQQ +3% in 10 days"). The app grades every one against real prices automatically.', why: 'Vague calls ("stocks look strong") can never be wrong, so they teach you nothing. A falsifiable forecast keeps an honest scoreboard.', pro: 'Pros write falsifiable theses and track their hit rate. Short-term prediction is genuinely hard — expect the live accuracy to hover near a coin flip, which is the real lesson.' },
     predmarket: { g: 'Reading the market', t: 'Prediction Markets (the Crowd)', plain: 'Real-money betting markets (Kalshi, Polymarket) where people trade contracts on outcomes — "S&P above 7850 Friday", "Fed cuts in July", "CPI above 3%". The price is the crowd\'s live probability (8¢ = 8% odds).', why: 'Because real money is on the line, the prices aggregate what informed bettors actually expect — a fast read on how the crowd is pricing macro events that move stocks.', pro: 'Pros watch them as a sentiment radar: a sudden volume burst or a sharp odds swing flags that the crowd is repricing a catalyst — often confirming news, not predicting it.' },
     sharpmoney: { g: 'Trusting a signal', t: 'Sharp Money (Informed-Activity Hallmarks)', plain: 'The prediction-market version of "unusual options activity" — patterns a well-informed bettor tends to leave: putting real size on a cheap longshot that\'s rising, volume exceeding the open positions, fresh open-interest building, or a big late bet right before resolution.', why: 'When size and conviction line up on one outcome, it can mean someone is betting on knowledge the crowd doesn\'t have yet — an early tell on a catalyst that could move stocks.', pro: 'Treat it as a lead to investigate, never proof. It flags statistical FINGERPRINTS, not actual insider trading — most hits are coincidence, hedging, or rumor. The screen demands real money behind the bet before flagging it.' },
@@ -4978,6 +4980,25 @@
     }
     const trust = `<div class="trust-badge" style="margin-top:8px">${trustBadgeHTML('forecast')}</div>`;
 
+    // Calibration — is the AI's stated confidence honest? (when it says 7/10, ~70%?)
+    const cal = pred.calibration || {};
+    let calib = `<div class="rot-head" style="margin-top:16px">📐 ${L('calibration', 'Is its confidence honest?')} <span class="dt-dim">· stated vs actual hit rate</span></div>`;
+    if (cal.n >= 8) {
+      const vCol = cal.verdict === 'well-calibrated' ? 'var(--green)' : 'var(--amber,#f59e0b)';
+      const vTxt = cal.verdict === 'overconfident' ? `overconfident — it claims ${cal.meanStated}% but hits ${cal.meanActual}%`
+        : cal.verdict === 'underconfident' ? `underconfident — it claims ${cal.meanStated}% but hits ${cal.meanActual}%`
+        : `well-calibrated — claims ${cal.meanStated}%, hits ${cal.meanActual}%`;
+      const rows = (cal.buckets || []).filter(b => b.n).map(b => {
+        const off = b.actual - b.stated;
+        const oc = Math.abs(off) <= 10 ? 'var(--green)' : 'var(--text-dim)';
+        return `<div class="bt-ic-row"><span>${b.label} conf</span><span class="dt-dim">says ${b.stated}%</span><span style="color:${oc}">hits ${b.actual}% <span class="dt-dim">(n=${b.n})</span></span></div>`;
+      }).join('');
+      calib += `<div class="dt-note" style="border-left-color:${vCol}"><b style="color:${vCol}">Verdict: ${vTxt}.</b> <span class="dt-dim">${L('brier', 'Brier ' + cal.brier)} (lower is better; 0.25 = no skill).</span></div>`
+        + `<div class="rot-panel" style="margin-top:6px"><div class="rot-sub" style="margin-bottom:4px"><b>By confidence bucket</b> <span class="dt-dim">— green = within 10pts of honest</span></div>${rows}</div>`;
+    } else {
+      calib += `<div class="dt-note">⏳ <b>Calibration building.</b> ${cal.n || 0} graded call${(cal.n || 0) === 1 ? '' : 's'} with a stated confidence — the stated-vs-actual breakdown shows once ≥8 resolve. It checks whether "7/10" really means ~70%.</div>`;
+    }
+
     // Open (pending) predictions.
     const open = pred.open || [];
     const openHtml = open.length
@@ -4996,7 +5017,7 @@
 
     const caveat = `<div class="fade-caveats" style="margin-top:14px"><p>⚠️ <b>Educational, not signals.</b> Short-term market prediction is genuinely hard — expect the live accuracy to hover near a coin flip. The point is the honest scoreboard: ${L('forecast', 'falsifiable calls')} you can learn from, not tips to trade.</p></div>`;
 
-    el.innerHTML = banner + track + trust + openHtml + recentHtml + caveat;
+    el.innerHTML = banner + track + trust + calib + openHtml + recentHtml + caveat;
     const gt = document.getElementById('forecast-gen-time'); if (gt && pred.lastGenerated) gt.textContent = pred.lastGenerated;
   }
   document.getElementById('forecast-refresh-btn')?.addEventListener('click', runForecastUI);

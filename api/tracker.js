@@ -1934,6 +1934,25 @@ async function generatePredictions(ctx) {
 }
 
 // op=predict — live read: open predictions + the honest auto-graded track record.
+// Forecast calibration — is the AI's 1–10 confidence honest? Bucket resolved calls
+// by stated confidence and compare to the actual hit rate; Brier score + verdict.
+function computeCalibration(resolved) {
+  const r = resolved.filter(p => typeof p.confidence === 'number' && p.confidence >= 1 && p.confidence <= 10);
+  if (!r.length) return { n: 0 };
+  const BUCKETS = [['low', 'Low (1–5)', c => c <= 5], ['med', 'Med (6–7)', c => c >= 6 && c <= 7], ['high', 'High (8–10)', c => c >= 8]];
+  const buckets = BUCKETS.map(([key, label, test]) => {
+    const sub = r.filter(p => test(p.confidence)); const n = sub.length;
+    const correct = sub.filter(p => p.status === 'correct').length;
+    return { key, label, n, correct, stated: n ? Math.round(sub.reduce((s, p) => s + p.confidence, 0) / n * 10) : null, actual: n ? Math.round(correct / n * 100) : null };
+  });
+  const brier = r.reduce((s, p) => s + Math.pow(p.confidence / 10 - (p.status === 'correct' ? 1 : 0), 2), 0) / r.length;
+  const meanExp = r.reduce((s, p) => s + p.confidence / 10, 0) / r.length;
+  const meanAct = r.filter(p => p.status === 'correct').length / r.length;
+  const gap = meanAct - meanExp;
+  const verdict = gap < -0.08 ? 'overconfident' : gap > 0.08 ? 'underconfident' : 'well-calibrated';
+  return { n: r.length, buckets, brier: +brier.toFixed(3), meanStated: Math.round(meanExp * 100), meanActual: Math.round(meanAct * 100), gap: Math.round(gap * 100), verdict };
+}
+
 async function runPredict(req, res) {
   const pr = require('../lib/predict');
   const days = await readAllPredictDays();
@@ -1951,7 +1970,8 @@ async function runPredict(req, res) {
     accuracy: resolved.length ? Math.round((correct / resolved.length) * 100) : null,
     wilsonLo: resolved.length ? Math.round(ci.lo * 100) : null,
     recent: resolved.slice(-8).reverse().map(p => ({ text: p.text, claim: pr.claimLabel(p), status: p.status, actualPct: p.actualPct })),
-    byHorizon, lastGenerated: days.length ? days[days.length - 1].date : null, generatedAt: new Date().toISOString(),
+    byHorizon, calibration: computeCalibration(resolved),
+    lastGenerated: days.length ? days[days.length - 1].date : null, generatedAt: new Date().toISOString(),
   });
 }
 
