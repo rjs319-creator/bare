@@ -1623,6 +1623,12 @@
     .crowd-link { color: var(--text); text-decoration: none; border-bottom: 1px dotted var(--border); }
     .crowd-link:hover { color: #14b8a6; }
     .crowd-chip { display: inline-block; font-size: 0.68rem; font-weight: 600; color: var(--text-dim); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; margin: 2px 4px 0 0; white-space: nowrap; }
+    /* 🧭 Brief */
+    .brief-sig { cursor: pointer; transition: background 0.12s; border-radius: 6px; }
+    .brief-sig:hover { background: var(--surface); }
+    .brief-eq { display: inline-block; font-size: 0.72rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 3px 9px; margin: 3px 5px 0 0; }
+    .brief-eq.eq-fav { border-left: 3px solid var(--green); }
+    .brief-eq.eq-pre { border-left: 3px solid var(--red); }
   </style>
 </head>
 <body>
@@ -1639,7 +1645,7 @@
     <a class="nav-link" href="#today" data-tab="start">🏠 Home</a>
     <a class="nav-link" href="#screener" data-tab="screeners">🔎 Screeners</a>
     <a class="nav-link" href="#rotation" data-tab="markets">📊 Markets</a>
-    <a class="nav-link" href="#forecast" data-tab="predict">🔮 Predict</a>
+    <a class="nav-link" href="#brief" data-tab="predict">🔮 Predict</a>
     <a class="nav-link" href="#backtest" data-tab="research">🔬 Research</a>
     <a class="nav-link" href="#scoreboard" data-tab="track">🏆 Track</a>
   </nav>
@@ -1660,7 +1666,7 @@
   <a class="mtt-item" href="#today" data-tab="start"><span class="mtt-ic">🏠</span>Home</a>
   <a class="mtt-item" href="#screener" data-tab="screeners"><span class="mtt-ic">🔎</span>Screeners</a>
   <a class="mtt-item" href="#rotation" data-tab="markets"><span class="mtt-ic">📊</span>Markets</a>
-  <a class="mtt-item" href="#forecast" data-tab="predict"><span class="mtt-ic">🔮</span>Predict</a>
+  <a class="mtt-item" href="#brief" data-tab="predict"><span class="mtt-ic">🔮</span>Predict</a>
   <a class="mtt-item" href="#backtest" data-tab="research"><span class="mtt-ic">🔬</span>Research</a>
   <a class="mtt-item" href="#scoreboard" data-tab="track"><span class="mtt-ic">🏆</span>Track</a>
 </nav>
@@ -2375,6 +2381,24 @@
 
   <hr class="section-divider" />
 
+  <!-- 🧭 BRIEF — synthesized read across Forecast + Crowd + Sharp, with equity translation -->
+  <section class="momentum-section" id="brief">
+    <div class="section-label">
+      <div class="accent-bar" style="background:#6366f1"></div>
+      <h2 style="color:#6366f1">🧭 Prediction Brief</h2>
+      <span class="label-meta">· the whole Predict section in one read — and what it means for stocks</span>
+      <div class="label-action">
+        <span class="lbl-time" id="brief-gen-time"></span>
+        <button class="refresh-btn" style="color:#6366f1" id="brief-refresh-btn">⟳ Refresh</button>
+      </div>
+    </div>
+    <div id="brief-container">
+      <div class="mom-status"><div class="mom-spinner"></div><p>Synthesizing forecasts, the crowd &amp; sharp money…</p></div>
+    </div>
+  </section>
+
+  <hr class="section-divider" />
+
   <!-- 🔮 FORECAST — falsifiable, auto-graded market predictions -->
   <section class="momentum-section" id="forecast">
     <div class="section-label">
@@ -2456,7 +2480,7 @@
     <a class="mbn-item" href="#today" data-tab="start"><span class="mbn-icon">🏠</span><span class="mbn-label">Home</span></a>
     <a class="mbn-item" href="#screener" data-tab="screeners"><span class="mbn-icon">🔎</span><span class="mbn-label">Screeners</span></a>
     <a class="mbn-item" href="#rotation" data-tab="markets"><span class="mbn-icon">📊</span><span class="mbn-label">Markets</span></a>
-    <a class="mbn-item" href="#forecast" data-tab="predict"><span class="mbn-icon">🔮</span><span class="mbn-label">Predict</span></a>
+    <a class="mbn-item" href="#brief" data-tab="predict"><span class="mbn-icon">🔮</span><span class="mbn-label">Predict</span></a>
     <a class="mbn-item" href="#backtest" data-tab="research"><span class="mbn-icon">🔬</span><span class="mbn-label">Research</span></a>
     <a class="mbn-item" href="#scoreboard" data-tab="track"><span class="mbn-icon">🏆</span><span class="mbn-label">Track</span></a>
   </div>
@@ -2468,7 +2492,7 @@
     start:     ['today', 'start'],
     screeners: ['screener', 'custom', 'daytrade', 'confluence', 'ghost', 'trendrider', 'fade'],
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
-    predict:   ['forecast', 'crowd', 'sharp'],
+    predict:   ['brief', 'forecast', 'crowd', 'sharp'],
     research:  ['backtest', 'events', 'edge'],
     track:     ['scoreboard', 'xalerts'],
   };
@@ -2478,7 +2502,7 @@
     today: '🏠 Today', start: '📘 Guide',
     screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', daytrade: '⚡ Day Trade', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
-    forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money',
+    brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
     scoreboard: '🏆 Scoreboard', xalerts: '🐦 Trade Alerts',
   };
@@ -2487,7 +2511,7 @@
   // Mark each section as a switchable screen
   SECTION_IDS.forEach(id => document.getElementById(id)?.classList.add('tabbable'));
 
-  let hubSub = { start: 'today', screeners: 'screener', markets: 'rotation', predict: 'forecast', research: 'backtest', track: 'scoreboard' };
+  let hubSub = { start: 'today', screeners: 'screener', markets: 'rotation', predict: 'brief', research: 'backtest', track: 'scoreboard' };
   try { const hs = JSON.parse(localStorage.getItem('hubSub')); if (hs) hubSub = { ...hubSub, ...hs }; } catch {}
   // Sanitize stored hubSub: after the nav regrouping a saved sub may no longer
   // belong to its group (e.g. markets→screener). Reset any stale entry to the
@@ -2546,6 +2570,7 @@
     if (sub === 'momentum' && typeof ensureMomentum === 'function') ensureMomentum();
     if (sub === 'options' && typeof ensureOptions === 'function') ensureOptions();
     if (sub === 'picks' && typeof ensurePicks === 'function') ensurePicks();
+    if (sub === 'brief' && typeof ensureBrief === 'function') ensureBrief();
     if (sub === 'forecast' && typeof ensureForecast === 'function') ensureForecast();
     if (sub === 'crowd' && typeof ensureCrowd === 'function') ensureCrowd();
     if (sub === 'sharp' && typeof ensureSharp === 'function') ensureSharp();
@@ -4741,6 +4766,7 @@
     forecast: { level: 'building', one: `AI ${L('forecast', 'falsifiable forecasts')} on the market, ${L('tape', 'tape')}/${L('regime', 'regime')}-aware and auto-graded against real prices — no self-scoring. Short-term prediction is hard; expect the live accuracy to sit near a coin flip. Educational, not a signal.` },
     crowd: { level: 'confirm', one: `A ${L('predmarket', 'prediction-market')} sentiment radar (Kalshi + Polymarket) — flags unusual volume and sharp odds swings on macro/equity contracts. It shows what the crowd is suddenly repricing (often confirming news), not a tradeable edge. The volume baseline sharpens over the first few days.` },
     sharp: { level: 'confirm', one: `Flags ${L('sharpmoney', 'informed-activity hallmarks')} — size + conviction lining up on a ${L('predmarket', 'prediction-market')} outcome. A lead to investigate, NOT proof of insider info: it surfaces statistical fingerprints, and most hits are coincidence or hedging. Speculative and educational.` },
+    brief: { level: 'confirm', one: `A rule-based synthesis of three individually weak/unproven signals (${L('forecast', 'forecast')}, crowd, ${L('sharpmoney', 'sharp money')}) plus the ${L('regime', 'regime')} — which is weighted heaviest as the only proven lever. The equity translation is a mapping, not a return forecast. Read it as "what the prediction layer leans," then confirm.` },
   };
   function trustBadgeHTML(sub) {
     const tr = TRUST[sub]; if (!tr) return '';
@@ -4810,6 +4836,165 @@
     const meta = document.getElementById('today-meta'); if (meta) meta.textContent = `· ${regLbl} · ${clbl} tape`;
   }
   document.getElementById('today-refresh-btn')?.addEventListener('click', runTodayUI);
+
+  // ── 🧭 PREDICTION BRIEF — synthesize Forecast + Crowd + Sharp into one read ─────
+  // Deterministic synthesis (no LLM): a consensus stance, a 3-signal agreement check,
+  // and an equity-translation layer mapping macro signals → affected sectors.
+  const SECTOR_NAME = { XLK: 'Tech', XLF: 'Financials', XLE: 'Energy', XLV: 'Health Care', XLY: 'Cons Disc', XLP: 'Staples', XLI: 'Industrials', XLU: 'Utilities', XLRE: 'Real Estate', XLB: 'Materials', XLC: 'Comm Svcs', IWM: 'Small Caps', SPY: 'S&P 500' };
+  const THEME_LABEL = { ratecut: 'rate cuts', ratehike: 'rate hikes', inflation: 'inflation', recession: 'recession', volatility: 'volatility', labor: 'jobs data', fed: 'Fed policy', equitylevel: 'index levels' };
+  const THEME_RISK = { recession: -1, volatility: -1, ratecut: 1, ratehike: -1, inflation: -1 };
+  const THEME_SECTORS = {
+    ratecut:    { fav: ['XLRE', 'XLU', 'IWM'], why: 'rate-cut odds active (rate-sensitive)' },
+    ratehike:   { fav: ['XLF'], pre: ['XLRE', 'XLU', 'XLK'], why: 'higher-for-longer odds' },
+    inflation:  { fav: ['XLE'], pre: ['XLK', 'XLY'], why: 'inflation in play' },
+    recession:  { fav: ['XLP', 'XLU', 'XLV'], pre: ['XLY', 'XLF', 'XLI'], why: 'recession odds active' },
+    volatility: { pre: ['SPY'], why: 'volatility bid (broad risk-off)' },
+  };
+  const briefSign = x => (x > 0.05 ? 1 : x < -0.05 ? -1 : 0);
+  function classifyMkt(title) {
+    const t = (title || '').toLowerCase();
+    if (/recession/.test(t)) return 'recession';
+    if (/\bvix\b|volatility/.test(t)) return 'volatility';
+    if (/cut/.test(t) && /rate|fed|fund/.test(t)) return 'ratecut';
+    if (/(hike|raise|increase)/.test(t) && /rate|fed|fund/.test(t)) return 'ratehike';
+    if (/cpi|inflation|pce/.test(t)) return 'inflation';
+    if (/jobs|payroll|unemployment|labor/.test(t)) return 'labor';
+    if (/s&p|nasdaq|dow jones/.test(t)) return 'equitylevel';
+    if (/\bfed\b|fomc|federal funds/.test(t)) return 'fed';
+    return null;
+  }
+  // Risk lean of a prediction-market move: theme risk × which side the crowd is bidding.
+  function mktLean(m) {
+    const theme = classifyMkt(m.title); const base = THEME_RISK[theme];
+    if (!base) return { theme, lean: 0 };
+    const prev = m.probPrev != null ? m.probPrev : m.prob;
+    const oddsUp = (m.prob || 0) >= prev;
+    const mag = Math.min(Math.abs((m.prob || 0) - prev) * 4, 1) || 0.1;
+    return { theme, lean: base * (oddsUp ? 1 : -1) * mag };
+  }
+  function aggLean(markets) {
+    let lean = 0; const themes = {};
+    (markets || []).forEach(m => { const r = mktLean(m); lean += r.lean; if (r.theme) themes[r.theme] = (themes[r.theme] || 0) + 1; });
+    return { lean, themes };
+  }
+  // Bullishness of a forecast call (weighted by confidence).
+  function fcBull(c) {
+    const s = (c.subject || '').toUpperCase(), d = c.direction, w = (c.confidence || 5) / 5;
+    let b = 0;
+    if (/^(SPY|QQQ|IWM|DIA)$/.test(s)) b = d === 'up' ? 1 : d === 'down' ? -1 : 0;
+    else if (s === '^VIX' || s === 'VIX') b = d === 'up' ? -1 : d === 'down' ? 1 : 0;
+    else if (/^XL/.test(s)) {
+      const cyc = /XLK|XLY|XLF|XLI|XLB|XLC/.test(s), def = /XLP|XLU|XLV|XLRE/.test(s);
+      if (d === 'outperform') b = cyc ? 0.6 : def ? -0.3 : 0.3;
+      else if (d === 'underperform') b = cyc ? -0.6 : def ? 0.3 : -0.3;
+      else b = d === 'up' ? 0.4 : d === 'down' ? -0.4 : 0;
+    } else b = d === 'up' ? 0.3 : d === 'down' ? -0.3 : 0;
+    return b * w;
+  }
+  function synthBrief(predict, crowd, tape) {
+    const reg = (tape && tape.ok) ? tape.regime : 'neutral';
+    const cond = (tape && tape.ok) ? tape.condition : 'mixed';
+    const regScore = reg === 'risk-on' ? 1 : reg === 'risk-off' ? -1 : 0;
+    // Forecast lean
+    const open = (predict && predict.ok && predict.open) || [];
+    const fcLean = open.reduce((s, c) => s + fcBull(c), 0);
+    const topFc = open.slice().sort((a, b) => (b.confidence || 0) - (a.confidence || 0))[0] || null;
+    // Crowd + Sharp leans / themes
+    const unusual = (crowd && crowd.ok && crowd.unusual) || [];
+    const sharp = (crowd && crowd.ok && crowd.sharp) || [];
+    const cAgg = aggLean(unusual), sAgg = aggLean(sharp);
+    const topMover = unusual.slice().sort((a, b) => (b.movePts || 0) - (a.movePts || 0))[0] || null;
+    const themes = {}; [cAgg.themes, sAgg.themes].forEach(tm => Object.entries(tm).forEach(([k, v]) => themes[k] = (themes[k] || 0) + v));
+    // Consensus (regime weighted most — it's the project's proven lever)
+    const consensus = 0.45 * regScore + 0.30 * briefSign(fcLean) + 0.15 * briefSign(cAgg.lean) + 0.10 * briefSign(sAgg.lean);
+    const cSign = briefSign(consensus);
+    let stance, col;
+    if (cSign > 0) { stance = 'Constructive / risk-on'; col = 'var(--green)'; }
+    else if (cSign < 0) { stance = 'Defensive / risk-off'; col = 'var(--red)'; }
+    else { stance = 'Mixed — no clear edge'; col = 'var(--amber,#f59e0b)'; }
+    if (cSign > 0 && cond === 'choppy') stance = 'Cautious risk-on';
+    // Agreement among the 3 tabs
+    const sigs = [
+      { name: 'Forecast', go: 'forecast', sign: briefSign(fcLean) },
+      { name: 'Crowd', go: 'crowd', sign: briefSign(cAgg.lean) },
+      { name: 'Sharp', go: 'sharp', sign: briefSign(sAgg.lean) },
+    ];
+    const active = sigs.filter(s => s.sign !== 0);
+    const agree = active.filter(s => s.sign === cSign).length;
+    // Equity translation
+    const favM = new Map(), preM = new Map();
+    const addFav = (e, why) => { if (!favM.has(e)) favM.set(e, why); };
+    const addPre = (e, why) => { if (!preM.has(e)) preM.set(e, why); };
+    if (regScore > 0) ['XLK', 'XLY', 'XLF', 'XLI'].forEach(e => addFav(e, 'risk-on regime'));
+    else if (regScore < 0) { ['XLP', 'XLU', 'XLV'].forEach(e => addFav(e, 'risk-off — defensives lead')); ['XLK', 'XLY', 'XLF'].forEach(e => addPre(e, 'cyclicals lag risk-off')); }
+    open.forEach(c => { const s = (c.subject || '').toUpperCase(); if (/^XL/.test(s)) { if (c.direction === 'outperform') addFav(s, 'forecast: outperform'); else if (c.direction === 'underperform') addPre(s, 'forecast: underperform'); } });
+    Object.keys(themes).forEach(th => { const ts = THEME_SECTORS[th]; if (!ts) return; (ts.fav || []).forEach(e => addFav(e, ts.why)); (ts.pre || []).forEach(e => addPre(e, ts.why)); });
+    favM.forEach((_, e) => preM.delete(e));   // favored wins conflicts
+    const favored = [...favM].slice(0, 5).map(([etf, why]) => ({ etf, name: SECTOR_NAME[etf] || etf, why }));
+    const pressured = [...preM].slice(0, 5).map(([etf, why]) => ({ etf, name: SECTOR_NAME[etf] || etf, why }));
+    return {
+      stance, col, regime: reg, cond, efficiency: (tape && tape.ok) ? tape.efficiency : null,
+      fcLean: briefSign(fcLean), topFc, crowdLean: briefSign(cAgg.lean), topMover, sharpLean: briefSign(sAgg.lean),
+      sharpCount: sharp.length, themes: Object.keys(themes).sort((a, b) => themes[b] - themes[a]),
+      sigs, agree, activeCount: active.length, favored, pressured,
+      forecastAcc: (predict && predict.ok) ? predict.accuracy : null,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+  const LEAN_TXT = { 1: ['▲', 'bullish', 'var(--green)'], '-1': ['▼', 'bearish', 'var(--red)'], 0: ['▬', 'neutral', 'var(--text-dim)'] };
+  let briefLoaded = false;
+  function ensureBrief() { if (!briefLoaded) { briefLoaded = true; runBriefUI(); } }
+  async function runBriefUI() {
+    const el = document.getElementById('brief-container'); if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Synthesizing forecasts, the crowd &amp; sharp money…</p></div>`;
+    try {
+      const [predict, crowd, tape] = await Promise.all([
+        fetch('/api/tracker?op=predict').then(r => r.json()).catch(() => null),
+        fetch('/api/tracker?op=crowd').then(r => r.json()).catch(() => null),
+        fetch('/api/tracker?op=tape').then(r => r.json()).catch(() => null),
+      ]);
+      renderBrief(synthBrief(predict, crowd, tape));
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not build the brief.</p></div>`; }
+  }
+  function briefSignalRow(s, b) {
+    const [ar, lbl, c] = LEAN_TXT[s.sign] || LEAN_TXT[0];
+    let detail = '';
+    if (s.name === 'Forecast') detail = b.topFc ? `${esc(b.topFc.claim || b.topFc.text || '')}` : 'no open forecasts';
+    else if (s.name === 'Crowd') detail = b.topMover ? `${esc((b.topMover.title || '').slice(0, 48))} ${b.topMover.movePts ? '· ' + b.topMover.movePts + 'pt move' : ''}` : 'quiet';
+    else detail = b.sharpCount ? `${b.sharpCount} flagged informed bet${b.sharpCount > 1 ? 's' : ''}` : 'no active signal';
+    return `<div class="bt-ic-row brief-sig" data-go="${s.go}"><span><b>${s.name}</b> <span style="color:${c}">${ar} ${lbl}</span></span>`
+      + `<span class="dt-dim" style="text-align:right;max-width:60%">${detail}</span></div>`;
+  }
+  function renderBrief(b) {
+    const el = document.getElementById('brief-container'); if (!el) return;
+    const regLbl = (b.regime || '').toUpperCase();
+    // Hero stance
+    const hero = `<div class="rot-panel" style="border-left:4px solid ${b.col}"><div class="rot-head" style="font-size:1.05rem;color:${b.col}">🧭 ${esc(b.stance)}</div>`
+      + `<div class="rot-sub">Next 1–3 weeks. Market is <b>${L('regime', regLbl)}</b>, tape <b>${L('tape', b.cond)}</b>${b.efficiency != null ? ` <span class="dt-dim">(${L('trendEff', 'eff ' + b.efficiency)})</span>` : ''}. Synthesized from the three signals below — regime weighted heaviest (the proven lever).</div></div>`;
+    // The three signals
+    const signals = `<div class="rot-head" style="margin-top:14px">The three signals <span class="dt-dim">· tap to drill in</span></div>`
+      + `<div class="rot-panel" style="margin-top:6px">${b.sigs.map(s => briefSignalRow(s, b)).join('')}</div>`;
+    // Agreement
+    const agreeCol = b.agree >= 2 ? 'var(--green)' : b.activeCount >= 2 ? 'var(--amber,#f59e0b)' : 'var(--text-dim)';
+    const agreeNote = b.activeCount === 0 ? 'No directional signal active right now.' : b.agree >= 2 ? 'Independent signals agree — higher conviction.' : 'Signals diverge — lower conviction, stay selective.';
+    const agree = `<div class="dt-note" style="border-left-color:${agreeCol}"><b style="color:${agreeCol}">🤝 ${b.agree} of ${b.sigs.length} signals align.</b> ${agreeNote}</div>`;
+    // Equity translation
+    const chip = (x, cls) => `<span class="brief-eq ${cls}"><b>${esc(x.etf)}</b> ${esc(x.name)} <span class="dt-dim">· ${esc(x.why)}</span></span>`;
+    let equity = `<div class="rot-head" style="margin-top:14px">📊 What it implies for stocks</div>`;
+    if (b.favored.length || b.pressured.length) {
+      equity += `<div class="rot-panel" style="margin-top:6px">`;
+      if (b.favored.length) equity += `<div class="rot-sub" style="margin-bottom:6px"><b style="color:var(--green)">Favored:</b><br>${b.favored.map(x => chip(x, 'eq-fav')).join(' ')}</div>`;
+      if (b.pressured.length) equity += `<div class="rot-sub"><b style="color:var(--red)">Pressured:</b><br>${b.pressured.map(x => chip(x, 'eq-pre')).join(' ')}</div>`;
+      equity += `</div>`;
+    } else equity += `<div class="dt-note">No clear sector tilt from the current signals.</div>`;
+    if (b.themes.length) equity += `<div class="rot-sub dt-dim" style="margin-top:6px">Themes in play: ${b.themes.map(t => THEME_LABEL[t] || t).join(' · ')}.</div>`;
+    const trust = `<div class="trust-badge" style="margin-top:10px">${trustBadgeHTML('brief')}</div>`;
+    const caveat = `<div class="fade-caveats" style="margin-top:12px"><p>⚠️ <b>A synthesis, not advice.</b> This blends signals that are themselves weak/unproven — the equity translation is rule-based, not a forecast of returns. Read it as "what the prediction layer is leaning," then confirm with your own work.</p></div>`;
+    el.innerHTML = hero + signals + agree + equity + trust + caveat;
+    el.querySelectorAll('[data-go]').forEach(r => r.addEventListener('click', () => showTab(r.dataset.go)));
+    const gt = document.getElementById('brief-gen-time'); if (gt) gt.textContent = new Date(b.generatedAt).toLocaleTimeString();
+  }
+  document.getElementById('brief-refresh-btn')?.addEventListener('click', runBriefUI);
 
   // ── 🔮 FORECAST — falsifiable AI predictions, auto-graded against real prices ──
   let forecastLoaded = false;
