@@ -37,6 +37,7 @@ const { writeDay, readAllPicks, hasStore, writeApexDay, readAllApex, writeGhostD
         writeCStudyDay, readAllCStudyDays,
         readJSON, writeJSON } = require('../lib/store');
 const { fetchDailyHistory } = require('../lib/screener');
+const { wilson } = require('../lib/stats');
 const { analyzeVReversal } = require('../lib/vreversal');
 const alerts = require('../lib/alerts');
 const apex = require('../lib/apex');
@@ -2693,13 +2694,6 @@ async function runCernLockProbe(req, res) {
 const resolveApex = (candles, sig) => resolveTrade(candles, sig.date, sig.entry, sig.stop, sig.target);
 
 // Wilson score interval for a binomial proportion (z=1.645 → ~90%).
-function wilson(wins, n, z = 1.645) {
-  if (!n) return { lo: 0, hi: 0 };
-  const p = wins / n, z2 = z * z, denom = 1 + z2 / n;
-  const center = (p + z2 / (2 * n)) / denom;
-  const half = (z * Math.sqrt((p * (1 - p) + z2 / (4 * n)) / n)) / denom;
-  return { lo: Math.max(0, center - half), hi: Math.min(1, center + half) };
-}
 
 function aggApex(arr) {
   const n = arr.length;
