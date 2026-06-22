@@ -2046,6 +2046,7 @@ async function runCrowd(req, res) {
       sharp: sharp.slice(0, 20),
       sharpTop: sharpScored.slice(0, 12),
       recentEvents: (evLog.events || []).slice(0, 15),
+      sharpValidation: summarizeSharpValidation(evLog.events || []),
       counts: { kalshi: k.length, polymarket: p.length, scanned: scored.length, unusual: unusual.length, sharp: sharp.length },
       baselineDays, baselineReady: baselineDays >= 3, oiBaseline: Object.keys(prevOI).length > 0,
       generatedAt: new Date().toISOString(),
@@ -2078,6 +2079,48 @@ async function logSharpEvents(flagged, today) {
   log.events = events.slice(0, 120);   // rolling cap
   await writeSharpEvents(log);
   return { added, updated };
+}
+
+// Tell-type matchers for the by-tell validation breakdown.
+const SHARP_TELLS = { longshot: /longshot/, oibuild: /new money|open interest/, size: /size exceeds/, volume: /large volume/, latesurge: /late surge/, move: /odds move/ };
+
+// Resolve settled Kalshi sharp events against their actual outcome (did the bet's
+// side win?). Only attempts events likely past settlement, within a time budget.
+async function resolveSharpEvents(pm, deadlineMs) {
+  const log = await readSharpEvents();
+  const evs = log.events || [];
+  const now = Date.now();
+  const pending = evs.filter(e => !e.outcome && e.venue === 'Kalshi'
+    && (!e.daysToClose || now >= Date.parse(e.date + 'T00:00:00Z') + (e.daysToClose + 1) * 86400000));
+  let i = 0, resolved = 0;
+  const worker = async () => {
+    while (i < pending.length) {
+      if (Date.now() > deadlineMs) return;
+      const e = pending[i++];
+      const r = await pm.fetchKalshiResult(e.id);
+      if (r) { e.outcome = r.result; e.hit = (r.result === String(e.side || '').toLowerCase()); e.resolvedAt = new Date().toISOString(); resolved++; }
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+  if (resolved) await writeSharpEvents(log);
+  return resolved;
+}
+
+// Honest "does sharp money predict?" summary over resolved flagged bets.
+function summarizeSharpValidation(events) {
+  const res = (events || []).filter(e => e.outcome === 'yes' || e.outcome === 'no');
+  const hits = res.filter(e => e.hit).length;
+  const ci = wilson(hits, res.length);
+  const byTell = {};
+  for (const [k, rx] of Object.entries(SHARP_TELLS)) {
+    const sub = res.filter(e => (e.tells || []).some(t => rx.test(t)));
+    byTell[k] = { n: sub.length, hits: sub.filter(e => e.hit).length };
+  }
+  return {
+    n: res.length, hits, rate: res.length ? Math.round(hits / res.length * 100) : null,
+    wilsonLo: res.length ? Math.round(ci.lo * 100) : null, byTell,
+    pending: (events || []).filter(e => !e.outcome).length,
+  };
 }
 
 // op=crowdtick — cron: snapshot today's volume+OI (baseline) AND durably log any
@@ -2121,8 +2164,10 @@ async function runCrowdTick(req, res) {
       title: '🎲 Crowd swing: ' + swing.title, detail: `odds ${swing.prob > swing.probPrev ? 'rising' : 'falling'} ${Math.round(swing.movePts)}pts → ${Math.round((swing.prob || 0) * 100)}%`,
     });
     const alerted = await emitAlerts(alerts);
+    // 4) resolve any settled sharp events against their real outcome (validation)
+    const resolved = await resolveSharpEvents(pm, t0 + 18000).catch(() => 0);
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({ ok: true, date: today, snapshot: Object.keys(snap).length, kalshi: k.length, polymarket: p.length, flagged: flagged.length, logged, alerted, elapsedMs: Date.now() - t0 });
+    return res.json({ ok: true, date: today, snapshot: Object.keys(snap).length, kalshi: k.length, polymarket: p.length, flagged: flagged.length, logged, alerted, resolved, elapsedMs: Date.now() - t0 });
   } catch (e) {
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ ok: false, error: String(e && e.message || e), elapsedMs: Date.now() - t0 });

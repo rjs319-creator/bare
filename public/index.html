@@ -5109,8 +5109,21 @@
               + `<div class="rot-sub"><b>${fmtMoney(e.notional)}</b> · ${Math.round((e.prob || 0) * 100)}% odds ${tells}</div></div>`;
           }).join('');
     }
+    // 📊 Validation — does sharp money actually predict? (resolved bets vs outcome)
+    const v = d.sharpValidation || {};
+    const TELL_LBL = { longshot: '🎯 Longshot conviction', oibuild: '📈 OI build (new money)', size: '💰 Size > open positions', volume: '💧 Large volume', latesurge: '⏰ Late surge', move: '⚡ Sharp odds move' };
+    let predict = `<div class="rot-head" style="margin-top:16px">📊 Does it predict? <span class="dt-dim">· flagged bets vs actual outcome</span></div>`;
+    if (v.n >= 5) {
+      const lo = v.wilsonLo, col = lo != null && lo >= 50 ? 'var(--green)' : (v.rate >= 50 ? 'var(--amber,#f59e0b)' : 'var(--red)');
+      const verdict = lo != null && lo >= 50 ? 'a real edge — sharp money is beating chance' : v.rate >= 53 ? 'promising, but not yet proven (floor below 50%)' : 'no edge so far — near a coin flip';
+      const tells = Object.entries(TELL_LBL).map(([k, lbl]) => { const t = v.byTell[k]; return t && t.n >= 3 ? `<div class="bt-ic-row"><span>${lbl}</span><span style="color:${Math.round(t.hits / t.n * 100) >= 50 ? 'var(--green)' : 'var(--text-dim)'}">${Math.round(t.hits / t.n * 100)}%</span><span class="dt-dim">n=${t.n}</span></div>` : ''; }).join('');
+      predict += `<div class="dt-note" style="border-left-color:${col}"><b style="color:${col}">When flagged, the bet's side won ${v.rate}%</b> of ${v.n} resolved cases <span class="dt-dim">(${L('wilsonLB', 'floor ' + (lo != null ? lo + '%' : '—'))})</span>. <b style="color:${col}">Verdict: ${verdict}.</b></div>`;
+      if (tells) predict += `<div class="rot-panel" style="margin-top:6px"><div class="rot-sub" style="margin-bottom:4px"><b>Which tell carries it?</b> <span class="dt-dim">(hit rate by hallmark)</span></div>${tells}</div>`;
+    } else {
+      predict += `<div class="dt-note">⏳ <b>Validation building.</b> ${v.pending || 0} flagged bet${(v.pending || 0) === 1 ? '' : 's'} awaiting settlement${v.n ? `, ${v.n} resolved` : ''} — the hit rate shows once ≥5 settle (each resolves when its Kalshi contract finalizes). Every bet is graded against the real outcome, never self-scored.</div>`;
+    }
     const caveat = `<div class="fade-caveats" style="margin-top:14px"><p>⚠️ <b>Hallmarks, not proof.</b> This flags statistical fingerprints of informed betting — it does <i>not</i> detect actual insider trading, and most hits are coincidence, hedging, or rumor. A lead to investigate, never a signal to follow. Real money, real markets — but speculative.</p></div>`;
-    el.innerHTML = banner + trust + body + history + caveat;
+    el.innerHTML = banner + trust + predict + body + history + caveat;
     const gt = document.getElementById('sharp-gen-time'); if (gt && d.generatedAt) gt.textContent = new Date(d.generatedAt).toLocaleTimeString();
   }
   document.getElementById('sharp-refresh-btn')?.addEventListener('click', runSharpUI);
