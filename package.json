@@ -2,6 +2,11 @@
   "name": "market-news-app",
   "version": "1.0.0",
   "private": true,
+  "scripts": {
+    "test": "node --test",
+    "test:watch": "node --test --watch",
+    "check": "node --check api/*.js && node --check lib/*.js"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
     "@vercel/blob": "^2.4.0"
