@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { scoreMarkets, scoreSharp, buildBaseline, buildPrevOI, daysToClose } = require('../lib/predmarkets');
+const { scoreMarkets, scoreSharp, buildBaseline, buildPrevOI, daysToClose, summarizeSharpValidation } = require('../lib/predmarkets');
 
 const mkt = o => Object.assign({ venue: 'Kalshi', id: 't', group: 'CPI', title: 't', vol24: 0, volTotal: 0, oi: 0, liq: 0, prob: 0.5, probPrev: 0.5, closeTime: new Date(Date.now() + 3 * 86400000).toISOString() }, o);
 
@@ -76,4 +76,27 @@ test('scoreSharp flags fresh open-interest build (new money)', () => {
 test('scoreSharp ignores a phantom move from probPrev=0', () => {
   const m = mkt({ id: 'a', vol24: 9000, oi: 9000, prob: 0.24, probPrev: 0 });
   assert.equal(scoreSharp([m], {}, {})[0].lc, 0);             // no "from 0%" longshot signal
+});
+
+test('summarizeSharpValidation: hit rate + pending + by-tell', () => {
+  const evs = [
+    { outcome: 'yes', hit: true, tells: ['🎯 longshot conviction — bought YES from 9%'] },
+    { outcome: 'no', hit: false, tells: ['🎯 longshot conviction', '📈 new money — open interest +88%'] },
+    { outcome: 'no', hit: true, tells: ['📈 new money — open interest +50%'] },
+    { outcome: 'yes', hit: true, tells: ['💰 size exceeds open positions (aggressive)'] },
+    { id: 'p1' },   // unresolved
+  ];
+  const s = summarizeSharpValidation(evs);
+  assert.equal(s.n, 4);
+  assert.equal(s.hits, 3);
+  assert.equal(s.rate, 75);
+  assert.equal(s.pending, 1);
+  assert.deepEqual(s.byTell.longshot, { n: 2, hits: 1 });
+  assert.deepEqual(s.byTell.oibuild, { n: 2, hits: 1 });
+});
+
+test('summarizeSharpValidation: empty is null rate', () => {
+  const s = summarizeSharpValidation([]);
+  assert.equal(s.n, 0);
+  assert.equal(s.rate, null);
 });

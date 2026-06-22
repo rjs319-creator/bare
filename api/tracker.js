@@ -1936,27 +1936,9 @@ async function generatePredictions(ctx) {
 }
 
 // op=predict — live read: open predictions + the honest auto-graded track record.
-// Forecast calibration — is the AI's 1–10 confidence honest? Bucket resolved calls
-// by stated confidence and compare to the actual hit rate; Brier score + verdict.
-function computeCalibration(resolved) {
-  const r = resolved.filter(p => typeof p.confidence === 'number' && p.confidence >= 1 && p.confidence <= 10);
-  if (!r.length) return { n: 0 };
-  const BUCKETS = [['low', 'Low (1–5)', c => c <= 5], ['med', 'Med (6–7)', c => c >= 6 && c <= 7], ['high', 'High (8–10)', c => c >= 8]];
-  const buckets = BUCKETS.map(([key, label, test]) => {
-    const sub = r.filter(p => test(p.confidence)); const n = sub.length;
-    const correct = sub.filter(p => p.status === 'correct').length;
-    return { key, label, n, correct, stated: n ? Math.round(sub.reduce((s, p) => s + p.confidence, 0) / n * 10) : null, actual: n ? Math.round(correct / n * 100) : null };
-  });
-  const brier = r.reduce((s, p) => s + Math.pow(p.confidence / 10 - (p.status === 'correct' ? 1 : 0), 2), 0) / r.length;
-  const meanExp = r.reduce((s, p) => s + p.confidence / 10, 0) / r.length;
-  const meanAct = r.filter(p => p.status === 'correct').length / r.length;
-  const gap = meanAct - meanExp;
-  const verdict = gap < -0.08 ? 'overconfident' : gap > 0.08 ? 'underconfident' : 'well-calibrated';
-  return { n: r.length, buckets, brier: +brier.toFixed(3), meanStated: Math.round(meanExp * 100), meanActual: Math.round(meanAct * 100), gap: Math.round(gap * 100), verdict };
-}
-
 async function runPredict(req, res) {
   const pr = require('../lib/predict');
+  const { computeCalibration } = pr;
   const days = await readAllPredictDays();
   const all = []; days.forEach(dd => (dd.predictions || []).forEach(p => all.push({ ...p, regime: dd.regime, condition: dd.condition })));
   const open = all.filter(p => !p.status || p.status === 'pending').sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 12);
@@ -2069,7 +2051,7 @@ async function runCrowd(req, res) {
       sharp: sharp.slice(0, 20),
       sharpTop: sharpScored.slice(0, 12),
       recentEvents: (evLog.events || []).slice(0, 15),
-      sharpValidation: summarizeSharpValidation(evLog.events || []),
+      sharpValidation: pm.summarizeSharpValidation(evLog.events || []),
       crowdStudy: summarizeCrowdStudy(cdays),
       counts: { kalshi: k.length, polymarket: p.length, scanned: scored.length, unusual: unusual.length, sharp: sharp.length },
       baselineDays, baselineReady: baselineDays >= 3, oiBaseline: Object.keys(prevOI).length > 0,
@@ -2105,9 +2087,6 @@ async function logSharpEvents(flagged, today) {
   return { added, updated };
 }
 
-// Tell-type matchers for the by-tell validation breakdown.
-const SHARP_TELLS = { longshot: /longshot/, oibuild: /new money|open interest/, size: /size exceeds/, volume: /large volume/, latesurge: /late surge/, move: /odds move/ };
-
 // Resolve settled Kalshi sharp events against their actual outcome (did the bet's
 // side win?). Only attempts events likely past settlement, within a time budget.
 async function resolveSharpEvents(pm, deadlineMs) {
@@ -2128,23 +2107,6 @@ async function resolveSharpEvents(pm, deadlineMs) {
   await Promise.all(Array.from({ length: 6 }, worker));
   if (resolved) await writeSharpEvents(log);
   return resolved;
-}
-
-// Honest "does sharp money predict?" summary over resolved flagged bets.
-function summarizeSharpValidation(events) {
-  const res = (events || []).filter(e => e.outcome === 'yes' || e.outcome === 'no');
-  const hits = res.filter(e => e.hit).length;
-  const ci = wilson(hits, res.length);
-  const byTell = {};
-  for (const [k, rx] of Object.entries(SHARP_TELLS)) {
-    const sub = res.filter(e => (e.tells || []).some(t => rx.test(t)));
-    byTell[k] = { n: sub.length, hits: sub.filter(e => e.hit).length };
-  }
-  return {
-    n: res.length, hits, rate: res.length ? Math.round(hits / res.length * 100) : null,
-    wilsonLo: res.length ? Math.round(ci.lo * 100) : null, byTell,
-    pending: (events || []).filter(e => !e.outcome).length,
-  };
 }
 
 // ── CROWD-LEADS STUDY — does a themed crowd swing precede the sector's move? ─────
