@@ -2109,35 +2109,9 @@ async function resolveSharpEvents(pm, deadlineMs) {
   return resolved;
 }
 
-// ── CROWD-LEADS STUDY — does a themed crowd swing precede the sector's move? ─────
-// Each clean directional theme maps to a canonical sector ETF + expected direction
-// (for the YES side being bid; flipped when odds fall).
-const THEME_PRIMARY = {
-  ratecut:    { etf: 'XLRE', dir: 1, label: 'Real Estate' },
-  ratehike:   { etf: 'XLF',  dir: 1, label: 'Financials' },
-  inflation:  { etf: 'XLE',  dir: 1, label: 'Energy' },
-  recession:  { etf: 'XLP',  dir: 1, label: 'Staples' },
-  volatility: { etf: 'SPY',  dir: -1, label: 'S&P 500' },
-};
-const CSTUDY_HORIZONS = [5, 10, 21];
-
-// From the scored crowd markets, build study events for qualifying themed swings.
-function buildStudyEvents(scored, today) {
-  const { classifyMkt } = require('../lib/brief');
-  const out = [];
-  for (const m of scored) {
-    if (m.movePts < 12) continue;
-    const prim = THEME_PRIMARY[classifyMkt(m.title)]; if (!prim) continue;
-    const notion = m.venue === 'Polymarket' ? m.vol24 : m.vol24 * (m.prob || 0.5);
-    if (notion < 1000) continue;
-    const dtc = m.closeTime ? (Date.parse(m.closeTime) - Date.now()) / 86400000 : 999;
-    if (dtc > 120) continue;                                              // near-dated catalyst only
-    const oddsUp = (m.prob || 0) >= (m.probPrev != null ? m.probPrev : m.prob);
-    out.push({ id: m.id + '|' + today, date: today, title: m.title, theme: classifyMkt(m.title),
-      oddsUp, movePts: Math.round(m.movePts), etf: prim.etf, sectorLabel: prim.label, dir: prim.dir * (oddsUp ? 1 : -1), grades: {} });
-  }
-  return out;
-}
+// ── CROWD-LEADS STUDY — pure logic in lib/cstudy.js; resolution (store + fetch)
+// stays here. Does a themed crowd swing precede the implicated sector's move? ────
+const { CSTUDY_HORIZONS, buildStudyEvents, summarizeCrowdStudy } = require('../lib/cstudy');
 
 // Grade matured study events against the implicated sector's forward return.
 async function resolveCrowdStudy(deadlineMs) {
@@ -2163,26 +2137,6 @@ async function resolveCrowdStudy(deadlineMs) {
   }
   await Promise.all([...changed].map(dt => { const d = days.find(x => x.date === dt); return writeCStudyDay(dt, { events: d.events }); }));
   return graded;
-}
-
-// Honest summary: does the crowd lead the implicated sector?
-function summarizeCrowdStudy(days) {
-  const events = days.flatMap(d => d.events || []);
-  const byHorizon = {}, byTheme = {};
-  CSTUDY_HORIZONS.forEach(h => byHorizon[h] = { n: 0, hits: 0 });
-  let n = 0, hits = 0, pending = 0;
-  for (const e of events) {
-    const g = e.grades || {}; const hs = CSTUDY_HORIZONS.filter(h => g[h]);
-    if (!hs.length) { pending++; continue; }
-    for (const h of hs) {
-      byHorizon[h].n++; if (g[h].hit) byHorizon[h].hits++;
-      n++; if (g[h].hit) hits++;
-      const t = byTheme[e.theme] = byTheme[e.theme] || { n: 0, hits: 0 };
-      t.n++; if (g[h].hit) t.hits++;
-    }
-  }
-  const ci = wilson(hits, n);
-  return { n, hits, rate: n ? Math.round(hits / n * 100) : null, wilsonLo: n ? Math.round(ci.lo * 100) : null, byHorizon, byTheme, pending, events: events.length };
 }
 
 // op=crowdtick — cron: snapshot today's volume+OI (baseline) AND durably log any
@@ -2250,8 +2204,6 @@ async function runCrowdTick(req, res) {
 // ── 🧭 PREDICTION BRIEF — synthesis + forward validation against SPY ────────────
 // Gathers the three Predict signals (reusing their cached endpoints), synthesizes
 // one stance, and tracks whether that stance actually precedes SPY moves.
-const BRIEF_HORIZONS = [5, 10, 21];
-
 async function gatherBriefInputs(req) {
   const host = req.headers['x-forwarded-host'] || req.headers.host;
   const base = 'https://' + host + '/api/tracker?op=';
@@ -2260,44 +2212,9 @@ async function gatherBriefInputs(req) {
   return { predict, crowd, tape };
 }
 
-function spyOnOrAfter(candles, date) { for (let i = 0; i < candles.length; i++) if (candles[i].date >= date) return i; return -1; }
-
-// Forward hit of a stance/component sign vs SPY return over a horizon.
-function gradeForward(spy, fromDate, signed, h) {
-  if (!signed) return null;                       // neutral → not a directional call
-  const ai = spyOnOrAfter(spy, fromDate); if (ai < 0) return null;
-  const bi = ai + h; if (bi >= spy.length) return null;   // not matured
-  const ret = (spy[bi].close / spy[ai].close - 1) * 100;
-  return { hit: (signed > 0 ? ret > 0 : ret < 0), ret: +ret.toFixed(2), exitDate: spy[bi].date };
-}
-
-function summarizeValidation(days, spy) {
-  const comps = ['consensus', 'fcLean', 'crowdLean', 'sharpLean', 'regimeScore'];
-  const out = { n: 0, byHorizon: {}, byComponent: {} };
-  comps.forEach(c => out.byComponent[c] = { hits: 0, n: 0 });
-  BRIEF_HORIZONS.forEach(h => out.byHorizon[h] = { hits: 0, n: 0 });
-  let resolvedAny = 0;
-  for (const d of days) {
-    let dayResolved = false;
-    for (const h of BRIEF_HORIZONS) {
-      const g = spy && spy.length ? gradeForward(spy, d.date, d.consensus, h) : null;
-      if (!g) continue;
-      out.byHorizon[h].n++; if (g.hit) out.byHorizon[h].hits++; dayResolved = true;
-      for (const c of comps) { const r = gradeForward(spy, d.date, d[c], h); if (r) { out.byComponent[c].n++; if (r.hit) out.byComponent[c].hits++; } }
-    }
-    if (dayResolved) resolvedAny++;
-  }
-  out.n = resolvedAny;
-  // Overall = consensus across all horizons.
-  const allH = BRIEF_HORIZONS.reduce((a, h) => ({ hits: a.hits + out.byHorizon[h].hits, n: a.n + out.byHorizon[h].n }), { hits: 0, n: 0 });
-  const ci = wilson(allH.hits, allH.n);
-  out.overall = { hits: allH.hits, n: allH.n, rate: allH.n ? Math.round(allH.hits / allH.n * 100) : null, wilsonLo: allH.n ? Math.round(ci.lo * 100) : null };
-  return out;
-}
-
 // op=brief — live synthesis + the forward-validation track record.
 async function runBrief(req, res) {
-  const { computeBrief } = require('../lib/brief');
+  const { computeBrief, summarizeValidation } = require('../lib/brief');
   try {
     const { predict, crowd, tape } = await gatherBriefInputs(req);
     const brief = computeBrief(predict, crowd, tape);
@@ -2322,7 +2239,7 @@ async function runAlertFeed(req, res) {
 // op=brieftick — cron: log today's stance (with SPY close) + resolve matured days.
 async function runBriefTick(req, res) {
   if (!hasStore()) return res.json({ ok: false, error: 'Blob storage not configured.' });
-  const { computeBrief } = require('../lib/brief');
+  const { computeBrief, summarizeValidation } = require('../lib/brief');
   const t0 = Date.now();
   try {
     const { predict, crowd, tape } = await gatherBriefInputs(req);

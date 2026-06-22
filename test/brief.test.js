@@ -1,7 +1,10 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { computeBrief, classifyMkt, mktLean, fcBull, sign } = require('../lib/brief');
+const { computeBrief, classifyMkt, mktLean, fcBull, sign, gradeForward, summarizeValidation } = require('../lib/brief');
+
+// SPY candles rising 0.5%/day from 2026-06-01.
+const spyUp = (() => { const c = []; let px = 500; for (let i = 0; i < 30; i++) { c.push({ date: new Date(Date.UTC(2026, 5, 1) + i * 86400000).toISOString().slice(0, 10), close: +px.toFixed(2) }); px *= 1.005; } return c; })();
 
 test('sign applies a deadband around zero', () => {
   assert.equal(sign(0.2), 1);
@@ -68,4 +71,25 @@ test('computeBrief tolerates missing/failed inputs', () => {
   const b = computeBrief(null, null, null);
   assert.equal(b.tone, 'neutral');
   assert.equal(b.regime, 'neutral');
+});
+
+test('gradeForward: risk-on hits in a rising tape, risk-off misses, neutral ungraded', () => {
+  assert.equal(gradeForward(spyUp, '2026-06-02', 1, 5).hit, true);
+  assert.equal(gradeForward(spyUp, '2026-06-02', -1, 5).hit, false);
+  assert.equal(gradeForward(spyUp, '2026-06-02', 0, 5), null);
+});
+
+test('gradeForward: returns null when not matured', () => {
+  assert.equal(gradeForward(spyUp, '2026-06-28', 1, 21), null);
+});
+
+test('summarizeValidation: aggregates consensus + components across horizons', () => {
+  const days = [
+    { date: '2026-06-02', consensus: 1, regimeScore: 1, fcLean: 1, crowdLean: 0, sharpLean: 0 },
+    { date: '2026-06-03', consensus: -1, regimeScore: -1, fcLean: 0, crowdLean: 0, sharpLean: 0 },
+  ];
+  const v = summarizeValidation(days, spyUp);
+  assert.equal(v.n, 2);                          // both days resolved
+  assert.equal(v.overall.n, 6);                  // 2 days × 3 horizons
+  assert.equal(v.byComponent.regimeScore.hits, 3);   // risk-on day's regime hits all 3 horizons
 });
