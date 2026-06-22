@@ -4837,110 +4837,9 @@
   }
   document.getElementById('today-refresh-btn')?.addEventListener('click', runTodayUI);
 
-  // ── 🧭 PREDICTION BRIEF — synthesize Forecast + Crowd + Sharp into one read ─────
-  // Deterministic synthesis (no LLM): a consensus stance, a 3-signal agreement check,
-  // and an equity-translation layer mapping macro signals → affected sectors.
-  const SECTOR_NAME = { XLK: 'Tech', XLF: 'Financials', XLE: 'Energy', XLV: 'Health Care', XLY: 'Cons Disc', XLP: 'Staples', XLI: 'Industrials', XLU: 'Utilities', XLRE: 'Real Estate', XLB: 'Materials', XLC: 'Comm Svcs', IWM: 'Small Caps', SPY: 'S&P 500' };
-  const THEME_LABEL = { ratecut: 'rate cuts', ratehike: 'rate hikes', inflation: 'inflation', recession: 'recession', volatility: 'volatility', labor: 'jobs data', fed: 'Fed policy', equitylevel: 'index levels' };
-  const THEME_RISK = { recession: -1, volatility: -1, ratecut: 1, ratehike: -1, inflation: -1 };
-  const THEME_SECTORS = {
-    ratecut:    { fav: ['XLRE', 'XLU', 'IWM'], why: 'rate-cut odds active (rate-sensitive)' },
-    ratehike:   { fav: ['XLF'], pre: ['XLRE', 'XLU', 'XLK'], why: 'higher-for-longer odds' },
-    inflation:  { fav: ['XLE'], pre: ['XLK', 'XLY'], why: 'inflation in play' },
-    recession:  { fav: ['XLP', 'XLU', 'XLV'], pre: ['XLY', 'XLF', 'XLI'], why: 'recession odds active' },
-    volatility: { pre: ['SPY'], why: 'volatility bid (broad risk-off)' },
-  };
-  const briefSign = x => (x > 0.05 ? 1 : x < -0.05 ? -1 : 0);
-  function classifyMkt(title) {
-    const t = (title || '').toLowerCase();
-    if (/recession/.test(t)) return 'recession';
-    if (/\bvix\b|volatility/.test(t)) return 'volatility';
-    if (/cut/.test(t) && /rate|fed|fund/.test(t)) return 'ratecut';
-    if (/(hike|raise|increase)/.test(t) && /rate|fed|fund/.test(t)) return 'ratehike';
-    if (/cpi|inflation|pce/.test(t)) return 'inflation';
-    if (/jobs|payroll|unemployment|labor/.test(t)) return 'labor';
-    if (/s&p|nasdaq|dow jones/.test(t)) return 'equitylevel';
-    if (/\bfed\b|fomc|federal funds/.test(t)) return 'fed';
-    return null;
-  }
-  // Risk lean of a prediction-market move: theme risk × which side the crowd is bidding.
-  function mktLean(m) {
-    const theme = classifyMkt(m.title); const base = THEME_RISK[theme];
-    if (!base) return { theme, lean: 0 };
-    const prev = m.probPrev != null ? m.probPrev : m.prob;
-    const oddsUp = (m.prob || 0) >= prev;
-    const mag = Math.min(Math.abs((m.prob || 0) - prev) * 4, 1) || 0.1;
-    return { theme, lean: base * (oddsUp ? 1 : -1) * mag };
-  }
-  function aggLean(markets) {
-    let lean = 0; const themes = {};
-    (markets || []).forEach(m => { const r = mktLean(m); lean += r.lean; if (r.theme) themes[r.theme] = (themes[r.theme] || 0) + 1; });
-    return { lean, themes };
-  }
-  // Bullishness of a forecast call (weighted by confidence).
-  function fcBull(c) {
-    const s = (c.subject || '').toUpperCase(), d = c.direction, w = (c.confidence || 5) / 5;
-    let b = 0;
-    if (/^(SPY|QQQ|IWM|DIA)$/.test(s)) b = d === 'up' ? 1 : d === 'down' ? -1 : 0;
-    else if (s === '^VIX' || s === 'VIX') b = d === 'up' ? -1 : d === 'down' ? 1 : 0;
-    else if (/^XL/.test(s)) {
-      const cyc = /XLK|XLY|XLF|XLI|XLB|XLC/.test(s), def = /XLP|XLU|XLV|XLRE/.test(s);
-      if (d === 'outperform') b = cyc ? 0.6 : def ? -0.3 : 0.3;
-      else if (d === 'underperform') b = cyc ? -0.6 : def ? 0.3 : -0.3;
-      else b = d === 'up' ? 0.4 : d === 'down' ? -0.4 : 0;
-    } else b = d === 'up' ? 0.3 : d === 'down' ? -0.3 : 0;
-    return b * w;
-  }
-  function synthBrief(predict, crowd, tape) {
-    const reg = (tape && tape.ok) ? tape.regime : 'neutral';
-    const cond = (tape && tape.ok) ? tape.condition : 'mixed';
-    const regScore = reg === 'risk-on' ? 1 : reg === 'risk-off' ? -1 : 0;
-    // Forecast lean
-    const open = (predict && predict.ok && predict.open) || [];
-    const fcLean = open.reduce((s, c) => s + fcBull(c), 0);
-    const topFc = open.slice().sort((a, b) => (b.confidence || 0) - (a.confidence || 0))[0] || null;
-    // Crowd + Sharp leans / themes
-    const unusual = (crowd && crowd.ok && crowd.unusual) || [];
-    const sharp = (crowd && crowd.ok && crowd.sharp) || [];
-    const cAgg = aggLean(unusual), sAgg = aggLean(sharp);
-    const topMover = unusual.slice().sort((a, b) => (b.movePts || 0) - (a.movePts || 0))[0] || null;
-    const themes = {}; [cAgg.themes, sAgg.themes].forEach(tm => Object.entries(tm).forEach(([k, v]) => themes[k] = (themes[k] || 0) + v));
-    // Consensus (regime weighted most — it's the project's proven lever)
-    const consensus = 0.45 * regScore + 0.30 * briefSign(fcLean) + 0.15 * briefSign(cAgg.lean) + 0.10 * briefSign(sAgg.lean);
-    const cSign = briefSign(consensus);
-    let stance, col;
-    if (cSign > 0) { stance = 'Constructive / risk-on'; col = 'var(--green)'; }
-    else if (cSign < 0) { stance = 'Defensive / risk-off'; col = 'var(--red)'; }
-    else { stance = 'Mixed — no clear edge'; col = 'var(--amber,#f59e0b)'; }
-    if (cSign > 0 && cond === 'choppy') stance = 'Cautious risk-on';
-    // Agreement among the 3 tabs
-    const sigs = [
-      { name: 'Forecast', go: 'forecast', sign: briefSign(fcLean) },
-      { name: 'Crowd', go: 'crowd', sign: briefSign(cAgg.lean) },
-      { name: 'Sharp', go: 'sharp', sign: briefSign(sAgg.lean) },
-    ];
-    const active = sigs.filter(s => s.sign !== 0);
-    const agree = active.filter(s => s.sign === cSign).length;
-    // Equity translation
-    const favM = new Map(), preM = new Map();
-    const addFav = (e, why) => { if (!favM.has(e)) favM.set(e, why); };
-    const addPre = (e, why) => { if (!preM.has(e)) preM.set(e, why); };
-    if (regScore > 0) ['XLK', 'XLY', 'XLF', 'XLI'].forEach(e => addFav(e, 'risk-on regime'));
-    else if (regScore < 0) { ['XLP', 'XLU', 'XLV'].forEach(e => addFav(e, 'risk-off — defensives lead')); ['XLK', 'XLY', 'XLF'].forEach(e => addPre(e, 'cyclicals lag risk-off')); }
-    open.forEach(c => { const s = (c.subject || '').toUpperCase(); if (/^XL/.test(s)) { if (c.direction === 'outperform') addFav(s, 'forecast: outperform'); else if (c.direction === 'underperform') addPre(s, 'forecast: underperform'); } });
-    Object.keys(themes).forEach(th => { const ts = THEME_SECTORS[th]; if (!ts) return; (ts.fav || []).forEach(e => addFav(e, ts.why)); (ts.pre || []).forEach(e => addPre(e, ts.why)); });
-    favM.forEach((_, e) => preM.delete(e));   // favored wins conflicts
-    const favored = [...favM].slice(0, 5).map(([etf, why]) => ({ etf, name: SECTOR_NAME[etf] || etf, why }));
-    const pressured = [...preM].slice(0, 5).map(([etf, why]) => ({ etf, name: SECTOR_NAME[etf] || etf, why }));
-    return {
-      stance, col, regime: reg, cond, efficiency: (tape && tape.ok) ? tape.efficiency : null,
-      fcLean: briefSign(fcLean), topFc, crowdLean: briefSign(cAgg.lean), topMover, sharpLean: briefSign(sAgg.lean),
-      sharpCount: sharp.length, themes: Object.keys(themes).sort((a, b) => themes[b] - themes[a]),
-      sigs, agree, activeCount: active.length, favored, pressured,
-      forecastAcc: (predict && predict.ok) ? predict.accuracy : null,
-      generatedAt: new Date().toISOString(),
-    };
-  }
+  // ── 🧭 PREDICTION BRIEF — synthesis lives server-side in lib/brief.js (single
+  // source of truth, shared with the validation cron). The UI just renders op=brief.
+  const TONE_COL = { bull: 'var(--green)', bear: 'var(--red)', neutral: 'var(--amber,#f59e0b)' };
   const LEAN_TXT = { 1: ['▲', 'bullish', 'var(--green)'], '-1': ['▼', 'bearish', 'var(--red)'], 0: ['▬', 'neutral', 'var(--text-dim)'] };
   let briefLoaded = false;
   function ensureBrief() { if (!briefLoaded) { briefLoaded = true; runBriefUI(); } }
@@ -4948,12 +4847,9 @@
     const el = document.getElementById('brief-container'); if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Synthesizing forecasts, the crowd &amp; sharp money…</p></div>`;
     try {
-      const [predict, crowd, tape] = await Promise.all([
-        fetch('/api/tracker?op=predict').then(r => r.json()).catch(() => null),
-        fetch('/api/tracker?op=crowd').then(r => r.json()).catch(() => null),
-        fetch('/api/tracker?op=tape').then(r => r.json()).catch(() => null),
-      ]);
-      renderBrief(synthBrief(predict, crowd, tape));
+      const b = await fetch('/api/tracker?op=brief').then(r => r.json()).catch(() => null);
+      if (!b || !b.ok) { el.innerHTML = `<div class="mom-status error"><p>Could not build the brief.</p></div>`; return; }
+      renderBrief(b);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not build the brief.</p></div>`; }
   }
   function briefSignalRow(s, b) {
@@ -4968,8 +4864,10 @@
   function renderBrief(b) {
     const el = document.getElementById('brief-container'); if (!el) return;
     const regLbl = (b.regime || '').toUpperCase();
+    const col = TONE_COL[b.tone] || TONE_COL.neutral;
+    const TL = b.themeLabels || {};
     // Hero stance
-    const hero = `<div class="rot-panel" style="border-left:4px solid ${b.col}"><div class="rot-head" style="font-size:1.05rem;color:${b.col}">🧭 ${esc(b.stance)}</div>`
+    const hero = `<div class="rot-panel" style="border-left:4px solid ${col}"><div class="rot-head" style="font-size:1.05rem;color:${col}">🧭 ${esc(b.stance)}</div>`
       + `<div class="rot-sub">Next 1–3 weeks. Market is <b>${L('regime', regLbl)}</b>, tape <b>${L('tape', b.cond)}</b>${b.efficiency != null ? ` <span class="dt-dim">(${L('trendEff', 'eff ' + b.efficiency)})</span>` : ''}. Synthesized from the three signals below — regime weighted heaviest (the proven lever).</div></div>`;
     // The three signals
     const signals = `<div class="rot-head" style="margin-top:14px">The three signals <span class="dt-dim">· tap to drill in</span></div>`
@@ -4987,12 +4885,26 @@
       if (b.pressured.length) equity += `<div class="rot-sub"><b style="color:var(--red)">Pressured:</b><br>${b.pressured.map(x => chip(x, 'eq-pre')).join(' ')}</div>`;
       equity += `</div>`;
     } else equity += `<div class="dt-note">No clear sector tilt from the current signals.</div>`;
-    if (b.themes.length) equity += `<div class="rot-sub dt-dim" style="margin-top:6px">Themes in play: ${b.themes.map(t => THEME_LABEL[t] || t).join(' · ')}.</div>`;
+    if (b.themes.length) equity += `<div class="rot-sub dt-dim" style="margin-top:6px">Themes in play: ${b.themes.map(t => TL[t] || t).join(' · ')}.</div>`;
+    // Validation track record — does the stance actually precede SPY moves?
+    const v = b.validation || {};
+    let track = `<div class="rot-head" style="margin-top:16px">📊 Does it work? <span class="dt-dim">· stance vs forward SPY, auto-graded</span></div>`;
+    if (v.overall && v.overall.n >= 8) {
+      const o = v.overall, lo = o.wilsonLo;
+      const tc = lo != null && lo >= 50 ? 'var(--green)' : (o.rate >= 50 ? 'var(--amber,#f59e0b)' : 'var(--red)');
+      const bh = [5, 10, 21].map(h => { const x = v.byHorizon[h]; return x && x.n ? `${h}d ${Math.round(x.hits / x.n * 100)}% (${x.n})` : null; }).filter(Boolean).join(' · ');
+      const comps = [['regimeScore', 'Regime'], ['fcLean', 'Forecast'], ['crowdLean', 'Crowd'], ['sharpLean', 'Sharp']]
+        .map(([k, lbl]) => { const c = v.byComponent[k]; return c && c.n >= 5 ? `<div class="bt-ic-row"><span>${lbl}</span><span style="color:${Math.round(c.hits / c.n * 100) >= 50 ? 'var(--green)' : 'var(--text-dim)'}">${Math.round(c.hits / c.n * 100)}%</span><span class="dt-dim">n=${c.n}</span></div>` : ''; }).join('');
+      track += `<div class="dt-note" style="border-left-color:${tc}"><b style="color:${tc}">Stance hit rate: ${o.rate}%</b> of ${o.n} resolved calls (${L('wilsonLB', 'floor ' + (lo != null ? lo + '%' : '—'))}).${bh ? ` <span class="dt-dim">By horizon: ${bh}.</span>` : ''}</div>`;
+      if (comps) track += `<div class="rot-panel" style="margin-top:6px"><div class="rot-sub" style="margin-bottom:4px"><b>Which signal carries it?</b> <span class="dt-dim">(hit rate vs forward SPY)</span></div>${comps}</div>`;
+    } else {
+      track += `<div class="dt-note">⏳ <b>Track record building.</b> ${v.logged || 0} daily stance${(v.logged || 0) === 1 ? '' : 's'} logged${v.n ? `, ${v.n} resolved` : ''} — the hit rate shows once ≥8 mature (first resolves 5 trading days after logging). Every stance is graded against real SPY moves, never self-scored.</div>`;
+    }
     const trust = `<div class="trust-badge" style="margin-top:10px">${trustBadgeHTML('brief')}</div>`;
     const caveat = `<div class="fade-caveats" style="margin-top:12px"><p>⚠️ <b>A synthesis, not advice.</b> This blends signals that are themselves weak/unproven — the equity translation is rule-based, not a forecast of returns. Read it as "what the prediction layer is leaning," then confirm with your own work.</p></div>`;
-    el.innerHTML = hero + signals + agree + equity + trust + caveat;
+    el.innerHTML = hero + signals + agree + equity + track + trust + caveat;
     el.querySelectorAll('[data-go]').forEach(r => r.addEventListener('click', () => showTab(r.dataset.go)));
-    const gt = document.getElementById('brief-gen-time'); if (gt) gt.textContent = new Date(b.generatedAt).toLocaleTimeString();
+    const gt = document.getElementById('brief-gen-time'); if (gt && b.generatedAt) gt.textContent = new Date(b.generatedAt).toLocaleTimeString();
   }
   document.getElementById('brief-refresh-btn')?.addEventListener('click', runBriefUI);
 

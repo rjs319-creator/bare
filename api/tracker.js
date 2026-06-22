@@ -32,6 +32,7 @@ const { writeDay, readAllPicks, hasStore, writeApexDay, readAllApex, writeGhostD
         writePredictDay, readAllPredictDays,
         writePredmktDay, readAllPredmktDays,
         readSharpEvents, writeSharpEvents,
+        writeBriefDay, readAllBriefDays,
         readJSON, writeJSON } = require('../lib/store');
 const { fetchDailyHistory } = require('../lib/screener');
 const { analyzeVReversal } = require('../lib/vreversal');
@@ -2093,6 +2094,100 @@ async function runCrowdTick(req, res) {
   }
 }
 
+// ── 🧭 PREDICTION BRIEF — synthesis + forward validation against SPY ────────────
+// Gathers the three Predict signals (reusing their cached endpoints), synthesizes
+// one stance, and tracks whether that stance actually precedes SPY moves.
+const BRIEF_HORIZONS = [5, 10, 21];
+
+async function gatherBriefInputs(req) {
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  const base = 'https://' + host + '/api/tracker?op=';
+  const get = op => fetch(base + op, { headers: { 'x-warm': '1' } }).then(r => r.json()).catch(() => null);
+  const [predict, crowd, tape] = await Promise.all([get('predict'), get('crowd'), get('tape')]);
+  return { predict, crowd, tape };
+}
+
+function spyOnOrAfter(candles, date) { for (let i = 0; i < candles.length; i++) if (candles[i].date >= date) return i; return -1; }
+
+// Forward hit of a stance/component sign vs SPY return over a horizon.
+function gradeForward(spy, fromDate, signed, h) {
+  if (!signed) return null;                       // neutral → not a directional call
+  const ai = spyOnOrAfter(spy, fromDate); if (ai < 0) return null;
+  const bi = ai + h; if (bi >= spy.length) return null;   // not matured
+  const ret = (spy[bi].close / spy[ai].close - 1) * 100;
+  return { hit: (signed > 0 ? ret > 0 : ret < 0), ret: +ret.toFixed(2), exitDate: spy[bi].date };
+}
+
+function summarizeValidation(days, spy) {
+  const comps = ['consensus', 'fcLean', 'crowdLean', 'sharpLean', 'regimeScore'];
+  const out = { n: 0, byHorizon: {}, byComponent: {} };
+  comps.forEach(c => out.byComponent[c] = { hits: 0, n: 0 });
+  BRIEF_HORIZONS.forEach(h => out.byHorizon[h] = { hits: 0, n: 0 });
+  let resolvedAny = 0;
+  for (const d of days) {
+    let dayResolved = false;
+    for (const h of BRIEF_HORIZONS) {
+      const g = spy && spy.length ? gradeForward(spy, d.date, d.consensus, h) : null;
+      if (!g) continue;
+      out.byHorizon[h].n++; if (g.hit) out.byHorizon[h].hits++; dayResolved = true;
+      for (const c of comps) { const r = gradeForward(spy, d.date, d[c], h); if (r) { out.byComponent[c].n++; if (r.hit) out.byComponent[c].hits++; } }
+    }
+    if (dayResolved) resolvedAny++;
+  }
+  out.n = resolvedAny;
+  // Overall = consensus across all horizons.
+  const allH = BRIEF_HORIZONS.reduce((a, h) => ({ hits: a.hits + out.byHorizon[h].hits, n: a.n + out.byHorizon[h].n }), { hits: 0, n: 0 });
+  const ci = wilson(allH.hits, allH.n);
+  out.overall = { hits: allH.hits, n: allH.n, rate: allH.n ? Math.round(allH.hits / allH.n * 100) : null, wilsonLo: allH.n ? Math.round(ci.lo * 100) : null };
+  return out;
+}
+
+// op=brief — live synthesis + the forward-validation track record.
+async function runBrief(req, res) {
+  const { computeBrief } = require('../lib/brief');
+  try {
+    const { predict, crowd, tape } = await gatherBriefInputs(req);
+    const brief = computeBrief(predict, crowd, tape);
+    const [days, spyDoc] = await Promise.all([readAllBriefDays().catch(() => []), fetchDailyHistory('SPY').catch(() => null)]);
+    const validation = summarizeValidation(days, spyDoc && spyDoc.candles);
+    validation.logged = days.length;
+    res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=86400');
+    return res.json({ ok: true, ...brief, validation, generatedAt: new Date().toISOString() });
+  } catch (e) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: false, error: String(e && e.message || e) });
+  }
+}
+
+// op=brieftick — cron: log today's stance (with SPY close) + resolve matured days.
+async function runBriefTick(req, res) {
+  if (!hasStore()) return res.json({ ok: false, error: 'Blob storage not configured.' });
+  const { computeBrief } = require('../lib/brief');
+  const t0 = Date.now();
+  try {
+    const { predict, crowd, tape } = await gatherBriefInputs(req);
+    const b = computeBrief(predict, crowd, tape);
+    const spyDoc = await fetchDailyHistory('SPY').catch(() => null);
+    const spy = (spyDoc && spyDoc.candles) || [];
+    const asOf = spy.length ? spy[spy.length - 1].date : new Date().toISOString().slice(0, 10);
+    const days = await readAllBriefDays().catch(() => []);
+    let logged = false;
+    if (!days.some(d => d.date === asOf)) {
+      await writeBriefDay(asOf, {
+        consensus: b.consensus, fcLean: b.fcLean, crowdLean: b.crowdLean, sharpLean: b.sharpLean, regimeScore: b.regimeScore,
+        stance: b.stance, regime: b.regime, cond: b.cond, spyClose: spy.length ? spy[spy.length - 1].close : null,
+      });
+      logged = true;
+    }
+    const val = summarizeValidation(logged ? [...days, { date: asOf, consensus: b.consensus }] : days, spy);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: true, asOf, logged, stance: b.stance, resolvedDays: val.n, overall: val.overall, elapsedMs: Date.now() - t0 });
+  } catch (e) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: false, error: String(e && e.message || e), elapsedMs: Date.now() - t0 });
+  }
+}
+
 // ── op=tape : the current MARKET CONDITION (shared badge across all screeners) ──
 // Lightweight: one SPY read + macro → trending / choppy / mixed / risk-off, so every
 // screener tab can show the same tape context (and adapt to it).
@@ -2984,6 +3079,8 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'predicttick') return runPredictTick(req, res);
   if (req.query.op === 'crowd') return runCrowd(req, res);
   if (req.query.op === 'crowdtick') return runCrowdTick(req, res);
+  if (req.query.op === 'brief') return runBrief(req, res);
+  if (req.query.op === 'brieftick') return runBriefTick(req, res);
   if (req.query.op === 'tape') return runTape(req, res);
   if (req.query.op === 'fadesignals') return runFadeSignals(req, res);
   if (req.query.op === 'fadetick') return runFadeTick(req, res);
