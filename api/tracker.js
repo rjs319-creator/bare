@@ -33,6 +33,7 @@ const { writeDay, readAllPicks, hasStore, writeApexDay, readAllApex, writeGhostD
         writePredmktDay, readAllPredmktDays,
         readSharpEvents, writeSharpEvents,
         writeBriefDay, readAllBriefDays,
+        readNotifyFeed, writeNotifyFeed,
         readJSON, writeJSON } = require('../lib/store');
 const { fetchDailyHistory } = require('../lib/screener');
 const { analyzeVReversal } = require('../lib/vreversal');
@@ -2002,6 +2003,22 @@ async function runPredictTick(req, res) {
 // A crowd-sentiment radar, not a proven edge (see the trust badge in the UI).
 const todayUTC = () => new Date().toISOString().slice(0, 10);
 
+// Append new alerts to the durable feed (dedup by id, newest first, rolling cap).
+async function emitAlerts(newItems) {
+  if (!newItems || !newItems.length) return 0;
+  const feed = await readNotifyFeed().catch(() => ({ items: [] }));
+  const items = feed.items || [];
+  const have = new Set(items.map(i => i.id));
+  let added = 0;
+  for (const it of newItems) {
+    if (!it || have.has(it.id)) continue;
+    items.unshift({ ts: new Date().toISOString(), ...it });
+    have.add(it.id); added++;
+  }
+  if (added) { feed.items = items.slice(0, 80); await writeNotifyFeed(feed); }
+  return added;
+}
+
 // op=crowd — live read: scored markets (unusual first) + baseline status.
 async function runCrowd(req, res) {
   const pm = require('../lib/predmarkets');
@@ -2086,8 +2103,26 @@ async function runCrowdTick(req, res) {
     const prevOI = pm.buildPrevOI(days, today);
     const flagged = pm.scoreSharp(all, baseline, prevOI).filter(m => m.sharpFlag);
     const logged = await logSharpEvents(flagged, today);
+    // 3) emit alerts — every flagged sharp bet + the single biggest macro crowd swing
+    const { classifyMkt } = require('../lib/brief');
+    const alerts = flagged.map(m => ({
+      id: 'sharp|' + m.id + '|' + today, type: 'sharp', sev: 'high', go: 'sharp',
+      title: '🕵️ Sharp money: ' + m.title, detail: (m.tells || []).slice(0, 2).join(' · ') + ' · ~$' + m.notional,
+    }));
+    const swing = pm.scoreMarkets(all, baseline).filter(m => {
+      if (m.movePts < 18 || !classifyMkt(m.title)) return false;          // big macro move
+      const notion = m.venue === 'Polymarket' ? m.vol24 : m.vol24 * (m.prob || 0.5);
+      if (notion < 1000) return false;                                    // real money, not a thin strike
+      const days = m.closeTime ? (Date.parse(m.closeTime) - Date.now()) / 86400000 : 999;
+      return days <= 120;                                                 // near-dated enough to matter
+    }).sort((a, b) => b.movePts - a.movePts)[0];
+    if (swing) alerts.push({
+      id: 'crowd|' + swing.id + '|' + today, type: 'crowd', sev: 'med', go: 'crowd',
+      title: '🎲 Crowd swing: ' + swing.title, detail: `odds ${swing.prob > swing.probPrev ? 'rising' : 'falling'} ${Math.round(swing.movePts)}pts → ${Math.round((swing.prob || 0) * 100)}%`,
+    });
+    const alerted = await emitAlerts(alerts);
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({ ok: true, date: today, snapshot: Object.keys(snap).length, kalshi: k.length, polymarket: p.length, flagged: flagged.length, logged, elapsedMs: Date.now() - t0 });
+    return res.json({ ok: true, date: today, snapshot: Object.keys(snap).length, kalshi: k.length, polymarket: p.length, flagged: flagged.length, logged, alerted, elapsedMs: Date.now() - t0 });
   } catch (e) {
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ ok: false, error: String(e && e.message || e), elapsedMs: Date.now() - t0 });
@@ -2159,6 +2194,13 @@ async function runBrief(req, res) {
   }
 }
 
+// op=alertfeed — read the durable Predict alerts feed (UI consumes; cron writes it).
+async function runAlertFeed(req, res) {
+  const feed = await readNotifyFeed().catch(() => ({ items: [] }));
+  res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=86400');
+  return res.json({ ok: true, items: (feed.items || []).slice(0, 50), generatedAt: new Date().toISOString() });
+}
+
 // op=brieftick — cron: log today's stance (with SPY close) + resolve matured days.
 async function runBriefTick(req, res) {
   if (!hasStore()) return res.json({ ok: false, error: 'Blob storage not configured.' });
@@ -2171,17 +2213,23 @@ async function runBriefTick(req, res) {
     const spy = (spyDoc && spyDoc.candles) || [];
     const asOf = spy.length ? spy[spy.length - 1].date : new Date().toISOString().slice(0, 10);
     const days = await readAllBriefDays().catch(() => []);
-    let logged = false;
+    let logged = false, alerted = 0;
     if (!days.some(d => d.date === asOf)) {
       await writeBriefDay(asOf, {
         consensus: b.consensus, fcLean: b.fcLean, crowdLean: b.crowdLean, sharpLean: b.sharpLean, regimeScore: b.regimeScore,
         stance: b.stance, regime: b.regime, cond: b.cond, spyClose: spy.length ? spy[spy.length - 1].close : null,
       });
       logged = true;
+      // Alert on a stance FLIP (sign change vs the last logged day) — a rare, high-value event.
+      const prev = days[days.length - 1];
+      if (prev && prev.consensus !== b.consensus && b.consensus !== 0) {
+        alerted = await emitAlerts([{ id: 'stance|' + asOf, type: 'stance', sev: 'high', go: 'brief',
+          title: '🧭 Brief flipped to ' + b.stance, detail: `was "${prev.stance || '—'}" — the prediction layer changed direction` }]);
+      }
     }
     const val = summarizeValidation(logged ? [...days, { date: asOf, consensus: b.consensus }] : days, spy);
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({ ok: true, asOf, logged, stance: b.stance, resolvedDays: val.n, overall: val.overall, elapsedMs: Date.now() - t0 });
+    return res.json({ ok: true, asOf, logged, alerted, stance: b.stance, resolvedDays: val.n, overall: val.overall, elapsedMs: Date.now() - t0 });
   } catch (e) {
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ ok: false, error: String(e && e.message || e), elapsedMs: Date.now() - t0 });
@@ -3081,6 +3129,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'crowdtick') return runCrowdTick(req, res);
   if (req.query.op === 'brief') return runBrief(req, res);
   if (req.query.op === 'brieftick') return runBriefTick(req, res);
+  if (req.query.op === 'alertfeed') return runAlertFeed(req, res);
   if (req.query.op === 'tape') return runTape(req, res);
   if (req.query.op === 'fadesignals') return runFadeSignals(req, res);
   if (req.query.op === 'fadetick') return runFadeTick(req, res);

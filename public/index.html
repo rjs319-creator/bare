@@ -1629,6 +1629,11 @@
     .brief-eq { display: inline-block; font-size: 0.72rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 3px 9px; margin: 3px 5px 0 0; }
     .brief-eq.eq-fav { border-left: 3px solid var(--green); }
     .brief-eq.eq-pre { border-left: 3px solid var(--red); }
+    /* 🔔 Alerts */
+    .nav-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; margin-left: 5px; border-radius: 999px; background: var(--red); color: #fff; font-size: 0.6rem; font-weight: 800; line-height: 1; vertical-align: middle; }
+    .alert-row { cursor: pointer; }
+    .alert-row.alert-unread { background: color-mix(in srgb, var(--amber, #f59e0b) 8%, var(--card)); }
+    .mbn-item .nav-badge, .mtt-item .nav-badge { position: relative; top: -6px; margin-left: 2px; }
   </style>
 </head>
 <body>
@@ -2453,6 +2458,23 @@
 
   <hr class="section-divider" />
 
+  <!-- 🔔 ALERTS — durable feed of Predict events (sharp flags, stance flips, crowd swings) -->
+  <section class="momentum-section" id="alerts">
+    <div class="section-label">
+      <div class="accent-bar" style="background:#f59e0b"></div>
+      <h2 style="color:#f59e0b">🔔 Alerts</h2>
+      <span class="label-meta">· sharp-money flags, stance flips &amp; major crowd swings — caught automatically</span>
+      <div class="label-action">
+        <button class="refresh-btn" style="color:#f59e0b" id="alerts-refresh-btn">⟳ Refresh</button>
+      </div>
+    </div>
+    <div id="alerts-container">
+      <div class="mom-status"><div class="mom-spinner"></div><p>Loading alerts…</p></div>
+    </div>
+  </section>
+
+  <hr class="section-divider" />
+
   <!-- OPTIONS FLOW -->
   <section class="options-section" id="options">
     <div class="section-label">
@@ -2492,7 +2514,7 @@
     start:     ['today', 'start'],
     screeners: ['screener', 'custom', 'daytrade', 'confluence', 'ghost', 'trendrider', 'fade'],
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
-    predict:   ['brief', 'forecast', 'crowd', 'sharp'],
+    predict:   ['brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     research:  ['backtest', 'events', 'edge'],
     track:     ['scoreboard', 'xalerts'],
   };
@@ -2502,7 +2524,7 @@
     today: '🏠 Today', start: '📘 Guide',
     screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', daytrade: '⚡ Day Trade', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
-    brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money',
+    brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
     scoreboard: '🏆 Scoreboard', xalerts: '🐦 Trade Alerts',
   };
@@ -2574,6 +2596,7 @@
     if (sub === 'forecast' && typeof ensureForecast === 'function') ensureForecast();
     if (sub === 'crowd' && typeof ensureCrowd === 'function') ensureCrowd();
     if (sub === 'sharp' && typeof ensureSharp === 'function') ensureSharp();
+    if (sub === 'alerts' && typeof ensureAlerts === 'function') ensureAlerts();
 
     const act = document.querySelector('.mobile-top-tabs .mtt-item.active');
     if (act) act.scrollIntoView({ inline: 'center', block: 'nearest', behavior: opts.instant ? 'auto' : 'smooth' });
@@ -5091,6 +5114,83 @@
     const gt = document.getElementById('sharp-gen-time'); if (gt && d.generatedAt) gt.textContent = new Date(d.generatedAt).toLocaleTimeString();
   }
   document.getElementById('sharp-refresh-btn')?.addEventListener('click', runSharpUI);
+
+  // ── 🔔 ALERTS — durable Predict feed + unread badge + opt-in browser notifications ──
+  const ALERT_ICON = { sharp: '🕵️', stance: '🧭', crowd: '🎲' };
+  const ALERT_COL = { high: 'var(--red)', med: 'var(--amber,#f59e0b)', low: 'var(--text-dim)' };
+  let alertsLoaded = false, alertItems = [];
+  const getSeen = () => { try { return +localStorage.getItem('notifySeen') || 0; } catch { return 0; } };
+  const setSeen = t => { try { localStorage.setItem('notifySeen', String(t)); } catch {} };
+  function timeAgo(ts) {
+    const s = Math.max(0, (Date.now() - Date.parse(ts)) / 1000);
+    if (s < 90) return 'just now'; if (s < 3600) return Math.round(s / 60) + 'm ago';
+    if (s < 86400) return Math.round(s / 3600) + 'h ago'; return Math.round(s / 86400) + 'd ago';
+  }
+  // Refresh the unread count + paint a badge on every Predict nav button.
+  function paintAlertBadge() {
+    const seen = getSeen();
+    const unread = alertItems.filter(i => Date.parse(i.ts) > seen).length;
+    document.querySelectorAll('[data-tab="predict"]').forEach(el => {
+      let b = el.querySelector('.nav-badge');
+      if (unread > 0) { if (!b) { b = document.createElement('span'); b.className = 'nav-badge'; el.appendChild(b); } b.textContent = unread > 9 ? '9+' : unread; b.style.display = ''; }
+      else if (b) b.style.display = 'none';
+    });
+    const sb = document.querySelector('#hub-subnav .hub-sub-btn[data-sub="alerts"]');
+    if (sb && !sb.querySelector('.nav-badge') && unread > 0) { const s = document.createElement('span'); s.className = 'nav-badge'; s.textContent = unread > 9 ? '9+' : unread; sb.appendChild(s); }
+    else if (sb && sb.querySelector('.nav-badge')) sb.querySelector('.nav-badge').style.display = unread > 0 ? '' : 'none';
+  }
+  async function fetchAlerts() {
+    try { const d = await fetch('/api/tracker?op=alertfeed').then(r => r.json()); if (d && d.ok) alertItems = d.items || []; } catch {}
+    return alertItems;
+  }
+  function maybeNotify(items) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const seen = getSeen();
+    items.filter(i => Date.parse(i.ts) > seen).slice(0, 3).forEach(i => {
+      try { new Notification(i.title, { body: i.detail || '', tag: i.id }); } catch {}
+    });
+  }
+  function ensureAlerts() { if (!alertsLoaded) { alertsLoaded = true; runAlertsUI(); } else runAlertsUI(); }
+  async function runAlertsUI() {
+    const el = document.getElementById('alerts-container'); if (!el) return;
+    if (!alertItems.length) el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading alerts…</p></div>`;
+    await fetchAlerts();
+    renderAlerts();
+    setSeen(Date.now());   // viewing the tab marks all read
+    paintAlertBadge();
+  }
+  function renderAlerts() {
+    const el = document.getElementById('alerts-container'); if (!el) return;
+    const seen = getSeen();
+    const notifyState = ('Notification' in window) ? Notification.permission : 'unsupported';
+    const notifyBtn = notifyState === 'granted'
+      ? `<span class="dt-dim">🔔 Browser notifications on</span>`
+      : notifyState === 'unsupported' ? `<span class="dt-dim">Browser notifications not supported here</span>`
+      : `<button class="today-cta" id="alerts-notify-btn">🔔 Enable browser notifications</button>`;
+    const head = `<div class="rot-panel"><div class="rot-head">🔔 Auto-caught events</div><div class="rot-sub">Sharp-money flags, Brief stance flips, and major crowd swings are logged here automatically by the daily scan — so you catch them without watching the tabs. ${notifyBtn}</div></div>`;
+    let body;
+    if (!alertItems.length) {
+      body = `<div class="dt-note" style="margin-top:12px">🟢 <b>No alerts yet.</b> When sharp money flags an informed bet, the Brief flips direction, or the crowd repricing spikes, it shows up here. The scan runs daily.</div>`;
+    } else {
+      body = `<div class="rot-head" style="margin-top:14px">Recent</div>` + alertItems.map(i => {
+        const unread = Date.parse(i.ts) > seen;
+        const col = ALERT_COL[i.sev] || 'var(--text-dim)';
+        return `<div class="rot-panel crowd-row alert-row${unread ? ' alert-unread' : ''}" data-go="${i.go || ''}" style="margin-top:8px;border-left:3px solid ${col}">`
+          + `<div class="crowd-head"><span><b>${ALERT_ICON[i.type] || '🔔'} ${esc(i.title)}</b></span><span class="dt-dim" style="white-space:nowrap">${timeAgo(i.ts)}</span></div>`
+          + (i.detail ? `<div class="rot-sub">${esc(i.detail)}</div>` : '') + `</div>`;
+      }).join('');
+    }
+    const caveat = `<div class="fade-caveats" style="margin-top:14px"><p>⚠️ Alerts flag <b>events worth a look</b>, not trades. Sharp money = ${L('sharpmoney', 'hallmarks')} (not proof); a stance flip is a synthesis turning, not a signal. Browser notifications fire while this site is open in your browser.</p></div>`;
+    el.innerHTML = head + body + caveat;
+    el.querySelectorAll('.alert-row[data-go]').forEach(r => { if (r.dataset.go) r.addEventListener('click', () => showTab(r.dataset.go)); });
+    el.querySelector('#alerts-notify-btn')?.addEventListener('click', async () => {
+      try { await Notification.requestPermission(); } catch {}
+      renderAlerts();
+    });
+  }
+  document.getElementById('alerts-refresh-btn')?.addEventListener('click', runAlertsUI);
+  // Background: fetch the feed shortly after boot so the unread badge shows before opening Predict.
+  setTimeout(() => { fetchAlerts().then(items => { paintAlertBadge(); maybeNotify(items); }); }, 2500);
 
   // ── Simple / Expert mode — progressive disclosure (Simple hides dense surfaces) ──
   function applyUiMode(m) {
