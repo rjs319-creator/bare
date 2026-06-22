@@ -34,6 +34,7 @@ const { writeDay, readAllPicks, hasStore, writeApexDay, readAllApex, writeGhostD
         readSharpEvents, writeSharpEvents,
         writeBriefDay, readAllBriefDays,
         readNotifyFeed, writeNotifyFeed,
+        writeCStudyDay, readAllCStudyDays,
         readJSON, writeJSON } = require('../lib/store');
 const { fetchDailyHistory } = require('../lib/screener');
 const { analyzeVReversal } = require('../lib/vreversal');
@@ -2043,11 +2044,12 @@ async function emitAlerts(newItems) {
 async function runCrowd(req, res) {
   const pm = require('../lib/predmarkets');
   try {
-    const [k, p, days, evLog] = await Promise.all([
+    const [k, p, days, evLog, cdays] = await Promise.all([
       pm.fetchKalshi().catch(() => []),
       pm.fetchPolymarket().catch(() => []),
       readAllPredmktDays().catch(() => []),
       readSharpEvents().catch(() => ({ events: [] })),
+      readAllCStudyDays().catch(() => []),
     ]);
     const today = todayUTC();
     const all = [...k, ...p];
@@ -2067,6 +2069,7 @@ async function runCrowd(req, res) {
       sharpTop: sharpScored.slice(0, 12),
       recentEvents: (evLog.events || []).slice(0, 15),
       sharpValidation: summarizeSharpValidation(evLog.events || []),
+      crowdStudy: summarizeCrowdStudy(cdays),
       counts: { kalshi: k.length, polymarket: p.length, scanned: scored.length, unusual: unusual.length, sharp: sharp.length },
       baselineDays, baselineReady: baselineDays >= 3, oiBaseline: Object.keys(prevOI).length > 0,
       generatedAt: new Date().toISOString(),
@@ -2143,6 +2146,82 @@ function summarizeSharpValidation(events) {
   };
 }
 
+// ── CROWD-LEADS STUDY — does a themed crowd swing precede the sector's move? ─────
+// Each clean directional theme maps to a canonical sector ETF + expected direction
+// (for the YES side being bid; flipped when odds fall).
+const THEME_PRIMARY = {
+  ratecut:    { etf: 'XLRE', dir: 1, label: 'Real Estate' },
+  ratehike:   { etf: 'XLF',  dir: 1, label: 'Financials' },
+  inflation:  { etf: 'XLE',  dir: 1, label: 'Energy' },
+  recession:  { etf: 'XLP',  dir: 1, label: 'Staples' },
+  volatility: { etf: 'SPY',  dir: -1, label: 'S&P 500' },
+};
+const CSTUDY_HORIZONS = [5, 10, 21];
+
+// From the scored crowd markets, build study events for qualifying themed swings.
+function buildStudyEvents(scored, today) {
+  const { classifyMkt } = require('../lib/brief');
+  const out = [];
+  for (const m of scored) {
+    if (m.movePts < 12) continue;
+    const prim = THEME_PRIMARY[classifyMkt(m.title)]; if (!prim) continue;
+    const notion = m.venue === 'Polymarket' ? m.vol24 : m.vol24 * (m.prob || 0.5);
+    if (notion < 1000) continue;
+    const dtc = m.closeTime ? (Date.parse(m.closeTime) - Date.now()) / 86400000 : 999;
+    if (dtc > 120) continue;                                              // near-dated catalyst only
+    const oddsUp = (m.prob || 0) >= (m.probPrev != null ? m.probPrev : m.prob);
+    out.push({ id: m.id + '|' + today, date: today, title: m.title, theme: classifyMkt(m.title),
+      oddsUp, movePts: Math.round(m.movePts), etf: prim.etf, sectorLabel: prim.label, dir: prim.dir * (oddsUp ? 1 : -1), grades: {} });
+  }
+  return out;
+}
+
+// Grade matured study events against the implicated sector's forward return.
+async function resolveCrowdStudy(deadlineMs) {
+  const days = await readAllCStudyDays();
+  const events = days.flatMap(d => d.events || []);
+  const open = events.filter(e => CSTUDY_HORIZONS.some(h => !e.grades || !e.grades[h]));
+  if (!open.length) return 0;
+  const etfs = [...new Set(open.map(e => e.etf))];
+  const candByEtf = {};
+  await Promise.all(etfs.map(async e => { if (Date.now() > deadlineMs) return; try { const d = await fetchDailyHistory(e); if (d) candByEtf[e] = d.candles; } catch {} }));
+  const idxOnOrAfter = (c, date) => { for (let i = 0; i < c.length; i++) if (c[i].date >= date) return i; return -1; };
+  let graded = 0; const changed = new Set();
+  for (const e of open) {
+    const c = candByEtf[e.etf]; if (!c) continue;
+    const ai = idxOnOrAfter(c, e.date); if (ai < 0) continue;
+    for (const h of CSTUDY_HORIZONS) {
+      if (e.grades && e.grades[h]) continue;
+      const bi = ai + h; if (bi >= c.length) continue;
+      const ret = (c[bi].close / c[ai].close - 1) * 100;
+      e.grades = e.grades || {}; e.grades[h] = { ret: +ret.toFixed(2), hit: (ret > 0 ? 1 : -1) === e.dir };
+      graded++; changed.add(e.date);
+    }
+  }
+  await Promise.all([...changed].map(dt => { const d = days.find(x => x.date === dt); return writeCStudyDay(dt, { events: d.events }); }));
+  return graded;
+}
+
+// Honest summary: does the crowd lead the implicated sector?
+function summarizeCrowdStudy(days) {
+  const events = days.flatMap(d => d.events || []);
+  const byHorizon = {}, byTheme = {};
+  CSTUDY_HORIZONS.forEach(h => byHorizon[h] = { n: 0, hits: 0 });
+  let n = 0, hits = 0, pending = 0;
+  for (const e of events) {
+    const g = e.grades || {}; const hs = CSTUDY_HORIZONS.filter(h => g[h]);
+    if (!hs.length) { pending++; continue; }
+    for (const h of hs) {
+      byHorizon[h].n++; if (g[h].hit) byHorizon[h].hits++;
+      n++; if (g[h].hit) hits++;
+      const t = byTheme[e.theme] = byTheme[e.theme] || { n: 0, hits: 0 };
+      t.n++; if (g[h].hit) t.hits++;
+    }
+  }
+  const ci = wilson(hits, n);
+  return { n, hits, rate: n ? Math.round(hits / n * 100) : null, wilsonLo: n ? Math.round(ci.lo * 100) : null, byHorizon, byTheme, pending, events: events.length };
+}
+
 // op=crowdtick — cron: snapshot today's volume+OI (baseline) AND durably log any
 // flagged sharp-money events, so flags are captured even when nobody's watching.
 async function runCrowdTick(req, res) {
@@ -2172,7 +2251,8 @@ async function runCrowdTick(req, res) {
       id: 'sharp|' + m.id + '|' + today, type: 'sharp', sev: 'high', go: 'sharp',
       title: '🕵️ Sharp money: ' + m.title, detail: (m.tells || []).slice(0, 2).join(' · ') + ' · ~$' + m.notional,
     }));
-    const swing = pm.scoreMarkets(all, baseline).filter(m => {
+    const scored = pm.scoreMarkets(all, baseline);
+    const swing = scored.filter(m => {
       if (m.movePts < 18 || !classifyMkt(m.title)) return false;          // big macro move
       const notion = m.venue === 'Polymarket' ? m.vol24 : m.vol24 * (m.prob || 0.5);
       if (notion < 1000) return false;                                    // real money, not a thin strike
@@ -2186,8 +2266,18 @@ async function runCrowdTick(req, res) {
     const alerted = await emitAlerts(alerts);
     // 4) resolve any settled sharp events against their real outcome (validation)
     const resolved = await resolveSharpEvents(pm, t0 + 18000).catch(() => 0);
+    // 5) crowd-leads study — log qualifying themed swings, then grade matured ones
+    const studyEvents = buildStudyEvents(scored, today);
+    if (studyEvents.length) {
+      const cdays = await readAllCStudyDays().catch(() => []);
+      const existing = (cdays.find(d => d.date === today) || {}).events || [];
+      const have = new Set(existing.map(e => e.id));
+      const merged = existing.concat(studyEvents.filter(e => !have.has(e.id)));
+      if (merged.length !== existing.length) await writeCStudyDay(today, { events: merged });
+    }
+    const studyGraded = await resolveCrowdStudy(t0 + 24000).catch(() => 0);
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({ ok: true, date: today, snapshot: Object.keys(snap).length, kalshi: k.length, polymarket: p.length, flagged: flagged.length, logged, alerted, resolved, elapsedMs: Date.now() - t0 });
+    return res.json({ ok: true, date: today, snapshot: Object.keys(snap).length, kalshi: k.length, polymarket: p.length, flagged: flagged.length, logged, alerted, resolved, studyLogged: studyEvents.length, studyGraded, elapsedMs: Date.now() - t0 });
   } catch (e) {
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ ok: false, error: String(e && e.message || e), elapsedMs: Date.now() - t0 });

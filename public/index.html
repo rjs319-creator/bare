@@ -5064,8 +5064,22 @@
       const top = (d.top || []).slice(0, 6);
       body = `<div class="dt-note" style="margin-top:14px">😴 Nothing unusual right now — no big volume bursts or odds swings on the macro board. The most active contracts:</div>` + top.map(crowdRow).join('');
     }
+    // 📊 Crowd-leads study — does a themed swing precede the implicated sector's move?
+    const cs = d.crowdStudy || {};
+    const CS_THEME = { ratecut: 'Rate cuts → Real Estate', ratehike: 'Rate hikes → Financials', inflation: 'Inflation → Energy', recession: 'Recession → Staples', volatility: 'Volatility → S&P' };
+    let study = `<div class="rot-head" style="margin-top:16px">📊 Does the crowd lead? <span class="dt-dim">· swing vs the sector's next move</span></div>`;
+    if (cs.n >= 8) {
+      const lo = cs.wilsonLo, col = lo != null && lo >= 50 ? 'var(--green)' : (cs.rate >= 53 ? 'var(--amber,#f59e0b)' : 'var(--red)');
+      const verdict = lo != null && lo >= 50 ? 'the crowd leads — swings precede the sector move' : cs.rate >= 53 ? 'suggestive, but not proven (floor below 50%)' : 'no lead — the move is already priced in';
+      const bh = [5, 10, 21].map(h => { const x = cs.byHorizon[h]; return x && x.n ? `${h}d ${Math.round(x.hits / x.n * 100)}% (${x.n})` : null; }).filter(Boolean).join(' · ');
+      const themes = Object.entries(cs.byTheme || {}).filter(([, t]) => t.n >= 3).map(([k, t]) => `<div class="bt-ic-row"><span>${CS_THEME[k] || k}</span><span style="color:${Math.round(t.hits / t.n * 100) >= 50 ? 'var(--green)' : 'var(--text-dim)'}">${Math.round(t.hits / t.n * 100)}%</span><span class="dt-dim">n=${t.n}</span></div>`).join('');
+      study += `<div class="dt-note" style="border-left-color:${col}"><b style="color:${col}">Sector moved as implied ${cs.rate}%</b> of ${cs.n} graded swings <span class="dt-dim">(${L('wilsonLB', 'floor ' + (lo != null ? lo + '%' : '—'))})</span>. <b style="color:${col}">Verdict: ${verdict}.</b>${bh ? ` <span class="dt-dim">By horizon: ${bh}.</span>` : ''}</div>`;
+      if (themes) study += `<div class="rot-panel" style="margin-top:6px"><div class="rot-sub" style="margin-bottom:4px"><b>By theme</b> <span class="dt-dim">(hit rate)</span></div>${themes}</div>`;
+    } else {
+      study += `<div class="dt-note">⏳ <b>Study building.</b> ${cs.pending || 0} themed swing${(cs.pending || 0) === 1 ? '' : 's'} logged${cs.n ? `, ${cs.n} graded` : ''} — the lead/no-lead verdict shows once ≥8 mature. Each tests whether a swing (e.g. rate-cut odds → Real Estate) precedes the sector's real move at 5/10/21 days.</div>`;
+    }
     const caveat = `<div class="fade-caveats" style="margin-top:14px"><p>⚠️ <b>A sentiment radar, not a signal.</b> A volume burst or odds swing usually means the crowd is repricing a <i>known</i> catalyst (often after the news) — it tells you what macro events are in play, not what to trade. Real money, but not a stock edge.</p></div>`;
-    el.innerHTML = banner + trust + body + caveat;
+    el.innerHTML = banner + trust + body + study + caveat;
     const gt = document.getElementById('crowd-gen-time'); if (gt && d.generatedAt) gt.textContent = new Date(d.generatedAt).toLocaleTimeString();
   }
   document.getElementById('crowd-refresh-btn')?.addEventListener('click', runCrowdUI);
