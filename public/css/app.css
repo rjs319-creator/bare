@@ -1665,3 +1665,4 @@
     .opp-prox.prox-coiled { border-left: 3px solid var(--green); }
     .opp-prox.prox-now { border-left: 3px solid var(--cyan); }
     .opp-prox.prox-ext { border-left: 3px solid var(--amber, #f59e0b); }
+    .opp-badge.opp-sleevea { color: #f0a832; border-color: #f0a83266; }

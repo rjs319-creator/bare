@@ -32,7 +32,18 @@ function relWeight(rec) {
   return 1 + Math.max(-0.15, Math.min(0.2, a * 0.02 + w * 0.004));  // beating → boost, losing → trim
 }
 
-export function rankOpportunities(results, reliability = {}) {
+// Model health from the apex model's ALREADY-RESOLVED picks (op=drift). This is the
+// loop operating NOW: the app grades its own recent picks and tilts accordingly.
+export function modelHealth(drift) {
+  const live = drift && drift.live;
+  if (!live || (live.n || 0) < 10) return { factor: 1, n: live ? live.n : 0, state: 'building' };
+  const base = (drift.baseline && drift.baseline.winRate) || 32;
+  const ratio = (live.winRate || 0) / Math.max(base, 1);
+  const factor = Math.max(0.82, Math.min(1.1, 0.72 + ratio * 0.38));   // underperforming → trim, beating → boost
+  return { factor, n: live.n, live: live.winRate, base, degrading: ratio < 0.7, beating: ratio > 1.1, state: drift.status || (ratio < 0.7 ? 'degrading' : 'ok') };
+}
+
+export function rankOpportunities(results, reliability = {}, healthFactor = 1) {
   return (results || [])
     .filter(c => c.levels && c.ghost && c.status && c.levels.entry > 0)
     .map(c => {
@@ -40,10 +51,11 @@ export function rankOpportunities(results, reliability = {}) {
       const stage = STAGE_VAL[c.status] ?? 60;
       const q = c.quant?.score ?? 0;
       const narr = Math.min((c.narrativeStrength ?? 0) * 10, 100);
-      // Accumulation + early-stage weighted heaviest — that's the "before it runs" edge.
-      const base = 0.34 * q + 0.30 * g + 0.21 * stage + 0.15 * narr;
+      const conv = c.conviction?.score ?? 70;                  // the LEARNED conviction (recalibrated from resolved picks)
+      // Accumulation + early-stage + the results-trained conviction drive the score.
+      const base = 0.28 * q + 0.26 * g + 0.18 * stage + 0.12 * narr + 0.16 * conv;
       const rec = reliability[`Ghost|${c.ghost.tier}`];
-      const opp = Math.round(base * relWeight(rec));            // tilt by the live track record
+      const opp = Math.round(base * relWeight(rec) * healthFactor);   // tilt by the model's live record + tier track record
       return { ...c, opp, rec };
     })
     .sort((a, b) => b.opp - a.opp);
@@ -103,6 +115,7 @@ function oppCard(c) {
     + `<div class="opp-conv" style="color:${cv.col}" title="${cv.label}">${cv.stars}</div></div>`
     + `<div class="opp-badges"><span class="opp-badge">${STAGE_LABEL[c.status] || c.status}</span>`
     + `<span class="opp-badge ghost-${(c.ghost.tier || '').toLowerCase()}">${L('ghost', c.ghost.tier)}</span>`
+    + (c.conviction?.sleeveA ? `<span class="opp-badge opp-sleevea" title="Top-quintile by the results-trained conviction model">🏅 ${L('conviction', 'top-quintile')}</span>` : '')
     + `<span class="dt-dim">${esc(c.sector || '')}</span></div>`
     + `<div class="opp-thesis">${thesis(c)}</div>`
     + proximity(c)
@@ -114,30 +127,38 @@ function oppCard(c) {
 export async function loadOpportunities(container, scope = 'large', limit = 6) {
   if (!container) return;
   container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Finding the best setups to buy before they run…</p></div>`;
-  let d, sb;
+  let d, sb, drift;
   try {
-    [d, sb] = await Promise.all([
+    [d, sb, drift] = await Promise.all([
       fetch('/api/screener?scope=' + scope).then(r => r.json()),
       fetch('/api/tracker?op=scoreboard').then(r => r.json()).catch(() => null),
+      fetch('/api/tracker?op=drift').then(r => r.json()).catch(() => null),
     ]);
   } catch { d = null; }
   if (!d) { container.innerHTML = `<div class="dt-note">Couldn't load opportunities right now.</div>`; return; }
   const regime = d.regime || {};
   const riskOff = regime.bearish === true || regime.riskOn === false;
   const reliability = buildReliability(sb && sb.groups);
-  const ranked = rankOpportunities(d.results, reliability);
+  const health = modelHealth(drift);
+  const ranked = rankOpportunities(d.results, reliability, health.factor);
   const top = ranked.slice(0, limit);
 
-  // Honest track-record line for the accumulation signal these are ranked on.
-  const accRecs = ['Ghost|GHOST', 'Ghost|STALKING'].map(k => reliability[k]).filter(r => r && r.n >= 8);
-  let trackLine;
-  if (accRecs.length) {
-    const tot = accRecs.reduce((a, r) => ({ n: a.n + r.n, sum: a.sum + r.avg * r.n }), { n: 0, sum: 0 });
-    const avg = tot.sum / tot.n;
-    trackLine = `📊 Live track record: accumulation picks have averaged <b style="color:${avg > 0 ? 'var(--green)' : 'var(--red)'}">${avg > 0 ? '+' : ''}${avg.toFixed(1)}%</b> over ${tot.n} resolved (1mo) — the ranking is tilted by this.`;
-  } else {
+  // Model-health line — the loop OPERATING now: the app grades its own resolved
+  // picks and this ranking responds (down-weights when degrading, boosts when beating).
+  let trackLine, trackCol;
+  if (health.state === 'building') {
     const logged = (sb && sb.totalPicks) || 0;
-    trackLine = `📊 Track record building — ${logged} picks logged; forward returns mature over weeks, then auto-tilt this ranking.`;
+    trackLine = `📊 The ranking self-tunes from results — ${logged} picks logged, ${health.n} resolved so far. As more mature it tilts harder.`;
+    trackCol = 'var(--cyan)';
+  } else if (health.degrading) {
+    trackLine = `⚠️ <b>The model is grading its own recent picks as weak</b> — its last ${health.n} resolved won just <b>${health.live}%</b> vs a ${health.base}% baseline. This list is <b>down-weighted</b> and these are research ideas, not green lights — size down and lean on the ${L('regime', 'regime')}.`;
+    trackCol = 'var(--red)';
+  } else if (health.beating) {
+    trackLine = `✅ <b>The model's recent picks are working</b> — its last ${health.n} resolved beat baseline (${health.live}% vs ${health.base}%). The ranking is leaning into it. Still confirm and use a ${L('stop', 'stop')}.`;
+    trackCol = 'var(--green)';
+  } else {
+    trackLine = `📊 The model's recent picks are tracking baseline (${health.live}% over ${health.n} resolved). Ranking tilts live with each new result.`;
+    trackCol = 'var(--cyan)';
   }
 
   let html = `<div class="rot-head" style="margin-top:4px">⭐ Top opportunities <span class="dt-dim">· quiet accumulation + early setups, ranked</span></div>`;
@@ -146,9 +167,9 @@ export async function loadOpportunities(container, scope = 'large', limit = 6) {
   } else {
     html += `<div class="dt-note" style="border-left-color:var(--green)"><b>✅ Constructive backdrop.</b> Market is ${regime.riskOn ? L('regime', 'risk-on') : 'neutral'}${regime.breadthPct != null ? ` · breadth ${regime.breadthPct}%` : ''} — a reasonable environment to look for early longs. These are <b>pre-breakout</b> names (being accumulated, not yet extended), ranked by conviction.</div>`;
   }
-  html += `<div class="dt-note" style="border-left-color:var(--cyan)">${trackLine}</div>`;
+  html += `<div class="dt-note" style="border-left-color:${trackCol}">${trackLine}</div>`;
   html += top.length ? top.map(oppCard).join('') : `<div class="dt-note">No clean pre-breakout setups passed the screen today — that's normal on some days. Check back, or browse the full ${L('breakout', 'screeners')}.</div>`;
-  html += `<div class="dt-dim opp-foot">Ranked by accumulation strength, setup stage, momentum quality &amp; story — then tilted by each signal's live ${L('beatRate', 'track record')}. Not advice; always confirm and use a ${L('stop', 'stop')}.</div>`;
+  html += `<div class="dt-dim opp-foot">Scored on accumulation, setup stage, momentum &amp; the model's ${L('conviction', 'results-trained conviction')}, then tilted by how its own recent picks are actually resolving — so the ranking adapts as results come in. Not advice; always confirm and use a ${L('stop', 'stop')}.</div>`;
   container.innerHTML = html;
 }
 
