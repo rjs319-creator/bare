@@ -1,6 +1,7 @@
   import { esc, fmtMoney, timeAgo } from './format.js';
   import { startLivePrices as startScreenerLive, stopLivePrices as stopScreenerLive, LIVE_SCREENERS } from './live-price.js';
   import { loadOpportunities, mountOpportunitiesTab } from './opportunities.js';
+  import { loadLeaderboard } from './leaderboard.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
 
   // ── App tabs with a "Markets" hub (Screener / Rotation / Sectors) ──
@@ -10,7 +11,7 @@
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
     predict:   ['brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     research:  ['backtest', 'events', 'edge'],
-    track:     ['scoreboard', 'xalerts'],
+    track:     ['leaderboard', 'scoreboard', 'xalerts'],
   };
   const TOP_TABS = Object.keys(TAB_GROUPS);
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
@@ -20,14 +21,14 @@
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
     brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
-    scoreboard: '🏆 Scoreboard', xalerts: '🐦 Trade Alerts',
+    leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', xalerts: '🐦 Trade Alerts',
   };
   const topOf = sec => TOP_TABS.find(t => TAB_GROUPS[t].includes(sec));
 
   // Mark each section as a switchable screen
   SECTION_IDS.forEach(id => document.getElementById(id)?.classList.add('tabbable'));
 
-  let hubSub = { start: 'today', screeners: 'opportunities', markets: 'rotation', predict: 'brief', research: 'backtest', track: 'scoreboard' };
+  let hubSub = { start: 'today', screeners: 'opportunities', markets: 'rotation', predict: 'brief', research: 'backtest', track: 'leaderboard' };
   try { const hs = JSON.parse(localStorage.getItem('hubSub')); if (hs) hubSub = { ...hubSub, ...hs }; } catch {}
   // Sanitize stored hubSub: after the nav regrouping a saved sub may no longer
   // belong to its group (e.g. markets→screener). Reset any stale entry to the
@@ -84,6 +85,7 @@
     if (sub === 'daytrade' && typeof ensureDaytrade === 'function') ensureDaytrade();
     if (sub === 'confluence' && typeof ensureConfluence === 'function') ensureConfluence();
     if (sub === 'xalerts' && typeof ensureXalerts === 'function') ensureXalerts();
+    if (sub === 'leaderboard' && typeof ensureLeaderboard === 'function') ensureLeaderboard();
     if (sub === 'momentum' && typeof ensureMomentum === 'function') ensureMomentum();
     if (sub === 'options' && typeof ensureOptions === 'function') ensureOptions();
     if (sub === 'picks' && typeof ensurePicks === 'function') ensurePicks();
@@ -2306,6 +2308,12 @@
       const sec = document.getElementById('opportunities'); if (sec) startScreenerLive(sec);   // re-arm live prices after each (re)load
     });
   }
+  let leaderboardLoaded = false;
+  function ensureLeaderboard() {
+    const el = document.getElementById('leaderboard-container'); if (!el || leaderboardLoaded) return;
+    leaderboardLoaded = true;
+    loadLeaderboard(el).then(() => el.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.go))));
+  }
   function ensureToday() { if (!todayLoaded) { todayLoaded = true; runTodayUI(); } }
   async function runTodayUI() {
     const el = document.getElementById('today-container');
@@ -2356,6 +2364,7 @@
   }
   document.getElementById('today-refresh-btn')?.addEventListener('click', runTodayUI);
   document.getElementById('opp-refresh-btn')?.addEventListener('click', () => { opportunitiesLoaded = false; ensureOpportunities(); });
+  document.getElementById('leaderboard-refresh-btn')?.addEventListener('click', () => { leaderboardLoaded = false; ensureLeaderboard(); });
 
   // ── 🧭 PREDICTION BRIEF — synthesis lives server-side in lib/brief.js (single
   // source of truth, shared with the validation cron). The UI just renders op=brief.

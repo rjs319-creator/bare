@@ -1687,3 +1687,11 @@
     .opp-sig.sig-rs2 { color: var(--green); border-color: #10d98a44; }
     .opp-sig.sig-hi { color: var(--cyan); border-color: #06c4d444; }
     .opp-sig.sig-vcp, .opp-sig.sig-vdu, .opp-sig.sig-acc { color: var(--text-dim); }
+    /* 🏆 Algo Leaderboard */
+    .lb-row { display: flex; align-items: center; gap: 12px; padding: 11px 14px; margin-top: 8px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
+    .lb-rank { font-size: 1.1rem; font-weight: 800; min-width: 28px; text-align: center; color: var(--text-dim); }
+    .lb-mid { flex: 1; min-width: 0; }
+    .lb-name { font-size: 0.92rem; font-weight: 700; }
+    .lb-detail { font-size: 0.76rem; margin-top: 2px; }
+    .lb-live { font-size: 0.7rem; color: var(--text-dim); display: block; margin-top: 1px; }
+    .lb-verdict { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
