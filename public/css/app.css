@@ -1623,3 +1623,10 @@
     .health-banner { background: color-mix(in srgb, var(--amber, #f59e0b) 14%, var(--card)); border: 1px solid var(--amber, #f59e0b); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.82rem; line-height: 1.5; color: var(--text); position: relative; }
     .health-banner .health-x { position: absolute; top: 6px; right: 8px; background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 0.9rem; padding: 2px 6px; }
     .health-banner .health-x:hover { color: var(--text); }
+    /* 📈 Live price overlay on screener cards */
+    .live-px { display: inline-flex; align-items: center; gap: 3px; margin-left: 7px; font-size: 0.72rem; font-weight: 700; color: var(--text); white-space: nowrap; vertical-align: middle; }
+    .live-px .live-ext { color: var(--text-dim); font-weight: 600; }
+    .live-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+    .live-dot.live-regular { background: var(--green); }
+    .live-dot.live-pre, .live-dot.live-post { background: var(--amber, #f59e0b); }
+    .live-dot.live-closed { background: var(--text-dim); }

@@ -1,4 +1,5 @@
   import { esc, fmtMoney, timeAgo } from './format.js';
+  import { startLivePrices as startScreenerLive, stopLivePrices as stopScreenerLive, LIVE_SCREENERS } from './live-price.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
 
   // ── App tabs with a "Markets" hub (Screener / Rotation / Sectors) ──
@@ -89,6 +90,9 @@
     if (sub === 'crowd' && typeof ensureCrowd === 'function') ensureCrowd();
     if (sub === 'sharp' && typeof ensureSharp === 'function') ensureSharp();
     if (sub === 'alerts' && typeof ensureAlerts === 'function') ensureAlerts();
+
+    // Live intraday price overlay on the stock screeners (daily-bar signals, live price).
+    if (LIVE_SCREENERS.has(sub)) startScreenerLive(document.getElementById(sub)); else stopScreenerLive();
 
     const act = document.querySelector('.mobile-top-tabs .mtt-item.active');
     if (act) act.scrollIntoView({ inline: 'center', block: 'nearest', behavior: opts.instant ? 'auto' : 'smooth' });
@@ -1604,7 +1608,7 @@
           <div class="scr-rank">#${c.rank}</div>
           <div class="scr-title">
             <div class="scr-tk-row">
-              <span class="scr-ticker">${esc(c.ticker)}</span>
+              <span class="scr-ticker" data-live="${esc(c.ticker)}">${esc(c.ticker)}</span>
               <span class="scr-status ${cls}">${stLabel}</span>
               ${tierHtml}
             </div>
@@ -2149,7 +2153,7 @@
     card.innerHTML = `
       <div class="cx-top">
         <div>
-          <div class="cx-tk-row"><span class="cx-ticker">${esc(c.ticker)}</span><span class="cx-tierbadge ${tier}">${tierLabel}</span></div>
+          <div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(c.ticker)}">${esc(c.ticker)}</span><span class="cx-tierbadge ${tier}">${tierLabel}</span></div>
           <div class="cx-company">${esc(c.company || c.ticker)}${c.sector ? ` · ${esc(c.sector)}` : ''}${scopeTag}${c.theme ? ` · ${esc(c.theme)}` : ''}</div>
         </div>
         <div class="cx-score-col">
@@ -2862,7 +2866,7 @@
     card.innerHTML = `
       <div class="cx-top">
         <div>
-          <div class="cx-tk-row"><span class="cx-ticker">${esc(c.ticker)}</span><span class="cx-tierbadge ${GHOST_TIER_CSS[tier] || ''}">${tierLabel}</span></div>
+          <div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(c.ticker)}">${esc(c.ticker)}</span><span class="cx-tierbadge ${GHOST_TIER_CSS[tier] || ''}">${tierLabel}</span></div>
           <div class="cx-company">${esc(c.company || c.ticker)}${c.sector ? ` · ${esc(c.sector)}` : ''}${scopeTag}${c.theme ? ` · ${esc(c.theme)}` : ''}</div>
         </div>
         <div class="cx-score-col">
@@ -3204,7 +3208,7 @@
         <div class="fade-card-top">
           <div class="fade-score" style="--c:${coolColor(s)}">${s}<span>cool-off</span></div>
           <div class="fade-id">
-            <div class="fade-tk"><b>${esc(r.ticker)}</b> <span class="fade-sec">${esc(r.sector || '')}</span>
+            <div class="fade-tk"><b data-live="${esc(r.ticker)}">${esc(r.ticker)}</b> <span class="fade-sec">${esc(r.sector || '')}</span>
               <span class="fade-badge" style="background:${strong ? '#ff4a4a22' : '#ff8a3a22'};color:${strong ? '#ff6b6b' : '#ffa256'}">${strong ? 'AVOID / TRIM' : 'CAUTION'}</span></div>
             <div class="fade-thesis">${thesis}</div>
           </div>
@@ -3330,7 +3334,7 @@
       basketHtml = `<div class="rot-panel"><div class="rot-head">🛑 Basket suppressed</div><div class="rot-sub">The climate is red — historically the worst time to add trend longs (they underperformed SPY ~12% out-of-sample). The engine shows no new ride list. Protect capital; wait for the light to turn.</div></div>`;
     } else {
       const rows = basket.slice(0, 15).map((b, i) => `<div class="bt-ic-row">
-        <span><b>${esc(b.ticker)}</b> <span style="color:var(--text-dim)">${esc(b.sector || '')}</span></span>
+        <span><b data-live="${esc(b.ticker)}">${esc(b.ticker)}</b> <span style="color:var(--text-dim)">${esc(b.sector || '')}</span></span>
         <span>mom ${b.mom > 0 ? '+' : ''}${b.mom}%</span>
         <span>$${b.price} <span style="color:var(--text-dim)">trail ${b.trailStop}</span></span></div>`).join('');
       basketHtml = `<div class="rot-panel"><div class="rot-head">🏇 Ride list — top trends ${col === 'yellow' ? '(size down — yellow)' : ''}</div>
@@ -3623,7 +3627,7 @@
     const stars = '★'.repeat(r.score) + '☆'.repeat(5 - r.score);
     const dirColor = r.direction === 'bullish' ? 'var(--green)' : r.direction === 'bearish' ? 'var(--red)' : 'var(--text-dim)';
     card.innerHTML = `<div class="cx-top"><div>
-        <div class="cx-tk-row"><span class="cx-ticker">$${esc(r.ticker)}</span>
+        <div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(r.ticker)}">$${esc(r.ticker)}</span>
           <span class="cx-tierbadge" style="color:${dirColor};border-color:currentColor;background:transparent">${esc(r.direction)}</span>
           ${r.coordinated ? '<span class="cx-tierbadge" style="color:var(--amber);border-color:#f0a83244;background:var(--amber-dim)">⚠ coordinated</span>' : ''}</div>
         <div class="cx-company">${r.independentSources} independent source${r.independentSources > 1 ? 's' : ''} · ${r.distinctAccounts} account${r.distinctAccounts > 1 ? 's' : ''} · ${esc(r.accounts.join(', '))}</div>
