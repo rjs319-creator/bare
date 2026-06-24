@@ -44,7 +44,7 @@ export function modelHealth(drift) {
   return { factor, n: live.n, live: live.winRate, base, degrading: ratio < 0.7, beating: ratio > 1.1, state: drift.status || (ratio < 0.7 ? 'degrading' : 'ok') };
 }
 
-export function rankOpportunities(results, reliability = {}, healthFactor = 1, leadSet = new Set()) {
+export function rankOpportunities(results, reliability = {}, healthFactor = 1, leadSet = new Set(), themeMom = {}) {
   return (results || [])
     .filter(c => c.levels && c.ghost && c.status && c.levels.entry > 0)
     .map(c => {
@@ -62,7 +62,11 @@ export function rankOpportunities(results, reliability = {}, healthFactor = 1, l
       const base = 0.28 * q + 0.26 * g + 0.18 * stage + 0.12 * narr + 0.16 * conv + themeBoost + sm.boost;
       const rec = reliability[`Ghost|${c.ghost.tier}`];
       const opp = Math.round(base * relWeight(rec) * healthFactor);   // tilt by the model's live record + tier track record
-      return { ...c, opp, rec, theme: c.theme, canonTheme: theme, inLeadingTheme, laggard, smBadges: sm.badges };
+      // Relative strength vs its OWN theme — leader or catch-up laggard.
+      const tMom = themeMom[theme], myMom = c.factors?.mom63;
+      let rsTheme = null;
+      if (tMom != null && myMom != null && inLeadingTheme) rsTheme = myMom >= tMom * 1.1 ? 'leads' : myMom <= tMom * 0.6 ? 'lags' : null;
+      return { ...c, opp, rec, theme: c.theme, canonTheme: theme, inLeadingTheme, laggard, smBadges: sm.badges, rsTheme };
     })
     .sort((a, b) => b.opp - a.opp);
 }
@@ -114,6 +118,17 @@ function proximity(c) {
   return `<div class="opp-prox prox-ext">🟡 <b>${Math.abs(pct).toFixed(1)}% past the trigger</b> — already moving; wait for a pullback toward $${esc(entry)}.</div>`;
 }
 
+// Volatility-adjusted position size — the desk-grade "risk a fixed % of account"
+// rule: a tighter stop lets you hold MORE shares for the same dollar risk.
+function sizing(lv) {
+  if (!(lv.entry > 0) || !(lv.stop > 0) || lv.stop >= lv.entry) return '';
+  const perShare = lv.entry - lv.stop;
+  const rp = (perShare / lv.entry) * 100;
+  const weight = Math.min(25, Math.max(2, Math.round(100 / rp)));         // 1% account risk → this % position, capped
+  const shPer1k = Math.floor(1000 / perShare);
+  return `<div class="opp-size">🎯 ${L('sizing', 'Size')}: stop <b>${rp.toFixed(1)}%</b> away → at 1% account risk, ≈<b>${weight}%</b> position (≈${shPer1k} sh per $1k risked).</div>`;
+}
+
 function levelsRow(lv) {
   const rr = lv.rr ? `${L('rr', lv.rr + ':1 R:R')}` : '';
   return `<div class="opp-levels">`
@@ -147,7 +162,10 @@ function oppCard(c) {
     + `<div class="opp-thesis">${thesis(c)}</div>`
     + proximity(c)
     + levelsRow(c.levels)
-    + ((c.smBadges && c.smBadges.length) ? `<div class="opp-sigs">${c.smBadges.join('')}</div>` : '')
+    + sizing(c.levels)
+    + ((c.smBadges && c.smBadges.length) || c.rsTheme ? `<div class="opp-sigs">`
+        + (c.rsTheme === 'leads' ? `<span class="opp-sig sig-rs-lead">⚡ ${L('relStrength', 'leads its theme')}</span>` : c.rsTheme === 'lags' ? `<span class="opp-sig sig-rs-lag">🐢 ${L('relStrength', 'lags its theme — catch-up')}</span>` : '')
+        + (c.smBadges || []).join('') + `</div>` : '')
     + expertDetail(c)
     + `</div>`;
 }
@@ -170,7 +188,8 @@ export async function loadOpportunities(container, scope = 'large', limit = 6) {
   const health = modelHealth(drift);
   const themesRanked = rankThemes(d.results);
   const { set: leadSet, list: leadingThemes } = leadingThemeSet(themesRanked, 4);
-  const ranked = rankOpportunities(d.results, reliability, health.factor, leadSet);
+  const themeMom = Object.fromEntries(themesRanked.map(t => [t.theme, t.mom63]));
+  const ranked = rankOpportunities(d.results, reliability, health.factor, leadSet, themeMom);
   const top = ranked.slice(0, limit);
 
   // Model-health line — the loop OPERATING now: the app grades its own resolved

@@ -1679,3 +1679,7 @@
     .opp-sig.sig-growth { color: var(--green); border-color: #10d98a44; }
     .opp-sig.sig-insider { color: var(--green); border-color: #10d98a66; background: var(--green-dim); }
     .opp-sig.sig-cat { color: var(--cyan); border-color: #06c4d444; }
+    .opp-size { font-size: 0.72rem; color: var(--text-dim); margin-top: 6px; }
+    .opp-size b { color: var(--text); }
+    .opp-sig.sig-rs-lead { color: var(--green); border-color: #10d98a55; }
+    .opp-sig.sig-rs-lag { color: #f0a832; border-color: #f0a83255; }
