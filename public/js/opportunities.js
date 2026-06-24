@@ -59,14 +59,16 @@ export function rankOpportunities(results, reliability = {}, healthFactor = 1, l
       const laggard = inLeadingTheme && (c.status === 'Setup' || c.status === 'Early') && (c.factors?.mom21 ?? 99) < 20;
       const themeBoost = inLeadingTheme ? (laggard ? 12 : 7) : 0;     // theme tailwind
       const sm = smartMoney(c);                                        // growth accel + insider + catalyst
-      const base = 0.28 * q + 0.26 * g + 0.18 * stage + 0.12 * narr + 0.16 * conv + themeBoost + sm.boost;
+      const ss = setupSignals(c);                                      // O'Neil/Minervini pre-breakout signals
+      const base = 0.28 * q + 0.26 * g + 0.18 * stage + 0.12 * narr + 0.16 * conv + themeBoost + sm.boost + ss.boost;
       const rec = reliability[`Ghost|${c.ghost.tier}`];
       const opp = Math.round(base * relWeight(rec) * healthFactor);   // tilt by the model's live record + tier track record
       // Relative strength vs its OWN theme — leader or catch-up laggard.
       const tMom = themeMom[theme], myMom = c.factors?.mom63;
       let rsTheme = null;
       if (tMom != null && myMom != null && inLeadingTheme) rsTheme = myMom >= tMom * 1.1 ? 'leads' : myMom <= tMom * 0.6 ? 'lags' : null;
-      return { ...c, opp, rec, theme: c.theme, canonTheme: theme, inLeadingTheme, laggard, smBadges: sm.badges, rsTheme };
+      const badges = [...ss.badges, ...sm.badges].slice(0, 5);         // institutional + smart-money, capped for a clean card
+      return { ...c, opp, rec, theme: c.theme, canonTheme: theme, inLeadingTheme, laggard, smBadges: badges, rsTheme };
     })
     .sort((a, b) => b.opp - a.opp);
 }
@@ -87,6 +89,21 @@ function smartMoney(c) {
   // Catalyst proximity — accumulating into an earnings catalyst.
   const days = f.earningsInDays;
   if (days != null && days >= 0 && days <= 35) out.badges.push(`<span class="opp-sig sig-cat">⏰ earnings in ${days}d</span>`);
+  return out;
+}
+
+// Institutional setup-quality signals (O'Neil pocket pivot, Minervini VCP/VDU,
+// RS-line new high, distance to 52w high) — the methodology elite growth funds use
+// to catch a name in the last quiet moment BEFORE it breaks. All from c.metrics.
+function setupSignals(c) {
+  const m = c.metrics || {};
+  const out = { boost: 0, badges: [] };
+  if (m.pocketPivot) { out.boost += 4; out.badges.push(`<span class="opp-sig sig-pp">🟢 pocket pivot</span>`); }
+  if (m.rsNewHigh) { out.boost += 3; out.badges.push(`<span class="opp-sig sig-rs2">💪 RS-line new high</span>`); }
+  if (m.pctFrom52wHigh != null && m.pctFrom52wHigh <= 8) { out.boost += 3; out.badges.push(`<span class="opp-sig sig-hi">🎯 ${Math.round(m.pctFrom52wHigh)}% from 52w high</span>`); }
+  if ((m.vcpContractions ?? 0) >= 2) { out.boost += 2; out.badges.push(`<span class="opp-sig sig-vcp">📐 VCP ×${m.vcpContractions}</span>`); }
+  if (m.vdu || (m.volSurge != null && m.volSurge < 0.7)) out.badges.push(`<span class="opp-sig sig-vdu">🤫 volume dry-up</span>`);
+  if ((m.accumRatio ?? 0) >= 1.5) out.badges.push(`<span class="opp-sig sig-acc">📊 accum ${m.accumRatio}×</span>`);
   return out;
 }
 
