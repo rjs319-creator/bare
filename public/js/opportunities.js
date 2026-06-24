@@ -66,6 +66,16 @@ function thesis(c) {
   return `Smart money is showing ${L('accumulation', acc)} while price holds ${stage} — a name being bought ${L('ghost', 'before the obvious move')}. ${mom} (${c.quant?.score ?? '—'}/100).${story}`;
 }
 
+// How close is it to the buy trigger? The crux of "get in BEFORE it runs."
+function proximity(c) {
+  const px = c.price, entry = c.levels.entry;
+  if (!(px > 0) || !(entry > 0)) return '';
+  const pct = (entry / px - 1) * 100;
+  if (pct > 1) return `<div class="opp-prox prox-coiled">🟢 <b>${pct.toFixed(1)}% below the buy trigger</b> ($${esc(entry)}) — room to position before it breaks.</div>`;
+  if (pct >= -1) return `<div class="opp-prox prox-now">⚡ <b>Right at the trigger</b> ($${esc(entry)}) — breaking now; confirm on volume.</div>`;
+  return `<div class="opp-prox prox-ext">🟡 <b>${Math.abs(pct).toFixed(1)}% past the trigger</b> — already moving; wait for a pullback toward $${esc(entry)}.</div>`;
+}
+
 function levelsRow(lv) {
   const rr = lv.rr ? `${L('rr', lv.rr + ':1 R:R')}` : '';
   return `<div class="opp-levels">`
@@ -95,6 +105,7 @@ function oppCard(c) {
     + `<span class="opp-badge ghost-${(c.ghost.tier || '').toLowerCase()}">${L('ghost', c.ghost.tier)}</span>`
     + `<span class="dt-dim">${esc(c.sector || '')}</span></div>`
     + `<div class="opp-thesis">${thesis(c)}</div>`
+    + proximity(c)
     + levelsRow(c.levels)
     + expertDetail(c)
     + `</div>`;

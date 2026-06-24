@@ -1660,3 +1660,8 @@
     .opp-scope-btn:hover { color: var(--text); border-color: var(--border-hi); }
     .opp-scope-btn.active { background: var(--green-dim); color: var(--green); border-color: #10d98a66; }
     .opp-scope-hint { font-size: 0.68rem; margin-left: 4px; }
+    /* ⭐ Opportunity proximity-to-trigger line */
+    .opp-prox { font-size: 0.76rem; font-weight: 600; margin: 0 0 8px; padding: 6px 10px; border-radius: 8px; background: var(--surface); }
+    .opp-prox.prox-coiled { border-left: 3px solid var(--green); }
+    .opp-prox.prox-now { border-left: 3px solid var(--cyan); }
+    .opp-prox.prox-ext { border-left: 3px solid var(--amber, #f59e0b); }
