@@ -31,10 +31,11 @@ function badgeHTML(q) {
 function updateAsOf(section, n) {
   let el = section.querySelector('.live-asof');
   if (!el) {
-    el = document.createElement('span');
+    el = document.createElement('div');
     el.className = 'live-asof';
-    const host = section.querySelector('.section-label .label-action') || section.querySelector('.section-label') || section;
-    host.insertBefore(el, host.firstChild);
+    const label = section.querySelector('.section-label');
+    if (label) label.insertAdjacentElement('afterend', el);   // its own line below the header (mobile-safe)
+    else section.insertBefore(el, section.firstChild);
   }
   const t = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   el.innerHTML = `<span class="live-dot live-regular"></span>live · ${t} · ${n} name${n === 1 ? '' : 's'}`;
