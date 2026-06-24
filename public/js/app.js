@@ -1,3 +1,5 @@
+  import { esc, fmtMoney, timeAgo } from './format.js';
+
   // ── App tabs with a "Markets" hub (Screener / Rotation / Sectors) ──
   const TAB_GROUPS = {
     start:     ['today', 'start'],
@@ -2584,7 +2586,6 @@
       renderSharp(d);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load prediction-market data.</p></div>`; }
   }
-  function fmtMoney(n) { n = n || 0; return n >= 1000 ? '$' + (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : '$' + Math.round(n); }
   function sharpRow(m, flagged) {
     const col = VENUE_COL[m.venue] || '#e11d48';
     const sCol = m.sharp >= 60 ? 'var(--red)' : m.sharp >= 45 ? 'var(--amber,#f59e0b)' : 'var(--text-dim)';
@@ -2658,11 +2659,6 @@
   let alertsLoaded = false, alertItems = [];
   const getSeen = () => { try { return +localStorage.getItem('notifySeen') || 0; } catch { return 0; } };
   const setSeen = t => { try { localStorage.setItem('notifySeen', String(t)); } catch {} };
-  function timeAgo(ts) {
-    const s = Math.max(0, (Date.now() - Date.parse(ts)) / 1000);
-    if (s < 90) return 'just now'; if (s < 3600) return Math.round(s / 60) + 'm ago';
-    if (s < 86400) return Math.round(s / 3600) + 'h ago'; return Math.round(s / 86400) + 'd ago';
-  }
   // Refresh the unread count + paint a badge on every Predict nav button.
   function paintAlertBadge() {
     const seen = getSeen();
@@ -4361,9 +4357,6 @@
     momentumContainer.innerHTML = `<div class="mom-status error"><p>${esc(msg)}</p></div>`;
   }
 
-  function esc(s) {
-    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
 
   // Boot the initial tab LAST, so every lazy-loader (let-scoped) is initialized
   // before its tab-switch dispatch runs. Still executes before first paint.
