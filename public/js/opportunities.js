@@ -14,7 +14,25 @@ const STAGE_VAL = { Setup: 100, Early: 82, Breakout: 60 };            // earlier
 const STAGE_LABEL = { Setup: '🎯 Coiled setup', Early: '🌱 Early base', Breakout: '🚀 Breaking out' };
 const GHOST_LABEL = { GHOST: 'heavy accumulation', STALKING: 'quiet accumulation', WATCH: 'early interest' };
 
-export function rankOpportunities(results) {
+// Build a per-(section|tier) reliability map from the live scoreboard, and a
+// confidence-aware weight: the app literally uses its own realized results to tilt
+// the ranking. Small samples → neutral (we don't over-trust a handful of picks).
+function buildReliability(groups) {
+  const map = {};
+  (groups || []).forEach(g => {
+    const h = g.horizons || {};
+    const best = h['1m'] || h['1w'] || h['3m'] || null;
+    map[`${g.section}|${g.tier}`] = best ? { avg: best.avg, winRate: best.winRate, n: best.n } : { n: 0 };
+  });
+  return map;
+}
+function relWeight(rec) {
+  if (!rec || (rec.n || 0) < 8) return 1;                       // not enough data → neutral
+  const a = rec.avg || 0, w = (rec.winRate || 50) - 50;
+  return 1 + Math.max(-0.15, Math.min(0.2, a * 0.02 + w * 0.004));  // beating → boost, losing → trim
+}
+
+export function rankOpportunities(results, reliability = {}) {
   return (results || [])
     .filter(c => c.levels && c.ghost && c.status && c.levels.entry > 0)
     .map(c => {
@@ -23,8 +41,10 @@ export function rankOpportunities(results) {
       const q = c.quant?.score ?? 0;
       const narr = Math.min((c.narrativeStrength ?? 0) * 10, 100);
       // Accumulation + early-stage weighted heaviest — that's the "before it runs" edge.
-      const opp = Math.round(0.34 * q + 0.30 * g + 0.21 * stage + 0.15 * narr);
-      return { ...c, opp };
+      const base = 0.34 * q + 0.30 * g + 0.21 * stage + 0.15 * narr;
+      const rec = reliability[`Ghost|${c.ghost.tier}`];
+      const opp = Math.round(base * relWeight(rec));            // tilt by the live track record
+      return { ...c, opp, rec };
     })
     .sort((a, b) => b.opp - a.opp);
 }
@@ -83,13 +103,31 @@ function oppCard(c) {
 export async function loadOpportunities(container) {
   if (!container) return;
   container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Finding the best setups to buy before they run…</p></div>`;
-  let d;
-  try { d = await fetch('/api/screener?scope=large').then(r => r.json()); } catch { d = null; }
+  let d, sb;
+  try {
+    [d, sb] = await Promise.all([
+      fetch('/api/screener?scope=large').then(r => r.json()),
+      fetch('/api/tracker?op=scoreboard').then(r => r.json()).catch(() => null),
+    ]);
+  } catch { d = null; }
   if (!d) { container.innerHTML = `<div class="dt-note">Couldn't load opportunities right now.</div>`; return; }
   const regime = d.regime || {};
   const riskOff = regime.bearish === true || regime.riskOn === false;
-  const ranked = rankOpportunities(d.results);
+  const reliability = buildReliability(sb && sb.groups);
+  const ranked = rankOpportunities(d.results, reliability);
   const top = ranked.slice(0, 6);
+
+  // Honest track-record line for the accumulation signal these are ranked on.
+  const accRecs = ['Ghost|GHOST', 'Ghost|STALKING'].map(k => reliability[k]).filter(r => r && r.n >= 8);
+  let trackLine;
+  if (accRecs.length) {
+    const tot = accRecs.reduce((a, r) => ({ n: a.n + r.n, sum: a.sum + r.avg * r.n }), { n: 0, sum: 0 });
+    const avg = tot.sum / tot.n;
+    trackLine = `📊 Live track record: accumulation picks have averaged <b style="color:${avg > 0 ? 'var(--green)' : 'var(--red)'}">${avg > 0 ? '+' : ''}${avg.toFixed(1)}%</b> over ${tot.n} resolved (1mo) — the ranking is tilted by this.`;
+  } else {
+    const logged = (sb && sb.totalPicks) || 0;
+    trackLine = `📊 Track record building — ${logged} picks logged; forward returns mature over weeks, then auto-tilt this ranking.`;
+  }
 
   let html = `<div class="rot-head" style="margin-top:4px">⭐ Top opportunities <span class="dt-dim">· quiet accumulation + early setups, ranked</span></div>`;
   if (riskOff) {
@@ -97,7 +135,8 @@ export async function loadOpportunities(container) {
   } else {
     html += `<div class="dt-note" style="border-left-color:var(--green)"><b>✅ Constructive backdrop.</b> Market is ${regime.riskOn ? L('regime', 'risk-on') : 'neutral'}${regime.breadthPct != null ? ` · breadth ${regime.breadthPct}%` : ''} — a reasonable environment to look for early longs. These are <b>pre-breakout</b> names (being accumulated, not yet extended), ranked by conviction.</div>`;
   }
+  html += `<div class="dt-note" style="border-left-color:var(--cyan)">${trackLine}</div>`;
   html += top.length ? top.map(oppCard).join('') : `<div class="dt-note">No clean pre-breakout setups passed the screen today — that's normal on some days. Check back, or browse the full ${L('breakout', 'screeners')}.</div>`;
-  html += `<div class="dt-dim opp-foot">Ranked by accumulation strength, setup stage, momentum quality &amp; story — the same signals the app tracks and re-weights over time. Not advice; always confirm and use a ${L('stop', 'stop')}.</div>`;
+  html += `<div class="dt-dim opp-foot">Ranked by accumulation strength, setup stage, momentum quality &amp; story — then tilted by each signal's live ${L('beatRate', 'track record')}. Not advice; always confirm and use a ${L('stop', 'stop')}.</div>`;
   container.innerHTML = html;
 }
