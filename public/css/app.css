@@ -1619,3 +1619,7 @@
     .alert-row { cursor: pointer; }
     .alert-row.alert-unread { background: color-mix(in srgb, var(--amber, #f59e0b) 8%, var(--card)); }
     .mbn-item .nav-badge, .mtt-item .nav-badge { position: relative; top: -6px; margin-left: 2px; }
+    /* 🩺 System health banner */
+    .health-banner { background: color-mix(in srgb, var(--amber, #f59e0b) 14%, var(--card)); border: 1px solid var(--amber, #f59e0b); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.82rem; line-height: 1.5; color: var(--text); position: relative; }
+    .health-banner .health-x { position: absolute; top: 6px; right: 8px; background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 0.9rem; padding: 2px 6px; }
+    .health-banner .health-x:hover { color: var(--text); }

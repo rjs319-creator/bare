@@ -185,6 +185,23 @@
   updateClock();
   setInterval(updateClock, 1000);
 
+  // ── System health banner — surfaces stale data or a failed daily cron run ──
+  async function checkHealth() {
+    let d; try { d = await fetch('/api/tracker?op=health').then(r => r.json()); } catch { return; }
+    if (!d || !d.ok) return;
+    const warns = [];
+    if (d.data && d.data.stale) warns.push(`⚠️ Market data is ${d.data.ageDays}d stale (last EOD ${esc(d.data.spyDate || '—')}) — prices may be behind.`);
+    if (d.lastRun && !d.lastRun.ok) warns.push(`⚠️ Last data refresh had ${d.lastRun.failCount} failed step${d.lastRun.failCount === 1 ? '' : 's'}${d.failStreak > 1 ? ` (${d.failStreak} runs in a row)` : ''}: ${esc((d.lastRun.failed || []).slice(0, 4).join(', ') || 'cache warms')}.`);
+    if (!warns.length) return;
+    const page = document.querySelector('.page'); if (!page) return;
+    const bar = document.createElement('div');
+    bar.className = 'health-banner';
+    bar.innerHTML = warns.join('<br>') + ` <button class="health-x" aria-label="dismiss">✕</button>`;
+    bar.querySelector('.health-x').addEventListener('click', () => bar.remove());
+    page.insertBefore(bar, page.firstChild);
+  }
+  checkHealth();
+
   // ── News feeds ──
   document.getElementById('refresh-btn').addEventListener('click', fetchAll);
   fetchAll();
