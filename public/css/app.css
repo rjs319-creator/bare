@@ -1666,3 +1666,10 @@
     .opp-prox.prox-now { border-left: 3px solid var(--cyan); }
     .opp-prox.prox-ext { border-left: 3px solid var(--amber, #f59e0b); }
     .opp-badge.opp-sleevea { color: #f0a832; border-color: #f0a83266; }
+    /* 🔥 Leading-themes strip on Opportunities */
+    .opp-themes { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
+    .opp-themes-h { font-size: 0.74rem; font-weight: 800; color: #f0a832; }
+    .opp-theme-chip { font-size: 0.7rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: color-mix(in srgb, #f0a832 12%, var(--card)); border: 1px solid #f0a83255; color: var(--text); }
+    .opp-theme-chip .opp-theme-mom { color: var(--green); }
+    .opp-themes-hint { font-size: 0.66rem; width: 100%; margin-top: 2px; }
+    .opp-badge.opp-theme-lead { color: #f0a832; border-color: #f0a83266; background: color-mix(in srgb, #f0a832 8%, var(--card)); }

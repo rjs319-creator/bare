@@ -5,6 +5,7 @@
 // expert detail, and tap-to-learn on every term. Regime-gated — stands down when
 // the backdrop is hostile (the project's one validated lever).
 import { esc } from './format.js';
+import { canonTheme, rankThemes, leadingThemeSet } from './themes.js';
 
 const L = (term, txt) => `<span class="learn-term" data-learn="${term}">${txt}</span>`;
 
@@ -43,7 +44,7 @@ export function modelHealth(drift) {
   return { factor, n: live.n, live: live.winRate, base, degrading: ratio < 0.7, beating: ratio > 1.1, state: drift.status || (ratio < 0.7 ? 'degrading' : 'ok') };
 }
 
-export function rankOpportunities(results, reliability = {}, healthFactor = 1) {
+export function rankOpportunities(results, reliability = {}, healthFactor = 1, leadSet = new Set()) {
   return (results || [])
     .filter(c => c.levels && c.ghost && c.status && c.levels.entry > 0)
     .map(c => {
@@ -52,11 +53,15 @@ export function rankOpportunities(results, reliability = {}, healthFactor = 1) {
       const q = c.quant?.score ?? 0;
       const narr = Math.min((c.narrativeStrength ?? 0) * 10, 100);
       const conv = c.conviction?.score ?? 70;                  // the LEARNED conviction (recalibrated from resolved picks)
-      // Accumulation + early-stage + the results-trained conviction drive the score.
-      const base = 0.28 * q + 0.26 * g + 0.18 * stage + 0.12 * narr + 0.16 * conv;
+      const theme = canonTheme(c.theme, c.narrative, c.sector);
+      const inLeadingTheme = leadSet.has(theme);
+      // A name early in a HOT theme that hasn't run itself yet = the laggard play.
+      const laggard = inLeadingTheme && (c.status === 'Setup' || c.status === 'Early') && (c.factors?.mom21 ?? 99) < 20;
+      const themeBoost = inLeadingTheme ? (laggard ? 12 : 7) : 0;     // theme tailwind
+      const base = 0.28 * q + 0.26 * g + 0.18 * stage + 0.12 * narr + 0.16 * conv + themeBoost;
       const rec = reliability[`Ghost|${c.ghost.tier}`];
       const opp = Math.round(base * relWeight(rec) * healthFactor);   // tilt by the model's live record + tier track record
-      return { ...c, opp, rec };
+      return { ...c, opp, rec, theme: c.theme, canonTheme: theme, inLeadingTheme, laggard };
     })
     .sort((a, b) => b.opp - a.opp);
 }
@@ -75,7 +80,8 @@ function thesis(c) {
   const mom = (c.quant?.score ?? 0) >= 85 ? 'top-tier momentum quality'
     : (c.quant?.score ?? 0) >= 70 ? 'strong momentum quality' : 'building momentum';
   const story = (c.narrativeStrength >= 6 && c.theme) ? ` <span class="dt-dim">Story: ${esc(c.theme)}.</span>` : '';
-  return `Smart money is showing ${L('accumulation', acc)} while price holds ${stage} — a name being bought ${L('ghost', 'before the obvious move')}. ${mom} (${c.quant?.score ?? '—'}/100).${story}`;
+  const lag = c.laggard ? ` <b style="color:#f0a832">🔥 Laggard play:</b> its theme (${esc(c.canonTheme)}) is already running hard while this name hasn't — a potential catch-up.` : '';
+  return `Smart money is showing ${L('accumulation', acc)} while price holds ${stage} — a name being bought ${L('ghost', 'before the obvious move')}. ${mom} (${c.quant?.score ?? '—'}/100).${lag}${story}`;
 }
 
 // How close is it to the buy trigger? The crux of "get in BEFORE it runs."
@@ -116,7 +122,8 @@ function oppCard(c) {
     + `<div class="opp-badges"><span class="opp-badge">${STAGE_LABEL[c.status] || c.status}</span>`
     + `<span class="opp-badge ghost-${(c.ghost.tier || '').toLowerCase()}">${L('ghost', c.ghost.tier)}</span>`
     + (c.conviction?.sleeveA ? `<span class="opp-badge opp-sleevea" title="Top-quintile by the results-trained conviction model">🏅 ${L('conviction', 'top-quintile')}</span>` : '')
-    + `<span class="dt-dim">${esc(c.sector || '')}</span></div>`
+    + (c.inLeadingTheme ? `<span class="opp-badge opp-theme-lead" title="In a leading theme">🔥 ${esc(c.canonTheme)}</span>` : `<span class="dt-dim">${esc(c.canonTheme || c.sector || '')}</span>`)
+    + `</div>`
     + `<div class="opp-thesis">${thesis(c)}</div>`
     + proximity(c)
     + levelsRow(c.levels)
@@ -140,7 +147,9 @@ export async function loadOpportunities(container, scope = 'large', limit = 6) {
   const riskOff = regime.bearish === true || regime.riskOn === false;
   const reliability = buildReliability(sb && sb.groups);
   const health = modelHealth(drift);
-  const ranked = rankOpportunities(d.results, reliability, health.factor);
+  const themesRanked = rankThemes(d.results);
+  const { set: leadSet, list: leadingThemes } = leadingThemeSet(themesRanked, 4);
+  const ranked = rankOpportunities(d.results, reliability, health.factor, leadSet);
   const top = ranked.slice(0, limit);
 
   // Model-health line — the loop OPERATING now: the app grades its own resolved
@@ -166,6 +175,12 @@ export async function loadOpportunities(container, scope = 'large', limit = 6) {
     html += `<div class="dt-note" style="border-left-color:var(--red)"><b>🛑 Risk-off backdrop — standing down.</b> The market is ${L('regime', 'risk-off')}; new long setups fail far more often here (the one thing this app has truly validated). The watchlist below is for when it turns — don't force it.</div>`;
   } else {
     html += `<div class="dt-note" style="border-left-color:var(--green)"><b>✅ Constructive backdrop.</b> Market is ${regime.riskOn ? L('regime', 'risk-on') : 'neutral'}${regime.breadthPct != null ? ` · breadth ${regime.breadthPct}%` : ''} — a reasonable environment to look for early longs. These are <b>pre-breakout</b> names (being accumulated, not yet extended), ranked by conviction.</div>`;
+  }
+  // 🔥 Leading themes strip — buy the laggard inside a running theme.
+  if (leadingThemes.length) {
+    html += `<div class="opp-themes"><span class="opp-themes-h">🔥 Leading themes</span>`
+      + leadingThemes.map(t => `<span class="opp-theme-chip" title="${t.n} names · 3mo median ${t.mom63}%">${esc(t.theme)} <span class="opp-theme-mom">+${Math.round(t.mom63)}%</span></span>`).join('')
+      + `<span class="dt-dim opp-themes-hint">· ⭐ below favors early names <b>in</b> these themes that haven't run yet</span></div>`;
   }
   html += `<div class="dt-note" style="border-left-color:${trackCol}">${trackLine}</div>`;
   html += top.length ? top.map(oppCard).join('') : `<div class="dt-note">No clean pre-breakout setups passed the screen today — that's normal on some days. Check back, or browse the full ${L('breakout', 'screeners')}.</div>`;
