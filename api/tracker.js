@@ -29,6 +29,7 @@ const { runArchive, runInsiderIngest, runInsider, runFundBuild, runFundamentals,
         runCernTickOp, runCern, runCernFsProbe, runCernLockProbe } = require('../lib/capture-routes');
 const { runTrack, runScoreboard, runApexLog, runGhostLog, runEdgeLog, runEdgeBook, runVReversal, runVReversalTest,
         runDrift, runRecalibrate, runResearchOp, runExitsOp, runLongShortOp, runPeadOp, runBackfillOp, runModel, runNarrative } = require('../lib/apex-routes');
+const { runHealth } = require('../lib/health');
 
 module.exports = async function handler(req, res) {
   if (req.query.op === 'track') return runTrack(req, res);
@@ -84,5 +85,6 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'alertsgrade') return runAlertsGrade(req, res);
   if (req.query.op === 'model') return runModel(req, res);
   if (req.query.op === 'narrative') return runNarrative(req, res);
+  if (req.query.op === 'health') return runHealth(req, res);
   return runScoreboard(req, res);
 };

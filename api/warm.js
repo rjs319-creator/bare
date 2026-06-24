@@ -152,6 +152,12 @@ module.exports = async function handler(req, res) {
   } catch (e) { brieftick = { error: String(e && e.message || e) }; }
 
   const warmedExtra = await extraWarm;   // already resolved — ran during the tail above
+  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, predicttick, crowdtick, brieftick, at: new Date().toISOString() };
+
+  // Observability: persist a compact health record so failed ticks / stale data are visible (op=health).
+  try { const { summarizeRun, writeHealthRun } = require('../lib/health'); await writeHealthRun(summarizeRun(result)); }
+  catch (e) { result.healthLogError = String(e && e.message || e); }
+
   res.setHeader('Cache-Control', 'no-store');
-  return res.json({ ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, predicttick, crowdtick, brieftick, at: new Date().toISOString() });
+  return res.json(result);
 };
