@@ -120,9 +120,8 @@ function thesis(c) {
     : 'breaking out right now';
   const mom = (c.quant?.score ?? 0) >= 85 ? 'top-tier momentum quality'
     : (c.quant?.score ?? 0) >= 70 ? 'strong momentum quality' : 'building momentum';
-  const story = (c.narrativeStrength >= 6 && c.theme) ? ` <span class="dt-dim">Story: ${esc(c.theme)}.</span>` : '';
-  const lag = c.laggard ? ` <b style="color:#f0a832">🔥 Laggard play:</b> its theme (${esc(c.canonTheme)}) is already running hard while this name hasn't — a potential catch-up.` : '';
-  return `Smart money is showing ${L('accumulation', acc)} while price holds ${stage} — a name being bought ${L('ghost', 'before the obvious move')}. ${mom} (${c.quant?.score ?? '—'}/100).${lag}${story}`;
+  const lag = c.laggard ? ` <b style="color:#f0a832">🔥 Laggard play:</b> its theme is running hard while this name hasn't — a potential catch-up.` : '';
+  return `Smart money is showing ${L('accumulation', acc)} while price holds ${stage} — a name being bought ${L('ghost', 'before the obvious move')}. ${mom} (${c.quant?.score ?? '—'}/100).${lag}`;
 }
 
 // How close is it to the buy trigger? The crux of "get in BEFORE it runs."
@@ -173,14 +172,14 @@ function oppCard(c) {
     + `<div class="opp-conv" style="color:${cv.col}" title="${cv.label}">${cv.stars}</div></div>`
     + `<div class="opp-badges"><span class="opp-badge">${STAGE_LABEL[c.status] || c.status}</span>`
     + `<span class="opp-badge ghost-${(c.ghost.tier || '').toLowerCase()}">${L('ghost', c.ghost.tier)}</span>`
-    + (c.conviction?.sleeveA ? `<span class="opp-badge opp-sleevea" title="Top-quintile by the results-trained conviction model">🏅 ${L('conviction', 'top-quintile')}</span>` : '')
+    + (c.conviction?.sleeveA ? `<span class="opp-badge opp-sleevea expert-only" title="Top-quintile by the results-trained conviction model">🏅 ${L('conviction', 'top-quintile')}</span>` : '')
     + (c.inLeadingTheme ? `<span class="opp-badge opp-theme-lead" title="In a leading theme">🔥 ${esc(c.canonTheme)}</span>` : `<span class="dt-dim">${esc(c.canonTheme || c.sector || '')}</span>`)
     + `</div>`
     + `<div class="opp-thesis">${thesis(c)}</div>`
     + proximity(c)
     + levelsRow(c.levels)
     + sizing(c.levels)
-    + ((c.smBadges && c.smBadges.length) || c.rsTheme ? `<div class="opp-sigs">`
+    + ((c.smBadges && c.smBadges.length) || c.rsTheme ? `<div class="opp-sigs expert-only">`
         + (c.rsTheme === 'leads' ? `<span class="opp-sig sig-rs-lead">⚡ ${L('relStrength', 'leads its theme')}</span>` : c.rsTheme === 'lags' ? `<span class="opp-sig sig-rs-lag">🐢 ${L('relStrength', 'lags its theme — catch-up')}</span>` : '')
         + (c.smBadges || []).join('') + `</div>` : '')
     + expertDetail(c)
