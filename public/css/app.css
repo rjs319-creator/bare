@@ -1634,3 +1634,23 @@
     .live-asof { display: flex; align-items: center; gap: 4px; font-size: 0.68rem; font-weight: 700; color: var(--text-dim); margin: -2px 0 8px; white-space: nowrap; }
     .live-asof .live-dot { animation: live-pulse 2s ease-in-out infinite; }
     @keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+    /* ⭐ Opportunities (Today home centerpiece) */
+    .opp-wrap { margin: 4px 0; }
+    .opp-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 13px 15px; margin-top: 9px; cursor: pointer; transition: border-color .15s, background .15s; }
+    .opp-card:hover { border-color: var(--border-hi); background: var(--card-hover); }
+    .opp-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .opp-id { min-width: 0; }
+    .opp-tk { font-size: 1.02rem; font-weight: 800; letter-spacing: .01em; }
+    .opp-co { font-size: 0.74rem; color: var(--text-dim); }
+    .opp-conv { font-size: 0.82rem; white-space: nowrap; }
+    .opp-badges { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 6px 0 5px; font-size: 0.7rem; }
+    .opp-badge { font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); }
+    .opp-badge.ghost-ghost { color: #9b8cff; border-color: #9b8cff66; }
+    .opp-badge.ghost-stalking { color: var(--cyan); border-color: #06c4d466; }
+    .opp-badge.ghost-watch { color: var(--text-dim); }
+    .opp-thesis { font-size: 0.82rem; line-height: 1.5; color: var(--text); margin-bottom: 8px; }
+    .opp-levels { display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.78rem; padding: 7px 10px; background: var(--surface); border-radius: 8px; }
+    .opp-levels .opp-lk { color: var(--text-dim); font-size: 0.68rem; text-transform: uppercase; letter-spacing: .03em; }
+    .opp-levels .opp-rr { margin-left: auto; color: var(--green); font-weight: 700; }
+    .opp-expert { margin-top: 8px; font-size: 0.74rem; line-height: 1.5; color: var(--text); border-top: 1px dashed var(--border); padding-top: 7px; }
+    .opp-foot { font-size: 0.7rem; line-height: 1.5; margin-top: 10px; }

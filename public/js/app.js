@@ -1,5 +1,6 @@
   import { esc, fmtMoney, timeAgo } from './format.js';
   import { startLivePrices as startScreenerLive, stopLivePrices as stopScreenerLive, LIVE_SCREENERS } from './live-price.js';
+  import { loadOpportunities } from './opportunities.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
 
   // ── App tabs with a "Markets" hub (Screener / Rotation / Sectors) ──
@@ -2330,10 +2331,16 @@
       if (picks.length) ideas = `<div class="rot-panel"><div class="rot-head">👀 A few names moving today</div><div class="rot-sub">Today's biggest movers on heavy volume — a starting watchlist, not advice. Tap a row to open the full Day Trade view.</div>`
         + picks.map(p => `<div class="bt-ic-row today-idea" data-go="daytrade"><span><b>${esc(p.ticker)}</b> <span style="color:var(--text-dim)">${esc(p.sector || '')}</span></span><span style="color:var(--green)">+${p.pctChange}%</span><span>RVOL ${p.relVol}×</span></div>`).join('') + `</div>`;
     }
+    const opps = `<div id="today-opps" class="opp-wrap"></div>`;
     const links = `<div class="today-links"><button class="today-link" data-go="start">📘 New here? Read the 2-min guide</button><button class="today-link" id="today-learn">📚 Learn the basics</button><button class="today-link" data-go="screener">🔎 All screeners</button></div>`;
-    el.innerHTML = read + rec + ideas + links;
+    el.innerHTML = read + rec + opps + ideas + links;
     el.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => { if (typeof showTab === 'function') showTab(b.dataset.go); }));
     el.querySelector('#today-learn')?.addEventListener('click', () => openLearn());
+    // ⭐ The centerpiece: pre-breakout buy opportunities, ranked. Loads independently.
+    loadOpportunities(el.querySelector('#today-opps')).then(() => {
+      el.querySelectorAll('#today-opps [data-go]').forEach(b => b.addEventListener('click', () => { if (typeof showTab === 'function') showTab(b.dataset.go); }));
+      if (typeof startScreenerLive === 'function') startScreenerLive(el.querySelector('#today-opps'));   // live prices on opp cards too
+    });
     const gt = document.getElementById('today-gen-time'); if (gt && ok && tape.generatedAt) gt.textContent = new Date(tape.generatedAt).toLocaleTimeString();
     const meta = document.getElementById('today-meta'); if (meta) meta.textContent = `· ${regLbl} · ${clbl} tape`;
   }
