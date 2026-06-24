@@ -27,6 +27,19 @@ function badgeHTML(q) {
     + `$${esc(q.price)} <span style="color:${col}">${pct > 0 ? '+' : ''}${esc(q.changePct)}%</span>${ext}`;
 }
 
+// "🟢 live · HH:MM:SS · N names" indicator in the section header (updated on refresh).
+function updateAsOf(section, n) {
+  let el = section.querySelector('.live-asof');
+  if (!el) {
+    el = document.createElement('span');
+    el.className = 'live-asof';
+    const host = section.querySelector('.section-label .label-action') || section.querySelector('.section-label') || section;
+    host.insertBefore(el, host.firstChild);
+  }
+  const t = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  el.innerHTML = `<span class="live-dot live-regular"></span>live · ${t} · ${n} name${n === 1 ? '' : 's'}`;
+}
+
 let busy = false;
 async function hydrate(section) {
   if (!section || busy) return;
@@ -37,13 +50,16 @@ async function hydrate(section) {
   busy = true;
   let prices = {};
   try { prices = await fetchPrices(tickers); } finally { busy = false; }
+  let n = 0;
   for (const el of els) {
     const q = prices[(el.dataset.live || '').toUpperCase()];
     if (!q) continue;
     let badge = el.querySelector(':scope > .live-px');
     if (!badge) { badge = document.createElement('span'); badge.className = 'live-px'; el.appendChild(badge); }
     badge.innerHTML = badgeHTML(q);
+    n++;
   }
+  if (n) updateAsOf(section, n);
 }
 
 let timer = null, current = null;
@@ -58,5 +74,6 @@ export function startLivePrices(section) {
 export function stopLivePrices() {
   if (timer) clearInterval(timer);
   earlyTimers.forEach(clearTimeout); earlyTimers.length = 0;
+  if (current) { const a = current.querySelector('.live-asof'); if (a) a.remove(); }
   timer = null; current = null;
 }
