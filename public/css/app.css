@@ -1673,3 +1673,9 @@
     .opp-theme-chip .opp-theme-mom { color: var(--green); }
     .opp-themes-hint { font-size: 0.66rem; width: 100%; margin-top: 2px; }
     .opp-badge.opp-theme-lead { color: #f0a832; border-color: #f0a83266; background: color-mix(in srgb, #f0a832 8%, var(--card)); }
+    /* Smart-money / fundamental signal chips on Opportunities */
+    .opp-sigs { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+    .opp-sig { font-size: 0.68rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); }
+    .opp-sig.sig-growth { color: var(--green); border-color: #10d98a44; }
+    .opp-sig.sig-insider { color: var(--green); border-color: #10d98a66; background: var(--green-dim); }
+    .opp-sig.sig-cat { color: var(--cyan); border-color: #06c4d444; }

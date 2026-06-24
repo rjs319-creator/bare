@@ -58,12 +58,32 @@ export function rankOpportunities(results, reliability = {}, healthFactor = 1, l
       // A name early in a HOT theme that hasn't run itself yet = the laggard play.
       const laggard = inLeadingTheme && (c.status === 'Setup' || c.status === 'Early') && (c.factors?.mom21 ?? 99) < 20;
       const themeBoost = inLeadingTheme ? (laggard ? 12 : 7) : 0;     // theme tailwind
-      const base = 0.28 * q + 0.26 * g + 0.18 * stage + 0.12 * narr + 0.16 * conv + themeBoost;
+      const sm = smartMoney(c);                                        // growth accel + insider + catalyst
+      const base = 0.28 * q + 0.26 * g + 0.18 * stage + 0.12 * narr + 0.16 * conv + themeBoost + sm.boost;
       const rec = reliability[`Ghost|${c.ghost.tier}`];
       const opp = Math.round(base * relWeight(rec) * healthFactor);   // tilt by the model's live record + tier track record
-      return { ...c, opp, rec, theme: c.theme, canonTheme: theme, inLeadingTheme, laggard };
+      return { ...c, opp, rec, theme: c.theme, canonTheme: theme, inLeadingTheme, laggard, smBadges: sm.badges };
     })
     .sort((a, b) => b.opp - a.opp);
+}
+
+// Smart-money + fundamental-acceleration signals (the Python screener's growth
+// filters, done with 2nd-derivative accel + insider flow + catalyst proximity).
+function smartMoney(c) {
+  const f = c.fundamentals || {}, ins = c.insider || {};
+  const out = { boost: 0, badges: [] };
+  // Growth quality & acceleration — the real pre-run-up fundamental tell.
+  if ((f.revGrowth ?? 0) >= 25 || (f.revAccel ?? 0) > 5) out.boost += 4;
+  if ((f.epsAccel ?? 0) > 10) out.boost += 3;
+  if (f.marginExpanding) out.boost += 2;
+  if (f.revGrowth != null) out.badges.push(`<span class="opp-sig sig-growth">📈 rev ${f.revGrowth > 0 ? '+' : ''}${Math.round(f.revGrowth)}%${(f.revAccel ?? 0) > 3 ? ' accel↑' : ''}</span>`);
+  // Insider BUYING (rare, high-signal) — execs putting money in before the move.
+  const net = ins.net?.value ?? 0;
+  if (net > 100000) { out.boost += 5; out.badges.push(`<span class="opp-sig sig-insider">🟢 ${L('selflearning', 'insiders buying')}</span>`); }
+  // Catalyst proximity — accumulating into an earnings catalyst.
+  const days = f.earningsInDays;
+  if (days != null && days >= 0 && days <= 35) out.badges.push(`<span class="opp-sig sig-cat">⏰ earnings in ${days}d</span>`);
+  return out;
 }
 
 function conviction(opp) {
@@ -127,6 +147,7 @@ function oppCard(c) {
     + `<div class="opp-thesis">${thesis(c)}</div>`
     + proximity(c)
     + levelsRow(c.levels)
+    + ((c.smBadges && c.smBadges.length) ? `<div class="opp-sigs">${c.smBadges.join('')}</div>` : '')
     + expertDetail(c)
     + `</div>`;
 }
