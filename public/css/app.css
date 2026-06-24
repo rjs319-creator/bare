@@ -1134,12 +1134,13 @@
       body.tabs .section-label h2 { font-size: 0.95rem; }
       body.tabs .page { padding-top: 12px; }
 
-      /* Header */
-      header { padding: 0 16px; height: 52px; grid-template-columns: auto 1fr; }
+      /* Header — keep the action buttons; drop the secondary status cluster so the
+         right column fits a 390px screen (the clock is already hidden on mobile). */
+      header { padding: 0 12px; height: 52px; grid-template-columns: auto 1fr; gap: 10px; }
       .header-nav { display: none; }
-      #live-clock { display: none; }
-      .market-status span { font-size: 0.65rem; }
-      .hdr-btn { padding: 5px 10px; font-size: 0.7rem; }
+      #live-clock, .market-status { display: none; }
+      .header-right { gap: 8px; min-width: 0; }
+      .hdr-btn { padding: 5px 9px; font-size: 0.7rem; }
       .logo-text { font-size: 0.85rem; }
 
       /* Page */
