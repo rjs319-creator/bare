@@ -1,12 +1,12 @@
   import { esc, fmtMoney, timeAgo } from './format.js';
   import { startLivePrices as startScreenerLive, stopLivePrices as stopScreenerLive, LIVE_SCREENERS } from './live-price.js';
-  import { loadOpportunities } from './opportunities.js';
+  import { loadOpportunities, mountOpportunitiesTab } from './opportunities.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
 
   // ── App tabs with a "Markets" hub (Screener / Rotation / Sectors) ──
   const TAB_GROUPS = {
     start:     ['today', 'start'],
-    screeners: ['screener', 'custom', 'daytrade', 'confluence', 'ghost', 'trendrider', 'fade'],
+    screeners: ['opportunities', 'screener', 'custom', 'daytrade', 'confluence', 'ghost', 'trendrider', 'fade'],
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
     predict:   ['brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     research:  ['backtest', 'events', 'edge'],
@@ -16,7 +16,7 @@
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
     today: '🏠 Today', start: '📘 Guide',
-    screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', daytrade: '⚡ Day Trade', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
+    opportunities: '⭐ Opportunities', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', daytrade: '⚡ Day Trade', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
     brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
@@ -27,7 +27,7 @@
   // Mark each section as a switchable screen
   SECTION_IDS.forEach(id => document.getElementById(id)?.classList.add('tabbable'));
 
-  let hubSub = { start: 'today', screeners: 'screener', markets: 'rotation', predict: 'brief', research: 'backtest', track: 'scoreboard' };
+  let hubSub = { start: 'today', screeners: 'opportunities', markets: 'rotation', predict: 'brief', research: 'backtest', track: 'scoreboard' };
   try { const hs = JSON.parse(localStorage.getItem('hubSub')); if (hs) hubSub = { ...hubSub, ...hs }; } catch {}
   // Sanitize stored hubSub: after the nav regrouping a saved sub may no longer
   // belong to its group (e.g. markets→screener). Reset any stale entry to the
@@ -70,6 +70,7 @@
     document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('active', el.dataset.tab === top));
     renderHubSubnav(top, sub);
     if (typeof updateTapeBadge === 'function') updateTapeBadge(top === 'screeners' ? sub : null);
+    if (sub === 'opportunities' && typeof ensureOpportunities === 'function') ensureOpportunities();
     if (sub === 'screener' && typeof ensureScreener === 'function') ensureScreener();
     if (sub === 'backtest' && typeof ensureBacktest === 'function') ensureBacktest();
     if (sub === 'custom' && typeof ensureCustom === 'function') ensureCustom();
@@ -2296,6 +2297,15 @@
 
   // ── 🏠 TODAY — guided home: read the tape, say what suits, route the novice ──
   let todayLoaded = false;
+  let opportunitiesLoaded = false;
+  function ensureOpportunities() {
+    const el = document.getElementById('opportunities-container'); if (!el || opportunitiesLoaded) return;
+    opportunitiesLoaded = true;
+    mountOpportunitiesTab(el, body => {
+      body.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.go)));
+      const sec = document.getElementById('opportunities'); if (sec) startScreenerLive(sec);   // re-arm live prices after each (re)load
+    });
+  }
   function ensureToday() { if (!todayLoaded) { todayLoaded = true; runTodayUI(); } }
   async function runTodayUI() {
     const el = document.getElementById('today-container');
@@ -2345,6 +2355,7 @@
     const meta = document.getElementById('today-meta'); if (meta) meta.textContent = `· ${regLbl} · ${clbl} tape`;
   }
   document.getElementById('today-refresh-btn')?.addEventListener('click', runTodayUI);
+  document.getElementById('opp-refresh-btn')?.addEventListener('click', () => { opportunitiesLoaded = false; ensureOpportunities(); });
 
   // ── 🧭 PREDICTION BRIEF — synthesis lives server-side in lib/brief.js (single
   // source of truth, shared with the validation cron). The UI just renders op=brief.

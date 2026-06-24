@@ -5,7 +5,7 @@
 import { esc } from './format.js';
 
 // Sub-tabs that get the overlay (daytrade already has its own live price).
-export const LIVE_SCREENERS = new Set(['screener', 'custom', 'ghost', 'trendrider', 'fade', 'confluence']);
+export const LIVE_SCREENERS = new Set(['opportunities', 'screener', 'custom', 'ghost', 'trendrider', 'fade', 'confluence']);
 
 async function fetchPrices(tickers) {
   const out = {};

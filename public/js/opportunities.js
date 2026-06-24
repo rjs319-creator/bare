@@ -100,13 +100,13 @@ function oppCard(c) {
     + `</div>`;
 }
 
-export async function loadOpportunities(container) {
+export async function loadOpportunities(container, scope = 'large', limit = 6) {
   if (!container) return;
   container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Finding the best setups to buy before they run…</p></div>`;
   let d, sb;
   try {
     [d, sb] = await Promise.all([
-      fetch('/api/screener?scope=large').then(r => r.json()),
+      fetch('/api/screener?scope=' + scope).then(r => r.json()),
       fetch('/api/tracker?op=scoreboard').then(r => r.json()).catch(() => null),
     ]);
   } catch { d = null; }
@@ -115,7 +115,7 @@ export async function loadOpportunities(container) {
   const riskOff = regime.bearish === true || regime.riskOn === false;
   const reliability = buildReliability(sb && sb.groups);
   const ranked = rankOpportunities(d.results, reliability);
-  const top = ranked.slice(0, 6);
+  const top = ranked.slice(0, limit);
 
   // Honest track-record line for the accumulation signal these are ranked on.
   const accRecs = ['Ghost|GHOST', 'Ghost|STALKING'].map(k => reliability[k]).filter(r => r && r.n >= 8);
@@ -139,4 +139,24 @@ export async function loadOpportunities(container) {
   html += top.length ? top.map(oppCard).join('') : `<div class="dt-note">No clean pre-breakout setups passed the screen today — that's normal on some days. Check back, or browse the full ${L('breakout', 'screeners')}.</div>`;
   html += `<div class="dt-dim opp-foot">Ranked by accumulation strength, setup stage, momentum quality &amp; story — then tilted by each signal's live ${L('beatRate', 'track record')}. Not advice; always confirm and use a ${L('stop', 'stop')}.</div>`;
   container.innerHTML = html;
+}
+
+// Dedicated tab: a cap-size toggle (where the big early runs live) + the full list.
+const SCOPES = [['large', 'S&P 500'], ['small', 'Small caps'], ['micro', 'Micro caps']];
+export function mountOpportunitiesTab(container, onReady) {
+  if (!container) return;
+  let scope = 'large';
+  try { const s = localStorage.getItem('oppScope'); if (s && SCOPES.some(x => x[0] === s)) scope = s; } catch {}
+  container.innerHTML = `<div class="opp-scope-row">${SCOPES.map(([v, lbl]) =>
+    `<button class="opp-scope-btn ${v === scope ? 'active' : ''}" data-scope="${v}">${lbl}</button>`).join('')}
+    <span class="dt-dim opp-scope-hint">· small &amp; micro caps run the hardest</span></div><div id="opp-body" class="opp-wrap"></div>`;
+  const body = container.querySelector('#opp-body');
+  const run = sc => loadOpportunities(body, sc, 12).then(() => onReady && onReady(body));
+  container.querySelectorAll('.opp-scope-btn').forEach(b => b.addEventListener('click', () => {
+    scope = b.dataset.scope;
+    try { localStorage.setItem('oppScope', scope); } catch {}
+    container.querySelectorAll('.opp-scope-btn').forEach(x => x.classList.toggle('active', x === b));
+    run(scope);
+  }));
+  run(scope);
 }

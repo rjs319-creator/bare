@@ -1654,3 +1654,9 @@
     .opp-levels .opp-rr { margin-left: auto; color: var(--green); font-weight: 700; }
     .opp-expert { margin-top: 8px; font-size: 0.74rem; line-height: 1.5; color: var(--text); border-top: 1px dashed var(--border); padding-top: 7px; }
     .opp-foot { font-size: 0.7rem; line-height: 1.5; margin-top: 10px; }
+    /* ⭐ Opportunities tab — cap-size toggle */
+    .opp-scope-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+    .opp-scope-btn { font-size: 0.74rem; font-weight: 700; padding: 5px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); color: var(--text-dim); cursor: pointer; transition: all .12s; }
+    .opp-scope-btn:hover { color: var(--text); border-color: var(--border-hi); }
+    .opp-scope-btn.active { background: var(--green-dim); color: var(--green); border-color: #10d98a66; }
+    .opp-scope-hint { font-size: 0.68rem; margin-left: 4px; }
