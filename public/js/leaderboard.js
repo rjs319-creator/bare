@@ -23,28 +23,33 @@ function wilsonLo(w, n, z = 1.645) {
   return Math.max(0, (p + z * z / (2 * n) - z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))) / d);
 }
 
-// Build the ranked board from scoreboard groups + the 3-month backtest summary.
-export function buildBoard(groups, btSummary) {
+// Build the ranked board from scoreboard groups + 3-month backtest + cached
+// confluence-strategy backtests. Everything normalizes to alpha/excess vs SPY.
+export function buildBoard(groups, btSummary, confAlgos) {
   const rows = (groups || []).map(g => {
     const key = `${g.section}|${g.tier}`;
     const live = bestHorizon(g.horizons);
-    const bt = btSummary && BT_TIER[key] ? btSummary[BT_TIER[key]] : null;   // trailing-3mo backtest
-    // Rank metric: prefer the realized 3-month backtest alpha (true "last 3 months"),
-    // else the live forward avg return. Confidence-weighted by sample.
+    const bt = btSummary && BT_TIER[key] ? btSummary[BT_TIER[key]] : null;
     const score = bt ? bt.avgAlpha : (live ? live.avg : null);
-    return {
-      key, name: ALGO_NAME[key] || key, live, bt, score,
-      n: bt ? bt.n : (live ? live.n : 0),
-      hasData: score != null,
-    };
+    return { key, name: ALGO_NAME[key] || key, live, bt, score, n: bt ? bt.n : (live ? live.n : 0), hasData: score != null };
   });
-  // Algos with data first, ranked by score desc; thin/no-data sink.
+  // Confluence strategies (cached backtest): excess vs SPY ≈ alpha, beatRate ≈ win.
+  for (const [k, a] of Object.entries(confAlgos || {})) {
+    if (a.excess == null) continue;
+    rows.push({ key: k, name: a.name, conf: a, score: a.excess, n: a.n || 0, hasData: true });
+  }
   return rows.sort((a, b) => (b.hasData - a.hasData) || ((b.score ?? -99) - (a.score ?? -99)));
 }
 
 function verdict(row) {
   if (!row.hasData) return ['building', 'var(--text-dim)', 'no resolved picks yet'];
-  const bt = row.bt, live = row.live;
+  const bt = row.bt, live = row.live, cf = row.conf;
+  if (cf) {
+    const tag = `${cf.excess > 0 ? '+' : ''}${cf.excess}% excess, ${cf.beatRate}% beat (floor ${cf.wilsonLo}%, n${cf.n})`;
+    if (cf.wilsonLo >= 50) return ['beating', 'var(--green)', tag];
+    if (cf.beatRate >= 48) return ['inline', 'var(--amber,#f59e0b)', tag];
+    return ['lagging', 'var(--red)', tag];
+  }
   if (bt) {
     if (bt.avgAlpha > 0.2 && bt.winRate >= 48) return ['beating', 'var(--green)', `+${bt.avgAlpha}% alpha over ${bt.n} (3mo backtest)`];
     if (bt.avgAlpha > -0.5) return ['inline', 'var(--amber,#f59e0b)', `${bt.avgAlpha}% alpha — roughly tracking SPY`];
@@ -71,15 +76,16 @@ function row(r, i) {
 export async function loadLeaderboard(container) {
   if (!container) return;
   container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Ranking the screener algos by realized performance…</p></div>`;
-  let sb, bt;
+  let sb, bt, lb;
   try {
-    [sb, bt] = await Promise.all([
+    [sb, bt, lb] = await Promise.all([
       fetch('/api/tracker?op=scoreboard').then(r => r.json()),
       fetch('/api/backtest?scope=large&months=3').then(r => r.json()).catch(() => null),
+      fetch('/api/tracker?op=leaderboard').then(r => r.json()).catch(() => null),
     ]);
   } catch { sb = null; }
   if (!sb) { container.innerHTML = `<div class="dt-note">Couldn't load the leaderboard right now.</div>`; return; }
-  const board = buildBoard(sb.groups, bt && bt.summary);
+  const board = buildBoard(sb.groups, bt && bt.summary, lb && lb.algos);
   const withData = board.filter(r => r.hasData).length;
 
   let html = `<div class="rot-panel"><div class="rot-head">🏆 Which algos are actually working?</div>`

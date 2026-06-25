@@ -144,6 +144,13 @@ module.exports = async function handler(req, res) {
     crowdtick = await r.json();
   } catch (e) { crowdtick = { error: String(e && e.message || e) }; }
 
+  // 🏆 Algo Leaderboard — snapshot the heavy confluence-strategy backtest into the cache.
+  let leaderboardtick = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=leaderboardtick&src=confluence', { headers: { 'x-warm': '1' } });
+    leaderboardtick = await r.json();
+  } catch (e) { leaderboardtick = { error: String(e && e.message || e) }; }
+
   // 🧭 Brief — log today's stance + resolve matured ones (runs after crowd/predict/tape are warm).
   let brieftick = null;
   try {
@@ -152,7 +159,7 @@ module.exports = async function handler(req, res) {
   } catch (e) { brieftick = { error: String(e && e.message || e) }; }
 
   const warmedExtra = await extraWarm;   // already resolved — ran during the tail above
-  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, predicttick, crowdtick, brieftick, at: new Date().toISOString() };
+  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, predicttick, crowdtick, brieftick, leaderboardtick, at: new Date().toISOString() };
 
   // Observability: persist a compact health record so failed ticks / stale data are visible (op=health).
   try { const { summarizeRun, writeHealthRun } = require('../lib/health'); await writeHealthRun(summarizeRun(result)); }
