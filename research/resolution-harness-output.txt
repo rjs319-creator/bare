@@ -1,0 +1,21 @@
+# Resolution harness output
+# Generated 2026-06-26T03:40:38Z via: node research/23-resolution-harness.js
+# Resolves backdated cohorts (2025Q2-Q4) against real forward data through the live
+# aggregatePerformance() pipeline. Benchmark = equal-weight small/mid universe.
+
+cohort 2025-06 (2025Q2): book 113, resolved 113
+cohort 2025-09 (2025Q3): book 129, resolved 129
+cohort 2025-12 (2025Q4): book 131, resolved 131
+
+=== RESOLVED QUARTERLY PERFORMANCE (real forward data) ===
+
+quarter   n   resolved   winRate   strat ret   universe(EW)   excess   status
+2025Q2   113     113     65%        +7.0%       +11.6%      -4.6%   closed
+2025Q3   129     129     53%        +0.2%        +3.2%      -3.1%   closed
+2025Q4   131     131     63%        +6.4%        +1.6%      +4.8%   closed
+
+CUMULATIVE (realized): strategy +14.1%  ·  universe +17.0%  ·  excess -3.0%
+TOTALS: 373 signals · 373 resolved · win rate 60% · mean/trade +4.4%
+
+VALIDATION: outcomes resolved ✅ · quarters aggregated ✅ · cumulative computed ✅
+(This is the exact aggregatePerformance() the Core Performance tab runs — proving the pipeline on real resolved outcomes.)
