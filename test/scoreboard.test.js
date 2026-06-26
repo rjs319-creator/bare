@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { forwardReturn, cernPicksFrom } = require('../lib/apex-routes');
+const { forwardReturn, cernPicksFrom, fadeRowsFrom } = require('../lib/apex-routes');
 
 // ── cernPicksFrom: map a CERN engine state into Scoreboard picks ─────────────
 
@@ -98,4 +98,44 @@ test('forwardReturn: null entry falls back to the close at the pick date', () =>
 
 test('forwardReturn: returns null when the horizon has not elapsed yet', () => {
   assert.equal(forwardReturn(CANDLES, { date: '2026-01-01' }, 5), null);
+});
+
+// ── fadeRowsFrom: flatten the fade ledger into Scoreboard short rows ──────────
+const FADE_DAYS = [
+  { date: '2026-06-20', signals: [
+    { ticker: 'ARE', date: '2026-06-20', entry: 53.29, action: 'SHORT', tier: 'EMERGING' },
+    { ticker: 'AMT', date: '2026-06-20', entry: 168.7, action: 'SHORT_LIGHT', tier: 'CONFIRMED' },
+    { ticker: 'XYZ', date: '2026-06-20', entry: 10, action: 'WATCH', tier: 'WATCH' },
+    { ticker: 'ZZZ', date: '2026-06-20', entry: 10, action: 'SKIP', tier: 'WATCH' },
+  ] },
+];
+
+test('fadeRowsFrom: keeps only actionable shorts and tags them short', () => {
+  const rows = fadeRowsFrom(FADE_DAYS);
+  assert.equal(rows.length, 2);                       // WATCH + SKIP dropped
+  assert.deepEqual(rows.map(r => r.ticker).sort(), ['AMT', 'ARE']);
+  assert.ok(rows.every(r => r.short === true));        // shorts → forwardReturn inverts
+});
+
+test('fadeRowsFrom: tier carries the action (conviction split)', () => {
+  const rows = fadeRowsFrom(FADE_DAYS);
+  assert.equal(rows.find(r => r.ticker === 'ARE').tier, 'SHORT');
+  assert.equal(rows.find(r => r.ticker === 'AMT').tier, 'SHORT_LIGHT');
+});
+
+test('fadeRowsFrom: tolerates empty / malformed input', () => {
+  assert.deepEqual(fadeRowsFrom([]), []);
+  assert.deepEqual(fadeRowsFrom(null), []);
+  assert.deepEqual(fadeRowsFrom([{ date: '2026-06-20' }]), []);   // no signals array
+});
+
+test('fadeRowsFrom: a fade short row is profitable when the name falls', () => {
+  // End-to-end with forwardReturn: entry above the future close → short gains.
+  const row = fadeRowsFrom(FADE_DAYS)[0];
+  const candles = [
+    { date: '2026-06-20', close: 100 },
+    { date: '2026-06-21', close: 90 },                 // fell 10% → a winning short
+  ];
+  const r = forwardReturn(candles, { ...row, date: '2026-06-20', entry: 100 }, 1);
+  assert.ok(r > 0);
 });
