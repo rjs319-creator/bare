@@ -81,6 +81,20 @@ test('rank buffer keeps a held name that slipped to the hold band', () => {
   assert.ok(withHeld.has('N75'), 'N75 retained via rank buffer when held');
 });
 
+test('buildBook annotates rank, strength percentile, and status (new/held/watch)', () => {
+  const rows = [];
+  for (let i = 0; i < 100; i++) rows.push(feat('N' + i, 'Industrials', i * 0.01, 0.3));
+  const { book } = core.buildBook(rows, new Set(['N75'])); // N75 held & deteriorating
+  assert.equal(book[0].rank, 1, 'top row is rank 1');
+  assert.ok(book.every((b, i) => i === 0 || b.rank === book[i - 1].rank + 1), 'ranks are contiguous');
+  assert.ok(book.every(b => b.strength >= 0 && b.strength <= 100), 'strength percentile in 0-100');
+  assert.equal(book[0].strength, 100, 'the top pick is at the 100th strength percentile');
+  assert.ok(book.every(b => ['new', 'held', 'watch'].includes(b.status)), 'status is one of new/held/watch');
+  const fresh = book.find(b => b.ticker === 'N99'), watch = book.find(b => b.ticker === 'N75');
+  assert.equal(fresh.status, 'new', 'a non-held top name is "new"');
+  assert.equal(watch.status, 'watch', 'a held name below the entry cut is "watch" (deteriorating)');
+});
+
 test('buildBook returns a note when the pool is too small', () => {
   const { book, note } = core.buildBook([feat('A', 'Industrials', 0.1, 0.3)], new Set());
   assert.equal(book.length, 0);

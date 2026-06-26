@@ -3178,7 +3178,7 @@
   // Primary action is AVOID / TRIM (no shorting needed); advanced short details are
   // tucked behind a toggle. The live track record leads, because that's the trust.
   // ── Core Momentum — survivorship-safe small/mid sector-neutral 12-1 (research-validated) ──
-  let coremoLoaded = false, coremoCore = null, coremoDrift = null;
+  let coremoLoaded = false, coremoCore = null, coremoDrift = null, coremoTopN = 0; // topN 0 = show all
   function ensureCoreMomentum() { if (!coremoLoaded) { coremoLoaded = true; runCoreMomentum(); } }
   async function runCoreMomentum() {
     const cont = document.getElementById('coremo-container');
@@ -3227,23 +3227,43 @@
     }
     const rebal = c.rebalanceWindow ? `<span style="color:#10d98a">● rebalance window (${esc(c.quarter || '')}) — book logs this quarter</span>` : `<span style="color:#8a93a6">next rebalance: first half of Jan/Apr/Jul/Oct · ${esc(c.quarter || '')}</span>`;
     const regime = c.regime ? `<span style="color:${c.regime === 'risk-on' ? '#10d98a' : '#f0a832'}">regime: ${esc(c.regime)}</span>` : '';
+    const cnt = { new: 0, held: 0, watch: 0 }; c.book.forEach(x => { cnt[x.status] = (cnt[x.status] || 0) + 1; });
     const head = `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px;font-size:0.72rem">
-      <span><b>${c.book.length}</b> names</span><span>pool ${c.pool}</span><span>universe cached ${c.universeCovered}</span>${regime ? '<span>' + regime + '</span>' : ''}<span>${rebal}</span></div>`;
-    const rows = c.book.slice(0, 80).map((x, i) => `<tr>
-      <td style="text-align:right;color:#8a93a6">${i + 1}</td>
-      <td><b>${esc(x.ticker)}</b>${x.held ? ' <span title="held from last rebalance (rank buffer)" style="color:#10d98a">●</span>' : ''}<div style="font-size:0.62rem;color:#8a93a6">${esc((x.company || '').slice(0, 28))}</div></td>
+      <span><b>${c.book.length}</b> names</span><span style="color:#10d98a">🟢 ${cnt.new} new</span><span>● ${cnt.held} held</span><span style="color:#f0a832">⚠️ ${cnt.watch} watch</span><span>pool ${c.pool}</span><span>cache ${c.universeCovered}</span>${regime ? '<span>' + regime + '</span>' : ''}<span>${rebal}</span></div>`;
+    // top-N selector — lets you focus on the strongest-ranked subset (with the caveat below)
+    const opts = [['Top 10', 10], ['Top 25', 25], ['Top 50', 50], ['All', 0]];
+    const controls = `<div class="scr-filters" style="margin-bottom:8px;display:flex;gap:6px;align-items:center">
+      <span style="font-size:0.66rem;color:#8a93a6">Show:</span>` +
+      opts.map(([l, n]) => `<button class="cm-topn refresh-btn" data-n="${n}" style="${coremoTopN === n ? 'color:#10d98a;font-weight:700;border-color:#10d98a' : 'color:#8a93a6'}">${l}</button>`).join('') + `</div>`;
+    const STATUS = {
+      new: '<span title="new entry — not in the last rebalance" style="color:#10d98a">🟢 new</span>',
+      held: '<span title="held and healthy (still in the top-20% entry band)" style="color:#cbd2dd">● held</span>',
+      watch: '<span title="held but deteriorating — only kept by the rank buffer; nearing the exit band" style="color:#f0a832">⚠️ watch</span>',
+    };
+    const delta = x => x.rankChange == null ? '<span style="color:#10d98a" title="new since last rebalance">new</span>'
+      : x.rankChange > 0 ? `<span style="color:#10d98a" title="moved up ${x.rankChange}">▲${x.rankChange}</span>`
+      : x.rankChange < 0 ? `<span style="color:var(--red,#ef4444)" title="moved down ${-x.rankChange}">▼${-x.rankChange}</span>`
+      : '<span style="color:#8a93a6">—</span>';
+    const shown = coremoTopN > 0 ? c.book.slice(0, coremoTopN) : c.book;
+    const rows = shown.map(x => `<tr>
+      <td style="text-align:right;color:#8a93a6">${x.rank}</td>
+      <td style="text-align:center;font-size:0.66rem">${delta(x)}</td>
+      <td><b>${esc(x.ticker)}</b><div style="font-size:0.62rem;color:#8a93a6">${esc((x.company || '').slice(0, 24))}</div></td>
       <td style="font-size:0.66rem">${esc(x.sector)}</td>
+      <td style="text-align:right" title="strength percentile vs the whole eligible universe">${x.strength}</td>
       <td style="text-align:right;color:${x.mom12_1 >= 0 ? '#10d98a' : 'var(--red,#ef4444)'}">${x.mom12_1 > 0 ? '+' : ''}${x.mom12_1}%</td>
       <td style="text-align:right">${x.vol}%</td>
       <td style="text-align:right">${fmtMoney(x.marketCap)}</td>
       <td style="text-align:right">$${x.advM}M</td>
       <td style="text-align:right">${x.levels ? '$' + x.levels.entry : '—'}</td>
-      <td style="text-align:right;color:#8a93a6">${x.levels ? '$' + x.levels.target : '—'}</td>
+      <td style="text-align:center;font-size:0.66rem">${STATUS[x.status] || x.status}</td>
     </tr>`).join('');
-    cont.innerHTML = intro + head + `<div style="overflow-x:auto"><table class="data-table" style="width:100%;font-size:0.74rem">
-      <thead><tr><th style="text-align:right">#</th><th>Ticker</th><th>Sector</th><th style="text-align:right">12-1 mom</th><th style="text-align:right">vol</th><th style="text-align:right">mkt cap</th><th style="text-align:right">ADV</th><th style="text-align:right">entry</th><th style="text-align:right">target</th></tr></thead>
+    cont.innerHTML = intro + head + controls + `<div style="overflow-x:auto"><table class="data-table" style="width:100%;font-size:0.74rem">
+      <thead><tr><th style="text-align:right">#</th><th style="text-align:center" title="rank change since the last rebalance">Δ</th><th>Ticker</th><th>Sector</th><th style="text-align:right" title="strength percentile vs the universe">Str</th><th style="text-align:right">12-1</th><th style="text-align:right">vol</th><th style="text-align:right">cap</th><th style="text-align:right">ADV</th><th style="text-align:right">entry</th><th style="text-align:center">status</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
-      <p style="font-size:0.62rem;color:#8a93a6;margin-top:8px">● = carried over from last rebalance (rank buffer: enter top 20%, hold to top 40%). Levels use a wide ~quarter time-hold (research showed tight stops bleed). Names are logged to the ledger on the quarterly rebalance and scored forward in the health badge above.</p>`;
+      <p style="font-size:0.62rem;color:#8a93a6;margin-top:8px">Ranked by sector-neutral momentum. <b>Δ</b> = rank change since the last rebalance (${c.lastRebalance ? esc(c.lastRebalance) : 'none yet'}); <b>Str</b> = strength percentile vs the universe; <b>status</b>: 🟢 new · ● held · ⚠️ deteriorating (near the buffer exit). Ranks refresh daily; <b>trade only at the quarterly rebalance</b> — frequent trading destroyed the edge in testing.</p>
+      <p style="font-size:0.62rem;color:#f0a832;margin-top:6px">⚠️ The validated approach is the <b>full equal-weight basket</b>. Focusing on a Top-N subset is your choice and adds idiosyncratic risk <i>without</i> proven extra return — within the book the ranking's predictive power is weak.</p>`;
+    cont.querySelectorAll('.cm-topn').forEach(b => b.addEventListener('click', () => { coremoTopN = parseInt(b.dataset.n, 10) || 0; renderCoreBook(cont, c); }));
   }
   const _coremoBtn = document.getElementById('coremo-refresh-btn');
   if (_coremoBtn) _coremoBtn.addEventListener('click', () => { coremoCore = null; runCoreMomentum(); });
