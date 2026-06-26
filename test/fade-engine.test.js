@@ -74,7 +74,7 @@ function strongFadeState() {
   return update(emptyState(), outs);
 }
 
-test('recommend issues SHORT when the posterior is strong AND the setup is fresh', () => {
+test('recommend issues SHORT when the posterior is strong AND the setup is fresh (RR >= 1)', () => {
   const r = recommend(strongFadeState(), {
     ticker: 'TEST', regime: 'neutral', sector: 'Tech', beta: 1,
     signal: { side: 'short', entry: 100, stop: 108, target: 80, rr: 2.5, expired: false },
@@ -82,6 +82,21 @@ test('recommend issues SHORT when the posterior is strong AND the setup is fresh
   assert.equal(r.action, 'SHORT');
   assert.ok(r.sizePct > 0);
   assert.equal(r.freshLevels, true);
+});
+
+test('recommend downgrades a thin-RR (< 1) fresh setup to SHORT_LIGHT and halves size', () => {
+  const state = strongFadeState();
+  const full = recommend(state, {
+    ticker: 'TEST', regime: 'neutral', sector: 'Tech', beta: 1,
+    signal: { side: 'short', entry: 100, stop: 108, target: 80, rr: 2.5, expired: false },
+  });
+  const thin = recommend(state, {
+    ticker: 'TEST', regime: 'neutral', sector: 'Tech', beta: 1,
+    signal: { side: 'short', entry: 100, stop: 112, target: 95, rr: 0.42, expired: false },
+  });
+  assert.equal(thin.action, 'SHORT_LIGHT');
+  assert.ok(thin.sizePct > 0);
+  assert.ok(thin.sizePct < full.sizePct, 'LIGHT is sized down vs a full SHORT');
 });
 
 test('recommend demotes an EXPIRED setup to WATCH despite a strong posterior', () => {
