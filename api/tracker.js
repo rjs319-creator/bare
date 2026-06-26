@@ -31,6 +31,7 @@ const { runTrack, runScoreboard, runApexLog, runGhostLog, runEdgeLog, runEdgeBoo
         runDrift, runRecalibrate, runResearchOp, runExitsOp, runLongShortOp, runPeadOp, runBackfillOp, runModel, runNarrative } = require('../lib/apex-routes');
 const { runHealth } = require('../lib/health');
 const { runLeaderboard, runLeaderboardTick } = require('../lib/leaderboard');
+const { runCoreBuild, runCore, runCoreLog, runCoreDrift } = require('../lib/stablecore-routes');
 
 module.exports = async function handler(req, res) {
   if (req.query.op === 'track') return runTrack(req, res);
@@ -89,5 +90,9 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'health') return runHealth(req, res);
   if (req.query.op === 'leaderboard') return runLeaderboard(req, res);
   if (req.query.op === 'leaderboardtick') return runLeaderboardTick(req, res);
+  if (req.query.op === 'corebuild') return runCoreBuild(req, res);
+  if (req.query.op === 'core') return runCore(req, res);
+  if (req.query.op === 'corelog') return runCoreLog(req, res);
+  if (req.query.op === 'coredrift') return runCoreDrift(req, res);
   return runScoreboard(req, res);
 };

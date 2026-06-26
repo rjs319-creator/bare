@@ -7,7 +7,7 @@
   // ── App tabs with a "Markets" hub (Screener / Rotation / Sectors) ──
   const TAB_GROUPS = {
     start:     ['today', 'start'],
-    screeners: ['opportunities', 'screener', 'custom', 'daytrade', 'confluence', 'ghost', 'trendrider', 'fade'],
+    screeners: ['opportunities', 'screener', 'custom', 'coremo', 'daytrade', 'confluence', 'ghost', 'trendrider', 'fade'],
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
     predict:   ['brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     research:  ['backtest', 'events', 'edge'],
@@ -17,7 +17,7 @@
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
     today: '🏠 Today', start: '📘 Guide',
-    opportunities: '⭐ Opportunities', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', daytrade: '⚡ Day Trade', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
+    opportunities: '⭐ Opportunities', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
     brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
@@ -75,6 +75,7 @@
     if (sub === 'screener' && typeof ensureScreener === 'function') ensureScreener();
     if (sub === 'backtest' && typeof ensureBacktest === 'function') ensureBacktest();
     if (sub === 'custom' && typeof ensureCustom === 'function') ensureCustom();
+    if (sub === 'coremo' && typeof ensureCoreMomentum === 'function') ensureCoreMomentum();
     if (sub === 'ghost' && typeof ensureGhost === 'function') ensureGhost();
     if (sub === 'events' && typeof ensureCern === 'function') ensureCern();
     if (sub === 'edge' && typeof ensureEdge === 'function') ensureEdge();
@@ -115,7 +116,7 @@
   // you whether today's tape FITS the screener you're looking at (condition-aware
   // per screener): trend/breakout/momentum favor trending tapes; mean-reversion
   // (Fade) favors choppy tapes — the opposite.
-  const SCREENER_STYLE = { screener: 'breakout', custom: 'momentum', daytrade: 'momentum', confluence: 'adaptive', ghost: 'breakout', trendrider: 'trend', fade: 'meanrev' };
+  const SCREENER_STYLE = { screener: 'breakout', custom: 'momentum', coremo: 'momentum', daytrade: 'momentum', confluence: 'adaptive', ghost: 'breakout', trendrider: 'trend', fade: 'meanrev' };
   const STYLE = {
     breakout: { favor: 'trending', name: 'breakouts', good: 'have the wind at their back', bad: 'fail more often (false breakouts) — be selective' },
     momentum: { favor: 'trending', name: 'momentum setups', good: 'tend to follow through', bad: 'stall and reverse — be selective, tighten stops' },
@@ -3175,6 +3176,77 @@
   // from its own learned per-stock history, expects to LAG the market over ~1 month.
   // Primary action is AVOID / TRIM (no shorting needed); advanced short details are
   // tucked behind a toggle. The live track record leads, because that's the trust.
+  // ── Core Momentum — survivorship-safe small/mid sector-neutral 12-1 (research-validated) ──
+  let coremoLoaded = false, coremoCore = null, coremoDrift = null;
+  function ensureCoreMomentum() { if (!coremoLoaded) { coremoLoaded = true; runCoreMomentum(); } }
+  async function runCoreMomentum() {
+    const cont = document.getElementById('coremo-container');
+    const health = document.getElementById('coremo-health-banner');
+    const time = document.getElementById('coremo-gen-time');
+    if (cont && !coremoCore) cont.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading the Core Momentum book…</p></div>`;
+    try {
+      const [c, d] = await Promise.all([
+        fetch('/api/tracker?op=core').then(r => r.json()).catch(() => null),
+        fetch('/api/tracker?op=coredrift').then(r => r.json()).catch(() => null),
+      ]);
+      coremoCore = c; coremoDrift = d;
+    } catch { /* render whatever we have */ }
+    renderCoreHealth(health, coremoDrift);
+    renderCoreBook(cont, coremoCore);
+    if (time && coremoCore && coremoCore.asOf) time.textContent = 'updated ' + timeAgo(new Date(coremoCore.asOf));
+  }
+  function coreHealthColor(s) { return s === 'HEALTHY' ? 'var(--green,#10d98a)' : s === 'DEGRADING' ? '#f0a832' : s === 'BROKEN' ? 'var(--red,#ef4444)' : '#8a93a6'; }
+  function renderCoreHealth(el, d) {
+    if (!el) return;
+    if (!d || d.ok === false) { el.innerHTML = ''; return; }
+    if (d.status === 'PENDING') {
+      el.innerHTML = `<div class="cx-strip" style="border-left:3px solid #8a93a6"><b>Track record: building.</b> ${esc(d.note || 'Signals log quarterly on rebalance and resolve over ~3 months.')} ${d.resolved ? `(${d.resolved} resolved so far)` : ''}</div>`;
+      return;
+    }
+    const col = coreHealthColor(d.status);
+    const pct = x => x == null ? '—' : (x * 100).toFixed(0) + '%';
+    const wil = d.wilson ? ` (90% CI ${pct(d.wilson.low)}–${pct(d.wilson.high)})` : '';
+    const kill = d.killSwitch ? `<div style="margin-top:6px;color:var(--red,#ef4444)"><b>⛔ Kill-switch:</b> live expectancy is negative — revert to passive small/mid exposure until it recovers.</div>` : '';
+    el.innerHTML = `<div class="cx-strip" style="border-left:3px solid ${col}">
+      <b style="color:${col}">● ${esc(d.status)}</b> — live win rate <b>${pct(d.winRate)}</b>${wil}, profit factor <b>${d.profitFactor == null ? '—' : d.profitFactor.toFixed(2)}</b>, mean return/trade <b>${pct(d.meanReturn)}</b>
+      · resolved <b>${d.resolved}</b> / open ${d.open}
+      <span style="color:#8a93a6">· baseline win ${pct(d.baseline && d.baseline.winRate)} / PF ${d.baseline ? d.baseline.pf : '—'} (research)</span>
+      ${d.recommendation ? `<div style="margin-top:4px">${esc(d.recommendation)}</div>` : ''}${kill}</div>`;
+  }
+  function renderCoreBook(cont, c) {
+    if (!cont) return;
+    if (!c || c.ok === false) { cont.innerHTML = `<div class="mom-status"><p>Core Momentum isn't available yet. It needs the Blob store + the daily cron to seed the feature cache (a few runs). See PICK-TRACKING.md.</p></div>`; return; }
+    const intro = `<div class="cx-strip" style="margin-bottom:10px">
+      <b>What this is.</b> The survivorship-safe small/mid <b>sector-neutral 12-1 momentum</b> sleeve validated in research: cap $800M–5B, top realized-vol tercile excluded, Healthcare excluded; equal-weight the top quintile with a rank buffer; rebalanced quarterly.
+      <span style="color:#8a93a6">Forward IR realistically ~0.8–1.2 (in-sample was higher — discounted for filter selection). A concentrated sleeve, not a replacement for broad exposure.</span></div>`;
+    if (c.building || !c.book || !c.book.length) {
+      const cov = c.coveragePct != null ? c.coveragePct : (c.universeCovered ? '' : 0);
+      cont.innerHTML = intro + `<div class="mom-status"><div class="mom-spinner"></div><p>Building the universe feature cache${c.universeCovered ? ` — ${c.universeCovered} names cached so far` : ''}. The daily cron fills it over a few runs; the book appears once enough names are covered.${c.note ? '<br><span style="color:#8a93a6">' + esc(c.note) + '</span>' : ''}</p></div>`;
+      return;
+    }
+    const rebal = c.rebalanceWindow ? `<span style="color:#10d98a">● rebalance window (${esc(c.quarter || '')}) — book logs this quarter</span>` : `<span style="color:#8a93a6">next rebalance: first half of Jan/Apr/Jul/Oct · ${esc(c.quarter || '')}</span>`;
+    const regime = c.regime ? `<span style="color:${c.regime === 'risk-on' ? '#10d98a' : '#f0a832'}">regime: ${esc(c.regime)}</span>` : '';
+    const head = `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px;font-size:0.72rem">
+      <span><b>${c.book.length}</b> names</span><span>pool ${c.pool}</span><span>universe cached ${c.universeCovered}</span>${regime ? '<span>' + regime + '</span>' : ''}<span>${rebal}</span></div>`;
+    const rows = c.book.slice(0, 80).map((x, i) => `<tr>
+      <td style="text-align:right;color:#8a93a6">${i + 1}</td>
+      <td><b>${esc(x.ticker)}</b>${x.held ? ' <span title="held from last rebalance (rank buffer)" style="color:#10d98a">●</span>' : ''}<div style="font-size:0.62rem;color:#8a93a6">${esc((x.company || '').slice(0, 28))}</div></td>
+      <td style="font-size:0.66rem">${esc(x.sector)}</td>
+      <td style="text-align:right;color:${x.mom12_1 >= 0 ? '#10d98a' : 'var(--red,#ef4444)'}">${x.mom12_1 > 0 ? '+' : ''}${x.mom12_1}%</td>
+      <td style="text-align:right">${x.vol}%</td>
+      <td style="text-align:right">${fmtMoney(x.marketCap)}</td>
+      <td style="text-align:right">$${x.advM}M</td>
+      <td style="text-align:right">${x.levels ? '$' + x.levels.entry : '—'}</td>
+      <td style="text-align:right;color:#8a93a6">${x.levels ? '$' + x.levels.target : '—'}</td>
+    </tr>`).join('');
+    cont.innerHTML = intro + head + `<div style="overflow-x:auto"><table class="data-table" style="width:100%;font-size:0.74rem">
+      <thead><tr><th style="text-align:right">#</th><th>Ticker</th><th>Sector</th><th style="text-align:right">12-1 mom</th><th style="text-align:right">vol</th><th style="text-align:right">mkt cap</th><th style="text-align:right">ADV</th><th style="text-align:right">entry</th><th style="text-align:right">target</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+      <p style="font-size:0.62rem;color:#8a93a6;margin-top:8px">● = carried over from last rebalance (rank buffer: enter top 20%, hold to top 40%). Levels use a wide ~quarter time-hold (research showed tight stops bleed). Names are logged to the ledger on the quarterly rebalance and scored forward in the health badge above.</p>`;
+  }
+  const _coremoBtn = document.getElementById('coremo-refresh-btn');
+  if (_coremoBtn) _coremoBtn.addEventListener('click', () => { coremoCore = null; runCoreMomentum(); });
+
   let fadeLoaded = false;
   function ensureFade() { if (!fadeLoaded) { fadeLoaded = true; runFade(); } }
 
