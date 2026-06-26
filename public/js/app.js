@@ -11,7 +11,7 @@
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
     predict:   ['brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     research:  ['backtest', 'events', 'edge'],
-    track:     ['leaderboard', 'scoreboard', 'xalerts'],
+    track:     ['leaderboard', 'scoreboard', 'coreperf', 'xalerts'],
   };
   const TOP_TABS = Object.keys(TAB_GROUPS);
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
@@ -21,7 +21,7 @@
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
     brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
-    leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', xalerts: '🐦 Trade Alerts',
+    leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
   const topOf = sec => TOP_TABS.find(t => TAB_GROUPS[t].includes(sec));
 
@@ -76,6 +76,7 @@
     if (sub === 'backtest' && typeof ensureBacktest === 'function') ensureBacktest();
     if (sub === 'custom' && typeof ensureCustom === 'function') ensureCustom();
     if (sub === 'coremo' && typeof ensureCoreMomentum === 'function') ensureCoreMomentum();
+    if (sub === 'coreperf' && typeof ensureCorePerf === 'function') ensureCorePerf();
     if (sub === 'ghost' && typeof ensureGhost === 'function') ensureGhost();
     if (sub === 'events' && typeof ensureCern === 'function') ensureCern();
     if (sub === 'edge' && typeof ensureEdge === 'function') ensureEdge();
@@ -3246,6 +3247,81 @@
   }
   const _coremoBtn = document.getElementById('coremo-refresh-btn');
   if (_coremoBtn) _coremoBtn.addEventListener('click', () => { coremoCore = null; runCoreMomentum(); });
+
+  // ── Core Performance — quarterly realized track record vs IWM ──
+  let coreperfLoaded = false;
+  function ensureCorePerf() { if (!coreperfLoaded) { coreperfLoaded = true; runCorePerf(); } }
+  async function runCorePerf() {
+    const cont = document.getElementById('coreperf-container');
+    const time = document.getElementById('coreperf-gen-time');
+    if (cont) cont.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading the Core Momentum track record…</p></div>`;
+    let d; try { d = await fetch('/api/tracker?op=coreperf').then(r => r.json()); } catch { d = null; }
+    renderCorePerf(cont, d);
+    if (time) time.textContent = 'updated ' + timeAgo(new Date());
+  }
+  function renderCorePerf(cont, d) {
+    if (!cont) return;
+    if (!d || d.ok === false) { cont.innerHTML = `<div class="mom-status"><p>Core Performance isn't available yet (needs the Blob store + the daily cron). See CORE-MOMENTUM.md.</p></div>`; return; }
+    const pct = x => x == null ? '—' : (x >= 0 ? '+' : '') + (x * 100).toFixed(1) + '%';
+    const col = x => x == null ? '' : `color:${x >= 0 ? 'var(--green,#10d98a)' : 'var(--red,#ef4444)'}`;
+    const intro = `<div class="cx-strip" style="margin-bottom:10px">
+      <b>What this is.</b> The realized track record of the <b>Core Momentum</b> sleeve — each quarterly cohort logged at rebalance, scored on its forward outcomes (+target / −stop / ~63-session time exit) vs <b>IWM</b> (Russell 2000, the small-cap benchmark).
+      <span style="color:#8a93a6">Open positions are counted but not marked-to-market — only resolved trades enter the returns (matches the drift methodology). Realistic forward IR ~0.8–1.2; confirm over ~8 live quarters.</span></div>`;
+    if (d.empty || !d.quarters || !d.quarters.length) {
+      cont.innerHTML = intro + `<div class="mom-status"><p>${esc(d.note || 'No cohorts logged yet — the track record begins at the first quarterly rebalance.')}</p></div>`;
+      return;
+    }
+    const c = d.cumulative || {}, t = d.totals || {};
+    const summary = `<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px;font-size:0.8rem">
+      <div><div style="color:#8a93a6;font-size:0.62rem">SINCE INCEPTION (realized)</div><b style="${col(c.strategyReturn)};font-size:1.1rem">${pct(c.strategyReturn)}</b></div>
+      <div><div style="color:#8a93a6;font-size:0.62rem">IWM (same windows)</div><b style="${col(c.benchReturn)};font-size:1.1rem">${pct(c.benchReturn)}</b></div>
+      <div><div style="color:#8a93a6;font-size:0.62rem">EXCESS vs IWM</div><b style="${col(c.excess)};font-size:1.1rem">${pct(c.excess)}</b></div>
+      <div><div style="color:#8a93a6;font-size:0.62rem">WIN RATE</div><b>${t.winRate == null ? '—' : (t.winRate * 100).toFixed(0) + '%'}</b></div>
+      <div><div style="color:#8a93a6;font-size:0.62rem">RESOLVED / OPEN</div><b>${t.resolved} / ${t.open}</b></div>
+      <div><div style="color:#8a93a6;font-size:0.62rem">REALIZED QTRS</div><b>${c.realizedQuarters || 0}</b></div></div>`;
+    const STAT = { open: '<span style="color:#8a93a6">○ open</span>', partial: '<span style="color:#f0a832">◐ partial</span>', closed: '<span style="color:#10d98a">● closed</span>' };
+    const rows = d.quarters.slice().reverse().map(q => `<tr>
+      <td><b>${esc(q.quarter)}</b><div style="font-size:0.6rem;color:#8a93a6">${esc(q.logDate || '')}</div></td>
+      <td style="text-align:right">${q.n}</td>
+      <td style="text-align:right;color:#8a93a6">${q.resolved}/${q.open}</td>
+      <td style="text-align:right">${q.winRate == null ? '—' : (q.winRate * 100).toFixed(0) + '%'}</td>
+      <td style="text-align:right;${col(q.meanReturn)}">${pct(q.meanReturn)}</td>
+      <td style="text-align:right;color:#8a93a6">${pct(q.benchReturn)}</td>
+      <td style="text-align:right;${col(q.excess)}">${pct(q.excess)}</td>
+      <td style="text-align:right">${STAT[q.status] || q.status}</td>
+    </tr>`).join('');
+    cont.innerHTML = intro + summary + coreperfChart(d.quarters) + `<div style="overflow-x:auto"><table class="data-table" style="width:100%;font-size:0.74rem">
+      <thead><tr><th>Quarter</th><th style="text-align:right">#</th><th style="text-align:right">res/open</th><th style="text-align:right">win</th><th style="text-align:right">return</th><th style="text-align:right">IWM</th><th style="text-align:right">excess</th><th style="text-align:right">status</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+      <p style="font-size:0.62rem;color:#8a93a6;margin-top:8px">Return = equal-weight realized return of that quarter's <i>resolved</i> picks. A quarter stays "open/partial" until its ~63-session windows elapse. Cumulative compounds realized quarters only.</p>`;
+  }
+  // Responsive SVG: per-quarter realized return (Core) vs IWM, around a zero baseline.
+  function coreperfChart(quarters) {
+    const R = (quarters || []).filter(q => q.meanReturn != null);
+    if (!R.length) return `<div class="cx-strip" style="margin-bottom:12px;color:#8a93a6">📈 The performance chart appears once a quarter's positions resolve (forward windows are ~3 months).</div>`;
+    const W = Math.max(360, R.length * 110 + 60), H = 220, padL = 46, padR = 14, padT = 18, padB = 34;
+    const plotH = H - padT - padB, zeroY = padT + plotH / 2, halfH = plotH / 2, plotW = W - padL - padR;
+    let maxAbs = 0.05; R.forEach(q => { maxAbs = Math.max(maxAbs, Math.abs(q.meanReturn || 0), Math.abs(q.benchReturn || 0)); });
+    const gw = plotW / R.length, y = v => zeroY - (v / maxAbs) * halfH;
+    const bar = (cx, bw, v, fill) => { if (v == null) return ''; const yy = y(v), top = Math.min(yy, zeroY), h = Math.max(1, Math.abs(yy - zeroY)); return `<rect x="${(cx - bw / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1" fill="${fill}"/>`; };
+    const fmtp = v => (v >= 0 ? '+' : '') + (v * 100).toFixed(0) + '%';
+    let bars = '', labels = '';
+    R.forEach((q, i) => {
+      const c0 = padL + i * gw + gw / 2, bw = Math.min(22, gw * 0.28);
+      bars += bar(c0 - bw * 0.62, bw, q.meanReturn, q.meanReturn >= 0 ? '#10d98a' : '#ef4444');
+      bars += bar(c0 + bw * 0.62, bw, q.benchReturn, '#5b6472');
+      labels += `<text x="${c0.toFixed(1)}" y="${H - padB + 14}" text-anchor="middle" font-size="10" fill="#8a93a6">${esc(q.quarter)}</text>`;
+    });
+    const grid = `<line x1="${padL}" y1="${zeroY}" x2="${W - padR}" y2="${zeroY}" stroke="#3a4150"/>`
+      + `<text x="${padL - 6}" y="${padT + 4}" text-anchor="end" font-size="9" fill="#8a93a6">${fmtp(maxAbs)}</text>`
+      + `<text x="${padL - 6}" y="${zeroY + 3}" text-anchor="end" font-size="9" fill="#8a93a6">0</text>`
+      + `<text x="${padL - 6}" y="${H - padB}" text-anchor="end" font-size="9" fill="#8a93a6">${fmtp(-maxAbs)}</text>`;
+    const legend = `<rect x="${padL}" y="3" width="9" height="9" fill="#10d98a"/><text x="${padL + 13}" y="11" font-size="10" fill="#cbd2dd">Core</text>`
+      + `<rect x="${padL + 50}" y="3" width="9" height="9" fill="#5b6472"/><text x="${padL + 63}" y="11" font-size="10" fill="#cbd2dd">IWM</text>`;
+    return `<div style="margin-bottom:12px"><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;font-family:inherit" role="img" aria-label="Quarterly Core vs IWM returns">${grid}${bars}${labels}${legend}</svg></div>`;
+  }
+  const _coreperfBtn = document.getElementById('coreperf-refresh-btn');
+  if (_coreperfBtn) _coreperfBtn.addEventListener('click', () => runCorePerf());
 
   let fadeLoaded = false;
   function ensureFade() { if (!fadeLoaded) { fadeLoaded = true; runFade(); } }
