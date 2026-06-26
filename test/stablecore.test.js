@@ -86,3 +86,41 @@ test('buildBook returns a note when the pool is too small', () => {
   assert.equal(book.length, 0);
   assert.ok(note, 'note explains the empty book');
 });
+
+test('benchReturnOver computes return over the holding window', () => {
+  const candles = [{ date: '2026-01-01', close: 100 }, { date: '2026-01-02', close: 110 }, { date: '2026-01-03', close: 121 }];
+  const r = core.benchReturnOver(candles, '2026-01-01', 2);
+  assert.ok(Math.abs(r.ret - 0.21) < 1e-9, '100 → 121 = +21%');
+  assert.equal(core.benchReturnOver([], '2026-01-01', 2), null);
+});
+
+test('aggregatePerformance: realized + partial quarters, cumulative compounding, win rate', () => {
+  // Arrange: Q1 fully resolved (loss -8%), Q2 partial (1 win +20%, 1 still open)
+  const signals = [
+    { quarter: '2026Q1', date: '2026-03-10', ticker: 'CCC' },
+    { quarter: '2026Q2', date: '2026-06-25', ticker: 'AAA' },
+    { quarter: '2026Q2', date: '2026-06-25', ticker: 'BBB' },
+  ];
+  const resolved = { 'AAA|2026-06-25': { outcome: 'WIN', r: 0.2 }, 'CCC|2026-03-10': { outcome: 'LOSS', r: -0.08 } };
+  const bench = [{ date: '2026-03-10', close: 100 }, { date: '2026-06-09', close: 108 }, { date: '2026-06-25', close: 110 }];
+  // Act
+  const p = core.aggregatePerformance(signals, resolved, bench, 63);
+  // Assert
+  const q1 = p.quarters.find(q => q.quarter === '2026Q1'), q2 = p.quarters.find(q => q.quarter === '2026Q2');
+  assert.equal(q1.status, 'closed');
+  assert.ok(Math.abs(q1.meanReturn + 0.08) < 1e-9, 'Q1 realized -8%');
+  assert.equal(q2.status, 'partial');
+  assert.equal(q2.open, 1, 'Q2 has one open position');
+  assert.ok(Math.abs(q2.meanReturn - 0.2) < 1e-9, 'Q2 realized portion +20%');
+  assert.ok(Math.abs(p.cumulative.strategyReturn - (0.92 * 1.2 - 1)) < 1e-9, 'cumulative compounds -8% then +20%');
+  assert.equal(p.totals.resolved, 2);
+  assert.ok(Math.abs(p.totals.winRate - 0.5) < 1e-9, 'overall win rate 50%');
+});
+
+test('aggregatePerformance: no resolved signals → null cumulative, open counted', () => {
+  const signals = [{ quarter: '2026Q2', date: '2026-06-25', ticker: 'AAA' }];
+  const p = core.aggregatePerformance(signals, {}, null, 63);
+  assert.equal(p.cumulative.strategyReturn, null);
+  assert.equal(p.totals.open, 1);
+  assert.equal(p.quarters[0].status, 'open');
+});
