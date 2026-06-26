@@ -1,0 +1,69 @@
+# Rank-movement harness output
+# Generated 2026-06-26T03:25:00Z via: node research/22-rank-harness.js [T1 T2]
+# Runs the live engine (lib/stablecore.js) against two real PIT cross-sections.
+
+########## 3-month gap (one rebalance interval) ##########
+=== RANK-MOVEMENT HARNESS  2026-02 → 2026-05  (live engine, real PIT data) ===
+
+book size: 108 (2026-02) → 127 (2026-05)
+carried over (in both): 66   new: 61   dropped: 42
+status @ 2026-05: ● held 51 · ⚠️ watch 15 · 🟢 new 61
+ranks that MOVED among carry-overs: 66/66   avg |rank move|: 33.1 places
+
+biggest RISERS:
+      96→13   ▲83  BHE    Technology
+      95→27   ▲68  CLMT   Energy
+      94→30   ▲64  GRC    Industrials
+      70→15   ▲55  ANDE   Industrials
+      85→32   ▲53  NATL   Technology
+     101→48   ▲53  NTCT   Technology
+       54→6   ▲48  REX    Basic Material
+      62→22   ▲40  TDAY   Consumer Cycli
+
+biggest FALLERS:
+     42→126   ▼84  MCHB   Financial Serv
+     39→113   ▼74  TILE   Industrials
+     46→116   ▼70  MCB    Financial Serv
+     57→127   ▼70  CALX   Technology
+     41→108   ▼67  TRS    Consumer Cycli
+     55→117   ▼62  XPEL   Consumer Cycli
+     50→111   ▼61  HE     Utilities
+      18→71   ▼53  MYE    Consumer Cycli
+
+NEW entries @ 2026-05 (top 8 by rank): #2 SKYT  #3 TTI  #4 LBRT  #5 HP  #12 GHM  #14 RSI  #17 GOLD  #18 ROG
+DROPPED since 2026-02 (top 8 by old rank): #1 COMM  #2 VISN  #3 BELFB  #4 PARR  #5 ALNT  #7 PRM  #11 APEI  #12 EYE
+
+VALIDATION: ranks re-ranked ✅ · held/buffer working ✅ · new entries appear ✅
+
+########## 1-month gap (incremental, ~cron cadence) ##########
+=== RANK-MOVEMENT HARNESS  2026-04 → 2026-05  (live engine, real PIT data) ===
+
+book size: 109 (2026-04) → 125 (2026-05)
+carried over (in both): 80   new: 45   dropped: 29
+status @ 2026-05: ● held 67 · ⚠️ watch 13 · 🟢 new 45
+ranks that MOVED among carry-overs: 79/80   avg |rank move|: 20.9 places
+
+biggest RISERS:
+       80→5   ▲75  HP     Energy
+       67→7   ▲60  EZPW   Financial Serv
+      94→39   ▲55  WTTR   Energy
+      65→13   ▲52  BHE    Technology
+      82→40   ▲42  ATEN   Technology
+     108→78   ▲30  AZZ    Industrials
+      76→50   ▲26  SONO   Technology
+      84→58   ▲26  OPY    Financial Serv
+
+biggest FALLERS:
+     32→114   ▼82  DBRG   Financial Serv
+     57→125   ▼68  PRDO   Consumer Defen
+     71→119   ▼48  TNL    Consumer Cycli
+     75→121   ▼46  XPEL   Consumer Cycli
+     73→116   ▼43  LCII   Consumer Cycli
+       9→49   ▼40  NPKI   Energy
+      29→68   ▼39  LAUR   Consumer Defen
+     68→106   ▼38  OPLN   Consumer Cycli
+
+NEW entries @ 2026-05 (top 8 by rank): #1 NGL  #3 TTI  #4 LBRT  #8 KALU  #12 GHM  #17 GOLD  #20 DAN  #25 SEB
+DROPPED since 2026-04 (top 8 by old rank): #4 APEI  #6 PRM  #13 EYE  #17 CALY  #18 ADEA  #20 AIR  #22 COHU  #28 THR
+
+VALIDATION: ranks re-ranked ✅ · held/buffer working ✅ · new entries appear ✅
