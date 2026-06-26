@@ -1,8 +1,18 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { emptyState, load, serialize, betaBucket, groupKey, betaVsSpy, summary, update, recommend } = require('../lib/fade-engine');
+const { emptyState, load, serialize, betaBucket, groupKey, betaVsSpy, summary, update, recommend, stretchZ } = require('../lib/fade-engine');
 const { tradeLevels } = require('../lib/vreversal');
+
+// Stretch normalization stats: means 0, sd 1 → stretchZ == sum of the 4 geometry
+// features. hiZ boundary set so 'high' geometry trips the penalty.
+const STRETCH = {
+  stats: { rsiPivot: { m: 0, s: 1 }, rise: { m: 0, s: 1 }, vSharp: { m: 0, s: 1 }, dropOff: { m: 0, s: 1 } },
+  hiZ: 2,
+};
+const FRESH_SIG = { side: 'short', entry: 100, stop: 108, target: 80, rr: 2.5, expired: false };
+const calmGeom = { rsiAtPivot: 0, risePct: 0, vSharpness: 0, dropOffHighPct: 0 };       // z = 0
+const hotGeom = { rsiAtPivot: 1, risePct: 1, vSharpness: 1, dropOffHighPct: 1 };         // z = 4 (> hiZ)
 
 test('betaBucket classifies low / mid / high', () => {
   assert.equal(betaBucket(null), 'mid');
@@ -97,6 +107,37 @@ test('recommend downgrades a thin-RR (< 1) fresh setup to SHORT_LIGHT and halves
   assert.equal(thin.action, 'SHORT_LIGHT');
   assert.ok(thin.sizePct > 0);
   assert.ok(thin.sizePct < full.sizePct, 'LIGHT is sized down vs a full SHORT');
+});
+
+// --- stretch lever: penalize over-extended tops ---
+test('stretchZ sums the four geometry z-scores; null without stats', () => {
+  assert.equal(stretchZ(hotGeom, STRETCH), 4);
+  assert.equal(stretchZ(calmGeom, STRETCH), 0);
+  assert.equal(stretchZ(hotGeom, null), null);          // inert until seeded
+  assert.equal(stretchZ(null, STRETCH), null);
+});
+
+test('recommend keeps a calm (low-stretch) fresh setup at full SHORT', () => {
+  const s = strongFadeState(); s.stretch = STRETCH;
+  const r = recommend(s, { ticker: 'TEST', regime: 'neutral', sector: 'Tech', beta: 1, signal: FRESH_SIG, geometry: calmGeom });
+  assert.equal(r.action, 'SHORT');
+  assert.equal(r.highStretch, false);
+});
+
+test('recommend demotes a HIGH-stretch fresh setup from SHORT to SHORT_LIGHT', () => {
+  const s = strongFadeState(); s.stretch = STRETCH;
+  const full = recommend(s, { ticker: 'TEST', regime: 'neutral', sector: 'Tech', beta: 1, signal: FRESH_SIG, geometry: calmGeom });
+  const hot = recommend(s, { ticker: 'TEST', regime: 'neutral', sector: 'Tech', beta: 1, signal: FRESH_SIG, geometry: hotGeom });
+  assert.equal(hot.action, 'SHORT_LIGHT');
+  assert.equal(hot.highStretch, true);
+  assert.ok(hot.sizePct < full.sizePct, 'over-extended top is sized down');
+});
+
+test('recommend leaves picks unchanged when state has no stretch stats (back-compat)', () => {
+  const s = strongFadeState();                          // no .stretch seeded
+  const r = recommend(s, { ticker: 'TEST', regime: 'neutral', sector: 'Tech', beta: 1, signal: FRESH_SIG, geometry: hotGeom });
+  assert.equal(r.action, 'SHORT');                      // penalty inert
+  assert.equal(r.highStretch, false);
 });
 
 test('recommend demotes an EXPIRED setup to WATCH despite a strong posterior', () => {
