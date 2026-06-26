@@ -1,0 +1,8 @@
+# Research rig (offline analysis + cached FMP data) — not imported by the app.
+# Keeping it out of deploys avoids a multi-GB upload of research/data/cache.
+research/
+
+# logs & local cruft
+*.log
+.DS_Store
+scratchpad/
