@@ -1,0 +1,10 @@
+# Generated ranked outputs and demo CSVs
+outputs/
+sample_stocks.csv
+sample_options_flow.csv
+sample_catalysts.csv
+
+# Python caches
+__pycache__/
+*.pyc
+.pytest_cache/

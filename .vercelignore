@@ -2,6 +2,9 @@
 # Keeping it out of deploys avoids a multi-GB upload of research/data/cache.
 research/
 
+# Offline Python screener pipeline (CSV triage tool) — not imported by the app.
+tools/
+
 # logs & local cruft
 *.log
 .DS_Store
