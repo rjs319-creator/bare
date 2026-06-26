@@ -9,7 +9,7 @@
     start:     ['today', 'start'],
     screeners: ['opportunities', 'screener', 'custom', 'coremo', 'daytrade', 'confluence', 'ghost', 'trendrider', 'fade'],
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
-    predict:   ['brief', 'forecast', 'crowd', 'sharp', 'alerts'],
+    predict:   ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     research:  ['backtest', 'events', 'edge'],
     track:     ['leaderboard', 'scoreboard', 'coreperf', 'xalerts'],
   };
@@ -19,7 +19,7 @@
     today: '🏠 Today', start: '📘 Guide',
     opportunities: '⭐ Opportunities', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
-    brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
+    gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
     leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
@@ -28,7 +28,7 @@
   // Mark each section as a switchable screen
   SECTION_IDS.forEach(id => document.getElementById(id)?.classList.add('tabbable'));
 
-  let hubSub = { start: 'today', screeners: 'opportunities', markets: 'rotation', predict: 'brief', research: 'backtest', track: 'leaderboard' };
+  let hubSub = { start: 'today', screeners: 'opportunities', markets: 'rotation', predict: 'gameplan', research: 'backtest', track: 'leaderboard' };
   try { const hs = JSON.parse(localStorage.getItem('hubSub')); if (hs) hubSub = { ...hubSub, ...hs }; } catch {}
   // Sanitize stored hubSub: after the nav regrouping a saved sub may no longer
   // belong to its group (e.g. markets→screener). Reset any stale entry to the
@@ -91,6 +91,7 @@
     if (sub === 'momentum' && typeof ensureMomentum === 'function') ensureMomentum();
     if (sub === 'options' && typeof ensureOptions === 'function') ensureOptions();
     if (sub === 'picks' && typeof ensurePicks === 'function') ensurePicks();
+    if (sub === 'gameplan' && typeof ensureGamePlan === 'function') ensureGamePlan();
     if (sub === 'brief' && typeof ensureBrief === 'function') ensureBrief();
     if (sub === 'forecast' && typeof ensureForecast === 'function') ensureForecast();
     if (sub === 'crowd' && typeof ensureCrowd === 'function') ensureCrowd();
@@ -2372,6 +2373,75 @@
   // source of truth, shared with the validation cron). The UI just renders op=brief.
   const TONE_COL = { bull: 'var(--green)', bear: 'var(--red)', neutral: 'var(--amber,#f59e0b)' };
   const LEAN_TXT = { 1: ['▲', 'bullish', 'var(--green)'], '-1': ['▼', 'bearish', 'var(--red)'], 0: ['▬', 'neutral', 'var(--text-dim)'] };
+  // ── 🗞️ DAILY GAME PLAN — news + sentiment + the app's own signals synthesized
+  // (server-side, lib/gameplan.js) into one succinct plan + predictions, tiered
+  // novice↔pro, building on a rolling multi-day narrative. UI just renders op=gameplan.
+  let gameplanLoaded = false;
+  function ensureGamePlan() { if (!gameplanLoaded) { gameplanLoaded = true; runGamePlanUI(false); } }
+  const GP_TONE_COL = { 'risk-off': 'var(--red)', cautious: 'var(--amber,#f59e0b)', neutral: 'var(--text-dim)', constructive: '#3b82f6', 'risk-on': 'var(--green)' };
+  const GP_CONF_COL = { high: 'var(--green)', medium: 'var(--amber,#f59e0b)', low: 'var(--text-dim)' };
+  async function runGamePlanUI(refresh) {
+    const el = document.getElementById('gameplan-container'); if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${refresh ? 'Rebuilding today’s game plan from the latest headlines… (this can take ~30s)' : 'Loading today’s game plan…'}</p></div>`;
+    try {
+      const g = await fetch(`/api/tracker?op=gameplan${refresh ? '&refresh=1' : ''}`).then(r => r.json()).catch(() => null);
+      if (!g || !g.ok) { el.innerHTML = `<div class="mom-status error"><p>Could not build the game plan${g && g.error ? ' — ' + esc(g.error) : ''}.</p><button class="dt-btn" id="gp-retry">Try rebuild</button></div>`; const b = document.getElementById('gp-retry'); if (b) b.onclick = () => runGamePlanUI(true); return; }
+      renderGamePlan(g);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the game plan.</p></div>`; }
+  }
+  function gpList(items, col) {
+    if (!items || !items.length) return `<div class="rot-sub dt-dim">—</div>`;
+    return `<ul class="gp-list" style="margin:4px 0 0;padding-left:18px">${items.map(x => `<li style="margin:3px 0">${esc(x)}</li>`).join('')}</ul>`;
+  }
+  function renderGamePlan(g) {
+    const el = document.getElementById('gameplan-container'); if (!el) return;
+    const s = g.sentiment || {}; const col = GP_TONE_COL[s.tone] || GP_TONE_COL.neutral;
+    const when = g.generatedAt ? new Date(g.generatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : g.date;
+    const inp = g.inputs || {};
+    // Hero: sentiment + headline
+    const hero = `<div class="rot-panel" style="border-left:4px solid ${col}">`
+      + `<div class="rot-head" style="font-size:1.05rem;color:${col};text-transform:capitalize">${esc(s.tone || 'neutral')} · ${esc(s.oneLiner || '')}</div>`
+      + `<div class="rot-sub" style="font-size:1rem;margin-top:6px"><b>${esc(g.headline || '')}</b></div>`
+      + `<div class="rot-sub dt-dim" style="margin-top:6px">${esc(when)} · regime <b>${esc(inp.regime || '?')}</b>${inp.vix != null ? ` · VIX ${(+inp.vix).toFixed(1)}` : ''} · ${inp.headlineCount || 0} headlines · ${esc(g.model || '')}</div></div>`;
+    // Novice / Pro toggle
+    const tiers = `<div class="rot-panel" style="margin-top:12px"><div class="gp-tier-tabs" style="display:flex;gap:8px;margin-bottom:8px">`
+      + `<button class="dt-btn gp-tier-btn gp-active" data-tier="novice">👶 Plain English</button>`
+      + `<button class="dt-btn gp-tier-btn" data-tier="pro">🎯 Pro</button></div>`
+      + `<div class="rot-sub gp-tier-body" data-tier="novice">${esc(g.novice || '')}</div>`
+      + `<div class="rot-sub gp-tier-body" data-tier="pro" style="display:none">${esc(g.pro || '')}</div></div>`;
+    // Drivers
+    const drivers = `<div class="rot-head" style="margin-top:14px">📰 What’s moving the tape</div><div class="rot-panel" style="margin-top:6px">`
+      + (g.drivers || []).map(d => `<div class="gp-driver" style="padding:6px 0;border-bottom:1px solid var(--border,#222)">`
+        + `<div><b>${esc(d.story || '')}</b></div>`
+        + `<div class="rot-sub" style="margin-top:2px">↳ ${esc(d.soWhat || '')}</div>`
+        + ((d.tickers && d.tickers.length) ? `<div class="dt-dim" style="font-size:0.78rem;margin-top:2px">${d.tickers.map(t => esc(t)).join(' · ')}</div>` : '')
+        + `</div>`).join('') + `</div>`;
+    // Game plan: lean / avoid / watch
+    const gp = g.gamePlan || {};
+    const plan = `<div class="rot-head" style="margin-top:14px">🧭 The plan</div><div class="rot-panel" style="margin-top:6px">`
+      + `<div class="rot-sub"><b style="color:var(--green)">Lean into</b></div>${gpList(gp.lean)}`
+      + `<div class="rot-sub" style="margin-top:8px"><b style="color:var(--red)">Avoid / fade</b></div>${gpList(gp.avoid)}`
+      + `<div class="rot-sub" style="margin-top:8px"><b style="color:var(--amber,#f59e0b)">Watch next</b></div>${gpList(gp.watch)}</div>`;
+    // Predictions
+    const preds = `<div class="rot-head" style="margin-top:14px">🔮 Calls for the coming days</div><div class="rot-panel" style="margin-top:6px">`
+      + (g.predictions || []).map(p => `<div style="padding:6px 0;border-bottom:1px solid var(--border,#222)">`
+        + `<div><span style="color:${GP_CONF_COL[p.confidence] || 'var(--text-dim)'};font-weight:600;text-transform:uppercase;font-size:0.72rem">${esc(p.confidence || '')}</span> <span class="dt-dim" style="font-size:0.78rem">· ${esc(p.horizon || '')}</span></div>`
+        + `<div style="margin-top:2px"><b>${esc(p.call || '')}</b></div>`
+        + `<div class="rot-sub dt-dim" style="margin-top:2px">${esc(p.rationale || '')}</div></div>`).join('') + `</div>`;
+    // Narrative + refresh
+    const narr = g.narrativeUpdate ? `<div class="dt-note" style="margin-top:12px"><b>📖 Running narrative:</b> ${esc(g.narrativeUpdate)}</div>` : '';
+    const foot = `<div style="margin-top:12px;display:flex;align-items:center;gap:10px">`
+      + `<button class="dt-btn" id="gp-refresh">🔄 Rebuild from latest news</button>`
+      + `<span class="dt-dim" style="font-size:0.78rem">A synthesis of the day’s news + the app’s own signals — not financial advice. Predictions are falsifiable hypotheses, not guarantees.</span></div>`;
+    el.innerHTML = hero + tiers + drivers + plan + preds + narr + foot;
+    // wire tier toggle + refresh
+    el.querySelectorAll('.gp-tier-btn').forEach(btn => btn.onclick = () => {
+      el.querySelectorAll('.gp-tier-btn').forEach(b => b.classList.toggle('gp-active', b === btn));
+      el.querySelectorAll('.gp-tier-body').forEach(b => b.style.display = b.dataset.tier === btn.dataset.tier ? '' : 'none');
+    });
+    const rb = document.getElementById('gp-refresh'); if (rb) rb.onclick = () => runGamePlanUI(true);
+  }
+
   let briefLoaded = false;
   function ensureBrief() { if (!briefLoaded) { briefLoaded = true; runBriefUI(); } }
   async function runBriefUI() {
