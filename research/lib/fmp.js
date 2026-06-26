@@ -15,19 +15,19 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // GET a stable/ endpoint. Returns parsed JSON, or throws with the status + body
 // snippet so a 403/402 (tier/legacy) surfaces loudly instead of silently faking.
-async function get(path, params = {}, { retries = 2, throttleMs = 250 } = {}) {
+async function get(path, params = {}, { retries = 4, throttleMs = 220 } = {}) {
   const qs = new URLSearchParams({ ...params, apikey: key() }).toString();
   const url = `${BASE}/${path}?${qs}`;
-  let lastErr;
+  let lastErr = new Error(`no attempt made for ${path}`);
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const r = await fetch(url);
-      if (r.status === 429) { await sleep(1000 * (attempt + 1)); continue; } // rate limit → back off
+      if (r.status === 429) { lastErr = new Error(`429 rate-limited on ${path}`); await sleep(1500 * (attempt + 1)); continue; }
       const text = await r.text();
       if (!r.ok) throw new Error(`HTTP ${r.status} on ${path}: ${text.slice(0, 160)}`);
       if (throttleMs) await sleep(throttleMs);
       return JSON.parse(text);
-    } catch (e) { lastErr = e; if (attempt < retries) await sleep(300 * (attempt + 1)); }
+    } catch (e) { lastErr = e || lastErr; if (attempt < retries) await sleep(400 * (attempt + 1)); }
   }
   throw lastErr;
 }
@@ -52,4 +52,10 @@ async function incomeQuarterly(symbol, limit = 60) {
   return get('income-statement', { symbol, period: 'quarter', limit });
 }
 
-module.exports = { get, delistedPage, priceHistory, incomeQuarterly, sleep, BASE };
+// Historical earnings events — announcement date + epsActual/epsEstimated.
+// Dates go back ~5y on Starter (estimates may be sparser); newest-first.
+async function earnings(symbol, limit = 40) {
+  return get('earnings', { symbol, limit });
+}
+
+module.exports = { get, delistedPage, priceHistory, incomeQuarterly, earnings, sleep, BASE };
