@@ -158,8 +158,20 @@ module.exports = async function handler(req, res) {
     brieftick = await r.json();
   } catch (e) { brieftick = { error: String(e && e.message || e) }; }
 
+  // Core Momentum sleeve: refresh the feature cache (resumable, ~5 daily runs to fully seed),
+  // log the book on quarterly rebalance (self-gated), and resolve outcomes for live drift.
+  let corebuild = null;
+  try { const r = await fetch('https://' + HOST + '/api/tracker?op=corebuild', { headers: { 'x-warm': '1' } }); corebuild = await r.json(); }
+  catch (e) { corebuild = { error: String(e && e.message || e) }; }
+  let corelog = null;
+  try { const r = await fetch('https://' + HOST + '/api/tracker?op=corelog', { headers: { 'x-warm': '1' } }); corelog = await r.json(); }
+  catch (e) { corelog = { error: String(e && e.message || e) }; }
+  let coredrift = null;
+  try { const r = await fetch('https://' + HOST + '/api/tracker?op=coredrift', { headers: { 'x-warm': '1' } }); coredrift = await r.json(); }
+  catch (e) { coredrift = { error: String(e && e.message || e) }; }
+
   const warmedExtra = await extraWarm;   // already resolved — ran during the tail above
-  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, predicttick, crowdtick, brieftick, leaderboardtick, at: new Date().toISOString() };
+  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, at: new Date().toISOString() };
 
   // Observability: persist a compact health record so failed ticks / stale data are visible (op=health).
   try { const { summarizeRun, writeHealthRun } = require('../lib/health'); await writeHealthRun(summarizeRun(result)); }
