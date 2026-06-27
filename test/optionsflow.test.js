@@ -59,10 +59,15 @@ test('scanChain flags unusual contracts and filters small ones', () => {
   assert.equal(sigs.find(s => s.side === 'put').sentiment, 'bearish');
 });
 
-test('scanChain requires NEW positioning (vol >= OI)', () => {
-  // big premium but vol/OI 0.5 (legacy OI churn) → excluded
-  const result = chain(100, [{ strike: 110, volume: 500, openInterest: 5000, lastPrice: 2, expiration: future }], []);
-  assert.equal(of.scanChain('AAPL', result).length, 0);
+test('scanChain requires NEW positioning UNLESS it is block-size', () => {
+  // modest premium ($100k) + vol/OI 0.1 (legacy churn) → excluded
+  const churn = chain(100, [{ strike: 110, volume: 500, openInterest: 5000, lastPrice: 2, expiration: future }], []);
+  assert.equal(of.scanChain('AAPL', churn).length, 0);
+  // block-size premium ($2M) with low vol/OI (0.4) → admitted, classified 'block'
+  const block = chain(100, [{ strike: 110, volume: 2000, openInterest: 5000, lastPrice: 10, expiration: future }], []);
+  const sigs = of.scanChain('AAPL', block);
+  assert.equal(sigs.length, 1);
+  assert.equal(sigs[0].kind, 'block');
 });
 
 test('scanOptionsFlow aggregates + sorts by score (mocked fetcher)', async () => {
