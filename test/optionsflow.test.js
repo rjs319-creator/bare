@@ -18,10 +18,10 @@ test('volOiRatio: ratio, or Infinity on zero OI with volume', () => {
   assert.equal(of.volOiRatio({ volume: 0, openInterest: 0 }), 0);
 });
 
-test('classify: block (huge premium) > sweep (high vol/OI) > large', () => {
-  assert.equal(of.classify({ volume: 6000, lastPrice: 5, openInterest: 100 }), 'block'); // $3M
-  assert.equal(of.classify({ volume: 1000, lastPrice: 1, openInterest: 100 }), 'sweep'); // $100k, vol/OI 10
-  assert.equal(of.classify({ volume: 600, lastPrice: 1, openInterest: 1000 }), 'large'); // $60k, vol/OI 0.6
+test('classify: sweep (high vol/OI) > block (big size, modest turnover) > large', () => {
+  assert.equal(of.classify({ volume: 1000, lastPrice: 1, openInterest: 100 }), 'sweep');  // vol/OI 10
+  assert.equal(of.classify({ volume: 3000, lastPrice: 400, openInterest: 2000 }), 'block'); // $120M, vol/OI 1.5
+  assert.equal(of.classify({ volume: 600, lastPrice: 1, openInterest: 1000 }), 'large');   // $60k, vol/OI 0.6
 });
 
 test('sentimentOf + moneyness', () => {
