@@ -1087,6 +1087,8 @@
       color: var(--text-dim); transition: color 0.15s, background 0.15s, transform 0.1s;
       -webkit-tap-highlight-color: transparent;
     }
+    /* The Search item is a <button> — strip native chrome so it matches the links. */
+    .mbn-action { background: none; border: none; font-family: inherit; cursor: pointer; }
     .mbn-item:active { transform: scale(0.92); }
     .mbn-item.active { color: var(--green); background: var(--green-dim); }
     .mbn-icon  { font-size: 1.25rem; line-height: 1; }
@@ -1139,8 +1141,9 @@
       header { padding: 0 12px; height: 52px; grid-template-columns: auto 1fr; gap: 10px; }
       .header-nav { display: none; }
       #live-clock, .market-status { display: none; }
-      .header-right { gap: 8px; min-width: 0; }
-      .hdr-btn { padding: 5px 9px; font-size: 0.7rem; }
+      .header-right { gap: 6px; min-width: 0; }
+      .hdr-btn { padding: 4px 8px; font-size: 0.68rem; }
+      #cmdk-btn { display: none; }   /* search lives in the bottom nav on mobile */
       .logo-text { font-size: 0.85rem; }
 
       /* Page */
@@ -1218,6 +1221,9 @@
       .opt-metrics { grid-template-columns: 1fr; }
       .opt-metrics .opt-metric:last-child { grid-column: auto; }
       .sector-tile { min-width: 68px; }
+      /* Drop the wordmark so the header (logo + action buttons) fits narrow phones;
+         the "M" logo icon stays. Prevents whole-page horizontal overflow. */
+      .logo-text { display: none; }
     }
 
     /* ── DESKTOP ENHANCEMENTS (≥1280px) ── */

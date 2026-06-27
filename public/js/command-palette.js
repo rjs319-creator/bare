@@ -33,7 +33,12 @@ function injectStyles() {
     .cmdk-hint{padding:8px 12px;border-top:1px solid #222732;color:#6b7280;font-size:.7rem;display:flex;gap:14px;flex-wrap:wrap}
     .cmdk-flash{animation:cmdkFlash 1.6s ease-out}
     @keyframes cmdkFlash{0%,40%{box-shadow:0 0 0 2px var(--green,#10d98a),0 0 16px var(--green,#10d98a)}100%{box-shadow:none}}
-  `;
+    @media (max-width:640px){
+      #cmdk-overlay{padding-top:7vh}
+      #cmdk-box{width:94vw;max-height:72vh}
+      #cmdk-input{font-size:16px}        /* ≥16px keeps iOS from zooming on focus */
+      .cmdk-item{padding:12px 11px}        /* roomier tap targets */
+    }`;
   document.head.appendChild(s);
 }
 

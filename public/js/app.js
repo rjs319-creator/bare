@@ -2637,6 +2637,8 @@
     btn.addEventListener('click', () => openPalette());
     right.insertBefore(btn, ref || right.firstChild);
   })();
+  // Mobile: the Search item in the bottom nav opens the same palette.
+  document.getElementById('mbn-search')?.addEventListener('click', e => { e.preventDefault(); openPalette(); });
 
   // ── 🏠 TODAY — guided home: read the tape, say what suits, route the novice ──
   let todayLoaded = false;
