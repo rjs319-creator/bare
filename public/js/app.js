@@ -567,21 +567,86 @@
   const optionsGenTime    = document.getElementById('options-gen-time');
   const optionsMeta       = document.getElementById('options-meta');
 
-  optionsRefreshBtn.addEventListener('click', fetchOptions);
-  // Lazy-load: only fetch when the Options tab opens (it hits a ~20s LLM endpoint).
+  optionsRefreshBtn.addEventListener('click', () => fetchOptions(true));
+  // Lazy-load: only fetch when the Options tab opens.
   let optionsLoaded = false;
-  function ensureOptions() { if (optionsLoaded) return; optionsLoaded = true; fetchOptions(); setInterval(fetchOptions, 4 * 60 * 60 * 1000); }
+  function ensureOptions() { if (optionsLoaded) return; optionsLoaded = true; fetchOptions(false); }
 
-  async function fetchOptions() {
+  // ── 🛠️ Unusual Options Flow (quantitative — op=optionsflow + op=optionsperf) ──
+  let optionsFlowAll = [];
+  const ofFilters = { type: '', sentiment: '', ticker: '' };
+
+  async function fetchOptions(refresh) {
     optionsRefreshBtn.disabled = true;
     optionsContainer.innerHTML = skeletonGrid(4);
     try {
-      const res  = await fetch('/api/options');
+      const res = await fetch('/api/tracker?op=optionsflow' + (refresh ? '&refresh=1' : ''));
       const data = await res.json();
-      if (data.error) { showOptionsError(data.error); return; }
-      renderOptions(data);
+      if (!data.ok) { showOptionsError(data.error || 'No options flow available right now.'); return; }
+      optionsFlowAll = data.signals || [];
+      renderOptionsFlowShell(data);
+      applyOptionsFilters();
+      loadOptionsPerf();
     } catch { showOptionsError('Could not load options flow. Please try again.'); }
     finally { optionsRefreshBtn.disabled = false; }
+  }
+
+  const OF_SEL = 'padding:7px 9px;border:1px solid #333;border-radius:6px;background:#14171f;color:#e5e7eb;font-size:0.82rem';
+  function renderOptionsFlowShell(data) {
+    if (optionsGenTime) optionsGenTime.textContent = data.generatedAt ? `Updated ${new Date(data.generatedAt).toLocaleTimeString()}` : '';
+    if (optionsMeta) optionsMeta.textContent = `· ${data.count} unusual signals across ${data.universe} liquid names`;
+    optionsContainer.innerHTML =
+      `<div class="dt-note" style="margin-bottom:12px">${esc(data.note || '')}</div>`
+      + `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">`
+      + `<select id="of-type" style="${OF_SEL}"><option value="">All flow types</option><option value="sweep">⚡ Sweeps</option><option value="block">🧱 Blocks</option><option value="large">💰 Large</option></select>`
+      + `<select id="of-sent" style="${OF_SEL}"><option value="">All sentiment</option><option value="bullish">▲ Bullish</option><option value="bearish">▼ Bearish</option></select>`
+      + `<input id="of-ticker" placeholder="Filter ticker (e.g. NVDA)" style="${OF_SEL};width:180px">`
+      + `<span id="of-count" class="dt-dim" style="font-size:0.78rem"></span></div>`
+      + `<div id="of-grid" class="scr-grid"></div>`
+      + `<div id="of-perf" style="margin-top:26px"></div>`;
+    const t = document.getElementById('of-type'), se = document.getElementById('of-sent'), tk = document.getElementById('of-ticker');
+    t.addEventListener('change', () => { ofFilters.type = t.value; applyOptionsFilters(); });
+    se.addEventListener('change', () => { ofFilters.sentiment = se.value; applyOptionsFilters(); });
+    tk.addEventListener('input', () => { ofFilters.ticker = tk.value.trim().toUpperCase(); applyOptionsFilters(); });
+  }
+
+  function applyOptionsFilters() {
+    const grid = document.getElementById('of-grid'); if (!grid) return;
+    let items = optionsFlowAll;
+    if (ofFilters.type) items = items.filter(s => s.kind === ofFilters.type);
+    if (ofFilters.sentiment) items = items.filter(s => s.sentiment === ofFilters.sentiment);
+    if (ofFilters.ticker) items = items.filter(s => (s.ticker || '').includes(ofFilters.ticker));
+    const cnt = document.getElementById('of-count'); if (cnt) cnt.textContent = `${items.length} shown`;
+    grid.innerHTML = items.length ? items.map(optionsFlowCard).join('') : `<div class="rot-sub dt-dim">No signals match the filters.</div>`;
+  }
+
+  function ofUsd(n) { return n >= 1e6 ? '$' + (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? '$' + Math.round(n / 1e3) + 'k' : '$' + n; }
+  const OF_KIND = { sweep: '⚡ Sweep', block: '🧱 Block', large: '💰 Large' };
+  function optionsFlowCard(s) {
+    const bull = s.sentiment === 'bullish', col = bull ? 'var(--green)' : 'var(--red)';
+    return `<div class="cx-card" style="border-left:3px solid ${col}">`
+      + `<div class="cx-top"><div>`
+      + `<div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(s.ticker)}">$${esc(s.ticker)}</span>`
+      + `<span class="cx-tierbadge" style="color:${col};border-color:currentColor">${bull ? '▲ Bullish' : '▼ Bearish'}</span>`
+      + `<span class="cx-tierbadge" style="color:var(--text-dim);border-color:#444">${OF_KIND[s.kind] || esc(s.kind)}</span></div>`
+      + `<div class="cx-company">${esc(s.type)} $${esc(String(s.strike))} · ${esc(s.expiry || '?')} (${s.dte}d) · ${esc(s.moneyness)}${s.iv ? ` · IV ${s.iv}%` : ''}</div>`
+      + `</div><div class="cx-score-col"><div class="cx-score" style="color:#06c4d4;font-size:1.05rem">${ofUsd(s.premium)}</div>`
+      + `<div class="cx-price">vol ${(s.volume || 0).toLocaleString()} · OI ${(s.openInterest || 0).toLocaleString()}${s.volOi ? ` · ${s.volOi}× OI` : ''}</div></div></div></div>`;
+  }
+
+  async function loadOptionsPerf() {
+    const el = document.getElementById('of-perf'); if (!el) return;
+    try {
+      const p = await fetch('/api/tracker?op=optionsperf').then(r => r.json());
+      if (!p || !p.ok) return;
+      if (!p.logged) { el.innerHTML = `<div class="rot-head">📊 Options Signal Track Record</div><div class="dt-note">Gathering data — flow signals are logged daily; their forward 1-week / 1-month returns on the underlying fill in over the coming weeks. By design it won't claim an edge on a thin sample.</div>`; return; }
+      const row = (lbl, h) => (h && h.n) ? `<div class="bt-ic-row"><span>${lbl}</span><span>${h.winRate}% win · ${h.avgReturnPct > 0 ? '+' : ''}${h.avgReturnPct}% avg · n=${h.n}</span></div>` : '';
+      const block = (hk) => `<div class="rot-sub" style="margin-top:8px"><b>${hk === '1w' ? '1-week' : '1-month'} forward (underlying)</b></div>`
+        + row('All signals', p.horizons[hk]) + row('Bullish', (p.bySentiment[hk] || {}).bullish) + row('Bearish', (p.bySentiment[hk] || {}).bearish);
+      el.innerHTML = `<div class="rot-head">📊 Options Signal Track Record <span class="dt-dim">· ${p.logged} logged · ${p.resolved} resolved</span></div>`
+        + `<div class="rot-panel" style="margin-top:6px">${block('1w')}${block('1m')}</div>`
+        + `<div class="dt-dim" style="font-size:0.74rem;margin-top:6px">${esc(p.note || '')}</div>`;
+    } catch { /* leave the panel as-is on error */ }
   }
 
   function renderOptions(data) {
