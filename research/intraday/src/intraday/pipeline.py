@@ -58,10 +58,16 @@ def generate_signals(cfg) -> list:
     return signals
 
 
-def hold_window_bars(cfg, signal: dict) -> list:
-    """Flat list of intraday bars for the signal's hold window (the next
-    `max_hold_sessions` sessions after T). Cached per-month by fmp."""
+def hold_window_sessions(cfg, signal: dict) -> list:
+    """List of sessions (each a list of intraday bars) for the hold window — the next
+    `max_hold_sessions` trading days after T. The first session is the entry day
+    (T+1), which entry-timing rules act within. Cached per-month by fmp."""
     bars = fmp.intraday(signal["symbol"], cfg.interval, signal["date"], date_plus(signal["date"], 10))
     sessions = fmp.group_by_session(bars)
     future = sorted(d for d in sessions if d > signal["date"])[: cfg.max_hold_sessions]
-    return [b for d in future for b in sessions[d]]
+    return [sessions[d] for d in future]
+
+
+def hold_window_bars(cfg, signal: dict) -> list:
+    """Flat list of all hold-window bars (sessions concatenated)."""
+    return [b for sess in hold_window_sessions(cfg, signal) for b in sess]

@@ -82,6 +82,32 @@ def simulate_long(session_bars: list, planned_entry: float, stop: Optional[float
     return _result("time", entry, session_bars[-1]["close"] * (1 - slip), held, risk, comm)
 
 
+def simulate_at(window: list, entry_price: float, start_idx: int, stop: Optional[float] = None,
+                target: Optional[float] = None, cost: CostModel = CostModel()) -> TradeResult:
+    """Manage a position whose entry has ALREADY been decided (price + the bar index
+    after which management begins) — used by entry-timing rules (entries.py). `window`
+    is the full flattened hold window; `start_idx` is the first management bar."""
+    slip = cost.slippage_bps / 1e4
+    comm = cost.commission_bps / 1e4
+    entry = entry_price * (1 + slip)
+    risk = (entry - stop) if stop is not None else None
+    if risk is not None and risk <= 0:
+        return TradeResult(False, "no_fill", entry, 0, 0, 0, 0)
+
+    mgmt = window[start_idx:]
+    if not mgmt:                              # entered on the final bar — nothing to manage
+        return _result("time", entry, window[-1]["close"] * (1 - slip), 0, risk, comm)
+
+    held = 0
+    for b in mgmt:
+        held += 1
+        if stop is not None and b["low"] <= stop:
+            return _result("stop", entry, stop * (1 - slip), held, risk, comm)
+        if target is not None and b["high"] >= target:
+            return _result("target", entry, target * (1 - slip), held, risk, comm)
+    return _result("time", entry, mgmt[-1]["close"] * (1 - slip), held, risk, comm)
+
+
 def _result(reason: str, entry: float, exit_px: float, held: int, risk: Optional[float],
             comm: float) -> TradeResult:
     gross = exit_px - entry
