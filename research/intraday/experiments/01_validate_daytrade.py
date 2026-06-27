@@ -88,20 +88,18 @@ def run() -> None:
         print("No signals in window — widen universe/dates in config.py.")
         return
 
-    # Execute each signal on real intraday bars.
+    # Execute each signal on real intraday bars. Fetch only each signal's short hold
+    # window (FMP intraday is cached per-month, so adjacent signals reuse downloads) —
+    # far cheaper than pulling 3.5yr of 5-min bars per name.
     print("Fetching intraday bars + simulating intrabar execution…")
-    intraday_cache: dict = {}
     results = []
     for s in tqdm(signals):
-        sym = s["symbol"]
-        if sym not in intraday_cache:
-            try:
-                bars = fmp.intraday(sym, CFG.interval, CFG.start, intra_end)
-                intraday_cache[sym] = fmp.group_by_session(bars)
-            except Exception as e:
-                print(f"  ! {sym} intraday failed: {e}")
-                intraday_cache[sym] = {}
-        sessions = intraday_cache[sym]
+        try:
+            bars = fmp.intraday(s["symbol"], CFG.interval, s["date"], _date_plus(s["date"], 10))
+        except Exception as e:
+            print(f"  ! {s['symbol']} intraday failed: {e}")
+            continue
+        sessions = fmp.group_by_session(bars)
         future = sorted(d for d in sessions if d > s["date"])[: CFG.max_hold_sessions]
         if not future:
             continue
@@ -127,6 +125,8 @@ def run() -> None:
     is_trs = [tr for s, tr in results if s["date"] < mid]
     oos_trs = [tr for s, tr in results if s["date"] >= mid]
     by_scan = {k: summarize([tr for s, tr in results if s["scan"] == k]) for k in SCANS}
+    years = sorted(set(s["date"][:4] for s, _ in results))
+    by_year = {y: summarize([tr for s, tr in results if s["date"][:4] == y]) for y in years}
 
     report = {
         "config": dict(universe=len(CFG.universe), start=CFG.start, end=CFG.end,
@@ -135,6 +135,7 @@ def run() -> None:
         "signals": len(signals), "executed": len(results),
         "overall": overall,
         "by_scan": by_scan,
+        "by_year": by_year,
         "in_sample": summarize(is_trs), "out_of_sample": summarize(oos_trs),
     }
     (OUT / "daytrade_validation.json").write_text(json.dumps(report, indent=2))
@@ -158,23 +159,34 @@ def run() -> None:
     show("OVERALL", overall)
     for k in SCANS:
         show(k, by_scan[k])
+    print("  — by year (regime check) —")
+    for y in years:
+        show(y, by_year[y])
     show("in-sample", report["in_sample"])
     show("out-of-sample", report["out_of_sample"])
 
     exp = overall.get("expectancy_pct", 0)
     lb = overall.get("win_rate_wilson_lb", 0)
+    oos_exp = report["out_of_sample"].get("expectancy_pct", 0)
+    pos_years = sum(1 for y in years if by_year[y].get("expectancy_pct", 0) > 0)
     print("\nVERDICT:")
-    if exp > 0 and lb >= 50:
-        print(f"  Picks are net-positive after real intrabar stops + costs (exp {exp}%/trade, "
-              f"win-rate LB {lb}%≥50). The screener's edge survives honest execution.")
+    if exp > 0 and oos_exp > 0 and lb >= 50:
+        print(f"  Durable: net-positive in aggregate AND out-of-sample (exp {exp}%/trade, "
+              f"OOS {oos_exp}%/trade, win-rate LB {lb}%≥50) — the edge survives honest "
+              f"intrabar execution across regimes.")
+    elif exp > 0 and (oos_exp <= 0 or pos_years <= len(years) // 2):
+        print(f"  NOT durable: aggregate is +{exp}%/trade but out-of-sample is {oos_exp}%/trade "
+              f"and only {pos_years}/{len(years)} years are positive — the edge is an early-window "
+              f"(regime) ARTIFACT that inverts out-of-sample. No regime-robust intraday edge; the "
+              f"screener is a regime-dependent movers watchlist, not a tradeable system "
+              f"(same pattern as the project's exits / PEAD / conviction findings).")
     elif exp > 0:
-        print(f"  Net-positive expectancy ({exp}%/trade) but win-rate floor {lb}%<50 — a "
-              f"right-skewed, low-hit-rate profile (few runners carry it). Matches the "
-              f"live screener's own daily-proxy finding; intrabar stops do not break it.")
+        print(f"  Marginal: net-positive ({exp}%/trade, OOS {oos_exp}%/trade) but win-rate floor "
+              f"{lb}%<50 — a thin, right-skewed low-hit-rate profile, not a confident edge.")
     else:
         print(f"  Negative expectancy ({exp}%/trade) once intrabar stops + costs are modelled — "
-              f"the daily-bar proxy was flattering. Evidence the stop placement leaks "
-              f"(consistent with the app's exits study). Do NOT trust the stated 1:2 as achievable.")
+              f"the daily-bar proxy was flattering and the stop placement leaks "
+              f"(consistent with the app's exits study). The stated 1:2 is not achievable as-is.")
     print(f"\nSaved: {OUT/'daytrade_validation.csv'} and .json")
 
 
