@@ -54,6 +54,21 @@ def test_pullback_fills_then_targets():
     assert r.exit_reason == "target"
 
 
+def test_no_stop_holds_to_time_exit():
+    # A deep dip that WOULD trigger a stop, but no stop is set -> hold to time exit.
+    bars = [bar(10, 10.1, 9.9, 10), bar(10, 10.2, 8.0, 9.5)]
+    r = simulate_long(bars, 10, stop=None, target=None, cost=ZERO, entry_mode="next_open")
+    assert r.filled is True
+    assert r.exit_reason == "time"
+    assert abs(r.exit_price - 9.5) < 1e-9
+
+
+def test_no_stop_with_target():
+    bars = [bar(10, 10.1, 9.9, 10), bar(10, 12.5, 8.0, 11)]   # target 12 hit; no stop
+    r = simulate_long(bars, 10, stop=None, target=12, cost=ZERO, entry_mode="next_open")
+    assert r.exit_reason == "target"
+
+
 def test_costs_reduce_return():
     bars = [bar(10, 10.1, 9.9, 10), bar(10, 12.1, 9.9, 11)]
     free = simulate_long(bars, 10, 9, 12, ZERO, "next_open")

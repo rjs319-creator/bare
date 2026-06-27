@@ -25,8 +25,9 @@ def summarize(results: List[TradeResult]) -> dict:
     n = len(filled)
     if n == 0:
         return {"n": 0}
-    wins = [r for r in filled if r.r_multiple > 0]
-    losses = [r for r in filled if r.r_multiple <= 0]
+    # Classify by net return (universal — R is undefined for no-stop policies).
+    wins = [r for r in filled if r.net_return_pct > 0]
+    losses = [r for r in filled if r.net_return_pct <= 0]
     rs = [r.r_multiple for r in filled]
     rets = [r.net_return_pct for r in filled]
     gross_win = sum(r.net_return_pct for r in wins)

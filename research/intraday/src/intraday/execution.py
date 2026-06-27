@@ -34,10 +34,13 @@ class TradeResult:
     net_return_pct: float          # after slippage + commission, both legs
 
 
-def simulate_long(session_bars: list, planned_entry: float, stop: float, target: float,
-                  cost: CostModel, entry_mode: str = "next_open") -> TradeResult:
+def simulate_long(session_bars: list, planned_entry: float, stop: Optional[float] = None,
+                  target: Optional[float] = None, cost: CostModel = CostModel(),
+                  entry_mode: str = "next_open") -> TradeResult:
     """Simulate a long trade over a flat list of intraday bars (already trimmed to the
-    holding window, ascending). `stop`/`target` are absolute price levels.
+    holding window, ascending). `stop`/`target` are absolute price levels, or None to
+    disable that exit (e.g. a no-stop, hold-to-time-exit policy — the exits study's
+    "don't use a tight stop" hypothesis).
 
     entry_mode:
       'next_open'  -> market entry at the first bar's open (executable; what you'd
@@ -62,32 +65,27 @@ def simulate_long(session_bars: list, planned_entry: float, stop: float, target:
         entry = session_bars[0]["open"] * (1 + slip)
         start = 1
 
-    risk = entry - stop
-    if risk <= 0:
+    risk = (entry - stop) if stop is not None else None
+    if risk is not None and risk <= 0:          # T+1 gapped below the stop -> untradeable
         return TradeResult(False, "no_fill", entry, 0, 0, 0, 0)
 
     # ---- manage ----
     held = 0
     for b in session_bars[start:]:
         held += 1
-        hit_stop = b["low"] <= stop
-        hit_target = b["high"] >= target
-        if hit_stop:                            # conservative: stop checked first
-            exit_px = stop * (1 - slip)
-            return _result("stop", entry, exit_px, held, risk, comm)
-        if hit_target:
-            exit_px = target * (1 - slip)
-            return _result("target", entry, exit_px, held, risk, comm)
+        if stop is not None and b["low"] <= stop:    # conservative: stop checked first
+            return _result("stop", entry, stop * (1 - slip), held, risk, comm)
+        if target is not None and b["high"] >= target:
+            return _result("target", entry, target * (1 - slip), held, risk, comm)
 
     # ---- time exit at last close ----
-    exit_px = session_bars[-1]["close"] * (1 - slip)
-    return _result("time", entry, exit_px, held, risk, comm)
+    return _result("time", entry, session_bars[-1]["close"] * (1 - slip), held, risk, comm)
 
 
-def _result(reason: str, entry: float, exit_px: float, held: int, risk: float,
+def _result(reason: str, entry: float, exit_px: float, held: int, risk: Optional[float],
             comm: float) -> TradeResult:
     gross = exit_px - entry
     net_ret = gross / entry - 2 * comm
-    r = gross / risk if risk > 0 else 0.0
+    r = gross / risk if (risk and risk > 0) else 0.0
     return TradeResult(True, reason, round(entry, 4), round(exit_px, 4), held,
                        round(r, 3), round(net_ret * 100, 3))
