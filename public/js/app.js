@@ -596,7 +596,15 @@
     if (optionsGenTime) optionsGenTime.textContent = data.generatedAt ? `Updated ${new Date(data.generatedAt).toLocaleTimeString()}` : '';
     if (optionsMeta) optionsMeta.textContent = `· ${data.count} unusual signals across ${data.universe} liquid names`;
     optionsContainer.innerHTML =
-      `<div class="dt-note" style="margin-bottom:12px">${esc(data.note || '')}</div>`
+      `<details class="dt-note" style="margin-bottom:12px"><summary style="cursor:pointer;font-weight:600">📖 New to options flow? How to read this</summary>`
+      + `<div style="margin-top:8px;line-height:1.65;font-size:0.85rem">Each card is an unusually large options trade — a window into where big money is positioning.`
+      + `<ul style="margin:8px 0;padding-left:18px">`
+      + `<li><b>Calls</b> = a bet the stock goes <b style="color:var(--green)">UP</b> (bullish). <b>Puts</b> = a bet it goes <b style="color:var(--red)">DOWN</b> (bearish).</li>`
+      + `<li><b>Premium</b> = dollars spent on the trade — bigger = more conviction (or bigger hedge).</li>`
+      + `<li><b>⚡ Sweep</b> = filled aggressively/urgently across exchanges. <b>🧱 Block</b> = one big negotiated, usually institutional, trade.</li>`
+      + `<li><b>"×&nbsp;OI"</b> = today's volume vs. the existing open interest — higher means a fresher, brand-new position.</li>`
+      + `<li><b>Strike / expiry</b> = the price level and deadline the trade is betting on.</li></ul>`
+      + `<b>Important:</b> this shows where money is <i>flowing</i>, not advice. We can't see whether they bought or sold, so read call activity as a bullish <i>lean</i>, not a certainty — and the Track Record at the bottom shows whether these signals have actually predicted moves.</div></details>`
       + `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">`
       + `<select id="of-type" style="${OF_SEL}"><option value="">All flow types</option><option value="sweep">⚡ Sweeps</option><option value="block">🧱 Blocks</option><option value="large">💰 Large</option></select>`
       + `<select id="of-sent" style="${OF_SEL}"><option value="">All sentiment</option><option value="bullish">▲ Bullish</option><option value="bearish">▼ Bearish</option></select>`
@@ -622,6 +630,16 @@
 
   function ofUsd(n) { return n >= 1e6 ? '$' + (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? '$' + Math.round(n / 1e3) + 'k' : '$' + n; }
   const OF_KIND = { sweep: '⚡ Sweep', block: '🧱 Block', large: '💰 Large' };
+  // Plain-English read of one signal, built deterministically from its fields.
+  function flowPlainEnglish(s) {
+    const optType = s.side === 'call' ? 'call options' : 'put options';
+    const dir = s.sentiment === 'bullish' ? 'rises above' : 'falls below';
+    const kindNote = s.kind === 'sweep' ? 'Filled as a sweep — aggressive, urgent buying across exchanges.'
+      : s.kind === 'block' ? 'A single large block — likely an institution.'
+        : 'A large premium trade.';
+    const fresh = s.volOi ? ` Volume was ${s.volOi}× the prior open interest, so it's a brand-new position.` : '';
+    return `Someone spent ~${ofUsd(s.premium)} on ${esc(s.ticker)} ${optType}, betting it ${dir} $${esc(String(s.strike))} by ${esc(s.expiry || 'expiry')} (${s.dte} days out). ${kindNote}${fresh}`;
+  }
   function optionsFlowCard(s) {
     const bull = s.sentiment === 'bullish', col = bull ? 'var(--green)' : 'var(--red)';
     return `<div class="cx-card" style="border-left:3px solid ${col}">`
@@ -631,7 +649,8 @@
       + `<span class="cx-tierbadge" style="color:var(--text-dim);border-color:#444">${OF_KIND[s.kind] || esc(s.kind)}</span></div>`
       + `<div class="cx-company">${esc(s.type)} $${esc(String(s.strike))} · ${esc(s.expiry || '?')} (${s.dte}d) · ${esc(s.moneyness)}${s.iv ? ` · IV ${s.iv}%` : ''}</div>`
       + `</div><div class="cx-score-col"><div class="cx-score" style="color:#06c4d4;font-size:1.05rem">${ofUsd(s.premium)}</div>`
-      + `<div class="cx-price">vol ${(s.volume || 0).toLocaleString()} · OI ${(s.openInterest || 0).toLocaleString()}${s.volOi ? ` · ${s.volOi}× OI` : ''}</div></div></div></div>`;
+      + `<div class="cx-price">vol ${(s.volume || 0).toLocaleString()} · OI ${(s.openInterest || 0).toLocaleString()}${s.volOi ? ` · ${s.volOi}× OI` : ''}</div></div></div>`
+      + `<div class="cx-narrative" style="margin-top:8px">💡 ${flowPlainEnglish(s)}</div></div>`;
   }
 
   async function loadOptionsPerf() {
