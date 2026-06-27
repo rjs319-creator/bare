@@ -597,10 +597,29 @@
   // Client-side aggregation (mirrors lib/optionsflow rollupByTicker/flowSummary so
   // the rollup respects the active filters).
   const OF_INDEX = new Set(['SPY', 'QQQ', 'IWM', 'DIA', 'VIX', 'VXX', 'UVXY', 'TLT', 'HYG', 'GLD', 'SLV', 'XLF', 'XLE', 'XLK', 'SMH']);
+  const OF_GRADE_BANDS = [[60, 'Very Bullish'], [25, 'Bullish'], [8, 'Slightly Bullish'], [-7, 'Neutral'], [-24, 'Slightly Bearish'], [-59, 'Bearish'], [-100, 'Very Bearish']];
+  // Bull/bear grade for a set of contracts (mirrors lib/optionsflow flowGrade):
+  // -100..+100 sentiment score, weighting aggressive OTM directional bets more.
+  function ofGrade(contracts) {
+    let bull = 0, bear = 0, tot = 0;
+    (contracts || []).forEach(c => {
+      const w = (c.premium || 0) * (1 + (c.kind === 'sweep' ? 0.25 : 0) + (c.moneyness === 'OTM' ? 0.15 : 0));
+      if (c.side === 'call') bull += w; else bear += w; tot += w;
+    });
+    const score = tot > 0 ? Math.round(((bull - bear) / tot) * 100) : 0;
+    let label = 'Neutral'; for (const [thr, lbl] of OF_GRADE_BANDS) { if (score >= thr) { label = lbl; break; } }
+    return { score, label };
+  }
+  function ofGradeColor(score) { return score >= 8 ? 'var(--green)' : score <= -8 ? 'var(--red)' : 'var(--text-dim)'; }
+  function ofGradeBadge(score, label) {
+    const emoji = score >= 8 ? '🟢' : score <= -8 ? '🔴' : '⚪';
+    return `<span class="cx-tierbadge" style="color:${ofGradeColor(score)};border-color:currentColor;font-weight:600">${emoji} ${label} ${score > 0 ? '+' : ''}${score}</span>`;
+  }
   function ofSummary(sigs) {
     let call = 0, put = 0; sigs.forEach(s => { if (s.side === 'call') call += s.premium; else put += s.premium; });
     const total = call + put;
-    return { totalPremium: total, callPremium: call, putPremium: put, bullishPct: total ? Math.round(100 * call / total) : 50, tickerCount: new Set(sigs.map(s => s.ticker)).size };
+    const g = ofGrade(sigs);
+    return { totalPremium: total, callPremium: call, putPremium: put, bullishPct: total ? Math.round(100 * call / total) : 50, score: g.score, grade: g.label, tickerCount: new Set(sigs.map(s => s.ticker)).size };
   }
   function ofRollup(sigs) {
     const m = new Map();
@@ -614,6 +633,7 @@
       r.totalPremium = r.callPremium + r.putPremium;
       r.bullishPct = r.totalPremium ? Math.round(100 * r.callPremium / r.totalPremium) : 50;
       r.net = r.bullishPct >= 60 ? 'bullish' : r.bullishPct <= 40 ? 'bearish' : 'mixed';
+      const g = ofGrade(r.contracts); r.score = g.score; r.grade = g.label;
       r.contracts.sort((a, b) => b.premium - a.premium);
       return r;
     });
@@ -621,11 +641,9 @@
     return out;
   }
   function ofSummaryBar(sm) {
-    const leanCol = sm.bullishPct >= 55 ? 'var(--green)' : sm.bullishPct <= 45 ? 'var(--red)' : 'var(--text-dim)';
-    const leanTxt = sm.bullishPct >= 55 ? 'net bullish' : sm.bullishPct <= 45 ? 'net bearish' : 'balanced';
     return `<div class="rot-panel"><div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px">`
       + `<div class="rot-head" style="margin:0">💰 ${ofUsd(sm.totalPremium)} unusual options premium <span class="dt-dim" style="font-weight:400">· ${sm.tickerCount} tickers</span></div>`
-      + `<div style="color:${leanCol};font-weight:600;font-size:0.9rem">${sm.bullishPct}% calls — ${leanTxt}</div></div>`
+      + `<div>Market grade: ${ofGradeBadge(sm.score, sm.grade)}</div></div>`
       + `<div style="display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:8px">`
       + `<div style="width:${sm.bullishPct}%;background:var(--green)"></div><div style="width:${100 - sm.bullishPct}%;background:var(--red)"></div></div>`
       + `<div class="dt-dim" style="font-size:0.72rem;display:flex;justify-content:space-between;margin-top:3px"><span>▲ calls ${ofUsd(sm.callPremium)}</span><span>puts ${ofUsd(sm.putPremium)} ▼</span></div></div>`;
@@ -696,17 +714,16 @@
   }
 
   function tickerRollupCard(r) {
-    const netCol = r.net === 'bullish' ? 'var(--green)' : r.net === 'bearish' ? 'var(--red)' : 'var(--text-dim)';
-    const netTxt = r.net === 'bullish' ? '▲ Net Bullish' : r.net === 'bearish' ? '▼ Net Bearish' : '◆ Mixed';
+    const gcol = ofGradeColor(r.score);
     const novice = ofNovice
-      ? `<div class="cx-narrative" style="margin-top:8px">💡 Big money is leaning <b style="color:${netCol}">${r.net}</b> on ${esc(r.ticker)} — ${ofUsd(r.callPremium)} in call premium vs ${ofUsd(r.putPremium)} in puts, across ${r.contracts.length} unusual trade${r.contracts.length > 1 ? 's' : ''}.</div>`
+      ? `<div class="cx-narrative" style="margin-top:8px">💡 ${esc(r.ticker)}'s options activity grades <b style="color:${gcol}">${r.grade} (${r.score > 0 ? '+' : ''}${r.score})</b> — ${ofUsd(r.callPremium)} in call (bullish) premium vs ${ofUsd(r.putPremium)} in puts, across ${r.contracts.length} unusual trade${r.contracts.length > 1 ? 's' : ''}.</div>`
       : '';
     const contractRow = s => `<div class="dt-dim" style="font-size:0.74rem;padding:2px 0">${esc(s.type)} $${esc(String(s.strike))} ${esc(s.expiry || '')} (${s.dte}d) · ${ofUsd(s.premium)} · ${OF_KIND[s.kind] || esc(s.kind)} · ${s.sentiment === 'bullish' ? '▲' : '▼'}</div>`;
     const expand = `<button class="of-expand dt-btn" data-n="${r.contracts.length}" style="margin-top:8px;font-size:0.74rem;padding:3px 8px">▸ show ${r.contracts.length} contract${r.contracts.length > 1 ? 's' : ''}</button>`
       + `<div style="display:none;margin-top:6px;border-top:1px solid #222;padding-top:6px">${r.contracts.map(contractRow).join('')}</div>`;
-    return `<div class="cx-card" style="border-left:3px solid ${netCol}">`
+    return `<div class="cx-card" style="border-left:3px solid ${gcol}">`
       + `<div class="cx-top"><div><div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(r.ticker)}">$${esc(r.ticker)}</span>`
-      + `<span class="cx-tierbadge" style="color:${netCol};border-color:currentColor">${netTxt}</span></div>`
+      + ofGradeBadge(r.score, r.grade) + `</div>`
       + `<div class="cx-company">${r.contracts.length} unusual contract${r.contracts.length > 1 ? 's' : ''}${r.sweep ? ` · ${r.sweep}⚡` : ''}${r.block ? ` · ${r.block}🧱` : ''}${r.underlying ? ` · spot $${r.underlying}` : ''}</div></div>`
       + `<div class="cx-score-col"><div class="cx-score" style="color:#06c4d4;font-size:1.05rem">${ofUsd(r.totalPremium)}</div><div class="cx-price">${r.bullishPct}% calls</div></div></div>`
       + `<div style="display:flex;height:7px;border-radius:4px;overflow:hidden;margin-top:8px"><div style="width:${r.bullishPct}%;background:var(--green)"></div><div style="width:${100 - r.bullishPct}%;background:var(--red)"></div></div>`
