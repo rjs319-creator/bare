@@ -95,6 +95,37 @@ test('resolveAt finds entry + forward close; null until horizon elapses', () => 
   assert.equal(resolveAt(candles, '2026-06-01', 10, 'bullish'), null); // not enough bars
 });
 
+test('rollupByTicker aggregates net call/put premium per ticker', () => {
+  const sigs = [
+    { ticker: 'NVDA', side: 'call', premium: 3_000_000, kind: 'sweep', underlying: 120 },
+    { ticker: 'NVDA', side: 'call', premium: 1_000_000, kind: 'block', underlying: 120 },
+    { ticker: 'NVDA', side: 'put', premium: 500_000, kind: 'sweep', underlying: 120 },
+    { ticker: 'SPY', side: 'put', premium: 8_000_000, kind: 'sweep', underlying: 600 },
+  ];
+  const r = of.rollupByTicker(sigs);
+  assert.equal(r[0].ticker, 'SPY');                    // sorted by total premium
+  const nvda = r.find(x => x.ticker === 'NVDA');
+  assert.equal(nvda.contracts, 3);
+  assert.equal(nvda.totalPremium, 4_500_000);
+  assert.equal(nvda.bullishPct, 89);                   // 4M call / 4.5M total
+  assert.equal(nvda.net, 'bullish');
+  assert.equal(nvda.topContract.premium, 3_000_000);
+  assert.equal(r.find(x => x.ticker === 'SPY').isIndex, true);
+  assert.equal(nvda.isIndex, false);
+});
+
+test('flowSummary gives the market-wide bull/bear premium split', () => {
+  const s = of.flowSummary([
+    { ticker: 'A', side: 'call', premium: 6_000_000 },
+    { ticker: 'B', side: 'put', premium: 4_000_000 },
+  ]);
+  assert.equal(s.totalPremium, 10_000_000);
+  assert.equal(s.bullishPct, 60);
+  assert.equal(s.lean, 'bullish');
+  assert.equal(s.tickerCount, 2);
+  assert.equal(of.flowSummary([]).lean, 'neutral');
+});
+
 test('summarize computes win rate + avg return', () => {
   const s = summarize([0.05, -0.02, 0.03, -0.01]);
   assert.equal(s.n, 4);
