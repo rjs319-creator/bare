@@ -95,6 +95,36 @@ test('resolveAt finds entry + forward close; null until horizon elapses', () => 
   assert.equal(resolveAt(candles, '2026-06-01', 10, 'bullish'), null); // not enough bars
 });
 
+test('flowGrade scores bull/bear with OTM-sweep weighting', () => {
+  // all OTM call sweeps → strongly bullish
+  const bull = of.flowGrade([
+    { side: 'call', premium: 2e6, kind: 'sweep', moneyness: 'OTM' },
+    { side: 'call', premium: 1e6, kind: 'sweep', moneyness: 'OTM' },
+  ]);
+  assert.equal(bull.score, 100);
+  assert.equal(bull.label, 'Very Bullish');
+  // all puts → bearish (negative)
+  const bear = of.flowGrade([{ side: 'put', premium: 3e6, kind: 'block', moneyness: 'ITM' }]);
+  assert.ok(bear.score < 0);
+  assert.equal(bear.label, 'Very Bearish');
+  // balanced → neutral
+  assert.equal(of.flowGrade([
+    { side: 'call', premium: 1e6, kind: 'large', moneyness: 'ATM' },
+    { side: 'put', premium: 1e6, kind: 'large', moneyness: 'ATM' },
+  ]).label, 'Neutral');
+  assert.equal(of.flowGrade([]).score, 0);
+});
+
+test('rollupByTicker attaches a grade per ticker', () => {
+  const r = of.rollupByTicker([
+    { ticker: 'MU', side: 'call', premium: 5e6, kind: 'sweep', moneyness: 'OTM', underlying: 100 },
+    { ticker: 'MU', side: 'call', premium: 1e6, kind: 'sweep', moneyness: 'OTM', underlying: 100 },
+  ]);
+  assert.ok(r[0].score > 50);
+  assert.equal(r[0].grade, 'Very Bullish');
+  assert.equal(r[0].contracts, 2);
+});
+
 test('rollupByTicker aggregates net call/put premium per ticker', () => {
   const sigs = [
     { ticker: 'NVDA', side: 'call', premium: 3_000_000, kind: 'sweep', underlying: 120 },
