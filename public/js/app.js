@@ -1,8 +1,12 @@
   import { esc, fmtMoney, timeAgo } from './format.js';
   import { startLivePrices as startScreenerLive, stopLivePrices as stopScreenerLive, LIVE_SCREENERS } from './live-price.js';
+  import { startFlowBadges, setFlowNav, FLOW_BADGE_TABS } from './flow-badge.js';
   import { loadOpportunities, mountOpportunitiesTab } from './opportunities.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
+
+  // Tapping a "💰 flow" badge on any screener card jumps to the Options tab.
+  setFlowNav(() => showTab('options'));
 
   // ── App tabs with a "Markets" hub (Screener / Rotation / Sectors) ──
   const TAB_GROUPS = {
@@ -100,6 +104,7 @@
 
     // Live intraday price overlay on the stock screeners (daily-bar signals, live price).
     if (LIVE_SCREENERS.has(sub)) startScreenerLive(document.getElementById(sub)); else stopScreenerLive();
+    if (FLOW_BADGE_TABS.has(sub)) startFlowBadges(document.getElementById(sub));
 
     const act = document.querySelector('.mobile-top-tabs .mtt-item.active');
     if (act) act.scrollIntoView({ inline: 'center', block: 'nearest', behavior: opts.instant ? 'auto' : 'smooth' });
@@ -574,7 +579,8 @@
 
   // ── 🛠️ Unusual Options Flow (quantitative — op=optionsflow + op=optionsperf) ──
   let optionsFlowAll = [];
-  const ofFilters = { type: '', sentiment: '', ticker: '' };
+  const ofFilters = { type: '', sentiment: '', ticker: '', money: '' };
+  let ofSort = (() => { try { return localStorage.getItem('ofSort') || 'premium'; } catch { return 'premium'; } })();
   let ofNovice = (() => { try { return localStorage.getItem('ofNovice') !== 'pro'; } catch { return true; } })();
   let ofView = (() => { try { return localStorage.getItem('ofView') === 'contracts' ? 'contracts' : 'ticker'; } catch { return 'ticker'; } })();
   // Confluence cross-reference: ticker -> [{icon,label,route,color,title}] of the
@@ -642,10 +648,50 @@
       r.net = r.bullishPct >= 60 ? 'bullish' : r.bullishPct <= 40 ? 'bearish' : 'mixed';
       const g = ofGrade(r.contracts); r.score = g.score; r.grade = g.label;
       r.contracts.sort((a, b) => b.premium - a.premium);
+      r.maxScore = Math.max(0, ...r.contracts.map(c => c.score || 0));
+      r.minDte = Math.min(Infinity, ...r.contracts.map(c => c.dte ?? Infinity));
+      r.maxVolOi = Math.max(0, ...r.contracts.map(c => c.volOi || 0));
       return r;
     });
     out.sort((a, b) => b.totalPremium - a.totalPremium);
     return out;
+  }
+  // Active filters, shared by the view + CSV export. (The flow feed is front-month
+  // only — all contracts are near-dated — so we filter by moneyness, not expiry.)
+  function ofFilteredItems() {
+    let items = optionsFlowAll;
+    if (ofFilters.type) items = items.filter(s => s.kind === ofFilters.type);
+    if (ofFilters.sentiment) items = items.filter(s => s.sentiment === ofFilters.sentiment);
+    if (ofFilters.ticker) items = items.filter(s => (s.ticker || '').includes(ofFilters.ticker));
+    if (ofFilters.money) items = items.filter(s => s.moneyness === ofFilters.money);
+    return items;
+  }
+  function ofSortContracts(arr) {
+    const a = [...arr];
+    if (ofSort === 'score') a.sort((x, y) => (y.score || 0) - (x.score || 0));
+    else if (ofSort === 'expiry') a.sort((x, y) => (x.dte || 0) - (y.dte || 0));
+    else if (ofSort === 'voloi') a.sort((x, y) => (y.volOi || 0) - (x.volOi || 0));
+    else a.sort((x, y) => (y.premium || 0) - (x.premium || 0));
+    return a;
+  }
+  function ofSortRollup(arr) {
+    const a = [...arr];
+    if (ofSort === 'score') a.sort((x, y) => (y.maxScore || 0) - (x.maxScore || 0));
+    else if (ofSort === 'expiry') a.sort((x, y) => (x.minDte ?? Infinity) - (y.minDte ?? Infinity));
+    else if (ofSort === 'voloi') a.sort((x, y) => (y.maxVolOi || 0) - (x.maxVolOi || 0));
+    else a.sort((x, y) => (y.totalPremium || 0) - (x.totalPremium || 0));
+    return a;
+  }
+  function exportOptionsCsv() {
+    const items = ofSortContracts(ofFilteredItems());
+    const cols = ['ticker', 'side', 'type', 'strike', 'expiry', 'dte', 'volume', 'openInterest', 'volOi', 'lastPrice', 'premium', 'iv', 'underlying', 'moneyness', 'kind', 'sentiment', 'score'];
+    const cell = v => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const csv = [cols.join(','), ...items.map(s => cols.map(c => cell(s[c])).join(','))].join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = 'options-flow-' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   function ofSummaryBar(sm) {
     return `<div class="rot-panel"><div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px">`
@@ -731,13 +777,22 @@
       + `<select id="of-sent" style="${OF_SEL}"><option value="">All sentiment</option><option value="bullish">▲ Bullish</option><option value="bearish">▼ Bearish</option></select>`
       + `<select id="of-type" style="${OF_SEL}"><option value="">All flow types</option><option value="sweep">⚡ Sweeps</option><option value="block">🧱 Blocks</option><option value="large">💰 Large</option></select>`
       + `<input id="of-ticker" placeholder="Filter ticker (e.g. NVDA)" style="${OF_SEL};width:170px">`
+      + `<select id="of-money" style="${OF_SEL}"><option value="">All moneyness</option><option value="OTM">OTM (directional)</option><option value="ATM">ATM</option><option value="ITM">ITM</option></select>`
+      + `<select id="of-sort" style="${OF_SEL}"><option value="premium">Sort: Premium</option><option value="score">Sort: Unusualness</option><option value="expiry">Sort: Soonest expiry</option><option value="voloi">Sort: Vol / OI</option></select>`
+      + `<button id="of-csv" class="dt-btn" title="Download the filtered flow as CSV">⬇ CSV</button>`
       + `<span id="of-count" class="dt-dim" style="font-size:0.78rem"></span></div>`
       + `<div id="of-grid"></div>`
       + `<div id="of-perf" style="margin-top:26px"></div>`;
     const t = document.getElementById('of-type'), se = document.getElementById('of-sent'), tk = document.getElementById('of-ticker');
+    const mn = document.getElementById('of-money'), so = document.getElementById('of-sort');
+    // Restore current control state (the shell is rebuilt on view/mode switches).
+    t.value = ofFilters.type; se.value = ofFilters.sentiment; tk.value = ofFilters.ticker; mn.value = ofFilters.money; so.value = ofSort;
     t.addEventListener('change', () => { ofFilters.type = t.value; applyOptionsView(); });
     se.addEventListener('change', () => { ofFilters.sentiment = se.value; applyOptionsView(); });
     tk.addEventListener('input', () => { ofFilters.ticker = tk.value.trim().toUpperCase(); applyOptionsView(); });
+    mn.addEventListener('change', () => { ofFilters.money = mn.value; applyOptionsView(); });
+    so.addEventListener('change', () => { ofSort = so.value; try { localStorage.setItem('ofSort', ofSort); } catch {} applyOptionsView(); });
+    document.getElementById('of-csv').addEventListener('click', exportOptionsCsv);
     const setView = (v) => { ofView = v; try { localStorage.setItem('ofView', v); } catch {} renderOptionsFlowShell(data); applyOptionsView(); loadOptionsPerf(); };
     document.getElementById('of-v-ticker').addEventListener('click', () => setView('ticker'));
     document.getElementById('of-v-contracts').addEventListener('click', () => setView('contracts'));
@@ -752,18 +807,15 @@
 
   function applyOptionsView() {
     const grid = document.getElementById('of-grid'); if (!grid) return;
-    let items = optionsFlowAll;
-    if (ofFilters.type) items = items.filter(s => s.kind === ofFilters.type);
-    if (ofFilters.sentiment) items = items.filter(s => s.sentiment === ofFilters.sentiment);
-    if (ofFilters.ticker) items = items.filter(s => (s.ticker || '').includes(ofFilters.ticker));
+    const items = ofFilteredItems();
     const sm = document.getElementById('of-summary'); if (sm) sm.innerHTML = ofSummaryBar(ofSummary(items));
     const cnt = document.getElementById('of-count');
     const empty = `<div class="rot-sub dt-dim">No signals match the filters.</div>`;
     if (ofView === 'contracts') {
       if (cnt) cnt.textContent = `${items.length} contracts`;
-      grid.innerHTML = items.length ? `<div class="scr-grid">${items.map(optionsFlowCard).join('')}</div>` : empty;
+      grid.innerHTML = items.length ? `<div class="scr-grid">${ofSortContracts(items).map(optionsFlowCard).join('')}</div>` : empty;
     } else {
-      const roll = ofRollup(items);
+      const roll = ofSortRollup(ofRollup(items));
       const single = roll.filter(r => !r.isIndex), idx = roll.filter(r => r.isIndex);
       if (cnt) cnt.textContent = `${roll.length} tickers`;
       const block = (title, rows) => rows.length ? `<div class="rot-head" style="margin:4px 0 8px">${title} <span class="dt-dim" style="font-weight:400">· ${rows.length}</span></div><div class="scr-grid" style="margin-bottom:18px">${rows.map(tickerRollupCard).join('')}</div>` : '';
