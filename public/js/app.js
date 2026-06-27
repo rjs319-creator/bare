@@ -575,6 +575,7 @@
   // ── 🛠️ Unusual Options Flow (quantitative — op=optionsflow + op=optionsperf) ──
   let optionsFlowAll = [];
   const ofFilters = { type: '', sentiment: '', ticker: '' };
+  let ofNovice = (() => { try { return localStorage.getItem('ofNovice') !== 'pro'; } catch { return true; } })();
 
   async function fetchOptions(refresh) {
     optionsRefreshBtn.disabled = true;
@@ -596,7 +597,10 @@
     if (optionsGenTime) optionsGenTime.textContent = data.generatedAt ? `Updated ${new Date(data.generatedAt).toLocaleTimeString()}` : '';
     if (optionsMeta) optionsMeta.textContent = `· ${data.count} unusual signals across ${data.universe} liquid names`;
     optionsContainer.innerHTML =
-      `<details class="dt-note" style="margin-bottom:12px"><summary style="cursor:pointer;font-weight:600">📖 New to options flow? How to read this</summary>`
+      `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">`
+      + `<button id="of-mode" class="dt-btn">${ofNovice ? '👶 Novice view' : '🎯 Pro view'}</button>`
+      + `<span class="dt-dim" style="font-size:0.78rem">${ofNovice ? 'plain-English reads' : 'raw premium · vol/OI · IV'}</span></div>`
+      + `<details id="of-explainer" class="dt-note" style="margin-bottom:12px"${ofNovice ? ' open' : ''}><summary style="cursor:pointer;font-weight:600">📖 New to options flow? How to read this</summary>`
       + `<div style="margin-top:8px;line-height:1.65;font-size:0.85rem">Each card is an unusually large options trade — a window into where big money is positioning.`
       + `<ul style="margin:8px 0;padding-left:18px">`
       + `<li><b>Calls</b> = a bet the stock goes <b style="color:var(--green)">UP</b> (bullish). <b>Puts</b> = a bet it goes <b style="color:var(--red)">DOWN</b> (bearish).</li>`
@@ -616,6 +620,13 @@
     t.addEventListener('change', () => { ofFilters.type = t.value; applyOptionsFilters(); });
     se.addEventListener('change', () => { ofFilters.sentiment = se.value; applyOptionsFilters(); });
     tk.addEventListener('input', () => { ofFilters.ticker = tk.value.trim().toUpperCase(); applyOptionsFilters(); });
+    document.getElementById('of-mode').addEventListener('click', () => {
+      ofNovice = !ofNovice;
+      try { localStorage.setItem('ofNovice', ofNovice ? 'novice' : 'pro'); } catch {}
+      const btn = document.getElementById('of-mode'); if (btn) btn.textContent = ofNovice ? '👶 Novice view' : '🎯 Pro view';
+      const ex = document.getElementById('of-explainer'); if (ex) ex.open = ofNovice;
+      applyOptionsFilters();   // re-render cards in the new mode (filters preserved)
+    });
   }
 
   function applyOptionsFilters() {
@@ -642,15 +653,19 @@
   }
   function optionsFlowCard(s) {
     const bull = s.sentiment === 'bullish', col = bull ? 'var(--green)' : 'var(--red)';
+    // Header (always): ticker · bull/bear · kind · premium.
+    const techMeta = ofNovice ? '' : `<div class="cx-company">${esc(s.type)} $${esc(String(s.strike))} · ${esc(s.expiry || '?')} (${s.dte}d) · ${esc(s.moneyness)}${s.iv ? ` · IV ${s.iv}%` : ''}</div>`;
+    const techVol = ofNovice ? '' : `<div class="cx-price">vol ${(s.volume || 0).toLocaleString()} · OI ${(s.openInterest || 0).toLocaleString()}${s.volOi ? ` · ${s.volOi}× OI` : ''}</div>`;
+    // Body: novice → plain-English read; pro → (technical lines live in the header).
+    const body = ofNovice ? `<div class="cx-narrative" style="margin-top:8px">💡 ${flowPlainEnglish(s)}</div>` : '';
     return `<div class="cx-card" style="border-left:3px solid ${col}">`
       + `<div class="cx-top"><div>`
       + `<div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(s.ticker)}">$${esc(s.ticker)}</span>`
       + `<span class="cx-tierbadge" style="color:${col};border-color:currentColor">${bull ? '▲ Bullish' : '▼ Bearish'}</span>`
       + `<span class="cx-tierbadge" style="color:var(--text-dim);border-color:#444">${OF_KIND[s.kind] || esc(s.kind)}</span></div>`
-      + `<div class="cx-company">${esc(s.type)} $${esc(String(s.strike))} · ${esc(s.expiry || '?')} (${s.dte}d) · ${esc(s.moneyness)}${s.iv ? ` · IV ${s.iv}%` : ''}</div>`
+      + techMeta
       + `</div><div class="cx-score-col"><div class="cx-score" style="color:#06c4d4;font-size:1.05rem">${ofUsd(s.premium)}</div>`
-      + `<div class="cx-price">vol ${(s.volume || 0).toLocaleString()} · OI ${(s.openInterest || 0).toLocaleString()}${s.volOi ? ` · ${s.volOi}× OI` : ''}</div></div></div>`
-      + `<div class="cx-narrative" style="margin-top:8px">💡 ${flowPlainEnglish(s)}</div></div>`;
+      + techVol + `</div></div>${body}</div>`;
   }
 
   async function loadOptionsPerf() {
