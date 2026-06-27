@@ -577,6 +577,11 @@
   const ofFilters = { type: '', sentiment: '', ticker: '' };
   let ofNovice = (() => { try { return localStorage.getItem('ofNovice') !== 'pro'; } catch { return true; } })();
   let ofView = (() => { try { return localStorage.getItem('ofView') === 'contracts' ? 'contracts' : 'ticker'; } catch { return 'ticker'; } })();
+  // Confluence cross-reference: ticker -> [{icon,label,route,color,title}] of the
+  // app's OWN screeners that currently flag the same name. Built lazily.
+  let ofConfluence = null;
+  let ofConfLoaded = false;
+  let ofRouteWired = false;
 
   async function fetchOptions(refresh) {
     optionsRefreshBtn.disabled = true;
@@ -589,6 +594,8 @@
       renderOptionsFlowShell(data);
       applyOptionsView();
       loadOptionsPerf();
+      wireOfRoute();
+      loadOptionsConfluence(refresh);
     } catch { showOptionsError('Could not load options flow. Please try again.'); }
     finally { optionsRefreshBtn.disabled = false; }
   }
@@ -649,6 +656,59 @@
       + `<div class="dt-dim" style="font-size:0.72rem;display:flex;justify-content:space-between;margin-top:3px"><span>▲ calls ${ofUsd(sm.callPremium)}</span><span>puts ${ofUsd(sm.putPremium)} ▼</span></div></div>`;
   }
 
+  // ── Confluence cross-reference ───────────────────────────────────────────────
+  // Joins each options-flow ticker against the app's own screeners so you can see
+  // when unusual options activity lines up with a Breakout, a Ghost accumulation
+  // setup, top conviction, or a live day-trade mover. Pure client-side join over
+  // data the app already serves — this is what ties the separate tools together.
+  function buildConfluence(screener, daytrade) {
+    const map = {};
+    const add = (tk, sig) => { if (tk) (map[tk] || (map[tk] = [])).push(sig); };
+    (screener?.results || []).forEach(c => {
+      const tk = c.ticker;
+      if (c.status === 'Breakout' && c.qualifies)
+        add(tk, { icon: '🔥', label: 'Breakout', route: 'screener', color: 'var(--green)', title: 'Also a current candidate in the Breakout screener' });
+      const gt = c.ghost?.tier;
+      if (gt === 'GHOST' || gt === 'STALKING')
+        add(tk, { icon: '👻', label: gt === 'GHOST' ? 'Ghost' : 'Stalking', route: 'ghost', color: '#a78bfa', title: 'Showing quiet accumulation in the Ghost Accumulation screener' });
+      if (c.conviction && (c.conviction.sleeveA || c.conviction.pctile >= 80))
+        add(tk, { icon: '🎯', label: 'Top conviction', route: 'custom', color: '#06c4d4', title: 'Top-quintile conviction in the Adaptive Momentum model' });
+    });
+    const dt = new Set([...(daytrade?.momentumLiquid || []), ...(daytrade?.explosiveSmall || [])].map(x => x.ticker));
+    dt.forEach(tk => add(tk, { icon: '🚀', label: 'Day-trade mover', route: 'daytrade', color: 'var(--amber,#f59e0b)', title: 'Flagged as a live mover in the Day Trade screener' }));
+    return map;
+  }
+
+  async function loadOptionsConfluence(force) {
+    if (ofConfLoaded && !force) return;
+    ofConfLoaded = true;
+    try {
+      const [scr, dt] = await Promise.all([
+        fetch('/api/screener?scope=large').then(r => r.json()).catch(() => null),
+        fetch('/api/tracker?op=daytrade').then(r => r.json()).catch(() => null),
+      ]);
+      ofConfluence = buildConfluence(scr, dt);
+      if (document.getElementById('of-grid')) applyOptionsView(); // re-decorate now that the join is ready
+    } catch { /* badges are an enhancement — ignore failures */ }
+  }
+
+  function ofConfluenceHTML(ticker) {
+    const sigs = ofConfluence && ofConfluence[ticker];
+    if (!sigs || !sigs.length) return '';
+    const badge = s => `<span class="of-conf cx-tierbadge" data-of-route="${s.route}" title="${esc(s.title)}" style="color:${s.color};border-color:currentColor;cursor:pointer">${s.icon} ${esc(s.label)}</span>`;
+    return `<div class="of-conf-row" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">${sigs.map(badge).join('')}</div>`;
+  }
+
+  // One delegated handler on the persistent container: tap a badge → jump to that screener.
+  function wireOfRoute() {
+    if (ofRouteWired) return;
+    ofRouteWired = true;
+    optionsContainer.addEventListener('click', e => {
+      const b = e.target.closest('.of-conf');
+      if (b && b.dataset.ofRoute && typeof showTab === 'function') showTab(b.dataset.ofRoute);
+    });
+  }
+
   function renderOptionsFlowShell(data) {
     if (optionsGenTime) optionsGenTime.textContent = data.generatedAt ? `Updated ${new Date(data.generatedAt).toLocaleTimeString()}` : '';
     if (optionsMeta) optionsMeta.textContent = `· ${data.count} unusual signals across ${data.universe} liquid names`;
@@ -664,7 +724,8 @@
       + `<li><b>Calls</b> = a bet the stock goes <b style="color:var(--green)">UP</b>. <b>Puts</b> = a bet it goes <b style="color:var(--red)">DOWN</b>.</li>`
       + `<li><b>Net bullish/bearish</b> = whether the day's call premium or put premium dominates for that ticker.</li>`
       + `<li><b>🎯 Single-stock</b> flow is usually conviction; <b>🛡 Index/ETF</b> flow (SPY, QQQ…) is often just hedging — so we separate them.</li>`
-      + `<li><b>⚡ Sweep</b> = aggressive/urgent fill · <b>🧱 Block</b> = one big institutional trade.</li></ul>`
+      + `<li><b>⚡ Sweep</b> = aggressive/urgent fill · <b>🧱 Block</b> = one big institutional trade.</li>`
+      + `<li><b>Confluence badges</b> (🔥 Breakout · 👻 Ghost · 🎯 Top conviction · 🚀 Day-trade mover) appear when the same ticker is <i>also</i> flagged by one of the app's own screeners — the options flow and the screen agreeing is a stronger read than either alone. Tap a badge to jump to that screener.</li></ul>`
       + `<b>Important:</b> this shows where money is <i>flowing</i>, not advice. We can't see whether they bought or sold, so treat it as a directional <i>lean</i> — and the Track Record below shows whether the signals actually predicted moves.</div></details>`
       + `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">`
       + `<select id="of-sent" style="${OF_SEL}"><option value="">All sentiment</option><option value="bullish">▲ Bullish</option><option value="bearish">▼ Bearish</option></select>`
@@ -727,7 +788,7 @@
       + `<div class="cx-company">${r.contracts.length} unusual contract${r.contracts.length > 1 ? 's' : ''}${r.sweep ? ` · ${r.sweep}⚡` : ''}${r.block ? ` · ${r.block}🧱` : ''}${r.underlying ? ` · spot $${r.underlying}` : ''}</div></div>`
       + `<div class="cx-score-col"><div class="cx-score" style="color:#06c4d4;font-size:1.05rem">${ofUsd(r.totalPremium)}</div><div class="cx-price">${r.bullishPct}% calls</div></div></div>`
       + `<div style="display:flex;height:7px;border-radius:4px;overflow:hidden;margin-top:8px"><div style="width:${r.bullishPct}%;background:var(--green)"></div><div style="width:${100 - r.bullishPct}%;background:var(--red)"></div></div>`
-      + novice + expand + `</div>`;
+      + ofConfluenceHTML(r.ticker) + novice + expand + `</div>`;
   }
 
   function ofUsd(n) { return n >= 1e6 ? '$' + (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? '$' + Math.round(n / 1e3) + 'k' : '$' + n; }
@@ -756,7 +817,7 @@
       + `<span class="cx-tierbadge" style="color:var(--text-dim);border-color:#444">${OF_KIND[s.kind] || esc(s.kind)}</span></div>`
       + techMeta
       + `</div><div class="cx-score-col"><div class="cx-score" style="color:#06c4d4;font-size:1.05rem">${ofUsd(s.premium)}</div>`
-      + techVol + `</div></div>${body}</div>`;
+      + techVol + `</div></div>${body}${ofConfluenceHTML(s.ticker)}</div>`;
   }
 
   async function loadOptionsPerf() {
