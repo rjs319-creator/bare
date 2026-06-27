@@ -10,6 +10,7 @@ const PATHS = [
   '/api/screener?scope=small',
   '/api/screener?scope=micro',
   '/api/sectors',
+  '/api/tracker?op=optionsflow&refresh=1',  // build + log the day's options flow (~1.5s) for the track record
 ];
 
 async function warmOne(p) {
