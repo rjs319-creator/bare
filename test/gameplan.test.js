@@ -30,6 +30,21 @@ test('signalsLine surfaces present signals only', () => {
   assert.equal(gp.signalsLine(null), 'App signals: none.');
 });
 
+test('optionsFlowLine renders market + top single-stock grades, graceful when absent', () => {
+  const line = gp.optionsFlowLine({ marketGrade: 'Bullish', marketScore: 31, topStocks: [{ ticker: 'MU', grade: 'Very Bullish', score: 94 }, { ticker: 'TSLA', grade: 'Neutral', score: 2 }] });
+  assert.match(line, /market grade Bullish \(\+31\)/);
+  assert.match(line, /MU Very Bullish \(\+94\)/);
+  assert.match(line, /TSLA Neutral \(\+2\)/);
+  assert.equal(gp.optionsFlowLine(null), 'Options flow: unavailable.');
+});
+
+test('buildUserMessage includes the options-flow line when provided', () => {
+  const msg = gp.buildUserMessage({ date: '2026-06-26', macro: null, headlines: [], signals: null,
+    optionsFlow: { marketGrade: 'Bullish', marketScore: 31, topStocks: [{ ticker: 'MU', grade: 'Very Bullish', score: 94 }] }, priorNarrative: '' });
+  assert.match(msg, /Options flow .* market grade Bullish/);
+  assert.match(msg, /MU Very Bullish/);
+});
+
 test('buildUserMessage includes date, headlines, and prior narrative when present', () => {
   const msg = gp.buildUserMessage({
     date: '2026-06-26',
