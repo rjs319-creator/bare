@@ -33,6 +33,7 @@ const { runHealth } = require('../lib/health');
 const { runLeaderboard, runLeaderboardTick } = require('../lib/leaderboard');
 const { runCoreBuild, runCore, runCoreLog, runCoreDrift, runCorePerf } = require('../lib/stablecore-routes');
 const { runGamePlan } = require('../lib/gameplan-routes');
+const { runOptionsFlow, runOptionsPerf } = require('../lib/optionsflow-routes');
 
 module.exports = async function handler(req, res) {
   if (req.query.op === 'track') return runTrack(req, res);
@@ -57,6 +58,8 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'crowd') return runCrowd(req, res);
   if (req.query.op === 'crowdtick') return runCrowdTick(req, res);
   if (req.query.op === 'gameplan') return runGamePlan(req, res);
+  if (req.query.op === 'optionsflow') return runOptionsFlow(req, res);
+  if (req.query.op === 'optionsperf') return runOptionsPerf(req, res);
   if (req.query.op === 'brief') return runBrief(req, res);
   if (req.query.op === 'brieftick') return runBriefTick(req, res);
   if (req.query.op === 'alertfeed') return runAlertFeed(req, res);
