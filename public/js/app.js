@@ -1,6 +1,7 @@
   import { esc, fmtMoney, timeAgo } from './format.js';
   import { startLivePrices as startScreenerLive, stopLivePrices as stopScreenerLive, LIVE_SCREENERS } from './live-price.js';
   import { startFlowBadges, setFlowNav, FLOW_BADGE_TABS } from './flow-badge.js';
+  import { initCommandPalette, openPalette } from './command-palette.js';
   import { loadOpportunities, mountOpportunitiesTab } from './opportunities.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
@@ -2601,6 +2602,40 @@
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal && !modal.hidden) close(); });
     // Any [data-learn] element anywhere opens the glossary at that concept.
     document.addEventListener('click', e => { const t = e.target.closest('[data-learn]'); if (t) { e.preventDefault(); openLearn(t.dataset.learn); } });
+  })();
+
+  // ── Global command palette (⌘K / Ctrl-K) ──────────────────────────────────
+  // Open the Options tab filtered to a ticker (used by the palette's ticker search).
+  function openOptionsForTicker(tk) {
+    showTab('options');
+    if (typeof ensureOptions === 'function') ensureOptions();
+    let tries = 0;
+    const apply = () => {
+      const inp = document.getElementById('of-ticker');
+      if (inp) { inp.value = tk; ofFilters.ticker = tk; if (typeof applyOptionsView === 'function') applyOptionsView(); }
+      else if (tries++ < 20) setTimeout(apply, 150);
+    };
+    apply();
+  }
+  const GROUP_LABEL = { start: 'Home', screeners: 'Screeners', markets: 'Markets', predict: 'Predict', research: 'Research', track: 'Track' };
+  initCommandPalette({
+    sections: SECTION_IDS.map(id => ({ id, label: (SUB_LABEL[id] || id).replace(/^[^\w]+\s*/, ''), group: GROUP_LABEL[topOf(id)] || '' })),
+    learn: Object.keys(LEARN).map(key => ({ key, label: LEARN[key].t, group: LEARN[key].g })),
+    onRoute: id => showTab(id),
+    onLearn: key => openLearn(key),
+    onTickerOptions: openOptionsForTicker,
+  });
+  // Header search affordance (desktop): a button that opens the palette.
+  (() => {
+    const right = document.querySelector('.header-right');
+    const ref = document.getElementById('learn-btn');
+    if (!right || document.getElementById('cmdk-btn')) return;
+    const btn = document.createElement('button');
+    btn.className = 'hdr-btn'; btn.id = 'cmdk-btn';
+    btn.title = 'Search everything (⌘K / Ctrl-K)';
+    btn.textContent = '🔎 Search';
+    btn.addEventListener('click', () => openPalette());
+    right.insertBefore(btn, ref || right.firstChild);
   })();
 
   // ── 🏠 TODAY — guided home: read the tape, say what suits, route the novice ──
