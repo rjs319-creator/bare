@@ -1598,6 +1598,7 @@
     .dt-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; margin: 7px 0; }
     .dt-card-top { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 0.9rem; }
     .dt-sec { color: var(--text-dim); font-size: 0.74rem; }
+    .dt-star { font-size: 0.82rem; cursor: help; }
     .dt-mv { color: var(--green); font-weight: 600; }
     .dt-dim { color: var(--text-dim); font-weight: 400; }
     .dt-now { font-size: 0.95rem; white-space: nowrap; }

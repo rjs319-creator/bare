@@ -3986,27 +3986,38 @@
     const fav = t.condition === 'trending', bad = t.condition === 'choppy' || t.condition === 'riskoff';
     const tapeBadge = `<div class="dt-note" style="border-left-color:${fav ? 'var(--green)' : bad ? 'var(--amber,#f59e0b)' : 'var(--border-hi)'}"><b>${ti} ${tlbl}.</b> ${tdesc} ${t.condition && t.condition !== 'mixed' ? `<span class="dt-dim">(momentum is a trend-following style — it ${fav ? '✓ suits' : '⚠ does not suit'} today's tape.)</span>` : ''}</div>`;
 
+    // Experimental config banner — the evidence-based ORB-stacked upgrade, framed honestly
+    // (it tested OOS-positive but FAILED formal deflation, so it's a paper-track lead).
+    const cfg = t.config;
+    const configBanner = cfg ? `<div class="rot-panel" style="border-color:#a855f755;background:#a855f70d">
+        <div class="rot-head" style="color:#c084fc">🧪 ${esc(cfg.name)} — experimental upgrade</div>
+        <div class="rot-sub"><b>What changed vs. the old "buy at close" plan:</b>
+          <ul style="margin:6px 0 6px 18px;padding:0">${cfg.rules.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+          <b style="color:#f59e0b">⚠️ Unproven — paper-track first.</b> ${esc(cfg.caveat)}</div>
+      </div>` : '';
+
     // Beginner-friendly "how to use" caption.
     const howto = `<div class="tr-howto">
       <div class="tr-howto-head">📖 How to use this — in plain English</div>
       <ol>
         <li><b>What this is.</b> A list of stocks making a <b>big move TODAY on unusually heavy volume</b> — the day's "movers."</li>
         <li><b>Check the regime first.</b> <b style="color:#22c55e">Risk-On</b>/<b style="color:#eab308">Neutral</b> = these setups are worth watching. <b style="color:#ef4444">Risk-Off</b> = the list is hidden — stand down (momentum fails in scary markets).</li>
-        <li><b>Pick your entry.</b> ↩️ <b>Pullback</b> = wait to buy lower on a dip (safer, may not fill) · 🎯 <b>Breakout</b> = buy now (chasing, fills for sure). Each shows 🛑 <b>Stop</b> (sell here if wrong) and 🏁 <b>Target</b> (take profit).</li>
+        <li><b>Pick your entry.</b> 📈 <b>Opening-range breakout</b> (the tested config) = next session, wait ~30 min, buy <b>only if it breaks the opening-range high</b> — don't chase the open · ↩️ <b>Pullback</b> = instead wait to buy lower on a dip. Each shows 🛑 <b>Stop</b> (2.5×ATR — sell here if wrong) and 🏁 <b>Target</b> (1:2, take profit).</li>
         <li><b>Size by risk, not by gut.</b> Shares ≈ (1% of your account) ÷ (Entry − Stop). Example: $10k account, risk $100, Entry $10 / Stop $9 → ~100 shares.</li>
         <li><b>Always confirm on a chart</b> (TradingView: MACD / RSI) before buying. This is a <b>watchlist, not advice</b>.</li>
       </ol>
     </div>`;
 
     const pb = r => r.pullback || null;
+    const orb = r => r.orb || null;
     const card = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
-          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span></span>
+          <span><b>${esc(r.ticker)}</b>${r.preferred ? ' <span class="dt-star" title="Top-half by rank — the experimental config\'s preferred selection">⭐</span>' : ''} <span class="dt-sec">${esc(r.sector || '')}</span></span>
           <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
         </div>
         <div class="dt-card-sub">+${r.pctChange}% today <span class="dt-dim">· ${L('rvol', 'RVOL')} ${r.relVol}×${r.beta != null ? ' · ' + L('beta', 'β') + ' ' + r.beta : ''}${r.gapPct != null ? ' · gap ' + r.gapPct + '%' : ''}</span></div>
-        ${pb(r) ? `<div class="dt-card-plan">↩️ <b>${L('pullback', 'Pullback entry')}</b> (wait for the dip) <b>$${pb(r).entry}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${pb(r).stop}</b> <span class="dt-dim">(−${pb(r).riskPct}%)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${pb(r).target}</b> <span class="dt-dim">${L('rr', 'R:R')} 1:${pb(r).rr}</span></div>` : ''}
-        <div class="dt-card-plan">🎯 ${L('pullback', 'Breakout entry')} (buy now) <b>$${r.entry}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${r.stop != null ? r.stop : '—'}</b>${r.riskPct != null ? ` <span class="dt-dim">(−${r.riskPct}%)</span>` : ''} &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${r.target != null ? r.target : '—'}</b>${r.rr ? ` <span class="dt-dim">${L('rr', 'R:R')} 1:${r.rr}</span>` : ''}</div>
+        ${orb(r) ? `<div class="dt-card-plan">📈 <b>Opening-range breakout</b> <span class="dt-dim">(next session)</span> — break above <b>$${orb(r).trigger}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${orb(r).stop}</b> <span class="dt-dim">(−${orb(r).riskPct}%, 2.5×ATR)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${orb(r).target}</b> <span class="dt-dim">${L('rr', 'R:R')} 1:${orb(r).rr}</span></div>` : ''}
+        ${pb(r) ? `<div class="dt-card-plan">↩️ <b>${L('pullback', 'Pullback entry')}</b> <span class="dt-dim">(alt: wait for a dip)</span> <b>$${pb(r).entry}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${pb(r).stop}</b> <span class="dt-dim">(−${pb(r).riskPct}%)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${pb(r).target}</b> <span class="dt-dim">${L('rr', 'R:R')} 1:${pb(r).rr}</span></div>` : ''}
         <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
         <div class="chart-panel" data-chart-panel style="display:none"></div>
       </div>`;
@@ -4015,9 +4026,10 @@
       const body = (rows || []).map(card).join('');
       return `<div class="rot-panel"><div class="rot-head">${title}</div><div class="rot-sub">${sub}</div>${extra || ''}${body || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No movers right now.</span></div>'}</div>`;
     };
-    const ml = list('🚀 Momentum &amp; Liquid ($5–$50)', t.momentumLiquid, 'Liquid names up &gt;5% on &gt;1.5× relative volume, ranked by the volume anomaly + learned tilt.');
+    const ml = list('🚀 Momentum &amp; Liquid ($5–$50)', t.momentumLiquid, 'Liquid names up &gt;5% on &gt;1.5× relative volume, ranked by the volume anomaly + learned tilt. <b>⭐ = top-half by rank</b> — the experimental config\'s preferred picks.');
     const betaNote = `<div class="dt-note"><b>β ≈ 2 — beta-neutral check:</b> these small caps swing ~2× the market. In 5y tests the edge is <b>real stock-picking alpha</b> (it barely changes when market beta is removed: +1.7% → +1.5%), but it's a <b>low-hit-rate, big-winner</b> profile (~48–49% win rate) — so <b>size small</b>. Advanced traders isolate the alpha by hedging ~2× the position in short SPY.</div>`;
-    const es = list('💥 Explosive Small-Cap ($1–$20)', t.explosiveSmall, 'Small caps up &gt;8% on &gt;2× relative volume — higher reward, lower hit-rate.', betaNote);
+    const esExclNote = `<div class="dt-note" style="border-left-color:var(--amber,#f59e0b)"><b>⚠️ Excluded from the experimental config.</b> In the intraday study this scan tested <b>negative out-of-sample</b>, so it's <b>not</b> part of the ORB-stacked plan above — shown for awareness only. Size very small if traded at all.</div>`;
+    const es = list('💥 Explosive Small-Cap ($1–$20)', t.explosiveSmall, 'Small caps up &gt;8% on &gt;2× relative volume — higher reward, lower hit-rate.', esExclNote + betaNote);
     let track;
     if (book && book.resolved >= 10) {
       const row = (n, s) => s && s.n ? `<div class="bt-ic-row"><span>${n} <span style="color:var(--text-dim)">${s.n}</span></span><span>exc ${s.avgExc > 0 ? '+' : ''}${s.avgExc}%</span><span>${L('beatRate', 'beat')} ${s.beatRate}% <span style="color:var(--text-dim)">(${L('wilsonLB', 'LB')} ${s.wilsonLo}%)</span></span></div>` : '';
@@ -4025,8 +4037,8 @@
     } else {
       track = `<div class="rot-panel rot-panel-pending"><div class="rot-head">📊 Live track record — building…</div><div class="rot-sub">${book ? `${book.stillOpen || 0} open, ${book.resolved || 0} resolved` : ''}. Each pick is scored ~${t.horizon} sessions later; accrues automatically via the daily cron.</div></div>`;
     }
-    el.innerHTML = banner + tapeBadge + howto + ml + es + track +
-      `<div class="fade-caveats"><b>How to use.</b> Today's relative-volume + momentum movers (the EOD version of the Finviz day-trade scans), regime-gated and self-learning. <b>Honest validation</b> (5y, forward 3-session excess vs SPY): large-cap momentum-chasing does <b>not</b> beat the market (it mean-reverts, −1.3% out-of-sample); explosive small-caps carry a <b>positive average excess</b> (~+1.7–2.3% in risk-on/neutral) but a <b>sub-50% hit-rate</b> — a few big runners carry it, and it dies in risk-off. So treat these as a <b>ranked movers watchlist</b>, not a win-rate edge; the per-stock learner tilts toward names whose momentum actually continues and drops the rest. Confirm entries in TradingView (MACD / RSI / Smart-Money). Research, not advice.</div>`;
+    el.innerHTML = banner + tapeBadge + configBanner + howto + ml + es + track +
+      `<div class="fade-caveats"><b>How to use.</b> Today's relative-volume + momentum movers (the EOD version of the Finviz day-trade scans), regime-gated and self-learning. <b>Honest validation</b> (5y, forward 3-session excess vs SPY): large-cap momentum-chasing does <b>not</b> beat the market (it mean-reverts, −1.3% out-of-sample); explosive small-caps carry a <b>positive average excess</b> (~+1.7–2.3% in risk-on/neutral) but a <b>sub-50% hit-rate</b> — a few big runners carry it, and it dies in risk-off. So treat these as a <b>ranked movers watchlist</b>, not a win-rate edge; the per-stock learner tilts toward names whose momentum actually continues and drops the rest. <b>The 🧪 experimental config above</b> (opening-range-breakout entry + 2.5×ATR stop + top-half selection) is the one variant that tested out-of-sample positive on <b>real intraday execution</b> — but it <b>failed formal deflation</b> (deflated Sharpe 0.59), so it's a paper-trading lead to confirm forward, not a proven edge. Confirm entries in TradingView (MACD / RSI / Smart-Money). Research, not advice.</div>`;
     // Wire each card's chart toggle (reuses the shared /api/chart canvas renderer)
     // and start live-price polling for the recommended names.
     const dtTickers = [];

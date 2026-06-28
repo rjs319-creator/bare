@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { rankScore, atr, ema, tradeLevels } = require('../lib/daytrade');
+const { rankScore, atr, ema, tradeLevels, orbLevels } = require('../lib/daytrade');
 
 test('rankScore weights relVol heaviest and caps it at 10x', () => {
   assert.equal(rankScore({ relVol: 5, pctChange: 3, gapPct: 2 }), 54);     // 50 + 3 + 1
@@ -32,4 +32,27 @@ test('tradeLevels: entry=close, stop below, 1:2 target, pullback present', () =>
 test('tradeLevels: returns null when ATR is zero', () => {
   const flat = Array.from({ length: 20 }, () => ({ high: 100, low: 100, close: 100 }));
   assert.equal(tradeLevels(flat), null);
+});
+
+test('tradeLevels: useLowFloor=false gives a pure (wider) ATR stop', () => {
+  const candles = Array.from({ length: 20 }, () => ({ high: 102, low: 98, close: 100 }));
+  const wide = tradeLevels(candles, { stopAtrMult: 2.5, useLowFloor: false });
+  assert.equal(wide.entry, 100);
+  assert.equal(wide.stop, 90);                 // 100 - 2.5*4 (no today's-low floor)
+  assert.equal(wide.target, 120);             // entry + 2*risk
+  assert.ok(wide.stop < tradeLevels(candles).stop);   // genuinely wider than the legacy stop
+});
+
+test('orbLevels: trigger=today high, 2.5xATR stop, 1:2 target', () => {
+  const candles = Array.from({ length: 20 }, () => ({ high: 102, low: 98, close: 100 }));
+  const o = orbLevels(candles);
+  assert.equal(o.trigger, 102);                // must break today's high to confirm
+  assert.equal(o.stop, 92);                    // 102 - 2.5*4
+  assert.equal(o.target, 122);                 // trigger + 2*risk
+  assert.equal(o.rr, 2);
+});
+
+test('orbLevels: returns null when ATR is zero', () => {
+  const flat = Array.from({ length: 20 }, () => ({ high: 100, low: 100, close: 100 }));
+  assert.equal(orbLevels(flat), null);
 });
