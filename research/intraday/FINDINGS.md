@@ -14,7 +14,8 @@ slippage/fill + 2 bps commission/leg), no lookahead (select on T close, act on T
 | 02 exit A/B | Tight stop is **worst** OOS; loosening halves the bleed — but no exit alone is durable. |
 | 03 regime gate | Macro/small-cap regime gating does **not** transfer to short-term picks (best gate still OOS-negative). Regime is a *cross-sectional* lever, not an intraday one. |
 | 04 entry timing | **Buying the gap (next-open) was the leak.** Opening-range-breakout entry: OOS −0.589 → **−0.124**. |
-| 05 stacked | Stacking the levers turns it **OOS-positive**. |
+| 05 stacked | Stacking the levers turns it **OOS-positive** (+1.56%/trade OOS). |
+| 06 deflation | **The gate fails.** After penalising for the 24-variant search, DSR **0.59** (<0.95) and the walk-forward-selected variant ≠ the chosen one and dies OOS (Sharpe −0.007). The magnitude is search luck. |
 
 ## Best configuration found (Experiment 05, rung L4)
 
@@ -30,14 +31,32 @@ slippage/fill + 2 bps commission/leg), no lookahead (select on T close, act on T
 - **Win-rate Wilson LB is still <50%** — this is a right-skewed, low-hit-rate, positive-*expectancy* profile: a minority of confirmed breakouts carry it (PF 1.22). Psychologically hard; sizing matters.
 - **Multiple testing:** ~5 experiments, ~30 variants. The +1.56% OOS magnitude is inflated by selection; the rank cut uses the in-sample distribution. Deflate it mentally.
 - **2023 was negative** — not all-weather.
-- The honest gate before trusting the magnitude is **forward / live confirmation + formal deflation (Deflated-Sharpe/PBO)** — *not* more in-sample tuning (which would overfit).
+
+## Experiment 06 — the deflation gate (the verdict)
+
+Ran the formal overfitting control flagged above. Result (`data/deflate.json`):
+
+- **DSR = 0.594** — well below the 0.95 bar. The raw PSR (ignoring selection) is 0.866,
+  but the deflation benchmark (E[max Sharpe] across the 24 trials) eats most of that:
+  once you account for having *searched* 24 variants, the probability the true Sharpe is
+  positive is only ~59%.
+- **PBO = 0.286** (≤0.5, acceptable in isolation), but —
+- **Walk-forward selection fails:** the variant that was best on the first half was *not*
+  the chosen config, and its second-half Sharpe is **−0.007** (dead). In-sample selection
+  does not survive forward.
+
+**Verdict: the +1.56% OOS magnitude is selection-inflated and does not clear the gate.**
+This is the project's recurring truth, now proven one level deeper: the process is sound
+and the rig keeps honestly rejecting, but there is no *confirmed* tradeable intraday edge
+on free/Starter data — only a promising lead that would need genuine forward/live
+confirmation (out-of-sample in the literal sense) before it could be trusted.
 
 ## What this means for the app
 
-The live Day Trade screener is a sound *watchlist*, but its implied "buy at the close,
-tight 1:2" plan is the weak part. The evidence-based upgrade (pending forward
-confirmation): **rank-filter to top-half momentum_liquid, surface an opening-range-
-breakout entry instead of buy-at-close, and widen the stop to ~2.5×ATR.** That changes
-the screener from "here are today's movers" to "here's a disciplined way to trade them"
-— the first configuration in this whole investigation that survives real OOS intraday
-execution.
+The live Day Trade screener is a sound *watchlist*. The stacked config (rank-filtered
+top-half `momentum_liquid` + opening-range-breakout entry + ~2.5×ATR stop) is the best
+*lead* this investigation produced and a defensible default *if* surfaced honestly — but
+**experiment 06 says do not ship it as a proven edge.** The disciplined path: paper/forward
+track the config live and only promote it in the UI once out-of-sample (not re-searched)
+results confirm the magnitude. Until then, keep the screener framed as "here are today's
+movers," not "here's a proven way to trade them."
