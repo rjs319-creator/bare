@@ -57,6 +57,28 @@ The live Day Trade screener is a sound *watchlist*. The stacked config (rank-fil
 top-half `momentum_liquid` + opening-range-breakout entry + ~2.5×ATR stop) is the best
 *lead* this investigation produced and a defensible default *if* surfaced honestly — but
 **experiment 06 says do not ship it as a proven edge.** The disciplined path: paper/forward
-track the config live and only promote it in the UI once out-of-sample (not re-searched)
-results confirm the magnitude. Until then, keep the screener framed as "here are today's
-movers," not "here's a proven way to trade them."
+track the config live and only promote it once out-of-sample (not re-searched) results
+confirm the magnitude.
+
+### Shipped (commit `2fbed22`, deployed + verified 2026-06-27)
+
+The config is now wired into the live screener **with the honest framing above**, not as a
+proven edge:
+
+- **Engine** (`lib/daytrade.js`): `tradeLevels` gained an opt-in `useLowFloor:false` for a
+  pure ~2.5×ATR stop (legacy default kept, so the shared Breakout/Confluence callers are
+  untouched); new `orbLevels()` surfaces the next-session opening-range-breakout plan
+  (break today's high, 2.5×ATR stop, 1:2 target) since EOD data can't see tomorrow's range.
+- **Route** (`lib/screener-routes.js`): the Day Trade scan uses the wide stop + ORB plan,
+  flags the top-half `momentum_liquid` as `preferred`, and returns an `experimental` config
+  block carrying the deflation caveat.
+- **UI** (`public/js/app.js`): a 🧪 "experimental upgrade" banner stating it **failed
+  deflation (DSR 0.59) — paper-track first**, ORB entry plans replacing "buy at close",
+  ⭐ on preferred names, and an "excluded — tested negative OOS" note on Explosive Small-Cap.
+
+**Tracking is unchanged** — picks are still logged daily and resolved as forward
+3-session excess vs SPY (`op=daytradetick`/`daytradebook`). That live ledger **is** the
+forward-confirmation gate: if the shipped config's preferred-`momentum_liquid` picks beat
+SPY out-of-sample over a meaningful sample, promote it from 🧪 experimental to default;
+if not, the rig was right and it stays a movers watchlist. Until then it remains framed as
+"here's a *disciplined, unproven* way to trade today's movers," never "a proven edge."
