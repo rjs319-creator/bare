@@ -880,8 +880,11 @@
       if (!p || !p.ok) return;
       if (!p.logged) { el.innerHTML = `<div class="rot-head">📊 Options Signal Track Record</div><div class="dt-note">Gathering data — flow signals are logged daily; their forward 1-week / 1-month returns on the underlying fill in over the coming weeks. By design it won't claim an edge on a thin sample.</div>`; return; }
       const row = (lbl, h) => (h && h.n) ? `<div class="bt-ic-row"><span>${lbl}</span><span>${h.winRate}% win · ${h.avgReturnPct > 0 ? '+' : ''}${h.avgReturnPct}% avg · n=${h.n}</span></div>` : '';
+      // Realized big-mover context: how often the underlying actually ran +10% / +20%
+      // in the flow's favored direction within the horizon — measured from the ledger.
+      const bwRow = (h) => (h && h.n && h.big10Rate != null) ? `<div class="bt-ic-row" style="opacity:.85"><span>🚀 Large-move context</span><span>&gt;10%: ${h.big10Rate}% · &gt;20%: ${h.big20Rate}% · avg peak +${h.avgMfePct}%</span></div>` : '';
       const block = (hk) => `<div class="rot-sub" style="margin-top:8px"><b>${hk === '1w' ? '1-week' : '1-month'} forward (underlying)</b></div>`
-        + row('All signals', p.horizons[hk]) + row('Bullish', (p.bySentiment[hk] || {}).bullish) + row('Bearish', (p.bySentiment[hk] || {}).bearish);
+        + row('All signals', p.horizons[hk]) + bwRow(p.horizons[hk]) + row('Bullish', (p.bySentiment[hk] || {}).bullish) + row('Bearish', (p.bySentiment[hk] || {}).bearish);
       el.innerHTML = `<div class="rot-head">📊 Options Signal Track Record <span class="dt-dim">· ${p.logged} logged · ${p.resolved} resolved</span></div>`
         + `<div class="rot-panel" style="margin-top:6px">${block('1w')}${block('1m')}</div>`
         + `<div class="dt-dim" style="font-size:0.74rem;margin-top:6px">${esc(p.note || '')}</div>`;
@@ -4364,15 +4367,21 @@
     }).join('');
     const hl = g.horizons['1m'] || g.horizons['1w'] || g.horizons['3m'];
     const wl = hl ? `<div class="sb-wl"><span>Avg win <b class="win">+${hl.avgWin}%</b></span><span>Avg loss <b class="loss">${hl.avgLoss}%</b></span></div>` : '';
+    // Big-winner reach: how often the signal's best run-up (MFE) crossed +10% / +20%
+    // before the horizon, regardless of where it closed. Surfaces the models that
+    // catch large moves vs. those that only grind out a small average.
+    const bw = (hl && hl.big10 != null) ? `<div class="sb-bw"><span title="Share of signals whose best run-up reached +10% before the horizon elapsed">🚀 &gt;10%: <b>${hl.big10}%</b></span><span title="Share that reached +20%">&gt;20%: <b>${hl.big20}%</b></span><span title="Average best run-up (Maximum Favorable Excursion) per signal">Avg peak <b>+${hl.avgMfe}%</b></span></div>` : '';
+    const bwBadge = (hl && hl.big10 >= 30) ? `<span class="sb-bwbadge" title="${hl.big10}% of signals reached +10% — a big-winner model">🚀 Big-winner ${hl.big10}%</span>` : '';
     return `<div class="sb-card ${v.cls === 'pos' ? 'pos' : v.cls === 'neg' ? 'neg' : ''} ${disabled ? 'disabled' : ''}">
         <div class="sb-head">
           <span class="sb-exp ${v.cls}">${v.label}${v.val != null ? ` ${v.val > 0 ? '+' : ''}${v.val}%` : ''}</span>
-          <div class="sb-title"><div class="sb-sig">${SB_TIER_LABEL[g.tier] || esc(g.tier)}</div></div>
+          <div class="sb-title"><div class="sb-sig">${SB_TIER_LABEL[g.tier] || esc(g.tier)}${bwBadge}</div></div>
           <button class="sb-toggle ${disabled ? 'off' : 'on'}" data-sig-toggle="${g.section}:${g.tier}">${disabled ? '✕ Disabled' : '✓ Enabled'}</button>
         </div>
         <div class="sb-count">${g.picks} pick${g.picks === 1 ? '' : 's'} logged</div>
         <div class="sb-horizons">${hz}</div>
         ${wl}
+        ${bw}
       </div>`;
   }
 
@@ -4389,7 +4398,7 @@
       return;
     }
 
-    const intro = `<div class="sb-intro">Every ticker the Screener and Momentum sections surface is logged daily with its entry price; each signal is scored on its <b>first appearance</b> (so names that linger aren't over-counted). Figures below are <b>realized</b> from price history. <b>Expectancy</b> = average return per pick (Strong Sell is inverted, so positive = a profitable short). Disable a negative-expectancy signal to hide it from its section — it keeps being tracked so you can re-enable it if it recovers.</div>`;
+    const intro = `<div class="sb-intro">Every ticker the Screener and Momentum sections surface is logged daily with its entry price; each signal is scored on its <b>first appearance</b> (so names that linger aren't over-counted). Figures below are <b>realized</b> from price history. <b>Expectancy</b> = average return per pick (Strong Sell is inverted, so positive = a profitable short). The <b>🚀 big-winner row</b> shows how often a signal's best run-up reached +10% / +20% before the horizon (and its average peak) — separating models that catch large moves from steady grinders. Disable a negative-expectancy signal to hide it from its section — it keeps being tracked so you can re-enable it if it recovers.</div>`;
 
     const bySec = {};
     data.groups.forEach(g => { (bySec[g.section] = bySec[g.section] || []).push(g); });

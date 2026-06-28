@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { forwardReturn, cernPicksFrom, fadeRowsFrom } = require('../lib/apex-routes');
+const { forwardReturn, forwardPath, summarizeReturns, cernPicksFrom, fadeRowsFrom } = require('../lib/apex-routes');
 
 // ── cernPicksFrom: map a CERN engine state into Scoreboard picks ─────────────
 
@@ -98,6 +98,46 @@ test('forwardReturn: null entry falls back to the close at the pick date', () =>
 
 test('forwardReturn: returns null when the horizon has not elapsed yet', () => {
   assert.equal(forwardReturn(CANDLES, { date: '2026-01-01' }, 5), null);
+});
+
+// ── forwardPath: close-to-close return + Maximum Favorable Excursion ──────────
+
+const PATH = [
+  { date: '2026-01-01', close: 100, high: 100, low: 100 },
+  { date: '2026-01-02', close: 105, high: 115, low: 99 },  // ran to +15% intrabar
+  { date: '2026-01-03', close: 108, high: 122, low: 104 }, // ran to +22% intrabar
+];
+
+test('forwardPath: a long captures the best run-up (MFE), not just the close', () => {
+  const r = forwardPath(PATH, { date: '2026-01-01', tier: 'X' }, 2);
+  assert.equal(r.ret, 8);    // closes at 108 → +8%
+  assert.equal(r.mfe, 22);   // best high 122 → +22%
+});
+
+test('forwardPath: a short measures favorable excursion to the downside', () => {
+  // entry 100, short: favorable = price falling; lowest low is 99 → MFE 1%
+  const r = forwardPath(PATH, { date: '2026-01-01', short: true }, 2);
+  assert.ok(Math.abs(r.mfe - 1) < 1e-9);
+  assert.equal(r.ret, -8); // long would be +8 → short inverts to -8
+});
+
+test('forwardPath: returns null when the horizon has not elapsed yet', () => {
+  assert.equal(forwardPath(PATH, { date: '2026-01-01' }, 5), null);
+});
+
+// ── summarizeReturns: expectancy + big-winner reach ──────────────────────────
+
+test('summarizeReturns: reports big-winner rates from the MFE distribution', () => {
+  const s = summarizeReturns([
+    { ret: 5, mfe: 12 }, { ret: -3, mfe: 4 },
+    { ret: 8, mfe: 25 }, { ret: -1, mfe: 9 },
+  ]);
+  assert.equal(s.n, 4);
+  assert.equal(s.winRate, 50);
+  assert.equal(s.big10, 50);   // 12 and 25 cross +10%
+  assert.equal(s.big20, 25);   // only 25 crosses +20%
+  assert.equal(s.avgMfe, 12.5); // (12+4+25+9)/4
+  assert.equal(summarizeReturns([]), null);
 });
 
 // ── fadeRowsFrom: flatten the fade ledger into Scoreboard short rows ──────────

@@ -91,8 +91,23 @@ test('resolveAt finds entry + forward close; null until horizon elapses', () => 
     { date: '2026-06-01', close: 100 }, { date: '2026-06-02', close: 101 },
     { date: '2026-06-03', close: 105 }, { date: '2026-06-04', close: 110 },
   ];
-  assert.ok(resolveAt(candles, '2026-06-01', 3, 'bullish') > 0);  // 100 → 110
+  assert.ok(resolveAt(candles, '2026-06-01', 3, 'bullish').ret > 0);  // 100 → 110
   assert.equal(resolveAt(candles, '2026-06-01', 10, 'bullish'), null); // not enough bars
+});
+
+test('resolveAt reports favorable excursion (MFE) along the path', () => {
+  // bullish: best high is 130 at bar 2 even though it closes at 110 → MFE 30%
+  const candles = [
+    { date: '2026-06-01', close: 100, high: 100, low: 100 },
+    { date: '2026-06-02', close: 105, high: 108, low: 99 },
+    { date: '2026-06-03', close: 110, high: 130, low: 104 },
+  ];
+  const r = resolveAt(candles, '2026-06-01', 2, 'bullish');
+  assert.ok(Math.abs(r.ret - 0.10) < 1e-9);   // close-to-close 100 → 110
+  assert.ok(Math.abs(r.mfe - 0.30) < 1e-9);   // best run-up 100 → 130
+  // bearish flow favors the low: best fall is 100 → 99 = 1%
+  const b = resolveAt(candles, '2026-06-01', 2, 'bearish');
+  assert.ok(Math.abs(b.mfe - 0.01) < 1e-9);
 });
 
 test('flowGrade scores bull/bear with OTM-sweep weighting', () => {
@@ -156,10 +171,16 @@ test('flowSummary gives the market-wide bull/bear premium split', () => {
   assert.equal(of.flowSummary([]).lean, 'neutral');
 });
 
-test('summarize computes win rate + avg return', () => {
-  const s = summarize([0.05, -0.02, 0.03, -0.01]);
+test('summarize computes win rate + avg return + big-mover rates', () => {
+  const s = summarize([
+    { ret: 0.05, mfe: 0.12 }, { ret: -0.02, mfe: 0.03 },
+    { ret: 0.03, mfe: 0.25 }, { ret: -0.01, mfe: 0.08 },
+  ]);
   assert.equal(s.n, 4);
   assert.equal(s.winRate, 50);
   assert.equal(s.avgReturnPct, 1.25);
+  assert.equal(s.big10Rate, 50);   // two of four reached +10% (0.12, 0.25)
+  assert.equal(s.big20Rate, 25);   // one of four reached +20% (0.25)
+  assert.equal(s.avgMfePct, 12);   // (12+3+25+8)/4
   assert.deepEqual(summarize([]), { n: 0 });
 });

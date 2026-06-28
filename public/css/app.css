@@ -903,6 +903,9 @@
     .sb-wl { display: flex; justify-content: space-between; font-size: 0.66rem; color: var(--text-dim); border-top: 1px solid var(--border); padding-top: 8px; }
     .sb-wl b.win  { color: var(--green); }
     .sb-wl b.loss { color: var(--red); }
+    .sb-bw { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 0.62rem; color: var(--text-dim); margin-top: 7px; }
+    .sb-bw b { color: var(--accent, #06c4d4); }
+    .sb-bwbadge { display: inline-block; font-size: 0.56rem; font-weight: 800; letter-spacing: 0.02em; color: #0b0e14; background: linear-gradient(90deg,#f0a832,#06c4d4); border-radius: 999px; padding: 1px 7px; margin-left: 6px; vertical-align: middle; }
     .sb-help { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; background: var(--bg); }
     .sb-help > summary { cursor: pointer; padding: 11px 14px; font-size: 0.78rem; font-weight: 700; color: var(--amber); list-style: none; display: flex; align-items: center; gap: 6px; }
     .sb-help > summary::-webkit-details-marker { display: none; }
