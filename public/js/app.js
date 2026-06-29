@@ -4411,10 +4411,35 @@
     ranked.forEach(r => grid.appendChild(buildXalertCard(r)));
     c.appendChild(grid);
   }
+  const ALERT_CATALYST = { earnings: '📅 Earnings', fda: '🧪 FDA/Trial', breakout: '🚀 Breakout', 'm&a': '🤝 M&A', squeeze: '🩳 Squeeze', analyst: '📊 Analyst', insider: '🏛 Insider', technical: '📈 Technical' };
+  const ALERT_TF = { day: '⏱ Day trade', swing: '📆 Swing', long: '🗓 Long-term' };
+  function convictionMeta(c) {
+    if (c == null) return null;
+    const label = c >= 75 ? 'Extreme' : c >= 50 ? 'High' : c >= 25 ? 'Medium' : 'Low';
+    const col = c >= 75 ? 'var(--red)' : c >= 50 ? 'var(--amber,#f0a832)' : c >= 25 ? '#06c4d4' : 'var(--text-dim)';
+    return { label, col, c };
+  }
   function buildXalertCard(r) {
     const card = document.createElement('div'); card.className = 'cx-card';
     const stars = '★'.repeat(r.score) + '☆'.repeat(5 - r.score);
     const dirColor = r.direction === 'bullish' ? 'var(--green)' : r.direction === 'bearish' ? 'var(--red)' : 'var(--text-dim)';
+
+    // Mined-signal chips: catalysts (WHY), options, timeframe.
+    const chips = [];
+    (r.catalysts || []).forEach(t => chips.push(`<span class="xa-chip">${ALERT_CATALYST[t] || esc(t)}</span>`));
+    if (r.options) chips.push(`<span class="xa-chip" style="color:#06c4d4;border-color:#06c4d444">⚡ ${esc(r.options.type)}${r.options.strike ? ' $' + esc(String(r.options.strike)) : ''}</span>`);
+    if (r.timeframe && ALERT_TF[r.timeframe]) chips.push(`<span class="xa-chip">${ALERT_TF[r.timeframe]}</span>`);
+    const chipRow = chips.length ? `<div class="xa-chips">${chips.join('')}</div>` : '';
+
+    // Conviction meter (intensity of the language, distinct from direction).
+    const cm = convictionMeta(r.conviction);
+    const convHtml = (cm && cm.c > 0) ? `<div class="xa-conv" title="How strongly the posts are worded (intensity language + emoji) — not a measure of whether they're right">
+        <span class="xa-conv-lb">Conviction</span><div class="xa-conv-track"><div class="xa-conv-fill" style="width:${cm.c}%;background:${cm.col}"></div></div><span style="color:${cm.col};font-weight:700">${cm.label}</span></div>` : '';
+
+    // Stated price levels (the actionable part — what the trader is actually playing).
+    const lv = r.levels;
+    const levelsHtml = lv ? `<div class="xa-levels">${lv.entry != null ? `<span>▶ Entry <b>$${esc(String(lv.entry))}</b></span>` : ''}${lv.target != null ? `<span>🎯 Target <b style="color:var(--green)">$${esc(String(lv.target))}</b></span>` : ''}${lv.stop != null ? `<span>🛑 Stop <b style="color:var(--red)">$${esc(String(lv.stop))}</b></span>` : ''}</div>` : '';
+
     card.innerHTML = `<div class="cx-top"><div>
         <div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(r.ticker)}">$${esc(r.ticker)}</span>
           <span class="cx-tierbadge" style="color:${dirColor};border-color:currentColor;background:transparent">${esc(r.direction)}</span>
@@ -4423,6 +4448,7 @@
       </div>
       <div class="cx-score-col"><div class="cx-score" style="color:#8a6dff;font-size:1.05rem">${stars}</div>
         <div class="cx-price">signal ${r.weightedSignal}</div></div></div>
+      ${chipRow}${convHtml}${levelsHtml}
       <div class="cx-narrative">${esc(r.sampleText)}</div>`;
     return card;
   }

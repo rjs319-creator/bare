@@ -1482,6 +1482,14 @@
     .of-action { font-size: 0.7rem; line-height: 1.5; margin-top: 8px; padding: 7px 9px; border-radius: 6px;
       color: var(--text-dim); background: var(--surface); border-left: 2px solid #06c4d4; }
     .of-action b { color: var(--text); }
+    .xa-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+    .xa-chip { font-size: 0.58rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; color: var(--text-dim); border: 1px solid var(--border); background: var(--bg); }
+    .xa-conv { display: flex; align-items: center; gap: 8px; margin-top: 9px; font-size: 0.62rem; color: var(--text-dim); }
+    .xa-conv-lb { white-space: nowrap; }
+    .xa-conv-track { flex: 1; height: 5px; border-radius: 3px; background: var(--bg-hi); overflow: hidden; }
+    .xa-conv-fill { height: 100%; }
+    .xa-levels { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 9px; font-size: 0.68rem; color: var(--text-dim); }
+    .xa-levels b { color: var(--text); }
     .cx-narr-str { color: var(--amber); font-weight: 700; }
 
     /* Model panel */
