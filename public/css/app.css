@@ -815,6 +815,7 @@
     .scr-tag.rsnh { color: #06c4d4; border-color: #06c4d455; background: var(--cyan-dim); }
     .scr-tag.lbase { color: var(--text-dim); border-color: var(--border-hi); }
     .scr-tag.model { color: #8a6dff; border-color: #8a6dff55; background: #120c24; }
+    .scr-tag.emerg { color: var(--green); border-color: #10d98a; background: var(--green-dim); box-shadow: 0 0 0 1px #10d98a33; }
     .scr-liq { display: inline-flex; align-items: center; gap: 4px; font-size: 0.58rem; font-weight: 800;
       padding: 3px 8px; border-radius: 5px; margin: 0 0 10px; letter-spacing: 0.02em; cursor: help; }
     .scr-liq-ic { font-size: 0.6rem; }

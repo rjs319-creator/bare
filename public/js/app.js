@@ -1081,6 +1081,7 @@
     });
     arr = arr.filter(c => !isSignalDisabled('screener', c.status)); // hide tiers disabled on the scoreboard
     if (scrHC) arr = arr.filter(isHighConviction);
+    if (scrEmerg) arr = arr.filter(c => c.emergingLeader);
     const md = getModel(scope);
     if (scrModelRank && md) {
       arr = arr.map(c => ({ ...c, _prob: modelProb(c) ?? -1 }));
@@ -1202,6 +1203,8 @@
   })();
   // ── High-Conviction filter: auto-derived from the live backtest's top edges ──
   let scrHC = false; try { scrHC = localStorage.getItem('scrHC') === '1'; } catch {}
+  // Emerging-Leader filter: show only early momentum-emergence movers (server flag).
+  let scrEmerg = false; try { scrEmerg = localStorage.getItem('scrEmerg') === '1'; } catch {}
   const HC_PREDICATES = {
     breakout: c => c.status === 'Breakout',
     trend:    c => !!c.aboveSma200,
@@ -1302,6 +1305,16 @@
         scrHC = !scrHC;
         try { localStorage.setItem('scrHC', scrHC ? '1' : '0'); } catch {}
         b.classList.toggle('active', scrHC);
+        HC_SCOPES.forEach(rankAndRender);
+      });
+    }
+    const eb = document.getElementById('scr-emerg-toggle');
+    if (eb) {
+      eb.classList.toggle('active', scrEmerg);
+      eb.addEventListener('click', () => {
+        scrEmerg = !scrEmerg;
+        try { localStorage.setItem('scrEmerg', scrEmerg ? '1' : '0'); } catch {}
+        eb.classList.toggle('active', scrEmerg);
         HC_SCOPES.forEach(rankAndRender);
       });
     }
@@ -1604,7 +1617,9 @@
   function renderScreenerList(results, container, scope, rrFallback) {
     if (!results.length) {
       const label = scope === 'large' ? 'large-cap' : scope === 'small' ? 'small-cap' : 'micro-cap';
-      const msg = scrHC
+      const msg = scrEmerg
+        ? `No emerging-leader ${label} names right now — no name is at the early stage of a momentum leg (fresh RS leadership + accumulation, not yet extended). This filter is intentionally selective and stays empty rather than flag oversold-bounce/squeeze names it can't predict. Turn off 🌱 Emerging to see all setups.`
+        : scrHC
         ? `No high-conviction ${label} names right now (breakout + above 200-day MA + VCP). Turn off 🎯 High-Conviction to see all setups.`
         : `No ${label} breakouts or setups clearing the filters right now — the broad tape is weak.`;
       container.innerHTML = `<div class="mom-status"><p>${msg}</p></div>`;
@@ -1897,6 +1912,7 @@
     // Elite-trader setup tags
     const mm = c.metrics || {};
     const tags = [];
+    if (c.emergingLeader) tags.push(['emerg', '🌱 Emerging Leader']);
     if (isHighConviction(c)) tags.push(['hc', '🎯 High-Conviction']);
     const _md = getModel(scopeOf(c));
     if (_md && _md.oosAUC >= MODEL_RELIABLE) { const wp = modelProb(c); if (wp != null) tags.push(['model', `🤖 ${wp}%`]); }
@@ -4068,6 +4084,29 @@
     const betaNote = `<div class="dt-note"><b>β ≈ 2 — beta-neutral check:</b> these small caps swing ~2× the market. In 5y tests the edge is <b>real stock-picking alpha</b> (it barely changes when market beta is removed: +1.7% → +1.5%), but it's a <b>low-hit-rate, big-winner</b> profile (~48–49% win rate) — so <b>size small</b>. Advanced traders isolate the alpha by hedging ~2× the position in short SPY.</div>`;
     const esExclNote = `<div class="dt-note" style="border-left-color:var(--amber,#f59e0b)"><b>⚠️ Excluded from the experimental config.</b> In the intraday study this scan tested <b>negative out-of-sample</b>, so it's <b>not</b> part of the ORB-stacked plan above — shown for awareness only. Size very small if traded at all.</div>`;
     const es = list('💥 Explosive Small-Cap ($1–$20)', t.explosiveSmall, 'Small caps up &gt;8% on &gt;2× relative volume — higher reward, lower hit-rate.', esExclNote + betaNote);
+
+    // 🌊 Multi-day Momentum Run (FCEL archetype) — sustained movers, shown in ALL
+    // regimes (identification, not a trade signal). Different fields than the single-
+    // day cards: 5-day move, # unusual-volume days, proximity to the run high.
+    const runCard = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
+        <div class="dt-card-top">
+          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span></span>
+          <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
+        </div>
+        <div class="dt-card-sub"><b style="color:var(--green)">+${r.pct5d}% / 5d</b> <span class="dt-dim">· ${r.highVolDays5} high-vol days · ${Math.round((r.nearHighFrac5 || 0) * 100)}% of run-high · today ${r.pctChange >= 0 ? '+' : ''}${r.pctChange}% · RVOL ${r.relVol}×</span></div>
+        ${r.stop ? `<div class="dt-card-plan">🛑 ${L('stop', 'Stop')} <b>$${r.stop}</b> <span class="dt-dim">(2.5×ATR)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${r.target}</b>${r.rr != null ? ` <span class="dt-dim">${L('rr', 'R:R')} 1:${r.rr}</span>` : ''}</div>` : ''}
+        <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
+        <div class="chart-panel" data-chart-panel style="display:none"></div>
+      </div>`;
+    const runRows = (t.momentumRun || []);
+    const runBody = runRows.map(runCard).join('');
+    const runSection = `<div class="rot-panel" style="border-color:#06b6d455">
+        <div class="rot-head" style="color:#22d3ee">🌊 Momentum Run — multi-day movers ${runRows.length ? `<span class="dt-dim">(${runRows.length})</span>` : ''}</div>
+        <div class="rot-sub">Names in a <b>sustained run</b> — up <b>≥20% over 5 sessions</b> with <b>≥2 unusual-volume days</b>, still trading near the run high. This is the <b>FCEL-style archetype</b>: a move that builds over days rather than a single spike, so it surfaces even on continuation days a single-day relative-volume gate misses. Shown in every regime (it's a <b>watchlist of names already moving</b>, not a trade signal).</div>
+        ${runBody || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No multi-day runs right now.</span></div>'}
+        <div class="dt-note" style="border-left-color:#06b6d4"><b>Honest framing.</b> This is <b>reactive momentum-continuation</b> — it catches a move <b>already underway</b> (recall), not a prediction of which name will start moving. This project's backtests show chasing momentum is <b>not</b> a forward edge, so expect false continuations and chop; use it to <b>spot and confirm</b> runs, then manage risk with the stop. The <b>bottom</b> of an FCEL-type move (the falling-knife low) is <b>not</b> predictable on this data — only the run, once it's confirmed, is catchable.</div>
+      </div>`;
+
     let track;
     if (book && book.resolved >= 10) {
       const row = (n, s) => s && s.n ? `<div class="bt-ic-row"><span>${n} <span style="color:var(--text-dim)">${s.n}</span></span><span>exc ${s.avgExc > 0 ? '+' : ''}${s.avgExc}%</span><span>${L('beatRate', 'beat')} ${s.beatRate}% <span style="color:var(--text-dim)">(${L('wilsonLB', 'LB')} ${s.wilsonLo}%)</span></span></div>` : '';
@@ -4075,7 +4114,7 @@
     } else {
       track = `<div class="rot-panel rot-panel-pending"><div class="rot-head">📊 Live track record — building…</div><div class="rot-sub">${book ? `${book.stillOpen || 0} open, ${book.resolved || 0} resolved` : ''}. Each pick is scored ~${t.horizon} sessions later; accrues automatically via the daily cron.</div></div>`;
     }
-    el.innerHTML = banner + tapeBadge + configBanner + howto + ml + es + track +
+    el.innerHTML = banner + tapeBadge + configBanner + howto + ml + es + runSection + track +
       `<div class="fade-caveats"><b>How to use.</b> Today's relative-volume + momentum movers (the EOD version of the Finviz day-trade scans), regime-gated and self-learning. <b>Honest validation</b> (5y, forward 3-session excess vs SPY): large-cap momentum-chasing does <b>not</b> beat the market (it mean-reverts, −1.3% out-of-sample); explosive small-caps carry a <b>positive average excess</b> (~+1.7–2.3% in risk-on/neutral) but a <b>sub-50% hit-rate</b> — a few big runners carry it, and it dies in risk-off. So treat these as a <b>ranked movers watchlist</b>, not a win-rate edge; the per-stock learner tilts toward names whose momentum actually continues and drops the rest. <b>The 🧪 experimental config above</b> (opening-range-breakout entry + 2.5×ATR stop + top-half selection) is the one variant that tested out-of-sample positive on <b>real intraday execution</b> — but it <b>failed formal deflation</b> (deflated Sharpe 0.59), so it's a paper-trading lead to confirm forward, not a proven edge. Confirm entries in TradingView (MACD / RSI / Smart-Money). Research, not advice.</div>`;
     // Wire each card's chart toggle (reuses the shared /api/chart canvas renderer)
     // and start live-price polling for the recommended names.
@@ -4088,7 +4127,7 @@
     startDaytradePrices([...new Set(dtTickers)]);
 
     const meta = document.getElementById('dt-meta');
-    if (meta) meta.textContent = `· ${t.regime} · ${(t.counts ? t.counts.momentumLiquid + t.counts.explosiveSmall : 0)} movers`;
+    if (meta) meta.textContent = `· ${t.regime} · ${(t.counts ? t.counts.momentumLiquid + t.counts.explosiveSmall + (t.counts.momentumRun || 0) : 0)} movers`;
     const gt = document.getElementById('dt-gen-time');
     if (gt && t.generatedAt) gt.textContent = new Date(t.generatedAt).toLocaleTimeString();
   }
