@@ -1360,13 +1360,13 @@
     btLoaded = true;
     const sel = document.getElementById('bt-months');
     if (sel) { sel.value = btMonths; sel.addEventListener('change', () => { btMonths = sel.value; runBacktest(); }); }
-    ['trades', 'walkforward'].forEach(v => {
-      const b = document.getElementById(v === 'trades' ? 'bt-view-trades' : 'bt-view-wf');
+    const VIEW_BTN = { trades: 'bt-view-trades', walkforward: 'bt-view-wf', movers: 'bt-view-movers' };
+    Object.entries(VIEW_BTN).forEach(([v, id]) => {
+      const b = document.getElementById(id);
       if (b) b.addEventListener('click', () => {
         if (btView === v) return;
         btView = v;
-        document.getElementById('bt-view-trades').classList.toggle('active', v === 'trades');
-        document.getElementById('bt-view-wf').classList.toggle('active', v === 'walkforward');
+        Object.entries(VIEW_BTN).forEach(([vv, ii]) => document.getElementById(ii)?.classList.toggle('active', vv === v));
         runBacktest();
       });
     });
@@ -1374,6 +1374,7 @@
   }
   async function runBacktest() {
     if (btView === 'walkforward') return runWalkForward();
+    if (btView === 'movers') return runMoverStudy();
     const el = document.getElementById('backtest-container');
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Replaying the screen across history… (a few seconds)</p></div>`;
@@ -1397,6 +1398,59 @@
       renderWalkForward(d);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Walk-forward failed. Please try again.</p></div>`; }
   }
+  // ── Big-Mover Reveal — which signals actually catch the biggest movers ──────
+  let btMoverScope = 'small';   // small-caps are where the biggest moves live
+  async function runMoverStudy(forceRun) {
+    const el = document.getElementById('backtest-container');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${forceRun ? 'Replaying every signal point-in-time across history & scoring against the biggest movers… (~15–40s)' : 'Loading the big-mover reveal…'}</p></div>`;
+    try {
+      const url = `/api/tracker?op=moverstudy&scope=${btMoverScope}` + (forceRun ? '&run=1' : '') + `&_=${Date.now()}`;
+      const res = await fetch(url);
+      const d = await res.json();
+      if (d.error) { el.innerHTML = `<div class="mom-status error"><p>${esc(d.error)}</p></div>`; return; }
+      renderMoverStudy(d);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Big-mover reveal failed. Please try again.</p></div>`; }
+  }
+  function renderMoverStudy(d) {
+    const el = document.getElementById('backtest-container');
+    const scopeSel = `<select class="scr-filter" id="ms-scope" style="max-width:150px">${[['large', 'Large-cap'], ['small', 'Small-cap'], ['micro', 'Micro-cap']].map(([v, l]) => `<option value="${v}"${v === btMoverScope ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
+    const runBtn = `<button class="bt-view-btn" id="ms-run">▶ Run / refresh study</button>`;
+    const controls = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">${scopeSel}${runBtn}<span style="font-size:0.66rem;color:var(--text-dim)">heavy — recomputes the point-in-time replay, ~15–40s</span></div>`;
+
+    if (d.empty || !d.signals) {
+      el.innerHTML = controls + `<div class="sb-empty">No study cached for <b>${esc(btMoverScope)}</b> yet. Click <b>▶ Run / refresh study</b> to build it (it replays every signal across history and scores it against the biggest movers).</div>`;
+      wireMoverControls();
+      return;
+    }
+    const intro = `<div class="bt-note">Took the <b>biggest movers</b> (forward ${d.holdSessions}-session run-up ≥ <b>${d.minMovePct}%</b>) over the last ${d.cohorts} monthly cohorts on <b>${esc(d.scope)}-cap</b> names, reconstructed every signal <b>point-in-time</b> (no look-ahead), and measured each. <b>${d.bigMovers.toLocaleString()}</b> big movers out of <b>${d.totalRecords.toLocaleString()}</b> name-dates — <b>base rate ${d.baseRatePct}%</b>.${d.cached ? '' : ' <span style="color:var(--green)">freshly computed.</span>'}</div>`;
+    const legend = `<div class="bt-eff-sub" style="margin-bottom:10px"><b>Recall</b> = of the big movers, % this signal flagged. <b>Precision</b> = of this signal's firings, % that became big movers. <b>Lift</b> = precision ÷ base rate — <b>&gt;1 means real concentration of big movers</b>; ≈1 means the signal fires on everything (no edge). High recall + low lift = a trap.</div>`;
+    const liftColor = l => l >= 1.3 ? 'var(--green)' : l >= 1.05 ? 'var(--amber,#f59e0b)' : 'var(--text-dim)';
+    const bar = pct => `<div style="height:5px;background:var(--bg-hi);border-radius:3px;overflow:hidden;margin-top:3px"><div style="height:100%;width:${Math.min(100, pct)}%;background:var(--accent,#8a6dff)"></div></div>`;
+    const rows = d.signals.map(s => `
+      <div class="bt-card" style="padding:10px 12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <span style="font-weight:700;font-size:0.78rem">${esc(s.label)}</span>
+          <span style="font-weight:800;font-size:0.9rem;color:${liftColor(s.lift)}" title="lift = precision ÷ base rate">${s.lift}× <span style="font-size:0.6rem;color:var(--text-dim)">lift</span></span>
+        </div>
+        <div style="display:flex;gap:16px;font-size:0.64rem;color:var(--text-dim);margin-top:5px">
+          <span style="flex:1">Recall ${s.recallPct}%${bar(s.recallPct)}</span>
+          <span style="flex:1">Precision ${s.precisionPct}%${bar(s.precisionPct)}</span>
+          <span style="white-space:nowrap;align-self:center">${s.fired.toLocaleString()} fires</span>
+        </div>
+      </div>`).join('');
+    const ex = (d.examples || []).length ? `<div class="bt-note" style="margin-top:12px"><b>Biggest movers in the window & which signals caught them:</b><br>${d.examples.map(e => `<b>${esc(e.ticker)}</b> +${e.mfePct}% <span style="color:var(--text-dim)">[${e.caughtBy.length ? e.caughtBy.map(esc).join(', ') : 'none of the signals'}]</span>`).join('<br>')}</div>` : '';
+    const caveat = `<div class="chart-disclaimer">⚠ In-sample, single (survivorship-biased) universe — this REVEALS which signals concentrate big movers (recall), it does NOT prove forward edge (precision is base-rate-aware but still historical). A signal with lift &gt;1.3 is a genuine lead; feed it into live weights only after a purged walk-forward confirms it. Reactive, not a guarantee. Not financial advice.</div>`;
+    el.innerHTML = controls + intro + legend + `<div class="bt-grid">${rows}</div>` + ex + `<div class="bt-note" style="margin-top:8px;color:var(--text-dim)">${esc(d.note)}</div>` + caveat;
+    wireMoverControls();
+  }
+  function wireMoverControls() {
+    const sel = document.getElementById('ms-scope');
+    if (sel) sel.addEventListener('change', () => { btMoverScope = sel.value; runMoverStudy(false); });
+    const btn = document.getElementById('ms-run');
+    if (btn) btn.addEventListener('click', () => runMoverStudy(true));
+  }
+
   function renderWalkForward(d) {
     const el = document.getElementById('backtest-container');
     const icCell = ic => ic == null ? '<span style="color:var(--text-dim)">—</span>'
