@@ -772,6 +772,8 @@
       + `<li><b>Net bullish/bearish</b> = whether the day's call premium or put premium dominates for that ticker.</li>`
       + `<li><b>🎯 Single-stock</b> flow is usually conviction; <b>🛡 Index/ETF</b> flow (SPY, QQQ…) is often just hedging — so we separate them.</li>`
       + `<li><b>⚡ Sweep</b> = aggressive/urgent fill · <b>🧱 Block</b> = one big institutional trade.</li>`
+      + `<li><b>Breakeven & "needs +X%"</b> = how far the stock must actually move (and to what price) by expiry for the bet to make money — the real bar to clear, not just the direction.</li>`
+      + `<li><b>⚠ ER (earnings)</b> = the company reports earnings <i>before</i> these options expire. That's an <b>event bet</b>: options often lose value after earnings even if the stock moves your way (volatility "crush"). Tread carefully.</li>`
       + `<li><b>Confluence badges</b> (🔥 Breakout · 👻 Ghost · 🎯 Top conviction · 🚀 Day-trade mover) appear when the same ticker is <i>also</i> flagged by one of the app's own screeners — the options flow and the screen agreeing is a stronger read than either alone. Tap a badge to jump to that screener.</li></ul>`
       + `<b>Important:</b> this shows where money is <i>flowing</i>, not advice. We can't see whether they bought or sold, so treat it as a directional <i>lean</i> — and the Track Record below shows whether the signals actually predicted moves.</div></details>`
       + `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">`
@@ -829,15 +831,21 @@
 
   function tickerRollupCard(r) {
     const gcol = ofGradeColor(r.score);
-    const novice = ofNovice
-      ? `<div class="cx-narrative" style="margin-top:8px">💡 ${esc(r.ticker)}'s options activity grades <b style="color:${gcol}">${r.grade} (${r.score > 0 ? '+' : ''}${r.score})</b> — ${ofUsd(r.callPremium)} in call (bullish) premium vs ${ofUsd(r.putPremium)} in puts, across ${r.contracts.length} unusual trade${r.contracts.length > 1 ? 's' : ''}.</div>`
+    const tc = r.topContract;
+    const beNote = (tc && tc.breakeven != null && tc.moveToBePct != null)
+      ? ` Its biggest bet (the $${esc(String(tc.strike))} ${tc.side === 'call' ? 'calls' : 'puts'}) needs <b>${tc.moveToBePct > 0 ? '+' : ''}${tc.moveToBePct}%</b> to $${esc(String(tc.breakeven))} by ${esc(tc.expiry || 'expiry')} to break even.`
       : '';
+    const lean = r.net === 'bullish' ? 'bullish' : r.net === 'bearish' ? 'bearish' : null;
+    const novice = ofNovice
+      ? `<div class="cx-narrative" style="margin-top:8px">💡 ${esc(r.ticker)}'s options activity grades <b style="color:${gcol}">${r.grade} (${r.score > 0 ? '+' : ''}${r.score})</b> — ${ofUsd(r.callPremium)} in call (bullish) premium vs ${ofUsd(r.putPremium)} in puts, across ${r.contracts.length} unusual trade${r.contracts.length > 1 ? 's' : ''}.${beNote}</div>${flowEarningsWarn(r)}${lean ? flowAction(lean) : ''}`
+      : flowEarningsWarn(r);
+    const erChip = r.earningsBeforeExpiry ? `<span class="cx-tierbadge" style="color:var(--amber,#f0a832);border-color:currentColor" title="Earnings report lands before these options expire — an event/IV-crush risk">⚠ ER ${r.earningsInDays}d</span>` : '';
     const contractRow = s => `<div class="dt-dim" style="font-size:0.74rem;padding:2px 0">${esc(s.type)} $${esc(String(s.strike))} ${esc(s.expiry || '')} (${s.dte}d) · ${ofUsd(s.premium)} · ${OF_KIND[s.kind] || esc(s.kind)} · ${s.sentiment === 'bullish' ? '▲' : '▼'}</div>`;
     const expand = `<button class="of-expand dt-btn" data-n="${r.contracts.length}" style="margin-top:8px;font-size:0.74rem;padding:3px 8px">▸ show ${r.contracts.length} contract${r.contracts.length > 1 ? 's' : ''}</button>`
       + `<div style="display:none;margin-top:6px;border-top:1px solid #222;padding-top:6px">${r.contracts.map(contractRow).join('')}</div>`;
     return `<div class="cx-card" style="border-left:3px solid ${gcol}">`
       + `<div class="cx-top"><div><div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(r.ticker)}">$${esc(r.ticker)}</span>`
-      + ofGradeBadge(r.score, r.grade) + `</div>`
+      + ofGradeBadge(r.score, r.grade) + erChip + `</div>`
       + `<div class="cx-company">${r.contracts.length} unusual contract${r.contracts.length > 1 ? 's' : ''}${r.sweep ? ` · ${r.sweep}⚡` : ''}${r.block ? ` · ${r.block}🧱` : ''}${r.underlying ? ` · spot $${r.underlying}` : ''}</div></div>`
       + `<div class="cx-score-col"><div class="cx-score" style="color:#06c4d4;font-size:1.05rem">${ofUsd(r.totalPremium)}</div><div class="cx-price">${r.bullishPct}% calls</div></div></div>`
       + `<div style="display:flex;height:7px;border-radius:4px;overflow:hidden;margin-top:8px"><div style="width:${r.bullishPct}%;background:var(--green)"></div><div style="width:${100 - r.bullishPct}%;background:var(--red)"></div></div>`
@@ -854,15 +862,37 @@
       : s.kind === 'block' ? 'A single large block — likely an institution.'
         : 'A large premium trade.';
     const fresh = s.volOi ? ` Volume was ${s.volOi}× the prior open interest, so it's a brand-new position.` : '';
-    return `Someone spent ~${ofUsd(s.premium)} on ${esc(s.ticker)} ${optType}, betting it ${dir} $${esc(String(s.strike))} by ${esc(s.expiry || 'expiry')} (${s.dte} days out). ${kindNote}${fresh}`;
+    // What actually has to happen for this bet to pay (the most actionable line).
+    const be = (s.breakeven != null && s.moveToBePct != null)
+      ? ` For it to pay, ${esc(s.ticker)} must move <b>~${s.moveToBePct > 0 ? '+' : ''}${s.moveToBePct}%</b> to <b>$${esc(String(s.breakeven))}</b> (breakeven) by ${esc(s.expiry || 'expiry')}.`
+      : '';
+    return `Someone spent ~${ofUsd(s.premium)} on ${esc(s.ticker)} ${optType}, betting it ${dir} $${esc(String(s.strike))} by ${esc(s.expiry || 'expiry')} (${s.dte} days out). ${kindNote}${fresh}${be}`;
+  }
+  // The actionable warning + plain "what you could do", honest about risk. Shared
+  // by contract and ticker cards. earnings-before-expiry is the big one.
+  function flowEarningsWarn(s) {
+    if (!s.earningsBeforeExpiry || s.earningsInDays == null) return '';
+    return `<div class="of-warn">⚠ <b>Earnings in ${s.earningsInDays}d</b> — before this option expires. That makes it an <b>event bet</b>: the option can lose value even if the stock moves your way, because volatility gets crushed after the report. Beginners: be very careful here.</div>`;
+  }
+  function flowAction(sentiment) {
+    const view = sentiment === 'bearish' ? 'bearish' : 'bullish';
+    const simpler = sentiment === 'bearish'
+      ? 'the simpler, lower-risk plays are to avoid/trim the stock or wait — shorting and buying puts both decay over time'
+      : 'the simpler, lower-risk way to play it is owning the shares — options are leveraged and expire worthless if the move is late';
+    return `<div class="of-action">💡 <b>What you could do:</b> this is a <b>${view}</b> lean. If you agree, ${simpler}. Treat the flow as a clue, not a signal to buy the same option — confirm with the Track Record below and your own chart.</div>`;
   }
   function optionsFlowCard(s) {
     const bull = s.sentiment === 'bullish', col = bull ? 'var(--green)' : 'var(--red)';
     // Header (always): ticker · bull/bear · kind · premium.
-    const techMeta = ofNovice ? '' : `<div class="cx-company">${esc(s.type)} $${esc(String(s.strike))} · ${esc(s.expiry || '?')} (${s.dte}d) · ${esc(s.moneyness)}${s.iv ? ` · IV ${s.iv}%` : ''}</div>`;
+    // Pro meta: add breakeven + the implied move required (concrete, no fluff).
+    const beMeta = (s.breakeven != null) ? ` · BE $${esc(String(s.breakeven))}${s.moveToBePct != null ? ` (${s.moveToBePct > 0 ? '+' : ''}${s.moveToBePct}%)` : ''}` : '';
+    const techMeta = ofNovice ? '' : `<div class="cx-company">${esc(s.type)} $${esc(String(s.strike))} · ${esc(s.expiry || '?')} (${s.dte}d) · ${esc(s.moneyness)}${s.iv ? ` · IV ${s.iv}%` : ''}${beMeta}${s.earningsBeforeExpiry ? ` · <span style="color:var(--amber,#f0a832)">⚠ ER ${s.earningsInDays}d</span>` : ''}</div>`;
     const techVol = ofNovice ? '' : `<div class="cx-price">vol ${(s.volume || 0).toLocaleString()} · OI ${(s.openInterest || 0).toLocaleString()}${s.volOi ? ` · ${s.volOi}× OI` : ''}</div>`;
-    // Body: novice → plain-English read; pro → (technical lines live in the header).
-    const body = ofNovice ? `<div class="cx-narrative" style="margin-top:8px">💡 ${flowPlainEnglish(s)}</div>` : '';
+    // Body: novice → plain-English read + earnings warning + what-you-could-do;
+    // pro → just the earnings warning (technical lines live in the header).
+    const body = ofNovice
+      ? `<div class="cx-narrative" style="margin-top:8px">💡 ${flowPlainEnglish(s)}</div>${flowEarningsWarn(s)}${flowAction(s.sentiment)}`
+      : flowEarningsWarn(s);
     return `<div class="cx-card" style="border-left:3px solid ${col}">`
       + `<div class="cx-top"><div>`
       + `<div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(s.ticker)}">$${esc(s.ticker)}</span>`

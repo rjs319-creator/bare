@@ -4,6 +4,32 @@ const assert = require('node:assert/strict');
 const of = require('../lib/optionsflow');
 const { resolveAt, summarize } = require('../lib/optionsflow-routes');
 
+// ── breakeven + implied move (the actionability fields) ──────────────────────
+test('breakevenOf: call = strike + premium/share, put = strike − premium/share', () => {
+  assert.equal(of.breakevenOf('call', 100, 3.5), 103.5);
+  assert.equal(of.breakevenOf('put', 100, 4), 96);
+  assert.equal(of.breakevenOf('call', null, 3), null);
+});
+
+test('moveToBreakevenPct: favorable % move required from spot (positive in the bet direction)', () => {
+  // call: spot 100, breakeven 110 → needs +10%
+  assert.equal(of.moveToBreakevenPct('call', 110, 100), 10);
+  // put: spot 100, breakeven 90 → needs a 10% DOWN move, reported as +10 (favorable)
+  assert.equal(of.moveToBreakevenPct('put', 90, 100), 10);
+  assert.equal(of.moveToBreakevenPct('call', 110, null), null);
+});
+
+test('scanChain attaches breakeven + moveToBePct to each signal', () => {
+  const result = {
+    quote: { regularMarketPrice: 100 },
+    options: [{ calls: [{ strike: 105, lastPrice: 4, volume: 5000, openInterest: 100, expiration: Math.floor(Date.now() / 1000) + 30 * 86400, impliedVolatility: 0.5 }], puts: [] }],
+  };
+  const sigs = of.scanChain('TEST', result);
+  assert.equal(sigs.length, 1);
+  assert.equal(sigs[0].breakeven, 109); // 105 + 4
+  assert.equal(sigs[0].moveToBePct, 9); // (109-100)/100
+});
+
 const future = Math.floor(Date.now() / 1000) + 20 * 86400;  // ~20 days out
 
 test('premiumUsd = volume × price × 100, with ask fallback', () => {

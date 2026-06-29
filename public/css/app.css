@@ -1476,6 +1476,12 @@
     .cx-pill-wt { font-size: 0.55rem; color: var(--text-dim); font-weight: 700; }
     .cx-weak { font-size: 0.62rem; color: var(--amber); font-weight: 700; margin-bottom: 9px; }
     .cx-narrative { font-size: 0.7rem; color: var(--text-dim); line-height: 1.45; margin-top: 10px; border-left: 2px solid var(--border); padding-left: 9px; }
+    .of-warn { font-size: 0.7rem; line-height: 1.45; margin-top: 8px; padding: 7px 9px; border-radius: 6px;
+      color: var(--amber, #f0a832); background: var(--amber-dim, #2a210a); border: 1px solid #f0a83244; }
+    .of-warn b { color: var(--amber, #f0a832); }
+    .of-action { font-size: 0.7rem; line-height: 1.5; margin-top: 8px; padding: 7px 9px; border-radius: 6px;
+      color: var(--text-dim); background: var(--surface); border-left: 2px solid #06c4d4; }
+    .of-action b { color: var(--text); }
     .cx-narr-str { color: var(--amber); font-weight: 700; }
 
     /* Model panel */
