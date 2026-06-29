@@ -1827,6 +1827,38 @@
     return `<div class="rr-fallback">⚠ No setups currently clear 2:1 reward-to-risk — showing the ${n} best available. Trade with caution or wait for cleaner entries.</div>`;
   }
 
+  // Compact USD for average dollar volume: $420K / $2.1M / $18M / $1.2B.
+  function fmtCompactUsd(n) {
+    n = +n || 0;
+    if (n >= 1e9) return '$' + (n / 1e9).toFixed(1) + 'B';
+    if (n >= 1e6) return '$' + (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + 'M';
+    if (n >= 1e3) return '$' + Math.round(n / 1e3) + 'K';
+    return '$' + Math.round(n);
+  }
+
+  // Liquidity / slippage hazard from 20-50d average dollar volume (ADV_USD).
+  // Thresholds use the project's own validated $3M/day tradeable floor (the level
+  // the stablecore + CERN-lockup feeds gate on) — below it, wide bid-ask spreads
+  // and low volume cause real entry/exit slippage that erodes theoretical alpha.
+  // Returns null (no badge) for liquid names so the warning stays low-profile.
+  const LIQ_HIGH_USD = 500e3;   // < $500k/day = severe slippage risk
+  const LIQ_CAUTION_USD = 3e6;  // < $3M/day  = thin; size carefully
+  function liquidityHazard(c) {
+    const adv = c && c.factors && c.factors.dollarVol;
+    if (adv == null || adv <= 0) return null;
+    const atrPct = (c.factors.atr != null && c.price) ? (c.factors.atr / c.price) * 100 : null;
+    const atrNote = atrPct != null ? ` ATR ≈ ${atrPct.toFixed(1)}% of price (wider on volatile names).` : '';
+    if (adv < LIQ_HIGH_USD) {
+      return { cls: 'high', label: '⚠ Low liquidity',
+        title: `Avg dollar volume only ${fmtCompactUsd(adv)}/day (below $500K). Wide bid-ask spreads and thin volume can cause severe slippage — fills may be far from quoted price, eroding theoretical edge.${atrNote}` };
+    }
+    if (adv < LIQ_CAUTION_USD) {
+      return { cls: 'caution', label: '⚠ Thin liquidity',
+        title: `Avg dollar volume ${fmtCompactUsd(adv)}/day (below the $3M tradeable floor). Fills may slip and spreads widen — size carefully and use limit orders.${atrNote}` };
+    }
+    return null;
+  }
+
   function buildScrCard(c, idx) {
     const st = c.status || 'Setup';
     const isBreakout = st === 'Breakout';
@@ -1878,6 +1910,8 @@
     const fd = c.fundamentals;
     if (fd && fd.earningsInDays != null && fd.earningsInDays >= 0 && fd.earningsInDays <= 10) tags.push(['earn', `⚠ Earnings ${fd.earningsInDays}d`]);
     const tagsHtml = tags.length ? `<div class="scr-tags">${tags.map(([k, t]) => `<span class="scr-tag ${k}">${esc(t)}</span>`).join('')}</div>` : '';
+    const liq = liquidityHazard(c);
+    const liqHtml = liq ? `<div class="scr-liq ${liq.cls}" title="${esc(liq.title)}"><span class="scr-liq-ic">🩸</span>${esc(liq.label)}</div>` : '';
     const fundaHtml = (fd && (fd.epsGrowth != null || fd.revGrowth != null)) ? `<div class="scr-funda">📈 ${fd.epsGrowth != null ? `EPS <b class="${fd.epsGrowth >= 0 ? 'pos' : 'neg'}">${fd.epsGrowth >= 0 ? '+' : ''}${fd.epsGrowth}%</b>` : ''}${fd.revGrowth != null ? `${fd.epsGrowth != null ? ' · ' : ''}Rev <b class="${fd.revGrowth >= 0 ? 'pos' : 'neg'}">${fd.revGrowth >= 0 ? '+' : ''}${fd.revGrowth}%</b>` : ''}${fd.netMargin != null ? ` · Margin ${fd.netMargin}%` : ''} <span class="scr-funda-yoy">YoY</span></div>` : '';
 
     const qbar = (lb, v) => `<div class="scr-qf"><div class="qf-top"><span>${lb}</span><b>${v ?? 0}</b></div><div class="qf-track"><div class="qf-fill" style="width:${v ?? 0}%"></div></div></div>`;
@@ -1938,6 +1972,7 @@
 
         <div class="scr-criteria">${chips}</div>
         ${filtersHtml}
+        ${liqHtml}
         ${tagsHtml}
         ${fundaHtml}
         ${quantHtml}
@@ -4319,6 +4354,22 @@
     INDEX_DELETE: 'Index Delete', INDEX_ADD_FADE: 'Index Add (fade)', LOCKUP_EXPIRY: 'Lockup Expiry', TAX_LOSS: 'Tax-Loss Selling', FIRE_SALE: 'Fire Sale', MARGIN_SPIRAL: 'Margin Spiral', FORCED_DOWNGRADE: 'Forced Downgrade' };
   const SB_HZ         = [['1w', '1-Week'], ['1m', '1-Month'], ['3m', '3-Month']];
 
+  // Regime filter — split every track record by the macro regime live at each
+  // pick's trigger (the project's one validated edge lever). 'all' = unsplit.
+  const SB_REGIMES = [['all', 'All Markets'], ['risk-on', 'Bull / Risk-On'], ['risk-off', 'Bear / Risk-Off']];
+  let sbRegime = (() => { try { return localStorage.getItem('sbRegime') || 'all'; } catch { return 'all'; } })();
+  function setSbRegime(r) {
+    sbRegime = r;
+    try { localStorage.setItem('sbRegime', r); } catch {}
+    if (lastScoreboard) renderScoreboard(lastScoreboard);
+  }
+  // Active horizons for a group given the selected regime: the unsplit set for
+  // 'all', otherwise that regime's bucket (empty obj → all horizons read pending).
+  function sbHz(g) {
+    if (sbRegime === 'all') return g.horizons || {};
+    return (g.byRegime && g.byRegime[sbRegime]) || {};
+  }
+
   function getDisabledSignals() {
     try { const a = JSON.parse(localStorage.getItem('disabledSignals')); return Array.isArray(a) ? a : []; } catch { return []; }
   }
@@ -4348,24 +4399,33 @@
     finally { scoreboardRefreshBtn.disabled = false; }
   }
 
-  // Headline expectancy: prefer 1-month, fall back to 1-week, then 3-month.
+  // Headline expectancy: prefer 1-month, fall back to 1-week, then 3-month —
+  // from the currently-selected regime bucket.
   function sbVerdict(g) {
-    const h = g.horizons || {};
+    const h = sbHz(g);
     const pick = h['1m'] || h['1w'] || h['3m'];
     if (!pick) return { cls: 'pending', label: 'Pending', val: null };
     return { cls: pick.avg > 0 ? 'pos' : 'neg', label: pick.avg > 0 ? 'Positive' : 'Negative', val: pick.avg };
   }
 
+  const SB_THIN_N = 10; // below this resolved-sample, flag the regime split as thin
+
   function sbCard(g) {
     const v = sbVerdict(g);
+    const h = sbHz(g);
     const disabled = isSignalDisabled(g.section, g.tier);
     const hz = SB_HZ.map(([k, lb]) => {
-      const s = g.horizons[k];
+      const s = h[k];
       if (!s) return `<div class="sb-h"><div class="sb-h-lb">${lb}</div><div class="sb-h-ret na">—</div><div class="sb-h-sub">pending</div></div>`;
       const up = s.avg >= 0;
       return `<div class="sb-h"><div class="sb-h-lb">${lb}</div><div class="sb-h-ret ${up ? 'up' : 'down'}">${up ? '+' : ''}${s.avg}%</div><div class="sb-h-sub">${s.winRate}% win · n=${s.n}</div></div>`;
     }).join('');
-    const hl = g.horizons['1m'] || g.horizons['1w'] || g.horizons['3m'];
+    const hl = h['1m'] || h['1w'] || h['3m'];
+    // In a regime view, show that regime's logged-pick count; flag thin samples so
+    // a 2-pick win-rate isn't mistaken for a real edge (the project's small-n rule).
+    const regCount = sbRegime === 'all' ? g.picks : ((g.regimePicks && g.regimePicks[sbRegime]) || 0);
+    const thin = sbRegime !== 'all' && (!hl || hl.n < SB_THIN_N)
+      ? `<span class="sb-thin" title="Small sample for this regime in the current data window — interpret with caution; the live window is mostly risk-on so the risk-off bucket fills slowly.">⚠ thin sample</span>` : '';
     const wl = hl ? `<div class="sb-wl"><span>Avg win <b class="win">+${hl.avgWin}%</b></span><span>Avg loss <b class="loss">${hl.avgLoss}%</b></span></div>` : '';
     // Big-winner reach: how often the signal's best run-up (MFE) crossed +10% / +20%
     // before the horizon, regardless of where it closed. Surfaces the models that
@@ -4378,7 +4438,7 @@
           <div class="sb-title"><div class="sb-sig">${SB_TIER_LABEL[g.tier] || esc(g.tier)}${bwBadge}</div></div>
           <button class="sb-toggle ${disabled ? 'off' : 'on'}" data-sig-toggle="${g.section}:${g.tier}">${disabled ? '✕ Disabled' : '✓ Enabled'}</button>
         </div>
-        <div class="sb-count">${g.picks} pick${g.picks === 1 ? '' : 's'} logged</div>
+        <div class="sb-count">${regCount} pick${regCount === 1 ? '' : 's'} logged${sbRegime === 'all' ? '' : ` in ${sbRegime === 'risk-on' ? 'risk-on' : 'risk-off'}`} ${thin}</div>
         <div class="sb-horizons">${hz}</div>
         ${wl}
         ${bw}
@@ -4400,13 +4460,26 @@
 
     const intro = `<div class="sb-intro">Every ticker the Screener and Momentum sections surface is logged daily with its entry price; each signal is scored on its <b>first appearance</b> (so names that linger aren't over-counted). Figures below are <b>realized</b> from price history. <b>Expectancy</b> = average return per pick (Strong Sell is inverted, so positive = a profitable short). The <b>🚀 big-winner row</b> shows how often a signal's best run-up reached +10% / +20% before the horizon (and its average peak) — separating models that catch large moves from steady grinders. Disable a negative-expectancy signal to hide it from its section — it keeps being tracked so you can re-enable it if it recovers.</div>`;
 
+    // Regime filter — only shown when the server could build the macro split.
+    const regimeBar = data.regimeSplit
+      ? `<div class="sb-regime-bar">
+          <label class="sb-regime-lb" for="sb-regime-sel">📊 Market regime</label>
+          <select id="sb-regime-sel" class="sb-regime-sel">${SB_REGIMES.map(([v, lb]) => `<option value="${v}"${v === sbRegime ? ' selected' : ''}>${lb}</option>`).join('')}</select>
+          <span class="sb-regime-note">${sbRegime === 'all'
+            ? 'Win-rates &amp; returns across every market. Switch to a regime to see which engines actually earn in bull vs. bear tapes — the one lever this project\'s backtests validated.'
+            : `Showing only picks triggered in a <b>${sbRegime === 'risk-on' ? 'risk-on (bull)' : 'risk-off (bear)'}</b> macro tape (VIX + credit-spread read at the trigger date).`}</span>
+        </div>`
+      : '';
+
     const bySec = {};
     data.groups.forEach(g => { (bySec[g.section] = bySec[g.section] || []).push(g); });
     const html = Object.keys(bySec).map(sec =>
       `<div class="sb-secgroup"><div class="sb-secgroup-h">${SB_SECTIONS[sec] || esc(sec)}</div><div class="sb-grid">${bySec[sec].map(sbCard).join('')}</div></div>`
     ).join('');
 
-    scoreboardContainer.innerHTML = intro + html;
+    scoreboardContainer.innerHTML = intro + regimeBar + html;
+    const regimeSel = document.getElementById('sb-regime-sel');
+    if (regimeSel) regimeSel.addEventListener('change', e => setSbRegime(e.target.value));
     scoreboardContainer.querySelectorAll('[data-sig-toggle]').forEach(btn => {
       btn.addEventListener('click', () => { const [s, t] = btn.dataset.sigToggle.split(':'); toggleSignal(s, t); });
     });

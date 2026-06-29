@@ -1,7 +1,22 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { forwardReturn, forwardPath, summarizeReturns, cernPicksFrom, fadeRowsFrom } = require('../lib/apex-routes');
+const { forwardReturn, forwardPath, summarizeReturns, cernPicksFrom, fadeRowsFrom, regimeBucketOf } = require('../lib/apex-routes');
+
+// ── regimeBucketOf: map a macro state into a Scoreboard regime bucket ─────────
+test('regimeBucketOf: null / missing state yields no bucket', () => {
+  assert.equal(regimeBucketOf(null), null);
+  assert.equal(regimeBucketOf(undefined), null);
+});
+test('regimeBucketOf: riskOn flag → risk-on bucket', () => {
+  assert.equal(regimeBucketOf({ riskOn: true, riskOff: false, regime: 'risk-on' }), 'risk-on');
+});
+test('regimeBucketOf: riskOff flag → risk-off bucket', () => {
+  assert.equal(regimeBucketOf({ riskOn: false, riskOff: true, regime: 'risk-off' }), 'risk-off');
+});
+test('regimeBucketOf: neutral state → no bucket (counts only in All)', () => {
+  assert.equal(regimeBucketOf({ riskOn: false, riskOff: false, regime: 'neutral' }), null);
+});
 
 // ── cernPicksFrom: map a CERN engine state into Scoreboard picks ─────────────
 
