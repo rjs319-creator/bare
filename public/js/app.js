@@ -1425,6 +1425,7 @@
     }
     const intro = `<div class="bt-note">Took the <b>biggest movers</b> (forward ${d.holdSessions}-session run-up ≥ <b>${d.minMovePct}%</b>) over the last ${d.cohorts} monthly cohorts on <b>${esc(d.scope)}-cap</b> names, reconstructed every signal <b>point-in-time</b> (no look-ahead), and measured each. <b>${d.bigMovers.toLocaleString()}</b> big movers out of <b>${d.totalRecords.toLocaleString()}</b> name-dates — <b>base rate ${d.baseRatePct}%</b>.${d.cached ? '' : ' <span style="color:var(--green)">freshly computed.</span>'}</div>`;
     const legend = `<div class="bt-eff-sub" style="margin-bottom:10px"><b>Recall</b> = of the big movers, % this signal flagged. <b>Precision</b> = of this signal's firings, % that became big movers. <b>Lift</b> = precision ÷ base rate — <b>&gt;1 means real concentration of big movers</b>; ≈1 means the signal fires on everything (no edge). High recall + low lift = a trap.</div>`;
+    const mc = d.momCutoff ? `<div class="bt-note" style="margin-bottom:10px">📐 <b>"Top-quartile 3-mo momentum" bar:</b> a name needed a <b>~${d.momCutoff.avgPct}%</b> trailing 3-month return on average to make the top quartile (range <b>${d.momCutoff.minPct}%</b> to <b>${d.momCutoff.maxPct}%</b> across the ${d.momCutoff.cohorts} cohorts). It's a <b>relative</b> cutoff recomputed each month, so the bar rises in strong tapes and falls in weak ones — that's why the signal keeps a stable lift across regimes.</div>` : '';
     const liftColor = l => l >= 1.3 ? 'var(--green)' : l >= 1.05 ? 'var(--amber,#f59e0b)' : 'var(--text-dim)';
     const bar = pct => `<div style="height:5px;background:var(--bg-hi);border-radius:3px;overflow:hidden;margin-top:3px"><div style="height:100%;width:${Math.min(100, pct)}%;background:var(--accent,#8a6dff)"></div></div>`;
     const rows = d.signals.map(s => `
@@ -1441,7 +1442,7 @@
       </div>`).join('');
     const ex = (d.examples || []).length ? `<div class="bt-note" style="margin-top:12px"><b>Biggest movers in the window & which signals caught them:</b><br>${d.examples.map(e => `<b>${esc(e.ticker)}</b> +${e.mfePct}% <span style="color:var(--text-dim)">[${e.caughtBy.length ? e.caughtBy.map(esc).join(', ') : 'none of the signals'}]</span>`).join('<br>')}</div>` : '';
     const caveat = `<div class="chart-disclaimer">⚠ In-sample, single (survivorship-biased) universe — this REVEALS which signals concentrate big movers (recall), it does NOT prove forward edge (precision is base-rate-aware but still historical). A signal with lift &gt;1.3 is a genuine lead; feed it into live weights only after a purged walk-forward confirms it. Reactive, not a guarantee. Not financial advice.</div>`;
-    el.innerHTML = controls + intro + legend + `<div class="bt-grid">${rows}</div>` + ex + `<div class="bt-note" style="margin-top:8px;color:var(--text-dim)">${esc(d.note)}</div>` + caveat;
+    el.innerHTML = controls + intro + legend + mc + `<div class="bt-grid">${rows}</div>` + ex + `<div class="bt-note" style="margin-top:8px;color:var(--text-dim)">${esc(d.note)}</div>` + caveat;
     wireMoverControls();
   }
   function wireMoverControls() {
