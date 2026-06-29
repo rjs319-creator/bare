@@ -344,7 +344,7 @@ module.exports = async function handler(req, res) {
     candidates = candidates.map(c => ({
       ticker: c.ticker, company: c.company, capTier: c.capTier,
       sector: c.sector, exchange: c.exchange, aboveSma200: c.aboveSma200,
-      status: c.status, qualifies: c.qualifies,
+      status: c.status, qualifies: c.qualifies, emergingLeader: c.emergingLeader,
       price: c.price, changePct: c.changePct,
       filters: c.filters,
       criteria: { ...c.criteria, narrative: c.narrativeStrength != null ? c.narrativeStrength >= 6 : false },
