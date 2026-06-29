@@ -692,6 +692,31 @@
       </label>
     </div>
 
+    <details class="scr-help">
+      <summary>📖 New here? How to use this screen &amp; its filters</summary>
+      <div class="scr-help-body">
+        <p><b>What this is.</b> A daily scan of the S&amp;P 500 (plus <b>small-cap</b> and <b>micro-cap</b> sections lower down) for stocks breaking out of a base on strength — potential moves <i>before</i> they get obvious. Each card shows a suggested <b>Entry</b>, <b>Stop</b> (where you're wrong), and <b>Target</b>.</p>
+        <p class="scr-help-h">The filters — what each one does and when to use it:</p>
+        <ul>
+          <li><b>Sector</b> — narrow to one industry (e.g. only Technology). Use it to focus on a theme you like or avoid one you don't.</li>
+          <li><b>Exchange</b> — filter by listing venue (NASDAQ/NYSE/AMEX). Most people can leave this on "All."</li>
+          <li><b>Relaxed gate vs Strict breakout</b> — how picky the scan is. <b>Relaxed</b> (default) shows strong trending names broadly. <b>Strict</b> shows only textbook breakouts (tight base + volume spike) — far fewer names, higher bar. Start Relaxed; switch to Strict when you want only the cleanest setups.</li>
+          <li><b>Momentum (3-mo ≥ X%)</b> — only show names already up at least X% over the last 3 months. <b>+11% = "top-quartile"</b>, the level our own study found best concentrates big movers. Use it to skip laggards and keep only names with real momentum behind them.</li>
+          <li><b>🎯 High-Conviction</b> — only setups that match the edges our backtest actually proved out-of-sample. Use it when you want quality over quantity.</li>
+          <li><b>🌱 Emerging</b> — early movers just <i>starting</i> a leg up (fresh leadership + accumulation, not yet stretched). Use it to get in early, RKLB-style. <i>Note: it can't catch oversold-bounce/squeeze spikes like FCEL — those launch from weakness and aren't predictable here.</i></li>
+          <li><b>🤖 Model</b> — re-orders the list by a learned win-probability model instead of the default score. Use it to see which names the model likes most.</li>
+        </ul>
+        <p class="scr-help-h">A simple way to start:</p>
+        <ol>
+          <li>Leave it on <b>Relaxed</b>, optionally set <b>Momentum ≥ +11%</b> and turn on <b>🎯 High-Conviction</b> to get a short, strong list.</li>
+          <li>Open a card and read its <b>Entry / Stop / Target</b> — and confirm on a real chart (TradingView) before doing anything.</li>
+          <li><b>Size by risk:</b> shares ≈ (1% of your account) ÷ (Entry − Stop).</li>
+          <li>Watch the <b>⚠ liquidity badge</b> — thin names can be hard to get in and out of.</li>
+        </ol>
+        <p class="scr-help-note">This is research to help you find candidates — not financial advice. Always do your own check before buying.</p>
+      </div>
+    </details>
+
     <div class="scr-tune">
       <button class="scr-tune-toggle" id="scr-tune-toggle"><span>⚙ Tune Quant Weights</span><span class="ct-arrow">▾</span></button>
       <div class="scr-tune-body" id="scr-tune-body" style="display:none">

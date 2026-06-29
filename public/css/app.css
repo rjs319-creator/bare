@@ -954,6 +954,19 @@
     .scr-subhead .sub-meta { font-size: 0.66rem; color: var(--text-dim); font-weight: 600; }
 
     /* Tune Quant Weights panel */
+    .scr-help { margin: 4px 0 14px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg); overflow: hidden; }
+    .scr-help > summary { cursor: pointer; padding: 10px 13px; font-size: 0.74rem; font-weight: 700; color: #10d98a; list-style: none; user-select: none; }
+    .scr-help > summary::-webkit-details-marker { display: none; }
+    .scr-help > summary::before { content: '▸ '; color: var(--text-dim); }
+    .scr-help[open] > summary::before { content: '▾ '; }
+    .scr-help > summary:hover { background: var(--bg-hi); }
+    .scr-help-body { padding: 4px 15px 14px; font-size: 0.74rem; line-height: 1.55; color: var(--text-dim); border-top: 1px solid var(--border); }
+    .scr-help-body p { margin: 9px 0; }
+    .scr-help-body b { color: var(--text); }
+    .scr-help-h { font-weight: 700; color: var(--text) !important; margin-top: 13px !important; }
+    .scr-help-body ul, .scr-help-body ol { margin: 6px 0 6px 4px; padding-left: 18px; }
+    .scr-help-body li { margin: 5px 0; }
+    .scr-help-note { font-size: 0.66rem; color: var(--text-muted); font-style: italic; border-top: 1px dashed var(--border); padding-top: 9px; }
     .scr-tune { margin-bottom: 16px; }
     .scr-tune-toggle {
       display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
