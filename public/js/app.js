@@ -1082,6 +1082,7 @@
     arr = arr.filter(c => !isSignalDisabled('screener', c.status)); // hide tiers disabled on the scoreboard
     if (scrHC) arr = arr.filter(isHighConviction);
     if (scrEmerg) arr = arr.filter(c => c.emergingLeader);
+    if (scrMomMin > 0) arr = arr.filter(c => c.factors && c.factors.mom63 != null && c.factors.mom63 >= scrMomMin);
     const md = getModel(scope);
     if (scrModelRank && md) {
       arr = arr.map(c => ({ ...c, _prob: modelProb(c) ?? -1 }));
@@ -1185,8 +1186,11 @@
 
   // Sector/exchange filters (persisted)
   const SCR_SECTORS = ['Technology', 'Communication Services', 'Consumer Discretionary', 'Consumer Staples', 'Health Care', 'Financials', 'Industrials', 'Energy', 'Utilities', 'Real Estate', 'Materials', 'Other'];
-  const loadFilters = () => { try { const f = JSON.parse(localStorage.getItem('scrFilters')); if (f) return f; } catch {} return { sector: 'all', exchange: 'all', gate: 'relaxed' }; };
-  const saveFilters = () => { try { localStorage.setItem('scrFilters', JSON.stringify({ sector: document.getElementById('scr-filter-sector')?.value || 'all', exchange: document.getElementById('scr-filter-exchange')?.value || 'all', gate: document.getElementById('scr-gate')?.value || 'relaxed' })); } catch {} };
+  const loadFilters = () => { try { const f = JSON.parse(localStorage.getItem('scrFilters')); if (f) return f; } catch {} return { sector: 'all', exchange: 'all', gate: 'relaxed', mom: '0' }; };
+  const saveFilters = () => { try { localStorage.setItem('scrFilters', JSON.stringify({ sector: document.getElementById('scr-filter-sector')?.value || 'all', exchange: document.getElementById('scr-filter-exchange')?.value || 'all', gate: document.getElementById('scr-gate')?.value || 'relaxed', mom: document.getElementById('scr-mom')?.value || '0' })); } catch {} };
+  // Minimum trailing 3-month (mom63) return % to show — client-side filter on the
+  // validated big-mover momentum signal (Big-Mover Reveal: top-quartile lift 1.41).
+  let scrMomMin = +(loadFilters().mom) || 0;
   (function initFilters() {
     const sel = document.getElementById('scr-filter-sector');
     if (sel) SCR_SECTORS.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sel.appendChild(o); });
@@ -1196,10 +1200,14 @@
     if (ex && saved.exchange) ex.value = saved.exchange;
     const gt = document.getElementById('scr-gate');
     if (gt && saved.gate) gt.value = saved.gate;
+    const mm = document.getElementById('scr-mom');
+    if (mm && saved.mom) mm.value = saved.mom;
+    // Sector/exchange/gate re-fetch (server-side query); momentum is client-side → just re-render.
     ['scr-filter-sector', 'scr-filter-exchange', 'scr-gate'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('change', () => { saveFilters(); refreshScreeners(); });
     });
+    if (mm) mm.addEventListener('change', () => { scrMomMin = +mm.value || 0; saveFilters(); ['large', 'small', 'micro'].forEach(rankAndRender); });
   })();
   // ── High-Conviction filter: auto-derived from the live backtest's top edges ──
   let scrHC = false; try { scrHC = localStorage.getItem('scrHC') === '1'; } catch {}
@@ -1672,7 +1680,9 @@
   function renderScreenerList(results, container, scope, rrFallback) {
     if (!results.length) {
       const label = scope === 'large' ? 'large-cap' : scope === 'small' ? 'small-cap' : 'micro-cap';
-      const msg = scrEmerg
+      const msg = scrMomMin > 0
+        ? `No ${label} names with a trailing 3-month return ≥ +${scrMomMin}% right now. Lower the Momentum filter or set it to "any" to see more setups.`
+        : scrEmerg
         ? `No emerging-leader ${label} names right now — no name is at the early stage of a momentum leg (fresh RS leadership + accumulation, not yet extended). This filter is intentionally selective and stays empty rather than flag oversold-bounce/squeeze names it can't predict. Turn off 🌱 Emerging to see all setups.`
         : scrHC
         ? `No high-conviction ${label} names right now (breakout + above 200-day MA + VCP). Turn off 🎯 High-Conviction to see all setups.`

@@ -670,6 +670,13 @@
         <option value="relaxed">Relaxed gate</option>
         <option value="strict">Strict breakout</option>
       </select>
+      <select class="scr-filter" id="scr-mom" title="Momentum threshold: show only names whose trailing 3-month (63-session) return clears this bar. +11% was the validated large-cap top-quartile big-mover bar (Big-Mover Reveal, lift 1.41) — the one signal with statistical backing for catching big moves.">
+        <option value="0">Momentum: any</option>
+        <option value="11">3-mo ≥ +11% (top-quartile)</option>
+        <option value="20">3-mo ≥ +20%</option>
+        <option value="30">3-mo ≥ +30%</option>
+        <option value="50">3-mo ≥ +50%</option>
+      </select>
       <button class="scr-hc" id="scr-hc-toggle">🎯 High-Conviction</button>
       <button class="scr-hc" id="scr-emerg-toggle" title="Early movers only: names at the START of a momentum-emergence leg (fresh RS leadership + accumulation, not yet extended). Catches the RKLB-style early mover; cannot catch oversold-bounce/squeeze spikes like FCEL.">🌱 Emerging</button>
       <button class="scr-hc" id="scr-model-toggle" title="Rank by the learned model's win-probability">🤖 Model</button>
