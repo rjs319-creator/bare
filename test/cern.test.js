@@ -80,6 +80,44 @@ test('dailyTick never returns TRADE or PROBE for a LOCKUP_EXPIRY event', () => {
   }
 });
 
+// ── Dislocation sign: D must be positive for the thesis-correct dislocation ──
+function flatThenMove(endClose, n = 60, evAt = 50, base = 100) {
+  const bars = [];
+  for (let i = 0; i < n; i++) {
+    // flat at `base` up to the event, then linear glide to `endClose`
+    const close = i < evAt ? base : base + (endClose - base) * ((i - evAt) / (n - 1 - evAt));
+    bars.push({ dateMs: i * 86400000, open: close, high: close * 1.005, low: close * 0.995, close, volume: 1e6 });
+  }
+  return bars;
+}
+
+test('D is positive for a down-dislocation on a long (dir -1) event', () => {
+  const cern = new CERN();
+  const bars = flatThenMove(90);                 // stock fell 10% after the event
+  const sectorBars = flatThenMove(50, 60, 50, 50); // sector flat
+  const ev = { type: 'LOCKUP_EXPIRY', symbol: 'X', dateMs: bars[50].dateMs, direction: -1, estFlowShares: 1e6 };
+  const m = cern._measure(ev, { bars, sectorBars, attentionZ: 0, daysToEarnings: 60, estimateRevisions: null }, 'neutral');
+  assert.ok(m && m.D > 0.02, `down-dislocation must yield positive D, got ${m && m.D}`);
+});
+
+test('D is positive for an up-dislocation on a short (dir +1) event', () => {
+  const cern = new CERN();
+  const bars = flatThenMove(110);                  // stock ran +10% after the event
+  const sectorBars = flatThenMove(50, 60, 50, 50); // sector flat
+  const ev = { type: 'INDEX_ADD_FADE', symbol: 'Y', dateMs: bars[50].dateMs, direction: 1, estFlowShares: 1e6 };
+  const m = cern._measure(ev, { bars, sectorBars, attentionZ: 0, daysToEarnings: 60, estimateRevisions: null }, 'neutral');
+  assert.ok(m && m.D > 0.02, `up-dislocation must yield positive D, got ${m && m.D}`);
+});
+
+test('D is zero for the wrong-way move (no dislocation to fade/buy)', () => {
+  const cern = new CERN();
+  const bars = flatThenMove(110);                  // stock UP but it's a buy-the-dip (dir -1) event
+  const sectorBars = flatThenMove(50, 60, 50, 50);
+  const ev = { type: 'LOCKUP_EXPIRY', symbol: 'Z', dateMs: bars[50].dateMs, direction: -1, estFlowShares: 1e6 };
+  const m = cern._measure(ev, { bars, sectorBars, attentionZ: 0, daysToEarnings: 60, estimateRevisions: null }, 'neutral');
+  assert.equal(m && m.D, 0, `wrong-way move must yield D=0, got ${m && m.D}`);
+});
+
 test('a non-logOnly type can still TRADE on the same dislocation (control)', () => {
   // bootstrap ship-gate lets a fresh type trade tiny when conviction is high
   const cern = new CERN();
