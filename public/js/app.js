@@ -4358,6 +4358,12 @@
       if (btn) btn.addEventListener('click', () => toggleChart(cardEl, tk));
     });
     startDaytradePrices([...new Set(dtTickers)]);
+    // ⏱️ Entry-timing lights — use each pick's ORB plan levels + avg volume when present.
+    const seen = new Set();
+    const dtPicks = [...(t.bestOpportunities || []), ...(t.momentumLiquid || []), ...(t.explosiveSmall || []), ...(t.momentumRun || [])]
+      .filter(p => p && p.ticker && !seen.has(p.ticker) && seen.add(p.ticker))
+      .map(p => ({ ticker: p.ticker, stop: p.orb && p.orb.stop, target: p.orb && p.orb.target, trigger: p.orb && p.orb.trigger, avgVol: p.avgVol }));
+    attachTimingLights(el, dtPicks, 'daytrade');
 
     const meta = document.getElementById('dt-meta');
     if (meta) meta.textContent = `· ${t.regime} · ${(t.counts ? t.counts.momentumLiquid + t.counts.explosiveSmall + (t.counts.momentumRun || 0) : 0)} movers`;
@@ -4399,6 +4405,55 @@
     } catch { /* keep last good prices */ }
   }
   document.getElementById('dt-refresh-btn')?.addEventListener('click', runDaytradeUI);
+
+  // ── ⏱️ Entry-Timing Light (shared) ─────────────────────────────────────────
+  // A 1-10 gauge of HOW GOOD A MOMENT it is to buy a pick RIGHT NOW (🟢10 optimal →
+  // 🔴1 worst), from live price level, VWAP extension, position-in-range, intraday
+  // relative volume, and the pick's own R:R + breakout trigger. Server-scored
+  // (lib/timing.js, SSOT) so there's no client/server sync hazard. Refreshes every
+  // 20 min and whenever the tab re-renders (which re-invokes this).
+  const TIMING_COL = { green: '#22c55e', amber: '#eab308', red: '#ef4444', grey: '#64748b' };
+  const timingTimers = {};
+  function renderTimingBadge(card, t) {
+    let slot = card.querySelector('[data-timing]');
+    if (!slot) { slot = document.createElement('span'); slot.setAttribute('data-timing', ''); (card.querySelector('.dt-card-top span') || card).appendChild(slot); }
+    if (!t || t.score == null) {
+      const lbl = t && t.label ? t.label : '—';
+      slot.innerHTML = `<span class="timing-light" style="border:1px solid ${TIMING_COL.grey};color:${TIMING_COL.grey}" title="${esc((t && t.reasons || []).join(' · '))}">${(t && t.emoji) || '⚪'} timing —</span>`;
+      return;
+    }
+    const col = TIMING_COL[t.light] || TIMING_COL.grey;
+    const tip = `Entry timing ${t.score}/10 — ${t.label}\n` + (t.reasons || []).join('\n');
+    slot.innerHTML = `<span class="timing-light" style="border:1px solid ${col};color:${col};background:${col}1a" title="${esc(tip)}">${t.emoji} ${t.score}/10</span>`;
+  }
+  // picks = [{ticker, stop?, target?, trigger?, avgVol?}]; `key` scopes the 20-min timer.
+  async function attachTimingLights(containerEl, picks, key) {
+    if (!containerEl || !picks || !picks.length) return;
+    if (timingTimers[key]) { clearInterval(timingTimers[key]); timingTimers[key] = null; }
+    // One-time legend so the badge is self-explanatory on any tab that uses it.
+    if (!containerEl.querySelector('.timing-legend')) {
+      const lg = document.createElement('div');
+      lg.className = 'dt-note timing-legend';
+      lg.innerHTML = `<b>⏱️ Entry-timing light</b> — how good a <i>moment</i> it is to buy each pick <b>right now</b> (updates every 20 min &amp; on refresh): <span style="color:${TIMING_COL.green}">🟢 7–10 good</span> · <span style="color:${TIMING_COL.amber}">🟡 4–6 fair</span> · <span style="color:${TIMING_COL.red}">🔴 1–3 poor/avoid</span>. Graded from live R:R to target, VWAP extension, position in the day's range, and intraday volume. Hover a badge for the reasons. <b>Timing, not a prediction.</b>`;
+      containerEl.insertBefore(lg, containerEl.firstChild);
+    }
+    const run = async () => {
+      try {
+        const res = await fetch('/api/tracker?op=timing', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ picks }),
+        });
+        const j = await res.json();
+        if (!j || !j.ok) return;
+        picks.forEach(p => {
+          const card = containerEl.querySelector(`.dt-card[data-ticker="${p.ticker}"]`);
+          if (card) renderTimingBadge(card, j.timing[p.ticker.toUpperCase()]);
+        });
+      } catch { /* keep last good lights */ }
+    };
+    run();
+    timingTimers[key] = setInterval(run, 20 * 60 * 1000); // 20 min — per spec
+  }
 
   // ── 🚀 Gap & Go (unscheduled catalyst gap-up continuation — validated event edge) ──
   // Today's ≥3% gap-ups on liquid names, with EARNINGS gaps filtered out (they don't
@@ -4483,6 +4538,12 @@
       const btn = cardEl.querySelector('[data-chart-toggle]');
       if (btn) btn.addEventListener('click', () => toggleChart(cardEl, tk));
     });
+    // ⏱️ Entry-timing lights — pass each pick's own ORB levels + avg volume.
+    const ggPicks = [...(t.strong || []), ...(t.moderate || [])].map(p => ({
+      ticker: p.ticker, stop: p.plan && p.plan.stop, target: p.plan && p.plan.target,
+      trigger: p.plan && p.plan.trigger, avgVol: p.avgVol,
+    }));
+    attachTimingLights(el, ggPicks, 'gapgo');
   }
   document.getElementById('gg-refresh-btn')?.addEventListener('click', runGapGoUI);
 
