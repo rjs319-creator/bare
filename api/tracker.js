@@ -23,7 +23,8 @@ const { runPredict, runPredictTick, runCrowd, runCrowdTick, runBrief, runBriefTi
 const { runFadeOpt, runFadeSeed, runFadeSignals, runFadeTick, runFadeBook,
         runTrendOpt, runTrend, runTrendTick, runTrendBook,
         runDaytrade, runDaytradeTick, runDaytradeBook, runDaytradeOpt,
-        runConfluence, runConfluenceTick, runConfluenceBook, runConfluenceOpt } = require('../lib/screener-routes');
+        runConfluence, runConfluenceTick, runConfluenceBook, runConfluenceOpt,
+        runCoil, runCoilTick, runCoilBook } = require('../lib/screener-routes');
 const { runAlertsIngest, runAlerts, runAlertsGrade } = require('../lib/alerts-routes');
 const { runArchive, runInsiderIngest, runInsider, runFundBuild, runFundamentals,
         runCernTickOp, runCern, runCernFsProbe, runCernLockProbe } = require('../lib/capture-routes');
@@ -49,6 +50,9 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'daytradetick') return runDaytradeTick(req, res);
   if (req.query.op === 'daytradebook') return runDaytradeBook(req, res);
   if (req.query.op === 'daytradeopt') return runDaytradeOpt(req, res);
+  if (req.query.op === 'coil') return runCoil(req, res);
+  if (req.query.op === 'coiltick') return runCoilTick(req, res);
+  if (req.query.op === 'coilbook') return runCoilBook(req, res);
   if (req.query.op === 'confluence') return runConfluence(req, res);
   if (req.query.op === 'confluencetick') return runConfluenceTick(req, res);
   if (req.query.op === 'confluencebook') return runConfluenceBook(req, res);

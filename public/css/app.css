@@ -1746,3 +1746,8 @@
     .lb-detail { font-size: 0.76rem; margin-top: 2px; }
     .lb-live { font-size: 0.7rem; color: var(--text-dim); display: block; margin-top: 1px; }
     .lb-verdict { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+
+/* 🧬 Coil Radar — responsive card grid + calibration reasons */
+.dt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 8px; }
+.coil-reasons li { margin: 1px 0; }
+@media (max-width: 680px) { .dt-grid { grid-template-columns: 1fr; } }

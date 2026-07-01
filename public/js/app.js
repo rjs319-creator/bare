@@ -12,7 +12,7 @@
   // ── App tabs with a "Markets" hub (Screener / Rotation / Sectors) ──
   const TAB_GROUPS = {
     start:     ['today', 'start'],
-    screeners: ['opportunities', 'screener', 'custom', 'coremo', 'daytrade', 'confluence', 'ghost', 'trendrider', 'fade'],
+    screeners: ['opportunities', 'screener', 'custom', 'coremo', 'daytrade', 'coil', 'confluence', 'ghost', 'trendrider', 'fade'],
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
     predict:   ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     research:  ['backtest', 'events', 'edge'],
@@ -22,7 +22,7 @@
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
     today: '🏠 Today', start: '📘 Guide',
-    opportunities: '⭐ Opportunities', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
+    opportunities: '⭐ Opportunities', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
     gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
@@ -90,6 +90,7 @@
     if (sub === 'fade' && typeof ensureFade === 'function') ensureFade();
     if (sub === 'trendrider' && typeof ensureTrendRider === 'function') ensureTrendRider();
     if (sub === 'daytrade' && typeof ensureDaytrade === 'function') ensureDaytrade();
+    if (sub === 'coil' && typeof ensureCoil === 'function') ensureCoil();
     if (sub === 'confluence' && typeof ensureConfluence === 'function') ensureConfluence();
     if (sub === 'xalerts' && typeof ensureXalerts === 'function') ensureXalerts();
     if (sub === 'leaderboard' && typeof ensureLeaderboard === 'function') ensureLeaderboard();
@@ -4261,6 +4262,76 @@
     } catch { /* keep last good prices */ }
   }
   document.getElementById('dt-refresh-btn')?.addEventListener('click', runDaytradeUI);
+
+  // ── 🧬 Coil Radar (pre-explosion: quiet, coiled names BEFORE the move) ──────
+  // Flags volatility-contracted, volume-dried-up, NOT-already-run-up names and
+  // attaches an EMPIRICALLY-CALIBRATED probability of an abnormal upside break.
+  let coilLoaded = false, coilScope = 'small';
+  function ensureCoil() { if (!coilLoaded) { coilLoaded = true; runCoilUI(); } }
+  async function runCoilUI() {
+    const el = document.getElementById('coil-container');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning for coiled setups…</p></div>`;
+    try {
+      const [t, book] = await Promise.all([
+        fetch(`/api/tracker?op=coil&scope=${coilScope}&limit=24`).then(r => r.json()),
+        fetch('/api/tracker?op=coilbook').then(r => r.json()).catch(() => null),
+      ]);
+      renderCoil(t, book);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Coil Radar.</p></div>`; }
+  }
+  function coilTrackPanel(book) {
+    if (!book || !book.ok || !book.resolved) {
+      const open = book && book.open ? book.open : 0;
+      return `<div class="dt-note" style="border-left-color:#a855f7"><b>📊 Self-validation ledger.</b> Picks are logged daily and auto-graded after ~${book && book.horizonDays || 10} sessions. ${open ? open + ' logged, none matured yet — check back in ~2 weeks.' : 'No picks logged yet — the daily cron starts the track record.'}</div>`;
+    }
+    const rows = (book.byBand || []).map(b =>
+      `<tr><td style="text-transform:capitalize">${esc(b.band)}</td><td style="text-align:right">${b.n}</td><td style="text-align:right">${b.predictedPct}%</td><td style="text-align:right"><b>${b.realizedPct}%</b></td></tr>`).join('');
+    return `<div class="rot-panel" style="border-color:#a855f755;background:#a855f70d">
+      <div class="rot-head" style="color:#c084fc">📊 Self-validation — predicted vs realized (out-of-sample)</div>
+      <div class="rot-sub">${book.resolved} picks auto-graded over ~${book.horizonDays} sessions (${book.open} still open). Model predicted <b>${book.predictedBreakPct}%</b> would make an abnormal break; <b>${book.realizedBreakPct}%</b> actually did <span class="dt-dim">(95% CI ${book.realizedCi.lo}–${book.realizedCi.hi}%)</span>. Honest, not curve-fit.
+        <table style="width:100%;margin-top:8px;font-size:.86em;border-collapse:collapse"><thead><tr style="color:var(--text-dim)"><th style="text-align:left">Coil band</th><th style="text-align:right">n</th><th style="text-align:right">predicted</th><th style="text-align:right">realized</th></tr></thead><tbody>${rows}</tbody></table>
+      </div></div>`;
+  }
+  function coilBandColor(band) { return band === 'high' ? '#a855f7' : band === 'elevated' ? '#8b5cf6' : band === 'normal' ? '#6b7280' : '#4b5563'; }
+  function renderCoil(t, book) {
+    const el = document.getElementById('coil-container');
+    if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Coil Radar unavailable.</p></div>`; return; }
+    const gen = document.getElementById('coil-gen-time'); if (gen && t.generatedAt) gen.textContent = '· ' + new Date(t.generatedAt).toLocaleString();
+    const scopeBtns = ['small', 'large', 'micro'].map(s =>
+      `<button class="hub-sub-btn ${s === t.scope ? 'active' : ''}" data-coil-scope="${s}" style="margin-right:6px">${s === 'small' ? 'Small-cap' : s === 'large' ? 'Large-cap' : 'Micro-cap'}</button>`).join('');
+    const howto = `<div class="tr-howto">
+      <div class="tr-howto-head">📖 What this is — in plain English</div>
+      <ol>
+        <li><b>The idea.</b> Most screeners show stocks <b>already moving</b>. This shows the opposite: <b>quiet, "coiled" stocks BEFORE they explode</b> — volatility squeezed, volume dried up, price flat (not already run up).</li>
+        <li><b>The %.</b> Each name shows the <b>calibrated chance of an abnormal upside break in ~${t.horizonDays} sessions</b> — an <i>honest, backtested number</i> (base rate ~${t.baseRatePct}%), <b>not a hyped "80%"</b>. Top-decile coils break ~1.9× as often as the least-coiled.</li>
+        <li><b>How to use it.</b> A coil says a name is <b>primed</b>, not that it <i>will</i> pop — the trigger is usually news/earnings this price model can't see. Use it as a <b>watchlist</b>: set alerts, confirm the breakout on a chart, then act. This is a watchlist, not advice.</li>
+      </ol></div>`;
+    const card = r => `<div class="dt-card">
+        <div class="dt-card-top">
+          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span></span>
+          <span class="dt-now"><b>$${r.price}</b></span>
+        </div>
+        <div class="dt-card-sub" style="display:flex;align-items:center;gap:8px;margin:4px 0 6px">
+          <span style="font-size:1.4em;font-weight:800;color:${coilBandColor(r.band)}">${r.explodeProbPct}%</span>
+          <span class="dt-dim">chance to break out (~${t.horizonDays}d) · ${r.lift}× base · <b style="color:${coilBandColor(r.band)}">${esc((r.band || '').toUpperCase())} coil</b> (D${r.prob ? r.prob.decile : ''}/10)</span>
+        </div>
+        <div class="dt-card-sub"><span class="dt-dim">squeeze ${r.metrics.squeezePctile}th pctile · vol ${r.metrics.hvPctile}th pctile · base ${r.metrics.rangeTightPct}% · ATR ${r.metrics.atrRatio}× · 20d ${r.metrics.ret20Pct >= 0 ? '+' : ''}${r.metrics.ret20Pct}%</span></div>
+        ${(r.reasons || []).length ? `<ul class="coil-reasons" style="margin:6px 0 0 16px;padding:0;font-size:.86em;color:var(--text-dim,#9ca3af)">${r.reasons.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+      </div>`;
+    const caveat = `<div class="dt-note" style="border-left-color:#a855f7;margin-top:10px"><b>⚠️ Honest edge.</b> ${esc(t.method ? t.method.caveat : '')} The % is a real base rate, not a promise — most of these will stay quiet. Paper-track before sizing.</div>`;
+    el.innerHTML = `${howto}
+      ${coilTrackPanel(book)}
+      <div style="margin:10px 0">${scopeBtns}</div>
+      <div class="rot-panel" style="border-color:#a855f755;background:#a855f70d">
+        <div class="rot-head" style="color:#c084fc">🧬 ${t.namesScanned} names scanned · showing the most-coiled ${t.picks.length}</div>
+        <div class="rot-sub">Sorted by coil strength. The % is each name's calibrated chance of an <b>abnormal</b> upside break (a move ≥2.5× its own volatility) in ~${t.horizonDays} sessions.</div>
+      </div>
+      <div class="dt-grid" style="margin-top:10px">${(t.picks || []).map(card).join('')}</div>
+      ${caveat}`;
+    el.querySelectorAll('[data-coil-scope]').forEach(b => b.addEventListener('click', () => { coilScope = b.getAttribute('data-coil-scope'); runCoilUI(); }));
+  }
+  document.getElementById('coil-refresh-btn')?.addEventListener('click', runCoilUI);
 
   // ── Confluence (5 classic strategies agree, regime-gated, self-learning) ──
   const CFL_STRAT = { ema: '9/21 EMA', supertrend: 'Supertrend', rsi: 'RSI dip', macd: 'MACD', priceAction: 'Structure' };

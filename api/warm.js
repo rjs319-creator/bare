@@ -131,6 +131,13 @@ module.exports = async function handler(req, res) {
     confluencetick = await r.json();
   } catch (e) { confluencetick = { error: String(e && e.message || e) }; }
 
+  // 🧬 Coil Radar — log today's top pre-explosion coil picks for the self-validating ledger.
+  let coiltick = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=coiltick', { headers: { 'x-warm': '1' } });
+    coiltick = await r.json();
+  } catch (e) { coiltick = { error: String(e && e.message || e) }; }
+
   // 🔮 Forecast — resolve matured predictions + (weekly) generate a fresh batch.
   let predicttick = null;
   try {
@@ -172,7 +179,7 @@ module.exports = async function handler(req, res) {
   catch (e) { coredrift = { error: String(e && e.message || e) }; }
 
   const warmedExtra = await extraWarm;   // already resolved — ran during the tail above
-  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, at: new Date().toISOString() };
+  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, coiltick, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, at: new Date().toISOString() };
 
   // Observability: persist a compact health record so failed ticks / stale data are visible (op=health).
   try { const { summarizeRun, writeHealthRun } = require('../lib/health'); await writeHealthRun(summarizeRun(result)); }
