@@ -14,7 +14,7 @@
     start:     ['today', 'start'],
     screeners: ['opportunities', 'screener', 'custom', 'coremo', 'daytrade', 'coil', 'confluence', 'ghost', 'trendrider', 'fade'],
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
-    predict:   ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
+    predict:   ['pulse', 'gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     research:  ['backtest', 'events', 'edge'],
     track:     ['leaderboard', 'scoreboard', 'coreperf', 'xalerts'],
   };
@@ -24,7 +24,7 @@
     today: '🏠 Today', start: '📘 Guide',
     opportunities: '⭐ Opportunities', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
-    gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
+    pulse: '📡 Market Pulse', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
     leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
@@ -97,6 +97,7 @@
     if (sub === 'momentum' && typeof ensureMomentum === 'function') ensureMomentum();
     if (sub === 'options' && typeof ensureOptions === 'function') ensureOptions();
     if (sub === 'picks' && typeof ensurePicks === 'function') ensurePicks();
+    if (sub === 'pulse' && typeof ensurePulse === 'function') ensurePulse();
     if (sub === 'gameplan' && typeof ensureGamePlan === 'function') ensureGamePlan();
     if (sub === 'brief' && typeof ensureBrief === 'function') ensureBrief();
     if (sub === 'forecast' && typeof ensureForecast === 'function') ensureForecast();
@@ -2863,6 +2864,60 @@
   // source of truth, shared with the validation cron). The UI just renders op=brief.
   const TONE_COL = { bull: 'var(--green)', bear: 'var(--red)', neutral: 'var(--amber,#f59e0b)' };
   const LEAN_TXT = { 1: ['▲', 'bullish', 'var(--green)'], '-1': ['▼', 'bearish', 'var(--red)'], 0: ['▬', 'neutral', 'var(--text-dim)'] };
+  // ── 📡 MARKET PULSE — top-10 trending distillations from social + finance media
+  // (server-side lib/pulse-routes.js via Claude web search). Ranked by popularity +
+  // how fast the news is trending. Attention digest, NOT buy signals. Refreshes ~4h.
+  let pulseLoaded = false;
+  function ensurePulse() { if (!pulseLoaded) { pulseLoaded = true; runPulseUI(false); } }
+  async function runPulseUI(force) {
+    const el = document.getElementById('pulse-container');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Re-scanning' : 'Scanning'} X · StockTwits · Reddit · finance YouTube… <span class="dt-dim">(can take ~20s)</span></p></div>`;
+    try {
+      const p = await fetch('/api/tracker?op=pulse' + (force ? '&force=1' : '')).then(r => r.json());
+      renderPulse(p);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Market Pulse.</p></div>`; }
+  }
+  const PULSE_VEL = { exploding: ['🔥', '#ef4444', 'Exploding'], rising: ['📈', '#f59e0b', 'Rising'], steady: ['➡️', '#9ca3af', 'Steady'], cooling: ['❄️', '#60a5fa', 'Cooling'] };
+  const PULSE_SENT = { bullish: ['var(--green)', '▲ Bullish'], bearish: ['var(--red)', '▼ Bearish'], mixed: ['var(--text-dim)', '▬ Mixed'] };
+  function renderPulse(p) {
+    const el = document.getElementById('pulse-container');
+    if (!el) return;
+    if (!p || !p.ok || !(p.items || []).length) {
+      el.innerHTML = `<div class="mom-status error"><p>Market Pulse is warming up${p && p.error ? ' — ' + esc(p.error) : ''}. Try Refresh in a moment.</p></div>`;
+      return;
+    }
+    const gt = document.getElementById('pulse-gen-time');
+    if (gt && p.generatedAt) gt.textContent = `· updated ${p.ageMins != null && p.ageMins < 90 ? (p.ageMins + 'm ago') : new Date(p.generatedAt).toLocaleString()}`;
+    const bars = n => { const f = Math.round((n / 100) * 10); return '▮'.repeat(f) + '▯'.repeat(10 - f); };
+    const card = it => {
+      const [ve, vc, vl] = PULSE_VEL[it.velocity] || PULSE_VEL.steady;
+      const [sc, sl] = PULSE_SENT[it.sentiment] || PULSE_SENT.mixed;
+      const tickers = (it.tickers || []).map(t => `<span class="pulse-tk">$${esc(t)}</span>`).join(' ');
+      return `<div class="pulse-card">
+        <div class="pulse-top">
+          <span class="pulse-rank">#${it.rank}</span>
+          <span class="pulse-head"><b>${esc(it.headline)}</b></span>
+          <span class="pulse-vel" style="color:${vc}" title="How fast this is trending">${ve} ${vl}</span>
+        </div>
+        <div class="pulse-meta">
+          ${tickers ? `<span class="pulse-tks">${tickers}</span>` : ''}
+          <span class="pulse-sent" style="color:${sc}">${sl}</span>
+          <span class="pulse-pop" title="Popularity ${it.popularity}/100"><span class="pulse-bars">${bars(it.popularity)}</span> ${it.popularity}</span>
+        </div>
+        <div class="pulse-idea">${esc(it.idea)}</div>
+        <div class="pulse-why"><b>Why it matters:</b> ${esc(it.whyMoves)}</div>
+        ${it.caution ? `<div class="pulse-caution">⚠️ ${esc(it.caution)}</div>` : ''}
+        <div class="pulse-src"><b>Trending on:</b> ${esc(it.sources)}</div>
+      </div>`;
+    };
+    el.innerHTML = `
+      <div class="dt-note" style="border-left-color:#ec4899"><b>📡 What the crowd is watching.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''}</div>
+      <div class="pulse-grid">${p.items.map(card).join('')}</div>`;
+    const rb = document.getElementById('pulse-refresh-btn');
+    if (rb) rb.onclick = () => runPulseUI(true);
+  }
+
   // ── 🗞️ DAILY GAME PLAN — news + sentiment + the app's own signals synthesized
   // (server-side, lib/gameplan.js) into one succinct plan + predictions, tiered
   // novice↔pro, building on a rolling multi-day narrative. UI just renders op=gameplan.

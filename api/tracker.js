@@ -35,6 +35,7 @@ const { runLeaderboard, runLeaderboardTick } = require('../lib/leaderboard');
 const { runCoreBuild, runCore, runCoreLog, runCoreDrift, runCorePerf } = require('../lib/stablecore-routes');
 const { runGamePlan } = require('../lib/gameplan-routes');
 const { runOptionsFlow, runOptionsPerf } = require('../lib/optionsflow-routes');
+const { runPulse } = require('../lib/pulse-routes');
 
 module.exports = async function handler(req, res) {
   if (req.query.op === 'track') return runTrack(req, res);
@@ -57,6 +58,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'confluencetick') return runConfluenceTick(req, res);
   if (req.query.op === 'confluencebook') return runConfluenceBook(req, res);
   if (req.query.op === 'confluenceopt') return runConfluenceOpt(req, res);
+  if (req.query.op === 'pulse') return runPulse(req, res);
   if (req.query.op === 'predict') return runPredict(req, res);
   if (req.query.op === 'predicttick') return runPredictTick(req, res);
   if (req.query.op === 'crowd') return runCrowd(req, res);
