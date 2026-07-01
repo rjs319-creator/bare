@@ -1797,6 +1797,7 @@
     grid.className = 'scr-grid';
     results.forEach((c, idx) => grid.appendChild(buildScrCard(c, idx)));
     container.appendChild(grid);
+    attachTimingLights(container, results.map(c => ({ ticker: c.ticker, stop: c.levels && c.levels.stop, target: c.levels && (c.levels.resistance ?? c.levels.target), trigger: c.levels && c.levels.entry })), 'screener-' + scope);
   }
 
   // Score haircut applied to long breakout candidates in a bearish regime —
@@ -2560,6 +2561,7 @@
       items.forEach((c, i) => grid.appendChild(buildApexCard(c, preset, i)));
       container.appendChild(grid);
     });
+    attachTimingLights(container, show.map(c => ({ ticker: c.ticker, stop: c.levels && c.levels.stop, target: c.levels && (c.levels.resistance ?? c.levels.target), trigger: c.levels && c.levels.entry })), 'custom');
   }
 
   // ── Portfolio exposure + equal-risk position sizing ────────────────────────
@@ -3540,6 +3542,7 @@
       items.forEach((c, i) => grid.appendChild(buildGhostCard(c, meta, i)));
       container.appendChild(grid);
     });
+    attachTimingLights(container, show.map(c => ({ ticker: c.ticker, stop: c.levels && c.levels.stop, target: c.levels && (c.levels.resistance ?? c.levels.target), trigger: c.levels && c.levels.entry })), 'ghost');
   }
 
   function buildGhostCard(c, meta, idx) {
@@ -4419,7 +4422,7 @@
     if (!slot) {
       slot = document.createElement('span'); slot.setAttribute('data-timing', ''); slot.style.marginLeft = '6px';
       // Host the badge near the ticker on whichever card type this is.
-      const host = card.querySelector('.dt-card-top span') || card.querySelector('.cx-tk-row') || card;
+      const host = card.querySelector('.dt-card-top span') || card.querySelector('.cx-tk-row') || card.querySelector('.scr-tk-row') || card;
       host.appendChild(slot);
     }
     if (!t || t.score == null) {
@@ -4435,7 +4438,7 @@
   // `findCard(ticker)` optionally locates the card element (default: a .dt-card[data-ticker]).
   async function attachTimingLights(containerEl, picks, key, findCard) {
     if (!containerEl || !picks || !picks.length) return;
-    const locate = findCard || (tk => containerEl.querySelector(`.dt-card[data-ticker="${tk}"]`));
+    const locate = findCard || (tk => containerEl.querySelector(`[data-ticker="${tk}"]`));
     if (timingTimers[key]) { clearInterval(timingTimers[key]); timingTimers[key] = null; }
     // One-time legend so the badge is self-explanatory on any tab that uses it.
     if (!containerEl.querySelector('.timing-legend')) {
@@ -4598,7 +4601,7 @@
         <li><b>The %.</b> Each name shows the <b>calibrated chance of an abnormal upside break in ~${t.horizonDays} sessions</b> — an <i>honest, backtested number</i> (base rate ~${t.baseRatePct}%), <b>not a hyped "80%"</b>. Top-decile coils break ~1.9× as often as the least-coiled.</li>
         <li><b>How to use it.</b> A coil says a name is <b>primed</b>, not that it <i>will</i> pop — the trigger is usually news/earnings this price model can't see. Use it as a <b>watchlist</b>: set alerts, confirm the breakout on a chart, then act. This is a watchlist, not advice.</li>
       </ol></div>`;
-    const card = r => `<div class="dt-card">
+    const card = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
           <span><span class="coil-rank" title="Rank by coil strength — the validated break-likelihood signal">#${r.rank}</span> <b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span></span>
           <span class="dt-now"><span class="dt-dim" style="font-size:.8em">coil</span> <b style="color:#c084fc">${r.coilScore != null ? r.coilScore.toFixed(2) : ''}</b></span>
@@ -4625,6 +4628,8 @@
       ${btPanel}
       ${caveat}`;
     el.querySelectorAll('[data-coil-scope]').forEach(b => b.addEventListener('click', () => { coilScope = b.getAttribute('data-coil-scope'); runCoilUI(); }));
+    // Pre-breakout names → time the ENTRY relative to the breakout trigger (+ VWAP/trend).
+    attachTimingLights(el, (t.picks || []).map(r => ({ ticker: r.ticker, trigger: r.entry })), 'coil');
   }
   document.getElementById('coil-refresh-btn')?.addEventListener('click', runCoilUI);
 
@@ -4708,6 +4713,7 @@
       if (btn) btn.addEventListener('click', () => toggleChart(cardEl, tk));
     });
     startConfluencePrices([...new Set((t.picks || []).map(r => r.ticker))]);
+    if (!t.riskOff) attachTimingLights(el, (t.picks || []).map(r => ({ ticker: r.ticker, stop: r.stop, target: r.target, trigger: r.entry })), 'confluence');
     const meta = document.getElementById('cfl-meta');
     if (meta) meta.textContent = `· ${t.regime} · ${t.count || 0} confluence longs`;
     const gt = document.getElementById('cfl-gen-time');
