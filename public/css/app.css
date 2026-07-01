@@ -1752,3 +1752,11 @@
 .coil-reasons li { margin: 1px 0; }
 @media (max-width: 680px) { .dt-grid { grid-template-columns: 1fr; } }
 .coil-rank { display: inline-block; min-width: 22px; text-align: center; font-weight: 800; font-size: .82rem; color: #c084fc; background: #a855f71a; border: 1px solid #a855f755; border-radius: 6px; padding: 0 5px; margin-right: 3px; }
+
+/* ⚡ Day Trade — relative-strength score, tier badge, and Today's Best Opportunities */
+.dt-relscore { display: inline-block; min-width: 24px; text-align: center; font-weight: 800; font-size: .74rem; color: #0b0f17; background: linear-gradient(90deg,#f59e0b,#fbbf24); border-radius: 5px; padding: 1px 5px; vertical-align: middle; }
+.dt-tier-b { font-size: .64rem; font-weight: 800; color: #94a3b8; border: 1px solid #475569; border-radius: 4px; padding: 0 3px; vertical-align: middle; }
+.dt-best-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; margin-top: 8px; }
+.dt-best-card { background: var(--surface); border: 1px solid #f59e0b44; border-radius: 10px; padding: 8px 11px; }
+.dt-best-top { display: flex; align-items: center; gap: 7px; font-size: .95rem; }
+.dt-best-rank { font-weight: 800; color: #f59e0b; font-size: .85rem; }
