@@ -582,7 +582,7 @@
 
   // ── 🛠️ Unusual Options Flow (quantitative — op=optionsflow + op=optionsperf) ──
   let optionsFlowAll = [];
-  const ofFilters = { type: '', sentiment: '', ticker: '', money: '' };
+  const ofFilters = { type: '', sentiment: '', ticker: '', money: '', minPrem: 0, aggr: '' };
   let ofSort = (() => { try { return localStorage.getItem('ofSort') || 'premium'; } catch { return 'premium'; } })();
   let ofNovice = (() => { try { return localStorage.getItem('ofNovice') !== 'pro'; } catch { return true; } })();
   let ofView = (() => { try { return localStorage.getItem('ofView') === 'contracts' ? 'contracts' : 'ticker'; } catch { return 'ticker'; } })();
@@ -641,7 +641,7 @@
     const m = new Map();
     sigs.forEach(s => {
       let r = m.get(s.ticker);
-      if (!r) { r = { ticker: s.ticker, underlying: s.underlying, isIndex: OF_INDEX.has(s.ticker), callPremium: 0, putPremium: 0, contracts: [], sweep: 0, block: 0, large: 0 }; m.set(s.ticker, r); }
+      if (!r) { r = { ticker: s.ticker, underlying: s.underlying, undChgPct: s.undChgPct, isIndex: OF_INDEX.has(s.ticker), callPremium: 0, putPremium: 0, contracts: [], sweep: 0, block: 0, large: 0 }; m.set(s.ticker, r); }
       if (s.side === 'call') r.callPremium += s.premium; else r.putPremium += s.premium;
       r.contracts.push(s); r[s.kind] = (r[s.kind] || 0) + 1;
     });
@@ -651,6 +651,7 @@
       r.net = r.bullishPct >= 60 ? 'bullish' : r.bullishPct <= 40 ? 'bearish' : 'mixed';
       const g = ofGrade(r.contracts); r.score = g.score; r.grade = g.label;
       r.contracts.sort((a, b) => b.premium - a.premium);
+      r.topContract = r.contracts[0] || null;
       r.maxScore = Math.max(0, ...r.contracts.map(c => c.score || 0));
       r.minDte = Math.min(Infinity, ...r.contracts.map(c => c.dte ?? Infinity));
       r.maxVolOi = Math.max(0, ...r.contracts.map(c => c.volOi || 0));
@@ -667,6 +668,8 @@
     if (ofFilters.sentiment) items = items.filter(s => s.sentiment === ofFilters.sentiment);
     if (ofFilters.ticker) items = items.filter(s => (s.ticker || '').includes(ofFilters.ticker));
     if (ofFilters.money) items = items.filter(s => s.moneyness === ofFilters.money);
+    if (ofFilters.minPrem) items = items.filter(s => (s.premium || 0) >= ofFilters.minPrem);
+    if (ofFilters.aggr) items = items.filter(s => s.aggressor === ofFilters.aggr);
     return items;
   }
   function ofSortContracts(arr) {
@@ -687,7 +690,7 @@
   }
   function exportOptionsCsv() {
     const items = ofSortContracts(ofFilteredItems());
-    const cols = ['ticker', 'side', 'type', 'strike', 'expiry', 'dte', 'volume', 'openInterest', 'volOi', 'lastPrice', 'premium', 'iv', 'underlying', 'moneyness', 'kind', 'sentiment', 'score'];
+    const cols = ['ticker', 'side', 'type', 'strike', 'expiry', 'dte', 'volume', 'openInterest', 'volOi', 'bid', 'ask', 'lastPrice', 'aggressor', 'premium', 'iv', 'underlying', 'undChgPct', 'moneyness', 'kind', 'sentiment', 'score'];
     const cell = v => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
     const csv = [cols.join(','), ...items.map(s => cols.map(c => cell(s[c])).join(','))].join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -696,8 +699,15 @@
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+  // One-sentence plain-English read of the whole tape, for Simple mode.
+  function ofPlainSummary(sm) {
+    const bull = sm.bullishPct >= 58, bear = sm.bullishPct <= 42;
+    const lean = bull ? 'leaning bullish' : bear ? 'leaning bearish' : 'mixed / two-sided';
+    const col = bull ? 'var(--green)' : bear ? 'var(--red)' : 'var(--text-dim)';
+    return `<div class="cx-narrative" style="margin-bottom:10px">💡 <b>Bottom line:</b> today's big options bets are <b style="color:${col}">${lean}</b> — ${sm.bullishPct}% of the unusual premium is in <b>calls</b> (bets on up) vs ${100 - sm.bullishPct}% in <b>puts</b> (bets on down), across ${sm.tickerCount} stock${sm.tickerCount === 1 ? '' : 's'}. Each card below is one stock: <span style="color:var(--green)">green</span> = call-heavy, <span style="color:var(--red)">red</span> = put-heavy.</div>`;
+  }
   function ofSummaryBar(sm) {
-    return `<div class="rot-panel"><div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px">`
+    return `<div class="rot-panel">${ofNovice ? ofPlainSummary(sm) : ''}<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px">`
       + `<div class="rot-head" style="margin:0">💰 ${ofUsd(sm.totalPremium)} unusual options premium <span class="dt-dim" style="font-weight:400">· ${sm.tickerCount} tickers</span></div>`
       + `<div>Market grade: ${ofGradeBadge(sm.score, sm.grade)}</div></div>`
       + `<div style="display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:8px">`
@@ -710,7 +720,7 @@
   // when unusual options activity lines up with a Breakout, a Ghost accumulation
   // setup, top conviction, or a live day-trade mover. Pure client-side join over
   // data the app already serves — this is what ties the separate tools together.
-  function buildConfluence(screener, daytrade) {
+  function buildConfluence(screener, daytrade, coil) {
     const map = {};
     const add = (tk, sig) => { if (tk) (map[tk] || (map[tk] = [])).push(sig); };
     (screener?.results || []).forEach(c => {
@@ -723,8 +733,21 @@
       if (c.conviction && (c.conviction.sleeveA || c.conviction.pctile >= 80))
         add(tk, { icon: '🎯', label: 'Top conviction', route: 'custom', color: '#06c4d4', title: 'Top-quintile conviction in the Adaptive Momentum model' });
     });
-    const dt = new Set([...(daytrade?.momentumLiquid || []), ...(daytrade?.explosiveSmall || [])].map(x => x.ticker));
-    dt.forEach(tk => add(tk, { icon: '🚀', label: 'Day-trade mover', route: 'daytrade', color: 'var(--amber,#f59e0b)', title: 'Flagged as a live mover in the Day Trade screener' }));
+    // Day-trade movers, enriched with each name's relative volume (RVOL) — the
+    // "unusually heavy volume" leg of the wishlist, shown right on the badge.
+    const rvol = {};
+    [...(daytrade?.momentumLiquid || []), ...(daytrade?.explosiveSmall || [])].forEach(x => {
+      if (!x.ticker) return;
+      rvol[x.ticker] = Math.max(rvol[x.ticker] || 0, x.relVol || 0);
+    });
+    Object.keys(rvol).forEach(tk => {
+      const rv = rvol[tk];
+      const rvTxt = rv >= 1.5 ? ` ${rv}× vol` : '';
+      add(tk, { icon: '🚀', label: 'Day-trade mover' + rvTxt, route: 'daytrade', color: 'var(--amber,#f59e0b)', title: `Live mover in the Day Trade screener${rv ? ` — trading ${rv}× its average volume today` : ''}` });
+    });
+    (coil?.picks || []).forEach(p => {
+      add(p.ticker, { icon: '🌀', label: 'Coil', route: 'coil', color: '#e879f9', title: 'A volatility-contracted "coil" in the Coil Radar — quiet compression before a potential break' });
+    });
     return map;
   }
 
@@ -732,11 +755,12 @@
     if (ofConfLoaded && !force) return;
     ofConfLoaded = true;
     try {
-      const [scr, dt] = await Promise.all([
+      const [scr, dt, coil] = await Promise.all([
         fetch('/api/screener?scope=large').then(r => r.json()).catch(() => null),
         fetch('/api/tracker?op=daytrade').then(r => r.json()).catch(() => null),
+        fetch('/api/tracker?op=coil&scope=large&limit=24').then(r => r.json()).catch(() => null),
       ]);
-      ofConfluence = buildConfluence(scr, dt);
+      ofConfluence = buildConfluence(scr, dt, coil);
       if (document.getElementById('of-grid')) applyOptionsView(); // re-decorate now that the join is ready
     } catch { /* badges are an enhancement — ignore failures */ }
   }
@@ -766,7 +790,8 @@
       `<div id="of-summary" style="margin-bottom:14px"></div>`
       + `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">`
       + `<div style="display:inline-flex;border:1px solid #333;border-radius:6px;overflow:hidden">${vtab('of-v-ticker', '📊 By ticker', ofView === 'ticker')}${vtab('of-v-contracts', '📜 All contracts', ofView === 'contracts')}</div>`
-      + `<button id="of-mode" class="dt-btn">${ofNovice ? '👶 Novice' : '🎯 Pro'}</button></div>`
+      + `<div style="display:inline-flex;border:1px solid #333;border-radius:6px;overflow:hidden">${vtab('of-m-simple', '🔰 Simple', ofNovice)}${vtab('of-m-pro', '📊 Pro', !ofNovice)}</div>`
+      + `<span class="dt-dim" style="font-size:0.74rem">${ofNovice ? 'Plain-English reads' : 'Full numbers & filters'}</span></div>`
       + `<details id="of-explainer" class="dt-note" style="margin-bottom:12px"${ofNovice ? ' open' : ''}><summary style="cursor:pointer;font-weight:600">📖 New to options flow? How to read this</summary>`
       + `<div style="margin-top:8px;line-height:1.65;font-size:0.85rem">Big traders buy options to bet on (or hedge against) a move. We flag the unusually large ones, then group them by ticker so you see <i>net</i> positioning.`
       + `<ul style="margin:8px 0;padding-left:18px">`
@@ -774,6 +799,7 @@
       + `<li><b>Net bullish/bearish</b> = whether the day's call premium or put premium dominates for that ticker.</li>`
       + `<li><b>🎯 Single-stock</b> flow is usually conviction; <b>🛡 Index/ETF</b> flow (SPY, QQQ…) is often just hedging — so we separate them.</li>`
       + `<li><b>⚡ Sweep</b> = aggressive/urgent fill · <b>🧱 Block</b> = one big institutional trade.</li>`
+      + `<li><b>⬆ @ ask / ⬇ @ bid</b> = whether the last order <b>lifted the ask</b> (a buyer paying up — backs the bull/bear read) or <b>hit the bid</b> (a seller — fades it, could be writing/closing). It reads the last print, not the whole day — a tell, not proof.</li>`
       + `<li><b>Breakeven & "needs +X%"</b> = how far the stock must actually move (and to what price) by expiry for the bet to make money — the real bar to clear, not just the direction.</li>`
       + `<li><b>⚠ ER (earnings)</b> = the company reports earnings <i>before</i> these options expire. That's an <b>event bet</b>: options often lose value after earnings even if the stock moves your way (volatility "crush"). Tread carefully.</li>`
       + `<li><b>Confluence badges</b> (🔥 Breakout · 👻 Ghost · 🎯 Top conviction · 🚀 Day-trade mover) appear when the same ticker is <i>also</i> flagged by one of the app's own screeners — the options flow and the screen agreeing is a stronger read than either alone. Tap a badge to jump to that screener.</li></ul>`
@@ -782,32 +808,46 @@
       + `<select id="of-sent" style="${OF_SEL}"><option value="">All sentiment</option><option value="bullish">▲ Bullish</option><option value="bearish">▼ Bearish</option></select>`
       + `<select id="of-type" style="${OF_SEL}"><option value="">All flow types</option><option value="sweep">⚡ Sweeps</option><option value="block">🧱 Blocks</option><option value="large">💰 Large</option></select>`
       + `<input id="of-ticker" placeholder="Filter ticker (e.g. NVDA)" style="${OF_SEL};width:170px">`
-      + `<select id="of-money" style="${OF_SEL}"><option value="">All moneyness</option><option value="OTM">OTM (directional)</option><option value="ATM">ATM</option><option value="ITM">ITM</option></select>`
-      + `<select id="of-sort" style="${OF_SEL}"><option value="premium">Sort: Premium</option><option value="score">Sort: Unusualness</option><option value="expiry">Sort: Soonest expiry</option><option value="voloi">Sort: Vol / OI</option></select>`
-      + `<button id="of-csv" class="dt-btn" title="Download the filtered flow as CSV">⬇ CSV</button>`
+      + `<select id="of-prem" style="${OF_SEL}"><option value="0">Any premium</option><option value="100000">≥ $100k</option><option value="250000">≥ $250k</option><option value="1000000">≥ $1M (block-size)</option></select>`
+      + (ofNovice ? '' :
+          `<select id="of-money" style="${OF_SEL}"><option value="">All moneyness</option><option value="OTM">OTM (directional)</option><option value="ATM">ATM</option><option value="ITM">ITM</option></select>`
+        + `<select id="of-aggr" style="${OF_SEL}"><option value="">Any fill</option><option value="ask">⬆ Bought at ask</option><option value="bid">⬇ Sold at bid</option></select>`
+        + `<select id="of-sort" style="${OF_SEL}"><option value="premium">Sort: Premium</option><option value="score">Sort: Unusualness</option><option value="expiry">Sort: Soonest expiry</option><option value="voloi">Sort: Vol / OI</option></select>`
+        + `<button id="of-csv" class="dt-btn" title="Download the filtered flow as CSV">⬇ CSV</button>`)
       + `<span id="of-count" class="dt-dim" style="font-size:0.78rem"></span></div>`
       + `<div id="of-grid"></div>`
       + `<div id="of-perf" style="margin-top:26px"></div>`;
     const t = document.getElementById('of-type'), se = document.getElementById('of-sent'), tk = document.getElementById('of-ticker');
-    const mn = document.getElementById('of-money'), so = document.getElementById('of-sort');
+    const pr = document.getElementById('of-prem');
+    // Pro-only controls (absent in Simple mode) — guard every reference.
+    const mn = document.getElementById('of-money'), so = document.getElementById('of-sort'), ag = document.getElementById('of-aggr');
     // Restore current control state (the shell is rebuilt on view/mode switches).
-    t.value = ofFilters.type; se.value = ofFilters.sentiment; tk.value = ofFilters.ticker; mn.value = ofFilters.money; so.value = ofSort;
+    t.value = ofFilters.type; se.value = ofFilters.sentiment; tk.value = ofFilters.ticker;
+    pr.value = String(ofFilters.minPrem);
+    if (mn) mn.value = ofFilters.money; if (so) so.value = ofSort; if (ag) ag.value = ofFilters.aggr;
     t.addEventListener('change', () => { ofFilters.type = t.value; applyOptionsView(); });
     se.addEventListener('change', () => { ofFilters.sentiment = se.value; applyOptionsView(); });
     tk.addEventListener('input', () => { ofFilters.ticker = tk.value.trim().toUpperCase(); applyOptionsView(); });
-    mn.addEventListener('change', () => { ofFilters.money = mn.value; applyOptionsView(); });
-    so.addEventListener('change', () => { ofSort = so.value; try { localStorage.setItem('ofSort', ofSort); } catch {} applyOptionsView(); });
-    document.getElementById('of-csv').addEventListener('click', exportOptionsCsv);
+    pr.addEventListener('change', () => { ofFilters.minPrem = parseInt(pr.value, 10) || 0; applyOptionsView(); });
+    if (mn) mn.addEventListener('change', () => { ofFilters.money = mn.value; applyOptionsView(); });
+    if (ag) ag.addEventListener('change', () => { ofFilters.aggr = ag.value; applyOptionsView(); });
+    if (so) so.addEventListener('change', () => { ofSort = so.value; try { localStorage.setItem('ofSort', ofSort); } catch {} applyOptionsView(); });
+    const csv = document.getElementById('of-csv'); if (csv) csv.addEventListener('click', exportOptionsCsv);
     const setView = (v) => { ofView = v; try { localStorage.setItem('ofView', v); } catch {} renderOptionsFlowShell(data); applyOptionsView(); loadOptionsPerf(); };
     document.getElementById('of-v-ticker').addEventListener('click', () => setView('ticker'));
     document.getElementById('of-v-contracts').addEventListener('click', () => setView('contracts'));
-    document.getElementById('of-mode').addEventListener('click', () => {
-      ofNovice = !ofNovice;
-      try { localStorage.setItem('ofNovice', ofNovice ? 'novice' : 'pro'); } catch {}
-      const btn = document.getElementById('of-mode'); if (btn) btn.textContent = ofNovice ? '👶 Novice' : '🎯 Pro';
-      const ex = document.getElementById('of-explainer'); if (ex) ex.open = ofNovice;
-      applyOptionsView();
-    });
+    // Simple ⇄ Pro rebuilds the shell so the filter set + card density match the mode.
+    const setMode = (novice) => {
+      if (novice === ofNovice) return;
+      ofNovice = novice;
+      try { localStorage.setItem('ofNovice', novice ? 'novice' : 'pro'); } catch {}
+      // Pro's advanced filters vanish in Simple — clear them so hidden filters
+      // don't silently keep narrowing the list.
+      if (novice) { ofFilters.money = ''; ofFilters.aggr = ''; }
+      renderOptionsFlowShell(data); applyOptionsView(); loadOptionsPerf();
+    };
+    document.getElementById('of-m-simple').addEventListener('click', () => setMode(true));
+    document.getElementById('of-m-pro').addEventListener('click', () => setMode(false));
   }
 
   function applyOptionsView() {
@@ -842,13 +882,14 @@
       ? `<div class="cx-narrative" style="margin-top:8px">💡 ${esc(r.ticker)}'s options activity grades <b style="color:${gcol}">${r.grade} (${r.score > 0 ? '+' : ''}${r.score})</b> — ${ofUsd(r.callPremium)} in call (bullish) premium vs ${ofUsd(r.putPremium)} in puts, across ${r.contracts.length} unusual trade${r.contracts.length > 1 ? 's' : ''}.${beNote}</div>${flowEarningsWarn(r)}${lean ? flowAction(lean) : ''}`
       : flowEarningsWarn(r);
     const erChip = r.earningsBeforeExpiry ? `<span class="cx-tierbadge" style="color:var(--amber,#f0a832);border-color:currentColor" title="Earnings report lands before these options expire — an event/IV-crush risk">⚠ ER ${r.earningsInDays}d</span>` : '';
-    const contractRow = s => `<div class="dt-dim" style="font-size:0.74rem;padding:2px 0">${esc(s.type)} $${esc(String(s.strike))} ${esc(s.expiry || '')} (${s.dte}d) · ${ofUsd(s.premium)} · ${OF_KIND[s.kind] || esc(s.kind)} · ${s.sentiment === 'bullish' ? '▲' : '▼'}</div>`;
+    const aggrMark = s => s.aggressor === 'ask' ? ' <span style="color:var(--green)">⬆@ask</span>' : s.aggressor === 'bid' ? ' <span style="color:var(--red)">⬇@bid</span>' : '';
+    const contractRow = s => `<div class="dt-dim" style="font-size:0.74rem;padding:2px 0">${esc(s.type)} $${esc(String(s.strike))} ${esc(s.expiry || '')} (${s.dte}d) · ${ofUsd(s.premium)} · ${OF_KIND[s.kind] || esc(s.kind)} · ${s.sentiment === 'bullish' ? '▲' : '▼'}${aggrMark(s)}${s.lastTradeTs ? ` · ${ofTime(s.lastTradeTs)}` : ''}</div>`;
     const expand = `<button class="of-expand dt-btn" data-n="${r.contracts.length}" style="margin-top:8px;font-size:0.74rem;padding:3px 8px">▸ show ${r.contracts.length} contract${r.contracts.length > 1 ? 's' : ''}</button>`
       + `<div style="display:none;margin-top:6px;border-top:1px solid #222;padding-top:6px">${r.contracts.map(contractRow).join('')}</div>`;
     return `<div class="cx-card" style="border-left:3px solid ${gcol}">`
       + `<div class="cx-top"><div><div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(r.ticker)}">$${esc(r.ticker)}</span>`
-      + ofGradeBadge(r.score, r.grade) + erChip + `</div>`
-      + `<div class="cx-company">${r.contracts.length} unusual contract${r.contracts.length > 1 ? 's' : ''}${r.sweep ? ` · ${r.sweep}⚡` : ''}${r.block ? ` · ${r.block}🧱` : ''}${r.underlying ? ` · spot $${r.underlying}` : ''}</div></div>`
+      + ofGradeBadge(r.score, r.grade) + erChip + (tc ? ofAggrChip(tc) : '') + `</div>`
+      + `<div class="cx-company">${r.contracts.length} unusual contract${r.contracts.length > 1 ? 's' : ''}${r.sweep ? ` · ${r.sweep}⚡` : ''}${r.block ? ` · ${r.block}🧱` : ''}${r.underlying ? ` · spot $${r.underlying}${r.undChgPct != null ? ` (${ofChg(r.undChgPct)})` : ''}` : ''}</div></div>`
       + `<div class="cx-score-col"><div class="cx-score" style="color:#06c4d4;font-size:1.05rem">${ofUsd(r.totalPremium)}</div><div class="cx-price">${r.bullishPct}% calls</div></div></div>`
       + `<div style="display:flex;height:7px;border-radius:4px;overflow:hidden;margin-top:8px"><div style="width:${r.bullishPct}%;background:var(--green)"></div><div style="width:${100 - r.bullishPct}%;background:var(--red)"></div></div>`
       + ofConfluenceHTML(r.ticker) + novice + expand + `</div>`;
@@ -856,6 +897,28 @@
 
   function ofUsd(n) { return n >= 1e6 ? '$' + (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? '$' + Math.round(n / 1e3) + 'k' : '$' + n; }
   const OF_KIND = { sweep: '⚡ Sweep', block: '🧱 Block', large: '💰 Large' };
+  // Aggressor of the last print: at-ask (bought, ⬆) confirms the call=bullish /
+  // put=bearish lean; at-bid (sold, ⬇) fades it. mid/none → no chip.
+  function ofAggrChip(s) {
+    if (!s.aggressor || s.aggressor === 'mid') return '';
+    const ask = s.aggressor === 'ask';
+    const col = ask ? 'var(--green)' : 'var(--red)';
+    const tip = ask
+      ? 'The last print lifted the ask — buyer-initiated, which backs the directional lean.'
+      : 'The last print hit the bid — seller-initiated, which fades the lean (could be writing/closing). Reads the last trade, not the whole day.';
+    return `<span class="cx-tierbadge" title="${esc(tip)}" style="color:${col};border-color:currentColor">${ask ? '⬆ @ ask' : '⬇ @ bid'}</span>`;
+  }
+  // Last-trade time (contract's own last print). Unix seconds → local HH:MM.
+  function ofTime(ts) {
+    if (!ts) return '';
+    try { return new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch { return ''; }
+  }
+  // Underlying's move on the day, colored.
+  function ofChg(pct) {
+    if (pct == null) return '';
+    const col = pct >= 0 ? 'var(--green)' : 'var(--red)';
+    return `<span style="color:${col}">${pct > 0 ? '+' : ''}${pct}%</span>`;
+  }
   // Plain-English read of one signal, built deterministically from its fields.
   function flowPlainEnglish(s) {
     const optType = s.side === 'call' ? 'call options' : 'put options';
@@ -864,11 +927,13 @@
       : s.kind === 'block' ? 'A single large block — likely an institution.'
         : 'A large premium trade.';
     const fresh = s.volOi ? ` Volume was ${s.volOi}× the prior open interest, so it's a brand-new position.` : '';
+    const aggr = s.aggressor === 'ask' ? ` The last order lifted the ask (buyer-initiated) — that backs this read.`
+      : s.aggressor === 'bid' ? ` The last order hit the bid (someone sold) — that cuts against it.` : '';
     // What actually has to happen for this bet to pay (the most actionable line).
     const be = (s.breakeven != null && s.moveToBePct != null)
       ? ` For it to pay, ${esc(s.ticker)} must move <b>~${s.moveToBePct > 0 ? '+' : ''}${s.moveToBePct}%</b> to <b>$${esc(String(s.breakeven))}</b> (breakeven) by ${esc(s.expiry || 'expiry')}.`
       : '';
-    return `Someone spent ~${ofUsd(s.premium)} on ${esc(s.ticker)} ${optType}, betting it ${dir} $${esc(String(s.strike))} by ${esc(s.expiry || 'expiry')} (${s.dte} days out). ${kindNote}${fresh}${be}`;
+    return `Someone spent ~${ofUsd(s.premium)} on ${esc(s.ticker)} ${optType}, betting it ${dir} $${esc(String(s.strike))} by ${esc(s.expiry || 'expiry')} (${s.dte} days out). ${kindNote}${fresh}${aggr}${be}`;
   }
   // The actionable warning + plain "what you could do", honest about risk. Shared
   // by contract and ticker cards. earnings-before-expiry is the big one.
@@ -888,7 +953,9 @@
     // Header (always): ticker · bull/bear · kind · premium.
     // Pro meta: add breakeven + the implied move required (concrete, no fluff).
     const beMeta = (s.breakeven != null) ? ` · BE $${esc(String(s.breakeven))}${s.moveToBePct != null ? ` (${s.moveToBePct > 0 ? '+' : ''}${s.moveToBePct}%)` : ''}` : '';
-    const techMeta = ofNovice ? '' : `<div class="cx-company">${esc(s.type)} $${esc(String(s.strike))} · ${esc(s.expiry || '?')} (${s.dte}d) · ${esc(s.moneyness)}${s.iv ? ` · IV ${s.iv}%` : ''}${beMeta}${s.earningsBeforeExpiry ? ` · <span style="color:var(--amber,#f0a832)">⚠ ER ${s.earningsInDays}d</span>` : ''}</div>`;
+    const lastMeta = s.lastTradeTs ? ` · last ${ofTime(s.lastTradeTs)}` : '';
+    const chgMeta = s.undChgPct != null ? ` · spot ${ofChg(s.undChgPct)}` : '';
+    const techMeta = ofNovice ? '' : `<div class="cx-company">${esc(s.type)} $${esc(String(s.strike))} · ${esc(s.expiry || '?')} (${s.dte}d) · ${esc(s.moneyness)}${s.iv ? ` · IV ${s.iv}%` : ''}${beMeta}${chgMeta}${lastMeta}${s.earningsBeforeExpiry ? ` · <span style="color:var(--amber,#f0a832)">⚠ ER ${s.earningsInDays}d</span>` : ''}</div>`;
     const techVol = ofNovice ? '' : `<div class="cx-price">vol ${(s.volume || 0).toLocaleString()} · OI ${(s.openInterest || 0).toLocaleString()}${s.volOi ? ` · ${s.volOi}× OI` : ''}</div>`;
     // Body: novice → plain-English read + earnings warning + what-you-could-do;
     // pro → just the earnings warning (technical lines live in the header).
@@ -899,7 +966,7 @@
       + `<div class="cx-top"><div>`
       + `<div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(s.ticker)}">$${esc(s.ticker)}</span>`
       + `<span class="cx-tierbadge" style="color:${col};border-color:currentColor">${bull ? '▲ Bullish' : '▼ Bearish'}</span>`
-      + `<span class="cx-tierbadge" style="color:var(--text-dim);border-color:#444">${OF_KIND[s.kind] || esc(s.kind)}</span></div>`
+      + `<span class="cx-tierbadge" style="color:var(--text-dim);border-color:#444">${OF_KIND[s.kind] || esc(s.kind)}</span>${ofAggrChip(s)}</div>`
       + techMeta
       + `</div><div class="cx-score-col"><div class="cx-score" style="color:#06c4d4;font-size:1.05rem">${ofUsd(s.premium)}</div>`
       + techVol + `</div></div>${body}${ofConfluenceHTML(s.ticker)}</div>`;

@@ -30,6 +30,31 @@ test('scanChain attaches breakeven + moveToBePct to each signal', () => {
   assert.equal(sigs[0].moveToBePct, 9); // (109-100)/100
 });
 
+test('aggressorOf: last near ask = buyer-lifted, near bid = seller-hit, else mid', () => {
+  assert.equal(of.aggressorOf(1.00, 2.00, 1.90), 'ask');  // 90% up the spread → lifted offer
+  assert.equal(of.aggressorOf(1.00, 2.00, 1.10), 'bid');  // 10% up → hit bid
+  assert.equal(of.aggressorOf(1.00, 2.00, 1.50), 'mid');  // dead center
+  assert.equal(of.aggressorOf(1.00, 2.00, 2.50), 'ask');  // above ask (deep ITM print) → ask
+  assert.equal(of.aggressorOf(null, 2.00, 1.9), null);    // no two-sided quote
+  assert.equal(of.aggressorOf(2.00, 2.00, 2.00), null);   // zero-width / crossed
+});
+
+test('scanChain attaches aggressor + bid/ask + underlying %chg + last-trade time', () => {
+  const result = {
+    quote: { regularMarketPrice: 100, regularMarketChangePercent: 3.4 },
+    options: [{ calls: [{
+      strike: 105, lastPrice: 4, bid: 3.6, ask: 4.0, lastTradeDate: 1782753509,
+      volume: 5000, openInterest: 100, expiration: future, impliedVolatility: 0.5,
+    }], puts: [] }],
+  };
+  const s = of.scanChain('TEST', result)[0];
+  assert.equal(s.aggressor, 'ask');        // last 4.0 == ask → buyer lifted the offer
+  assert.equal(s.bid, 3.6);
+  assert.equal(s.ask, 4.0);
+  assert.equal(s.undChgPct, 3.4);
+  assert.equal(s.lastTradeTs, 1782753509);
+});
+
 const future = Math.floor(Date.now() / 1000) + 20 * 86400;  // ~20 days out
 
 test('premiumUsd = volume × price × 100, with ask fallback', () => {
