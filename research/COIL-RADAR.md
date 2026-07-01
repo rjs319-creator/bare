@@ -76,6 +76,29 @@ single-digit-to-low-teens odds, **never a fabricated "80%".**
   leading edge). ⇒ Folding raw social *sentiment* into the score would hurt it. Consistent with
   this project's prior decision to decline hype-based confluence.
 
+## Event-driven backtest of the BREAKOUT TRADE SYSTEM (not just the signal)
+
+Beyond "does it break," we simulated the actual trade plan point-in-time (~2y): enter on a
+buy-stop above the 10-day coil ceiling (must trigger within 10 sessions), stop below the
+coil / entry−1.5×ATR, target = the calibrated 2.5σ level, managed 15 sessions, **conservative
+stop-first fills** (a bar spanning both counts as a stop).
+
+- **Trigger rate ~48–53%** (about half the coils actually break out in-window).
+- Of entered: **win ~14–20%, stop ~61–65%** — a low-win, high-R:R breakout profile.
+- **Realized avg R/entered (OOS): small/micro ≈ +0.12R, large ≈ +0.03R** (roughly break-even).
+  A few ~3R winners carry the low win rate on small-caps; large-caps are a watchlist, not a
+  standalone system.
+
+**The ranking result (important, and it changed the product):** we tested whether any score
+predicts realized trade R. **Every "conviction" ranker is INVERTED** — OOS Spearman vs realized
+R: Expected-R −0.40/−0.37, R:R −0.43/−0.34, break-prob −0.29/−0.29, coil-score −0.39/−0.39;
+only **wider stop / higher risk% is +0.35**. Interpretation: the tightest, highest-R:R coils
+have the tightest stops, which get **whipsawed** → worst realized trades. So an Expected-R /
+R:R ranking (initially shipped) was **removed** — it sorted picks worst-to-best. Picks are now
+ranked by **coil strength** (validated for break *likelihood*), with the levels shown as a plan
+and the backtested system stats shown honestly in the UI. There is no validated way to rank
+*which coil will trade best*, so we don't pretend to.
+
 ## Honest limitations
 - Modest edge (~1.2–1.3× lift). A coil says a name is *primed*, not that it *will* pop.
 - Timing/direction of the eventual break is usually an **exogenous catalyst** (news/earnings)
