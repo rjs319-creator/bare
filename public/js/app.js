@@ -12,7 +12,7 @@
   // ── App tabs with a "Markets" hub (Screener / Rotation / Sectors) ──
   const TAB_GROUPS = {
     start:     ['today', 'start'],
-    screeners: ['opportunities', 'screener', 'custom', 'coremo', 'daytrade', 'coil', 'confluence', 'ghost', 'trendrider', 'fade'],
+    screeners: ['opportunities', 'screener', 'custom', 'coremo', 'daytrade', 'gapgo', 'coil', 'confluence', 'ghost', 'trendrider', 'fade'],
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
     predict:   ['pulse', 'gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     research:  ['backtest', 'events', 'edge'],
@@ -22,7 +22,7 @@
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
     today: '🏠 Today', start: '📘 Guide',
-    opportunities: '⭐ Opportunities', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
+    opportunities: '⭐ Opportunities', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
@@ -90,6 +90,7 @@
     if (sub === 'fade' && typeof ensureFade === 'function') ensureFade();
     if (sub === 'trendrider' && typeof ensureTrendRider === 'function') ensureTrendRider();
     if (sub === 'daytrade' && typeof ensureDaytrade === 'function') ensureDaytrade();
+    if (sub === 'gapgo' && typeof ensureGapGo === 'function') ensureGapGo();
     if (sub === 'coil' && typeof ensureCoil === 'function') ensureCoil();
     if (sub === 'confluence' && typeof ensureConfluence === 'function') ensureConfluence();
     if (sub === 'xalerts' && typeof ensureXalerts === 'function') ensureXalerts();
@@ -4398,6 +4399,92 @@
     } catch { /* keep last good prices */ }
   }
   document.getElementById('dt-refresh-btn')?.addEventListener('click', runDaytradeUI);
+
+  // ── 🚀 Gap & Go (unscheduled catalyst gap-up continuation — validated event edge) ──
+  // Today's ≥3% gap-ups on liquid names, with EARNINGS gaps filtered out (they don't
+  // continue). The first deflation-surviving event edge; ORB entry plan attached.
+  let gapgoLoaded = false;
+  function ensureGapGo() { if (!gapgoLoaded) { gapgoLoaded = true; runGapGoUI(); } }
+  async function runGapGoUI() {
+    const el = document.getElementById('gg-container');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning today's unscheduled gappers…</p></div>`;
+    try {
+      const [t, book] = await Promise.all([
+        fetch('/api/tracker?op=gapgo').then(r => r.json()),
+        fetch('/api/tracker?op=gapgobook').then(r => r.json()).catch(() => null),
+      ]);
+      renderGapGo(t, book);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Gap &amp; Go.</p></div>`; }
+  }
+  function renderGapGo(t, book) {
+    const el = document.getElementById('gg-container');
+    if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Gap &amp; Go unavailable.</p></div>`; return; }
+    document.getElementById('gg-gen-time') && (document.getElementById('gg-gen-time').textContent = t.generatedAt ? new Date(t.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+
+    // Evidence + honest caveat panel (validated lead — forward-track before sizing).
+    const cfg = t.config || {};
+    const evidence = `<div class="rot-panel" style="border-color:#22d3ee55;background:#22d3ee0d">
+      <div class="rot-head" style="color:#22d3ee">🚀 ${esc(cfg.name || 'Unscheduled Gap-and-Go')} — validated event edge</div>
+      <div class="rot-sub">
+        <ul style="margin:6px 0 6px 18px;padding:0">${(cfg.rules || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+        <b style="color:#22c55e">✓ Evidence.</b> ${esc(cfg.evidence || '')}<br>
+        <b style="color:#f59e0b">⚠️ Caveat.</b> ${esc(cfg.caveat || '')}
+      </div>
+    </div>`;
+
+    // Why earnings are skipped + how many were filtered today.
+    const filtered = t.counts && t.counts.earningsExcluded
+      ? `<div class="dt-note" style="border-left-color:var(--amber,#f59e0b)"><b>⏭️ ${t.counts.earningsExcluded} earnings-reaction gap${t.counts.earningsExcluded === 1 ? '' : 's'} filtered out today.</b> Earnings gaps are a one-time repricing — they don't continue (they underperformed non-earnings gaps in every backtest bucket). This screener trades the <b>unscheduled</b> catalyst gap only.</div>`
+      : `<div class="dt-note"><b>⏭️ Earnings gaps are filtered out</b> — the edge is on unscheduled catalyst gaps only.</div>`;
+
+    const howto = `<div class="tr-howto">
+      <div class="tr-howto-head">📖 How to use this — in plain English</div>
+      <ol>
+        <li><b>What this is.</b> Stocks that <b>gapped up hard today on NON-earnings news</b> — a live catalyst that's still repricing. In testing, these keep running intraday; earnings gaps don't.</li>
+        <li><b>Entry (the tested rule).</b> Don't chase the open. Wait ~30 min, then buy <b>only if it breaks the opening-range high</b> (📈 trigger below).</li>
+        <li><b>Risk.</b> 🛑 <b>Stop</b> = 2.5×ATR below the trigger. 🏁 <b>Target</b> = 1:2. Time-stop after ~3 sessions.</li>
+        <li><b>Size by risk.</b> Shares ≈ (1% of account) ÷ (Trigger − Stop). This tilts to volatile names — <b>size small</b>, the P&amp;L is lumpy (a few big winners carry it).</li>
+        <li><b>Watchlist, not advice.</b> Confirm on a chart. This is a validated <b>lead being forward-tracked</b>, not a guarantee.</li>
+      </ol>
+    </div>`;
+
+    const card = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
+        <div class="dt-card-top">
+          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span>${r.earningsCheck === 'unknown' ? ' <span class="dt-tier-b" title="Earnings adjacency could not be verified (no data) — confirm there is no scheduled report before trading">? ER</span>' : ''}</span>
+          <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
+        </div>
+        <div class="dt-card-sub"><b style="color:#22d3ee">▲ gap +${r.gapPct}%</b> <span class="dt-dim">· ${L('rvol', 'RVOL')} ${r.relVol}×${r.excessPct != null ? ' · vs SPY ' + (r.excessPct >= 0 ? '+' : '') + r.excessPct + '%' : ''}</span></div>
+        <div class="dt-card-plan">📈 <b>Opening-range breakout</b> — break above <b>$${r.plan.trigger}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${r.plan.stop}</b> <span class="dt-dim">(−${r.plan.riskPct}%, 2.5×ATR)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${r.plan.target}</b> <span class="dt-dim">${L('rr', 'R:R')} 1:${r.plan.rr}</span></div>
+        <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
+        <div class="chart-panel" data-chart-panel style="display:none"></div>
+      </div>`;
+    const list = (title, rows, sub) => {
+      const body = (rows || []).map(card).join('');
+      return `<div class="rot-panel"><div class="rot-head">${title}</div><div class="rot-sub">${sub}</div>${body || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No qualifying gappers right now — this is a selective, event-driven screen; empty on quiet days.</span></div>'}</div>`;
+    };
+    const strong = list('🔥 STRONG — gap ≥5% <span class="dt-dim">(the validated primary)</span>', t.strong, 'Big unscheduled gaps. Backtested +1.9%/trade net, PF 1.47, positive all 4 years, passes deflation. Ranked by gap size (the validated monotone signal).');
+    const moderate = list('⚡ MODERATE — gap 3–5%', t.moderate, 'Smaller gaps — positive but weaker than the ≥5% tier. Ranked by gap size.');
+
+    // Self-validation ledger (forward excess-vs-SPY of logged picks, by tier).
+    let bookPanel = '';
+    if (book && book.ok) {
+      const row = (lbl, s) => !s || !s.n ? '' : `<div class="bt-ic-row"><span>${lbl}</span><span><b>${s.avgExc >= 0 ? '+' : ''}${s.avgExc}%</b> avg excess · ${s.beatRate}% beat (Wilson ${s.wilsonLo}%) · n=${s.n}</span></div>`;
+      const rows = row('Overall', book.overall) + row('STRONG (≥5%)', book.byTier && book.byTier.STRONG) + row('MODERATE (3–5%)', book.byTier && book.byTier.MODERATE);
+      bookPanel = `<div class="rot-panel"><div class="rot-head">📋 Live forward track record <span class="dt-dim">(self-validation)</span></div>
+        <div class="rot-sub">${esc(book.note || '')}</div>
+        ${rows || `<div class="bt-ic-row"><span style="color:var(--text-dim)">${book.resolved || 0} resolved · ${book.stillOpen || 0} open — accrues as picks mature (~${t.horizon} sessions).</span></div>`}</div>`;
+    }
+
+    el.innerHTML = evidence + filtered + howto + strong + moderate + bookPanel;
+    // Wire each card's chart toggle (reuses the shared /api/chart canvas renderer).
+    el.querySelectorAll('.dt-card[data-ticker]').forEach(cardEl => {
+      const tk = cardEl.dataset.ticker;
+      const btn = cardEl.querySelector('[data-chart-toggle]');
+      if (btn) btn.addEventListener('click', () => toggleChart(cardEl, tk));
+    });
+  }
+  document.getElementById('gg-refresh-btn')?.addEventListener('click', runGapGoUI);
 
   // ── 🧬 Coil Radar (pre-explosion: quiet, coiled names BEFORE the move) ──────
   // Flags volatility-contracted, volume-dried-up, NOT-already-run-up names and
