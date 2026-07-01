@@ -1760,3 +1760,20 @@
 .dt-best-card { background: var(--surface); border: 1px solid #f59e0b44; border-radius: 10px; padding: 8px 11px; }
 .dt-best-top { display: flex; align-items: center; gap: 7px; font-size: .95rem; }
 .dt-best-rank { font-weight: 800; color: #f59e0b; font-size: .85rem; }
+
+/* 📡 Market Pulse — trending social/media distillations */
+.pulse-grid { display: grid; gap: 9px; }
+.pulse-card { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid #ec4899; border-radius: 10px; padding: 10px 13px; }
+.pulse-top { display: flex; align-items: baseline; gap: 9px; }
+.pulse-rank { font-weight: 800; color: #ec4899; font-size: .9rem; min-width: 26px; }
+.pulse-head { flex: 1; font-size: .98rem; }
+.pulse-vel { font-size: .78rem; font-weight: 700; white-space: nowrap; }
+.pulse-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 6px 0; font-size: .82rem; }
+.pulse-tk { display: inline-block; background: #ec489922; color: #f9a8d4; border-radius: 5px; padding: 0 6px; font-weight: 700; font-size: .8rem; }
+.pulse-sent { font-weight: 700; }
+.pulse-pop { color: var(--text-dim); }
+.pulse-bars { color: #ec4899; letter-spacing: -1px; }
+.pulse-idea { font-size: .9rem; margin: 3px 0; }
+.pulse-why { font-size: .86rem; color: var(--text-dim); margin: 3px 0; }
+.pulse-caution { font-size: .82rem; color: var(--amber, #f59e0b); margin: 4px 0; }
+.pulse-src { font-size: .78rem; color: var(--text-dim); margin-top: 4px; font-style: italic; }
