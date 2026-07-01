@@ -4307,25 +4307,28 @@
         <li><b>The %.</b> Each name shows the <b>calibrated chance of an abnormal upside break in ~${t.horizonDays} sessions</b> — an <i>honest, backtested number</i> (base rate ~${t.baseRatePct}%), <b>not a hyped "80%"</b>. Top-decile coils break ~1.9× as often as the least-coiled.</li>
         <li><b>How to use it.</b> A coil says a name is <b>primed</b>, not that it <i>will</i> pop — the trigger is usually news/earnings this price model can't see. Use it as a <b>watchlist</b>: set alerts, confirm the breakout on a chart, then act. This is a watchlist, not advice.</li>
       </ol></div>`;
+    const rs = r => r.rankScore == null ? '' : (r.rankScore >= 0 ? '+' : '') + r.rankScore.toFixed(2);
+    const rsColor = r => r.rankScore == null ? 'var(--text-dim)' : r.rankScore > 0.1 ? '#22c55e' : r.rankScore > -0.2 ? '#eab308' : '#9ca3af';
     const card = r => `<div class="dt-card">
         <div class="dt-card-top">
-          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span></span>
-          <span class="dt-now"><b>$${r.price}</b></span>
+          <span><span class="coil-rank" title="Rank by Expected R (calibrated break prob × reward:risk)">#${r.rank}</span> <b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span></span>
+          <span class="dt-now"><span class="dt-dim" style="font-size:.8em">score</span> <b style="color:${rsColor(r)}">${rs(r)}</b></span>
         </div>
         <div class="dt-card-sub" style="display:flex;align-items:center;gap:8px;margin:4px 0 6px">
           <span style="font-size:1.4em;font-weight:800;color:${coilBandColor(r.band)}">${r.explodeProbPct}%</span>
-          <span class="dt-dim">chance to break out (~${t.horizonDays}d) · ${r.lift}× base · <b style="color:${coilBandColor(r.band)}">${esc((r.band || '').toUpperCase())} coil</b> (D${r.prob ? r.prob.decile : ''}/10)</span>
+          <span class="dt-dim">chance to break out (~${t.horizonDays}d) · ${r.lift}× base · <b style="color:${coilBandColor(r.band)}">${esc((r.band || '').toUpperCase())} coil</b> (D${r.decile || ''}/10)</span>
         </div>
+        <div class="dt-card-plan">📈 <b>Breakout plan</b> <span class="dt-dim">(buy the break, not the quiet)</span> — now <b>$${r.price}</b> · enter above <b>$${r.entry}</b> &nbsp;·&nbsp; 🛑 stop <b>$${r.stop}</b> <span class="dt-dim">(−${r.riskPct}%)</span> &nbsp;·&nbsp; 🎯 target <b>$${r.target}</b> <span class="dt-dim">(+${r.rewardPct}%, R:R 1:${r.rr})</span></div>
         <div class="dt-card-sub"><span class="dt-dim">squeeze ${r.metrics.squeezePctile}th pctile · vol ${r.metrics.hvPctile}th pctile · base ${r.metrics.rangeTightPct}% · ATR ${r.metrics.atrRatio}× · 20d ${r.metrics.ret20Pct >= 0 ? '+' : ''}${r.metrics.ret20Pct}%</span></div>
         ${(r.reasons || []).length ? `<ul class="coil-reasons" style="margin:6px 0 0 16px;padding:0;font-size:.86em;color:var(--text-dim,#9ca3af)">${r.reasons.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
       </div>`;
-    const caveat = `<div class="dt-note" style="border-left-color:#a855f7;margin-top:10px"><b>⚠️ Honest edge.</b> ${esc(t.method ? t.method.caveat : '')} The % is a real base rate, not a promise — most of these will stay quiet. Paper-track before sizing.</div>`;
+    const caveat = `<div class="dt-note" style="border-left-color:#a855f7;margin-top:10px"><b>⚠️ Honest edge.</b> ${esc(t.method ? t.method.caveat : '')} The % is a real base rate, not a promise — most of these will stay quiet. <b>Enter</b> is a breakout buy-stop above the coil (not the current price); <b>target</b> is the calibrated ${'≥2.5σ'} break level. <b>Rank score = Expected R</b> = break-prob × reward:risk − 1R on a stop-out — higher = better asymmetry. It's a <i>conservative</i> number (often negative: a ~13% touch-rate needs R:R &gt; 7 to profit purely mechanically, and it charges a full −1R even on names that just drift) — use it to <b>compare</b> setups and take partial profits early. Paper-track before sizing.</div>`;
     el.innerHTML = `${howto}
       ${coilTrackPanel(book)}
       <div style="margin:10px 0">${scopeBtns}</div>
       <div class="rot-panel" style="border-color:#a855f755;background:#a855f70d">
-        <div class="rot-head" style="color:#c084fc">🧬 ${t.namesScanned} names scanned · showing the most-coiled ${t.picks.length}</div>
-        <div class="rot-sub">Sorted by coil strength. The % is each name's calibrated chance of an <b>abnormal</b> upside break (a move ≥2.5× its own volatility) in ~${t.horizonDays} sessions.</div>
+        <div class="rot-head" style="color:#c084fc">🧬 ${t.namesScanned} names scanned · the most-coiled ${t.picks.length}, ranked by trade quality</div>
+        <div class="rot-sub">Filtered to the most-coiled names, then <b>ranked #1..N by Expected R</b> (the calibrated break chance × each name's reward:risk). The % is the calibrated chance of an <b>abnormal</b> upside break (≥2.5× its own volatility) in ~${t.horizonDays} sessions.</div>
       </div>
       <div class="dt-grid" style="margin-top:10px">${(t.picks || []).map(card).join('')}</div>
       ${caveat}`;
