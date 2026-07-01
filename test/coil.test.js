@@ -123,6 +123,18 @@ test('trailingDailyVol: positive for a moving series, null without enough bars',
   assert.equal(trailingDailyVol(c, 5), null);
 });
 
+test('trailingDailyVol: undefined/null input returns null without throwing (coiltick guard)', () => {
+  assert.equal(trailingDailyVol(undefined), null);
+  assert.equal(trailingDailyVol(null), null);
+  assert.equal(trailingDailyVol([]), null);
+});
+
+test('rankCoil: rows carry candles so the ledger tick can compute entry-time vol', () => {
+  const ranked = rankCoil([{ ticker: 'OK', candles: coiled() }], 'small');
+  assert.ok(Array.isArray(ranked[0].candles), 'candles preserved on ranked row');
+  assert.ok(trailingDailyVol(ranked[0].candles) > 0, 'vol computable from the ranked row');
+});
+
 test('resolveBreak: a name that jumps far beyond its own vol RESOLVES as a break', () => {
   // flat quiet history (tiny daily vol) then a +40% pop within the horizon.
   const flat = []; for (let i = 0; i < 30; i++) flat.push({ date: `2026-02-${String(i + 1).padStart(2, '0')}`, close: 100 + (i % 2) * 0.1 });
