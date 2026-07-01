@@ -4731,12 +4731,27 @@
   // ── Trade Alerts (social, ranked by the external-collector pipeline) ──
   let xalertsLoaded = false;
   function ensureXalerts() { if (!xalertsLoaded) { xalertsLoaded = true; fetchXalerts(); } }
+  let xalertsFlashTimer = null;
   async function fetchXalerts() {
     const c = document.getElementById('xalerts-container');
-    const btn = document.getElementById('xalerts-refresh-btn'); if (btn) btn.disabled = true;
+    const btn = document.getElementById('xalerts-refresh-btn');
+    if (xalertsFlashTimer) { clearTimeout(xalertsFlashTimer); xalertsFlashTimer = null; }
+    if (btn) { btn.disabled = true; btn.textContent = '⟳ Refreshing…'; btn.style.color = '#8a6dff'; }
+    let ok = true;
     try { renderXalerts(await (await fetch('/api/tracker?op=alerts')).json()); }
-    catch { c.innerHTML = '<div class="mom-status error"><p>Could not load trade alerts.</p></div>'; }
-    finally { if (btn) btn.disabled = false; }
+    catch { ok = false; c.innerHTML = '<div class="mom-status error"><p>Could not load trade alerts.</p></div>'; }
+    finally {
+      if (btn) {
+        btn.disabled = false;
+        // Brief "✓ Refreshed" flash so the refresh is visibly confirmed even when the
+        // ranked list is unchanged (data only moves when the collector pushes new posts).
+        btn.textContent = ok ? '✓ Refreshed' : '⚠ Retry';
+        btn.style.color = ok ? 'var(--green, #10d98a)' : 'var(--red, #ef5050)';
+        xalertsFlashTimer = setTimeout(() => {
+          btn.textContent = '⟳ Refresh'; btn.style.color = '#8a6dff'; xalertsFlashTimer = null;
+        }, 1400);
+      }
+    }
   }
   function renderXalertsEdge(edge) {
     const el = document.getElementById('xalerts-edge'); if (!el) return;
