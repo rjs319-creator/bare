@@ -38,17 +38,27 @@ def _cache_path(name: str) -> Path:
     return CACHE_DIR / (name + ".json")
 
 
-def _get(url: str, cache_name: str) -> object:
+def _get(url: str, cache_name: str, retries: int = 4) -> object:
     cp = _cache_path(cache_name)
     if cp.exists():
         return json.loads(cp.read_text())
-    time.sleep(_THROTTLE_S)
-    resp = requests.get(url, timeout=30)
-    if resp.status_code != 200:
-        raise RuntimeError(f"FMP {resp.status_code}: {resp.text[:120]}")
-    data = resp.json()
-    cp.write_text(json.dumps(data))
-    return data
+    last = None
+    for attempt in range(retries):
+        time.sleep(_THROTTLE_S * (attempt + 1))          # linear backoff
+        try:
+            resp = requests.get(url, timeout=30)
+        except requests.exceptions.RequestException as ex:  # transient network reset/timeout
+            last = ex
+            continue
+        if resp.status_code == 200:
+            data = resp.json()
+            cp.write_text(json.dumps(data))
+            return data
+        if resp.status_code in (429, 500, 502, 503, 504):   # transient server/rate-limit
+            last = RuntimeError(f"FMP {resp.status_code}: {resp.text[:120]}")
+            continue
+        raise RuntimeError(f"FMP {resp.status_code}: {resp.text[:120]}")  # hard error, don't retry
+    raise RuntimeError(f"FMP request failed after {retries} attempts: {last}")
 
 
 def _norm_daily(rows: list) -> list:
@@ -109,4 +119,33 @@ def group_by_session(bars: list) -> "dict[str, list]":
     out: dict = {}
     for b in bars:
         out.setdefault(b["date"], []).append(b)
+    return out
+
+
+def earnings(symbol: str) -> list:
+    """Historical earnings events for one symbol via stable/earnings — the announcement
+    DATES (retained ~5y on Starter; only the estimate DEPTH is capped ~12mo, which we
+    don't rely on here) plus epsActual/epsEstimated when present.
+
+    Returns [{date, epsActual, epsEstimated, revActual, revEstimated}] ascending,
+    dates only (YYYY-MM-DD). Cached like everything else. Empty list on failure.
+    """
+    url = f"{BASE}/earnings?symbol={symbol}&apikey={_key()}&limit=80"
+    try:
+        rows = _get(url, f"earn_{symbol}")
+    except Exception:
+        return []
+    out = []
+    for r in (rows or []):
+        d = str(r.get("date") or "")[:10]
+        if len(d) != 10:
+            continue
+        out.append({
+            "date": d,
+            "epsActual": r.get("epsActual"),
+            "epsEstimated": r.get("epsEstimated"),
+            "revActual": r.get("revenueActual"),
+            "revEstimated": r.get("revenueEstimated"),
+        })
+    out.sort(key=lambda e: e["date"])
     return out
