@@ -2402,14 +2402,19 @@
     const sum = preset.p1 + preset.p2 + preset.p3 + preset.p4;
     return Math.round((pl.p1 * preset.p1 + pl.p2 * preset.p2 + pl.p3 * preset.p3 + pl.p4 * preset.p4) / sum);
   }
-  // Balance rule: Apex requires no weak pillar AND a confirmed setup.
-  function apexTier(score, pl, c) {
+  // Balance rule: Apex requires no weak pillar AND a confirmed setup. Mirrors
+  // lib/apex.js tierOf (keep in sync). Regime gate: in RISK_OFF the breakout edge
+  // inverts (the app's one durable finding), so cap actionable tiers at 'watch' —
+  // no new apex/loaded LONGS in risk-off, matching the conviction sleeve's gate.
+  function apexTier(score, pl, c, regime) {
     const minP = Math.min(pl.p1, pl.p2, pl.p3, pl.p4);
     const confirmed = c.status === 'Breakout' || c.status === 'Early';
-    if (score >= 72 && minP >= 45 && confirmed) return 'apex';
-    if (score >= 58 && minP >= 35) return 'loaded';
-    if (score >= 45) return 'watch';
-    return null;
+    let tier = null;
+    if (score >= 72 && minP >= 45 && confirmed) tier = 'apex';
+    else if (score >= 58 && minP >= 35) tier = 'loaded';
+    else if (score >= 45) tier = 'watch';
+    if (regime === 'RISK_OFF' && (tier === 'apex' || tier === 'loaded')) tier = 'watch';
+    return tier;
   }
   // Risk-Off threshold tightening: stronger volume confirmation + 2× liquidity.
   function apexRegimeFilter(list, regime) {
@@ -2508,7 +2513,7 @@
       let cands = [];
       wanted.forEach(s => { const d = byScope[s]; if (d && Array.isArray(d.results)) cands.push(...d.results.map(c => ({ ...c, _scope: s }))); });
       cands = apexRegimeFilter(cands, regime);
-      cands.forEach(c => { c._pl = apexPillars(c); c._apex = apexComposite(c._pl, preset); c._tier = apexTier(c._apex, c._pl, c); });
+      cands.forEach(c => { c._pl = apexPillars(c); c._apex = apexComposite(c._pl, preset); c._tier = apexTier(c._apex, c._pl, c, regime); });
 
       const seen = {}, deduped = [];
       cands.filter(c => c._tier).sort((a, b) => b._apex - a._apex).forEach(c => { if (!seen[c.ticker]) { seen[c.ticker] = 1; deduped.push(c); } });
@@ -2537,7 +2542,7 @@
 
     if (!show.length) {
       const why = regime === 'RISK_OFF'
-        ? ' — the volume/liquidity gates tighten in weak tapes, by design'
+        ? ' — the breakout edge inverts in risk-off, so no new Apex/Loaded longs are surfaced (tiers are capped at Watch) and volume/liquidity gates tighten, by design'
         : '';
       container.innerHTML = `<div class="mom-status"><p>No names cleared the Apex model in the <b>${APEX_RG_LABEL[regime]}</b> regime${why}. Try a broader scope or a looser tier filter.</p></div>`;
       return;
@@ -2548,6 +2553,12 @@
       ['watch', '👁 Watch', 'On the radar — building, not yet confirmed'],
     ];
     container.innerHTML = '';
+    if (regime === 'RISK_OFF') {
+      const rb = document.createElement('div');
+      rb.className = 'regime-banner';
+      rb.innerHTML = `<span class="rb-ic">🛑</span><div class="rb-body"><b>Risk-off regime — no new Apex/Loaded longs.</b> The breakout edge inverts in risk-off (the app's one durable, backtested finding), so actionable tiers are capped at Watch. Names below are informational only.</div>`;
+      container.appendChild(rb);
+    }
     container.appendChild(buildApexPortfolio(list)); // Apex+Loaded exposure + sizing (ignores tier filter)
     groups.forEach(([tier, name, sub]) => {
       const items = show.filter(c => c._tier === tier);

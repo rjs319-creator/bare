@@ -388,7 +388,14 @@ module.exports = async function handler(req, res) {
       bearish: !!(regime && regime.bearish) || macroRiskOff,
       riskOn: !!(regime && regime.riskOn) && (!macro || macro.riskOn),
     };
-    const ghostResult = runGhostAccumulationIndex(candidates, ghostRegimeInput, {
+    // GAI + conviction are scored over the FULL scanned cross-section (`valid`),
+    // NOT the ~28-name display buffer. The walk-forward harness that validated the
+    // conviction ranker defines "top-quintile" over the whole cohort, so scoring
+    // only the pre-sorted buffer here would ship a DIFFERENT ranker than the one
+    // back-tested (train/serve skew). Pillar percentiles are already cross-sectional
+    // over `valid`; only the buffer carries real BONUS/IN enrichment — the rest use
+    // neutral 50, exactly as the harness pins those pillars where no feed exists.
+    const ghostResult = runGhostAccumulationIndex(valid, ghostRegimeInput, {
       killSwitch: !!(regime && regime.bearish) || macroRiskOff,
     });
     const ghostByTicker = {};
@@ -398,23 +405,25 @@ module.exports = async function handler(req, res) {
     candidates.forEach(c => { c.ghost = ghostByTicker[c.ticker] || null; });
 
     // ── Conviction score (Edge Book · Sleeve A) — the regime-gated ranker the
-    //    walk-forward harness validated (momentum core + BONUS, IN dropped),
-    //    computed LIVE over the GAI pillars. Sleeve A = top-quintile conviction
-    //    names, long-eligible only when the regime gate allows (not risk-off).
+    //    walk-forward harness validated (momentum core + BONUS, IN dropped).
+    //    Sleeve A = top-quintile conviction across the FULL cross-section (the same
+    //    denominator the harness used), long-eligible only when the regime gate
+    //    allows (not risk-off). The displayed candidates then read their percentile
+    //    off this whole-cohort distribution.
     const convRegime = ghostResult.regime;
     const convCanLong = longOk(convRegime);
-    const convVals = [];
-    candidates.forEach(c => {
-      const score = c.ghost ? convictionScore(c.ghost.pillars, convRegime) : null;
-      c.conviction = score != null ? { score } : null;
-      if (score != null) convVals.push(score);
-    });
-    const convSorted = [...convVals].sort((a, b) => a - b);
+    const convAll = [];
+    for (const g of ghostResult.longs) {
+      const score = convictionScore(g.pillars, convRegime);
+      if (score != null) convAll.push(score);
+    }
+    const convSorted = convAll.sort((a, b) => a - b);
     const convPctile = x => { if (!convSorted.length) return null; let lo = 0, hi = convSorted.length; while (lo < hi) { const m = (lo + hi) >> 1; if (convSorted[m] <= x) lo = m + 1; else hi = m; } return Math.round((lo / convSorted.length) * 100); };
     candidates.forEach(c => {
-      if (!c.conviction) return;
-      c.conviction.pctile = convPctile(c.conviction.score);
-      c.conviction.sleeveA = convCanLong && c.conviction.pctile >= 80;   // top quintile, long-eligible
+      const score = c.ghost ? convictionScore(c.ghost.pillars, convRegime) : null;
+      if (score == null) { c.conviction = null; return; }
+      const pctile = convPctile(score);
+      c.conviction = { score, pctile, sleeveA: convCanLong && pctile >= 80 };   // top quintile of the full cohort, long-eligible
     });
 
     // Fresh for 15m; then serve the STALE cached response INSTANTLY for up to a
