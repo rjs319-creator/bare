@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { coilFeatures, scoreCohort, explodeProbability, rankCoil, CALIBRATION, trailingDailyVol, resolveBreak } = require('../lib/coil');
+const { coilFeatures, scoreCohort, explodeProbability, rankCoil, CALIBRATION, trailingDailyVol, resolveBreak, coilTradePlan } = require('../lib/coil');
 
 // Build a synthetic candle series. `spec` is an array of {c, h, l, v} (defaults derive h/l from c).
 function series(spec) {
@@ -133,6 +133,36 @@ test('rankCoil: rows carry candles so the ledger tick can compute entry-time vol
   const ranked = rankCoil([{ ticker: 'OK', candles: coiled() }], 'small');
   assert.ok(Array.isArray(ranked[0].candles), 'candles preserved on ranked row');
   assert.ok(trailingDailyVol(ranked[0].candles) > 0, 'vol computable from the ranked row');
+});
+
+// ── Trade plan + rank score ──
+test('coilTradePlan: entry is a breakout above current price, stop below it, target above entry', () => {
+  const c = coiled();
+  const p = coilTradePlan(c, c.length - 1, 12.6);
+  assert.ok(p, 'plan computed');
+  assert.ok(p.entry >= p.current, 'entry is a breakout trigger at/above current price');
+  assert.ok(p.stop < p.entry, 'stop below entry');
+  assert.ok(p.target > p.entry, 'target above entry');
+  assert.ok(p.rr > 0 && p.riskPct > 0, 'positive risk and reward:risk');
+  assert.ok(Object.isFrozen(p), 'plan is immutable');
+});
+
+test('coilTradePlan: rank score (expected R) rises with break probability', () => {
+  const c = coiled();
+  const lo = coilTradePlan(c, c.length - 1, 5).expR;
+  const hi = coilTradePlan(c, c.length - 1, 25).expR;
+  assert.ok(hi > lo, `higher break prob → higher expected R (${hi} > ${lo})`);
+});
+
+test('coilTradePlan: null probability yields a plan with no rank score (never fabricated)', () => {
+  const p = coilTradePlan(coiled(), undefined, null);
+  assert.ok(p && p.entry > 0);
+  assert.equal(p.expR, null);
+});
+
+test('coilTradePlan: guards short/empty input', () => {
+  assert.equal(coilTradePlan([], 0, 10), null);
+  assert.equal(coilTradePlan(coiled(15), 14, 10), null);
 });
 
 test('resolveBreak: a name that jumps far beyond its own vol RESOLVES as a break', () => {
