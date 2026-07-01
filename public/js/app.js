@@ -1106,21 +1106,28 @@
   ];
 
   // ── Tunable per-tier quant weights with named presets ──
+  // Accumulation (accum) + up/down volume (ud) carry real forward-return edge in
+  // this project's research; base-quality (base) + volume-surge (vol) are DEAD, so
+  // the default zeroes them and routes their weight to accum/ud. base/vol stay in
+  // the panel so users can opt back into the classic breakout view (Base-heavy
+  // preset). Keep SCR_DEFAULT_W in sync with DEFAULT_WEIGHTS in api/screener.js.
   const SCR_FACTORS = [
     ['rs',     'Relative Strength'],
     ['mom',    'Momentum'],
     ['trend',  'Trend Template'],
     ['volAdj', 'Vol-Adj Mom'],
+    ['accum',  'Accumulation'],
+    ['ud',     'Up/Down Vol'],
+    ['prox',   'Proximity'],
     ['base',   'Base Quality'],
     ['vol',    'Volume Surge'],
-    ['prox',   'Proximity'],
   ];
-  const SCR_DEFAULT_W = { rs: 22, mom: 20, trend: 18, volAdj: 16, base: 12, vol: 8, prox: 4 };
+  const SCR_DEFAULT_W = { rs: 22, mom: 20, trend: 16, volAdj: 14, accum: 12, ud: 10, prox: 6, base: 0, vol: 0 };
   const BUILTIN_PRESETS = {
-    'Balanced':        { rs: 22, mom: 20, trend: 18, volAdj: 16, base: 12, vol: 8, prox: 4 },
-    'Momentum':        { rs: 28, mom: 30, trend: 14, volAdj: 12, base: 6,  vol: 6,  prox: 4 },
-    'Base-heavy':      { rs: 12, mom: 10, trend: 14, volAdj: 12, base: 30, vol: 16, prox: 6 },
-    'Trend-following': { rs: 18, mom: 14, trend: 30, volAdj: 18, base: 10, vol: 6,  prox: 4 },
+    'Balanced':        { rs: 22, mom: 20, trend: 16, volAdj: 14, accum: 12, ud: 10, prox: 6, base: 0,  vol: 0 },
+    'Momentum':        { rs: 26, mom: 28, trend: 12, volAdj: 12, accum: 8,  ud: 6,  prox: 8, base: 0,  vol: 0 },
+    'Base-heavy':      { rs: 12, mom: 10, trend: 14, volAdj: 12, accum: 8,  ud: 6,  prox: 6, base: 24, vol: 8 },
+    'Trend-following': { rs: 18, mom: 14, trend: 28, volAdj: 16, accum: 8,  ud: 4,  prox: 8, base: 4,  vol: 0 },
   };
   const TIERS = ['large', 'small', 'micro'];
   const TIER_LABEL = { large: 'Large', small: 'Small', micro: 'Micro' };
@@ -1184,12 +1191,13 @@
     if (scrEmerg) arr = arr.filter(c => c.emergingLeader);
     if (scrMomMin > 0) arr = arr.filter(c => c.factors && c.factors.mom63 != null && c.factors.mom63 >= scrMomMin);
     const md = getModel(scope);
+    // Rank purely by strength — NOT breakouts-first (breakout PF < 1 in this
+    // project's research). A confirmed breakout is a badge, not a sort key.
     if (scrModelRank && md) {
       arr = arr.map(c => ({ ...c, _prob: modelProb(c) ?? -1 }));
-      arr.sort((a, b) => { if (a.qualifies !== b.qualifies) return a.qualifies ? -1 : 1; return b._prob - a._prob; });
+      arr.sort((a, b) => b._prob - a._prob);
     } else {
       arr.sort((a, b) => {
-        if (a.qualifies !== b.qualifies) return a.qualifies ? -1 : 1;
         if (b._score !== a._score) return b._score - a._score;
         return (b.narrativeStrength || 0) - (a.narrativeStrength || 0);
       });

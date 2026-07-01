@@ -56,10 +56,16 @@ function attachPercentiles(items, getters) {
   }
 }
 
-// Default composite weighting a momentum/breakout quant desk would use (the
-// client can override these live via the Tune panel). Relative strength leads
-// (O'Neil), trend + vol-adjusted momentum next, accumulation base quality up.
-const DEFAULT_WEIGHTS = { rs: 22, mom: 20, trend: 18, volAdj: 16, base: 12, vol: 8, prox: 4 };
+// Default composite weighting (the client can override live via the Tune panel).
+// This project's own edge research found the DEAD factors — volume-surge (`vol`,
+// rank-IC ≈ −0.004) and base-quality/VCP (`base`) — carry no forward-return edge,
+// while accumulation ratio (`accum`, IC ~0.075) and up/down volume (`ud`, ~0.071)
+// DO. So the default now zeroes base+vol and routes their weight to accum+ud
+// alongside the validated momentum family (rs/mom/trend/volAdj/prox). base+vol are
+// kept in the shape (weight 0) so the Tune panel can still expose them and a user
+// can opt back into the classic breakout view. Keep in sync with SCR_DEFAULT_W in
+// public/js/app.js.
+const DEFAULT_WEIGHTS = { rs: 22, mom: 20, trend: 16, volAdj: 14, accum: 12, ud: 10, prox: 6, base: 0, vol: 0 };
 
 // Cross-sectional percentile components for one name (0-100 each).
 function pctComponents(it) {
@@ -327,13 +333,13 @@ module.exports = async function handler(req, res) {
     });
     valid.forEach(c => { c.pct = pctComponents(c); c.quant = { score: composite(c.pct, DEFAULT_WEIGHTS) }; });
 
-    // 3. Keep breakouts/setups, rank by default composite (breakouts first).
-    //    Return a buffer beyond `cap` so client re-weighting can swap names in.
+    // 3. Keep breakouts/setups, rank PURELY by the (cleaned) quant composite —
+    //    NOT breakouts-first. This project's own research found breakout PF < 1,
+    //    so a confirmed breakout is a metadata BADGE (c.qualifies), not a sort key;
+    //    momentum/accumulation strength orders the list. Return a buffer beyond
+    //    `cap` so client re-weighting can swap names in.
     const buffer = cap + (isSmallScope ? 6 : 8);
-    let candidates = valid.filter(c => c.include).sort((a, b) => {
-      if (a.qualifies !== b.qualifies) return a.qualifies ? -1 : 1;
-      return b.quant.score - a.quant.score;
-    }).slice(0, buffer);
+    let candidates = valid.filter(c => c.include).sort((a, b) => b.quant.score - a.quant.score).slice(0, buffer);
 
     // 4. Enrich candidates — LLM narrative + real fundamentals + insider data —
     //    ALL IN PARALLEL (independent calls). Previously serialized, which made a
