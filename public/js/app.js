@@ -4416,7 +4416,12 @@
   const timingTimers = {};
   function renderTimingBadge(card, t) {
     let slot = card.querySelector('[data-timing]');
-    if (!slot) { slot = document.createElement('span'); slot.setAttribute('data-timing', ''); (card.querySelector('.dt-card-top span') || card).appendChild(slot); }
+    if (!slot) {
+      slot = document.createElement('span'); slot.setAttribute('data-timing', ''); slot.style.marginLeft = '6px';
+      // Host the badge near the ticker on whichever card type this is.
+      const host = card.querySelector('.dt-card-top span') || card.querySelector('.cx-tk-row') || card;
+      host.appendChild(slot);
+    }
     if (!t || t.score == null) {
       const lbl = t && t.label ? t.label : '—';
       slot.innerHTML = `<span class="timing-light" style="border:1px solid ${TIMING_COL.grey};color:${TIMING_COL.grey}" title="${esc((t && t.reasons || []).join(' · '))}">${(t && t.emoji) || '⚪'} timing —</span>`;
@@ -4427,8 +4432,10 @@
     slot.innerHTML = `<span class="timing-light" style="border:1px solid ${col};color:${col};background:${col}1a" title="${esc(tip)}">${t.emoji} ${t.score}/10</span>`;
   }
   // picks = [{ticker, stop?, target?, trigger?, avgVol?}]; `key` scopes the 20-min timer.
-  async function attachTimingLights(containerEl, picks, key) {
+  // `findCard(ticker)` optionally locates the card element (default: a .dt-card[data-ticker]).
+  async function attachTimingLights(containerEl, picks, key, findCard) {
     if (!containerEl || !picks || !picks.length) return;
+    const locate = findCard || (tk => containerEl.querySelector(`.dt-card[data-ticker="${tk}"]`));
     if (timingTimers[key]) { clearInterval(timingTimers[key]); timingTimers[key] = null; }
     // One-time legend so the badge is self-explanatory on any tab that uses it.
     if (!containerEl.querySelector('.timing-legend')) {
@@ -4446,7 +4453,7 @@
         const j = await res.json();
         if (!j || !j.ok) return;
         picks.forEach(p => {
-          const card = containerEl.querySelector(`.dt-card[data-ticker="${p.ticker}"]`);
+          const card = locate(p.ticker);
           if (card) renderTimingBadge(card, j.timing[p.ticker.toUpperCase()]);
         });
       } catch { /* keep last good lights */ }
@@ -4784,6 +4791,15 @@
     const grid = document.createElement('div'); grid.className = 'scr-grid';
     ranked.forEach(r => grid.appendChild(buildXalertCard(r)));
     c.appendChild(grid);
+    // ⏱️ Entry-timing light — buy-side only (bullish alerts); uses the trader's stated
+    // stop/target for R:R when present, else VWAP/extension/volume alone.
+    const bullish = ranked.filter(r => r.direction === 'bullish' && r.ticker).map(r => ({
+      ticker: r.ticker, stop: r.levels && r.levels.stop, target: r.levels && r.levels.target,
+    }));
+    attachTimingLights(c, bullish, 'xalerts', tk => {
+      const el = grid.querySelector(`.cx-ticker[data-live="${tk}"]`);
+      return el ? el.closest('.cx-card') : null;
+    });
   }
   const ALERT_CATALYST = { earnings: '📅 Earnings', fda: '🧪 FDA/Trial', breakout: '🚀 Breakout', 'm&a': '🤝 M&A', squeeze: '🩳 Squeeze', analyst: '📊 Analyst', insider: '🏛 Insider', technical: '📈 Technical' };
   const ALERT_TF = { day: '⏱ Day trade', swing: '📆 Swing', long: '🗓 Long-term' };
