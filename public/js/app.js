@@ -2049,10 +2049,12 @@
   }
 
   function buildScrCard(c, idx) {
-    const st = c.status || 'Setup';
+    // Emerging-leader admitted names have no base-pattern status (status=null) —
+    // label them as such rather than defaulting to a misleading "Setup".
+    const st = c.status || (c.emergingLeader ? 'Emerging' : 'Setup');
     const isBreakout = st === 'Breakout';
-    const cls = st.toLowerCase(); // breakout | setup | early
-    const stLabel = st === 'Breakout' ? '🚀 Breakout' : st === 'Early' ? '🌱 Early' : '⏳ Setup';
+    const cls = st === 'Emerging' ? 'early' : st.toLowerCase(); // breakout | setup | early
+    const stLabel = st === 'Breakout' ? '🚀 Breakout' : st === 'Early' ? '🌱 Early' : st === 'Emerging' ? '🌱 Emerging Leader' : '⏳ Setup';
     const up = (c.changePct ?? 0) >= 0;
     const q = c.pct || {};
     const score = c._score ?? c.quant?.score ?? 0;

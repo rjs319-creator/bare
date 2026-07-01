@@ -333,13 +333,44 @@ module.exports = async function handler(req, res) {
     });
     valid.forEach(c => { c.pct = pctComponents(c); c.quant = { score: composite(c.pct, DEFAULT_WEIGHTS) }; });
 
-    // 3. Keep breakouts/setups, rank PURELY by the (cleaned) quant composite —
-    //    NOT breakouts-first. This project's own research found breakout PF < 1,
-    //    so a confirmed breakout is a metadata BADGE (c.qualifies), not a sort key;
-    //    momentum/accumulation strength orders the list. Return a buffer beyond
-    //    `cap` so client re-weighting can swap names in.
+    // ── Market regime (large/unfiltered only): SPY vs 200-DMA + breadth ──
+    // Computed BEFORE selection so the emerging-leader admission (below) can be
+    // regime-gated. Blended with the VIX/credit MACRO layer (leads the index).
+    let regime = null;
+    if (!isSmallScope && sectorFilter === 'all' && exchangeFilter === 'ALL') {
+      let indexAbove200 = null;
+      if (spyCandles) { const cl = spyCandles.map(x => x.close), li = cl.length - 1, s200 = smaAt(cl, 200, li); indexAbove200 = s200 != null ? cl[li] > s200 : null; }
+      const breadthPct = valid.length ? Math.round((valid.filter(c => c.above50).length / valid.length) * 100) : null;
+      // Bearish regime: SPY below its 200-DMA OR fewer than 40% of names above
+      // their 50-DMA. Breakouts fail at much higher rates here, so the UI warns
+      // and downgrades long breakout scores when this is true.
+      const bearish = indexAbove200 === false || (breadthPct != null && breadthPct < 40);
+      regime = {
+        indexAbove200,
+        breadthPct,
+        bearish,
+        riskOn: indexAbove200 === true && (breadthPct == null || breadthPct >= 45),
+      };
+    }
+    // Macro (VIX + credit) — the promise was kicked off early; resolves once.
+    let macro = null;
+    try { macro = await macroPromise; } catch {}
+    const macroRiskOff = !!(macro && macro.riskOff);
+
+    // 3. Select the display buffer, ranked PURELY by the (cleaned) quant composite —
+    //    NOT breakouts-first (breakout PF < 1 in this project's research), so a
+    //    confirmed breakout is a metadata BADGE (c.qualifies), not a sort key.
+    //    ADMISSION (item 5): also admit emergingLeader names — fresh RS leadership +
+    //    accumulation, not extended, built only on validated factors — that lack a
+    //    base-pattern status. Gated by the 5y admission backtest (lib/emerging.js):
+    //    LARGE only (small/micro incremental names backtested NEGATIVE — the
+    //    falling-knife archetype the detector can't distinguish) and only OUTSIDE
+    //    risk-off (the +1.5% incremental fwd excess fades risk-off). Return a buffer
+    //    beyond `cap` so client re-weighting can swap names in.
+    const admitEmerging = !isSmallScope && !(!!(regime && regime.bearish) || macroRiskOff);
     const buffer = cap + (isSmallScope ? 6 : 8);
-    let candidates = valid.filter(c => c.include).sort((a, b) => b.quant.score - a.quant.score).slice(0, buffer);
+    let candidates = valid.filter(c => c.include || (admitEmerging && c.emergingLeader))
+      .sort((a, b) => b.quant.score - a.quant.score).slice(0, buffer);
 
     // 4. Enrich candidates — LLM narrative + real fundamentals + insider data —
     //    ALL IN PARALLEL (independent calls). Previously serialized, which made a
@@ -360,31 +391,9 @@ module.exports = async function handler(req, res) {
       narrative: c.narrative, narrativeStrength: c.narrativeStrength, theme: c.theme,
     }));
 
-    // ── Market regime (large/unfiltered only): SPY vs 200-DMA + breadth ──
-    let regime = null;
-    if (!isSmallScope && sectorFilter === 'all' && exchangeFilter === 'ALL') {
-      let indexAbove200 = null;
-      if (spyCandles) { const cl = spyCandles.map(x => x.close), li = cl.length - 1, s200 = smaAt(cl, 200, li); indexAbove200 = s200 != null ? cl[li] > s200 : null; }
-      const breadthPct = valid.length ? Math.round((valid.filter(c => c.above50).length / valid.length) * 100) : null;
-      // Bearish regime: SPY below its 200-DMA OR fewer than 40% of names above
-      // their 50-DMA. Breakouts fail at much higher rates here, so the UI warns
-      // and downgrades long breakout scores when this is true.
-      const bearish = indexAbove200 === false || (breadthPct != null && breadthPct < 40);
-      regime = {
-        indexAbove200,
-        breadthPct,
-        bearish,
-        riskOn: indexAbove200 === true && (breadthPct == null || breadthPct >= 45),
-      };
-    }
-
     // ── Ghost Accumulation Index (GAI) — score the candidate pool through an
     //    accumulation lens, server-side (single source of truth in lib/ghost.js).
-    //    Regime now blends the SPY-trend read with the VIX/credit MACRO layer
-    //    (leads the index), and risk-off flips the kill switch (tiers downgraded).
-    let macro = null;
-    try { macro = await macroPromise; } catch {}
-    const macroRiskOff = !!(macro && macro.riskOff);
+    //    `regime` + `macro`/`macroRiskOff` were computed ABOVE (before selection).
     // Market TAPE (trend vs chop) from SPY efficiency ratio — breakouts fail in
     // choppy tapes too, so the UI downgrades them there (in addition to bearish).
     if (regime && spyCandles) {

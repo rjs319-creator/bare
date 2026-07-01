@@ -31,7 +31,7 @@ const { runAlertsIngest, runAlerts, runAlertsGrade } = require('../lib/alerts-ro
 const { runArchive, runInsiderIngest, runInsider, runFundBuild, runFundamentals,
         runCernTickOp, runCern, runCernFsProbe, runCernLockProbe } = require('../lib/capture-routes');
 const { runTrack, runScoreboard, runApexLog, runGhostLog, runEdgeLog, runEdgeBook, runVReversal, runVReversalTest,
-        runDrift, runRecalibrate, runResearchOp, runExitsOp, runLongShortOp, runPeadOp, runBackfillOp, runModel, runNarrative, runMoverStudyOp } = require('../lib/apex-routes');
+        runDrift, runRecalibrate, runResearchOp, runExitsOp, runEmergingOp, runLongShortOp, runPeadOp, runBackfillOp, runModel, runNarrative, runMoverStudyOp } = require('../lib/apex-routes');
 const { runHealth } = require('../lib/health');
 const { runLeaderboard, runLeaderboardTick } = require('../lib/leaderboard');
 const { runCoreBuild, runCore, runCoreLog, runCoreDrift, runCorePerf } = require('../lib/stablecore-routes');
@@ -98,6 +98,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'research') return runResearchOp(req, res);
   if (req.query.op === 'moverstudy') return runMoverStudyOp(req, res);
   if (req.query.op === 'exits') return runExitsOp(req, res);
+  if (req.query.op === 'emerging') return runEmergingOp(req, res);
   if (req.query.op === 'longshort') return runLongShortOp(req, res);
   if (req.query.op === 'pead') return runPeadOp(req, res);
   if (req.query.op === 'alertsingest') return runAlertsIngest(req, res);
