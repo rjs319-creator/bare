@@ -26,7 +26,7 @@ const { runFadeOpt, runFadeSeed, runFadeSignals, runFadeTick, runFadeBook,
         runConfluence, runConfluenceTick, runConfluenceBook, runConfluenceOpt,
         runCoil, runCoilTick, runCoilBook,
         runGapGo, runGapGoTick, runGapGoBook,
-        runTiming } = require('../lib/screener-routes');
+        runTiming, runTimingLog, runTimingBook, runTimingTune } = require('../lib/screener-routes');
 const { runAlertsIngest, runAlerts, runAlertsGrade } = require('../lib/alerts-routes');
 const { runArchive, runInsiderIngest, runInsider, runFundBuild, runFundamentals,
         runCernTickOp, runCern, runCernFsProbe, runCernLockProbe } = require('../lib/capture-routes');
@@ -60,6 +60,9 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'gapgotick') return runGapGoTick(req, res);
   if (req.query.op === 'gapgobook') return runGapGoBook(req, res);
   if (req.query.op === 'timing') return runTiming(req, res);
+  if (req.query.op === 'timinglog') return runTimingLog(req, res);
+  if (req.query.op === 'timingbook') return runTimingBook(req, res);
+  if (req.query.op === 'timingtune') return runTimingTune(req, res);
   if (req.query.op === 'confluence') return runConfluence(req, res);
   if (req.query.op === 'confluencetick') return runConfluenceTick(req, res);
   if (req.query.op === 'confluencebook') return runConfluenceBook(req, res);
