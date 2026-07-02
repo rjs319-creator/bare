@@ -7,6 +7,10 @@ const { convictionScore, convictionWeights, longOk } = require('../lib/convictio
 const { fetchMacro } = require('../lib/macro');
 const { loadCandleCache, cacheState, cacheGet, saveCandleCache } = require('../lib/candle-cache');
 const { readJSON, writeJSON, hasStore } = require('../lib/store');
+const { fetchShortInterest, siFlag } = require('../lib/shortinterest');
+
+// Union universe, for shrinking the FINRA short-interest payload to names we screen.
+const UNIVERSE_SET = new Set([...LARGE, ...SMALL_CAPS, ...MICRO_CAPS]);
 
 const NARRATIVE_TOOL = {
   name: 'submit_narratives',
@@ -376,8 +380,14 @@ module.exports = async function handler(req, res) {
     //    ALL IN PARALLEL (independent calls). Previously serialized, which made a
     //    cold screener ~26s once picks started flowing; parallel cuts it to ~the
     //    slowest single leg. Fundamentals + insider attach to the pre-map objects.
+    // Short interest fetched in parallel with enrichment (cached/memoized, ~free after
+    // first). It's a SOFT AVOIDANCE FLAG only (research/26-si: high SI% is a significant
+    // negative predictor but short-side + regime-fragile) — it is NOT fed into the
+    // validated quant/GAI composites; it only annotates the displayed cards.
+    const siPromise = fetchShortInterest(UNIVERSE_SET).catch(() => null);
     await enrichCandidates(candidates, isWarm, scope);
     mark.enrich = Date.now() - reqT0;
+    const siData = await siPromise;
     candidates = candidates.map(c => ({
       ticker: c.ticker, company: c.company, capTier: c.capTier,
       sector: c.sector, exchange: c.exchange, aboveSma200: c.aboveSma200,
@@ -388,8 +398,10 @@ module.exports = async function handler(req, res) {
       metrics: c.metrics, levels: c.levels, factors: c.factors,
       pct: c.pct, quant: c.quant, reasons: c.reasons,
       fundamentals: c.fundamentals || null, insider: c.insider || null,
+      shortInterest: siData ? siFlag(siData.bySymbol[c.ticker.toUpperCase()], c.fundamentals && c.fundamentals.sharesOut) : null,
       narrative: c.narrative, narrativeStrength: c.narrativeStrength, theme: c.theme,
     }));
+    const shortInterestAsOf = siData ? siData.settlementDate : null;
 
     // ── Ghost Accumulation Index (GAI) — score the candidate pool through an
     //    accumulation lens, server-side (single source of truth in lib/ghost.js).
@@ -463,6 +475,7 @@ module.exports = async function handler(req, res) {
       timings: { cacheLoadMs: mark.cacheLoad, scanMs: mark.scan, enrichMs: (mark.enrich || 0) - (mark.scan || 0), totalMs: Date.now() - reqT0 },
       results: candidates,
       defaultWeights: DEFAULT_WEIGHTS,
+      shortInterestAsOf,
       scannedCount: valid.length,
       breakoutCount: valid.filter(c => c.qualifies).length,
       narrativeEnabled: candidates.some(c => c.narrative),

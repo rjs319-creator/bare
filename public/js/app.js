@@ -1189,6 +1189,7 @@
     arr = arr.filter(c => !isSignalDisabled('screener', c.status)); // hide tiers disabled on the scoreboard
     if (scrHC) arr = arr.filter(isHighConviction);
     if (scrEmerg) arr = arr.filter(c => c.emergingLeader);
+    if (scrHideHighSI) arr = arr.filter(c => !(c.shortInterest && c.shortInterest.level === 'high'));
     if (scrMomMin > 0) arr = arr.filter(c => c.factors && c.factors.mom63 != null && c.factors.mom63 >= scrMomMin);
     const md = getModel(scope);
     // Rank purely by strength — NOT breakouts-first (breakout PF < 1 in this
@@ -1353,6 +1354,7 @@
 
   // ── Learned factor model (per scope) ──
   let scrModelRank = false; try { scrModelRank = localStorage.getItem('scrModelRank') === '1'; } catch {}
+  let scrHideHighSI = false; try { scrHideHighSI = localStorage.getItem('scrHideHighSI') === '1'; } catch {}
   const MODEL_RELIABLE = 0.53; // OOS AUC threshold to trust the model
   const loadModelMap = () => { try { const m = JSON.parse(localStorage.getItem('hcModelByScope')); if (m && typeof m === 'object') return m; } catch {} return {}; };
   function getModel(scope) { return loadModelMap()[scope] || null; }
@@ -1441,6 +1443,16 @@
         scrModelRank = !scrModelRank;
         try { localStorage.setItem('scrModelRank', scrModelRank ? '1' : '0'); } catch {}
         mb.classList.toggle('active', scrModelRank);
+        HC_SCOPES.forEach(rankAndRender);
+      });
+    }
+    const sib = document.getElementById('scr-hidesi-toggle');
+    if (sib) {
+      sib.classList.toggle('active', scrHideHighSI);
+      sib.addEventListener('click', () => {
+        scrHideHighSI = !scrHideHighSI;
+        try { localStorage.setItem('scrHideHighSI', scrHideHighSI ? '1' : '0'); } catch {}
+        sib.classList.toggle('active', scrHideHighSI);
         HC_SCOPES.forEach(rankAndRender);
       });
     }
@@ -2101,6 +2113,13 @@
     if (mm.udVol != null && mm.udVol >= 1.3) tags.push(['ud', `U/D ${mm.udVol}×`]);
     const fd = c.fundamentals;
     if (fd && fd.earningsInDays != null && fd.earningsInDays >= 0 && fd.earningsInDays <= 10) tags.push(['earn', `⚠ Earnings ${fd.earningsInDays}d`]);
+    // Short-interest flag — a soft AVOIDANCE badge (high SI% = significant negative
+    // predictor, but short-side + regime-fragile; opt-in filter, never a hard gate).
+    const si = c.shortInterest;
+    if (si && si.level) {
+      const lbl = si.pct != null ? `${si.pct}%` : (si.dtc != null ? `${si.dtc}d DTC` : '');
+      tags.push(['si' + (si.level === 'high' ? ' hi' : ''), `🩳 ${si.level === 'high' ? 'High ' : ''}SI ${lbl}`]);
+    }
     const tagsHtml = tags.length ? `<div class="scr-tags">${tags.map(([k, t]) => `<span class="scr-tag ${k}">${esc(t)}</span>`).join('')}</div>` : '';
     const liq = liquidityHazard(c);
     const liqHtml = liq ? `<div class="scr-liq ${liq.cls}" title="${esc(liq.title)}"><span class="scr-liq-ic">🩸</span>${esc(liq.label)}</div>` : '';
@@ -4491,13 +4510,26 @@
   // continue). The first deflation-surviving event edge; ORB entry plan attached.
   let gapgoLoaded = false;
   function ensureGapGo() { if (!gapgoLoaded) { gapgoLoaded = true; runGapGoUI(); } }
+  let ggSkipFade = false; try { ggSkipFade = localStorage.getItem('ggSkipFade') === '1'; } catch {}
+  // Gap-cause badge (research/27 pilot): offering/M&A FADE (red), FDA/guidance/contract
+  // CONTINUE (green), else neutral. No badge for newsless gaps (the common case).
+  const GG_CAUSE = {
+    FADE_OFFERING: ['🩳 Offering', 'fade'], MA: ['🤝 Buyout', 'fade'],
+    FDA: ['🧪 FDA', 'cont'], CONTRACT: ['📝 Contract', 'cont'], GUIDE: ['📈 Guidance', 'cont'],
+    OTHER: ['📰 News', 'dim'],
+  };
+  function ggCauseBadge(cause) {
+    const c = GG_CAUSE[cause]; if (!c) return '';
+    const color = c[1] === 'fade' ? '#ef4444' : c[1] === 'cont' ? '#22c55e' : 'var(--text-dim)';
+    return ` <span class="gg-cause" style="color:${color};border:1px solid ${color}44;border-radius:4px;padding:1px 5px;font-size:0.6rem;font-weight:800">${c[0]}</span>`;
+  }
   async function runGapGoUI() {
     const el = document.getElementById('gg-container');
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning today's unscheduled gappers…</p></div>`;
     try {
       const [t, book] = await Promise.all([
-        fetch('/api/tracker?op=gapgo').then(r => r.json()),
+        fetch('/api/tracker?op=gapgo' + (ggSkipFade ? '&skipfade=1' : '')).then(r => r.json()),
         fetch('/api/tracker?op=gapgobook').then(r => r.json()).catch(() => null),
       ]);
       renderGapGo(t, book);
@@ -4540,7 +4572,7 @@
           <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span>${r.earningsCheck === 'unknown' ? ' <span class="dt-tier-b" title="Earnings adjacency could not be verified (no data) — confirm there is no scheduled report before trading">? ER</span>' : ''}</span>
           <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
         </div>
-        <div class="dt-card-sub"><b style="color:#22d3ee">▲ gap +${r.gapPct}%</b> <span class="dt-dim">· ${L('rvol', 'RVOL')} ${r.relVol}×${r.excessPct != null ? ' · vs SPY ' + (r.excessPct >= 0 ? '+' : '') + r.excessPct + '%' : ''}</span></div>
+        <div class="dt-card-sub"><b style="color:#22d3ee">▲ gap +${r.gapPct}%</b> <span class="dt-dim">· ${L('rvol', 'RVOL')} ${r.relVol}×${r.excessPct != null ? ' · vs SPY ' + (r.excessPct >= 0 ? '+' : '') + r.excessPct + '%' : ''}</span>${ggCauseBadge(r.cause)}</div>
         ${r.continuationScore != null ? `<div class="dt-card-sub">🎯 <b title="Take/skip meta-label: gap size + RVOL + regime. Top-third beat bottom in 6/6 years OOS. Ranks a right-skewed edge — it does not raise the ~50% hit rate.">Continuation ${r.continuationScore}</b>/100 ${r.take ? '<span class="dt-tier-a" style="background:#22c55e33;color:#22c55e">✅ TAKE</span>' : '<span class="dt-dim">· watch</span>'}${r.suggestedRiskPct ? ` &nbsp;·&nbsp; 💰 <b title="0.25× fractional Kelly by tier, scaled by score, zeroed in risk-off. Position = this% × equity ÷ (trigger − stop).">risk ${r.suggestedRiskPct}%</b> <span class="dt-dim">of capital</span>` : (r.suggestedRiskPct === 0 ? ' <span class="dt-dim">· risk-off: size 0</span>' : '')}</div>` : ''}
         <div class="dt-card-plan">📈 <b>Opening-range breakout</b> — break above <b>$${r.plan.trigger}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${r.plan.stop}</b> <span class="dt-dim">(−${r.plan.riskPct}%, 2.5×ATR)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${r.plan.target}</b> <span class="dt-dim">${L('rr', 'R:R')} 1:${r.plan.rr}</span></div>
         <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
@@ -4561,9 +4593,15 @@
     if (book && book.ok) {
       const row = (lbl, s) => !s || !s.n ? '' : `<div class="bt-ic-row"><span>${lbl}</span><span><b>${s.avgExc >= 0 ? '+' : ''}${s.avgExc}%</b> avg excess · ${s.beatRate}% beat (Wilson ${s.wilsonLo}%) · n=${s.n}</span></div>`;
       const rows = row('Overall', book.overall) + row('STRONG (≥5%)', book.byTier && book.byTier.STRONG) + row('MODERATE (3–5%)', book.byTier && book.byTier.MODERATE);
+      // By-cause accrual (offering/M&A fade vs FDA/guidance continue) — shows progress
+      // toward ~150/class before the opt-in FADE skip is trusted.
+      const CAUSE_LBL = { FADE_OFFERING: '🩳 Offering', MA: '🤝 Buyout', FDA: '🧪 FDA', CONTRACT: '📝 Contract', GUIDE: '📈 Guidance', OTHER: '📰 Other', NONE: '· No news' };
+      const bc = book.byCause || {};
+      const causeRows = Object.keys(CAUSE_LBL).map(k => { const s = bc[k]; return s && s.n ? row(`${CAUSE_LBL[k]} <span class="dt-dim">(${s.n}/${book.causeTarget || 150})</span>`, s) : ''; }).join('');
+      const causeBlock = causeRows ? `<div class="bt-ic-row" style="margin-top:6px"><span style="color:var(--text-dim);font-weight:700">By gap-cause (pilot — accruing):</span><span></span></div>${causeRows}` : '';
       bookPanel = `<div class="rot-panel"><div class="rot-head">📋 Live forward track record <span class="dt-dim">(self-validation)</span></div>
         <div class="rot-sub">${esc(book.note || '')}</div>
-        ${rows || `<div class="bt-ic-row"><span style="color:var(--text-dim)">${book.resolved || 0} resolved · ${book.stillOpen || 0} open — accrues as picks mature (~${t.horizon} sessions).</span></div>`}</div>`;
+        ${rows || `<div class="bt-ic-row"><span style="color:var(--text-dim)">${book.resolved || 0} resolved · ${book.stillOpen || 0} open — accrues as picks mature (~${t.horizon} sessions).</span></div>`}${causeBlock}</div>`;
     }
 
     el.innerHTML = evidence + filtered + regimeNote + howto + strong + moderate + bookPanel;
@@ -4581,6 +4619,17 @@
     attachTimingLights(el, ggPicks, 'gapgo');
   }
   document.getElementById('gg-refresh-btn')?.addEventListener('click', runGapGoUI);
+  (() => {
+    const b = document.getElementById('gg-skipfade-toggle');
+    if (!b) return;
+    b.classList.toggle('active', ggSkipFade);
+    b.addEventListener('click', () => {
+      ggSkipFade = !ggSkipFade;
+      try { localStorage.setItem('ggSkipFade', ggSkipFade ? '1' : '0'); } catch {}
+      b.classList.toggle('active', ggSkipFade);
+      runGapGoUI();
+    });
+  })();
 
   // ── 🧬 Coil Radar (pre-explosion: quiet, coiled names BEFORE the move) ──────
   // Flags volatility-contracted, volume-dried-up, NOT-already-run-up names and
