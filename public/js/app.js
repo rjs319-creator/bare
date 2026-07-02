@@ -1,7 +1,8 @@
   import { esc, fmtMoney, timeAgo } from './format.js';
   import { startLivePrices as startScreenerLive, stopLivePrices as stopScreenerLive, LIVE_SCREENERS } from './live-price.js';
   import { startFlowBadges, setFlowNav, FLOW_BADGE_TABS } from './flow-badge.js';
-  import { initCommandPalette, openPalette } from './command-palette.js';
+  import { initCommandPalette, openPalette, revealTicker } from './command-palette.js';
+import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadOpportunities, mountOpportunitiesTab } from './opportunities.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
@@ -2885,7 +2886,24 @@
     onRoute: id => showTab(id),
     onLearn: key => openLearn(key),
     onTickerOptions: openOptionsForTicker,
+    onTickerLookup: openTickerLookup,
   });
+
+  // Sections currently rendering a ticker (its cards carry data-live / data-ticker).
+  // Powers the "elsewhere in the app" cross-references in the ticker-lookup modal.
+  function findTickerMentions(ticker) {
+    const T = (ticker || '').toUpperCase();
+    const ids = new Set();
+    document.querySelectorAll(`[data-live="${T}"], [data-ticker="${T}"]`).forEach(el => {
+      const sec = el.closest('section.tabbable, section[id]');
+      if (sec && sec.id && SECTION_IDS.includes(sec.id)) ids.add(sec.id);
+    });
+    return [...ids].map(id => ({ id, label: SUB_LABEL[id] || id }));
+  }
+
+  // The lookup modal delegates the grade banner + chart to the app's shared
+  // renderChart (defined later, hoisted), and reuses the palette's jump-and-flash.
+  initTickerLookup({ renderChart, findMentions: findTickerMentions, onReveal: revealTicker });
   // Header search affordance (desktop): a button that opens the palette.
   (() => {
     const right = document.querySelector('.header-right');

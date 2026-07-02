@@ -61,7 +61,8 @@ function buildOverlay() {
 }
 
 // Reveal a ticker on a section that's already rendering it (flash the card).
-function revealTicker(sectionId, ticker) {
+// Exported so the ticker-lookup modal can reuse the same jump-and-flash.
+export function revealTicker(sectionId, ticker) {
   cfg.onRoute(sectionId);
   let tries = 0;
   const find = () => {
@@ -88,10 +89,16 @@ function sectionsWithTicker(ticker) {
 
 function tickerCommands(q) {
   const tk = q.toUpperCase();
-  const cmds = [{
-    ic: '💰', kind: 'Ticker', title: `Options flow → <b>${esc(tk)}</b>`,
+  const cmds = [];
+  // Primary: full lookup — price, chart, buy-signal grade, and cross-references.
+  if (cfg.onTickerLookup) cmds.push({
+    ic: '📈', kind: 'Look up', title: `Look up <b>${esc(tk)}</b> — price · chart · signal`,
+    run: () => cfg.onTickerLookup(tk),
+  });
+  cmds.push({
+    ic: '💰', kind: 'Options', title: `Options flow → <b>${esc(tk)}</b>`,
     run: () => cfg.onTickerOptions(tk),
-  }];
+  });
   const labelOf = id => (cfg.sections.find(s => s.id === id) || {}).label || id;
   sectionsWithTicker(tk).forEach(id => cmds.push({
     ic: '📍', kind: 'Reveal', title: `Show <b>${esc(tk)}</b> in ${esc(labelOf(id))}`,

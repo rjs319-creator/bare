@@ -743,6 +743,34 @@
       font-size: 0.6rem; line-height: 1.4; color: var(--text-dim);
     }
 
+    /* Ticker-lookup modal (search-any-stock) */
+    .tkl-head { margin: 0 34px 4px 0; }
+    .tkl-tk { font-size: 1.2rem; font-weight: 900; letter-spacing: -0.01em; color: var(--text); }
+    .tkl-price { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 2px; }
+    .tkl-px { font-size: 1.9rem; font-weight: 900; letter-spacing: -0.02em; color: var(--text); }
+    .tkl-chg { font-size: 0.9rem; font-weight: 800; }
+    .tkl-ah-row { font-size: 0.68rem; color: var(--text-dim); margin-bottom: 10px; }
+    .tkl-ah-row b { font-weight: 800; }
+    .tkl-verdict { align-items: flex-start; margin: 10px 0 12px; }
+    .tkl-vic { font-size: 1.5rem; line-height: 1; flex-shrink: 0; }
+    .tkl-vtext { flex: 1; min-width: 0; }
+    .tkl-vhead { font-size: 0.9rem; color: var(--text-dim); }
+    .tkl-vhead b { font-size: 0.98rem; font-weight: 900; color: var(--text); }
+    .tkl-verdict.buy .tkl-vhead b, .tkl-verdict.strong_buy .tkl-vhead b { color: var(--green); }
+    .tkl-verdict.sell .tkl-vhead b, .tkl-verdict.strong_sell .tkl-vhead b { color: var(--red); }
+    .tkl-verdict.hold .tkl-vhead b { color: var(--amber); }
+    .tkl-vsub { font-size: 0.72rem; color: var(--text-dim); line-height: 1.4; margin-top: 3px; }
+    .tkl-vconf { color: var(--text-muted); }
+    .tkl-mentions { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+    .tkl-mtitle { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 8px; }
+    .tkl-mnone { font-size: 0.72rem; color: var(--text-dim); line-height: 1.4; }
+    .tkl-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tkl-chip {
+      background: var(--surface); border: 1px solid var(--border); color: var(--text);
+      border-radius: 999px; padding: 5px 12px; font-size: 0.72rem; font-weight: 600; cursor: pointer;
+    }
+    .tkl-chip:hover { border-color: var(--cyan); color: var(--cyan); }
+
     /* ── Strong Buy/Sell live verdict badge (shown on the toggle button) ── */
     .sig-badge {
       font-size: 0.58rem; font-weight: 900; letter-spacing: 0.04em;
