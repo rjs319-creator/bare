@@ -56,10 +56,16 @@ function attachPercentiles(items, getters) {
   }
 }
 
-// Default composite weighting a momentum/breakout quant desk would use (the
-// client can override these live via the Tune panel). Relative strength leads
-// (O'Neil), trend + vol-adjusted momentum next, accumulation base quality up.
-const DEFAULT_WEIGHTS = { rs: 22, mom: 20, trend: 18, volAdj: 16, base: 12, vol: 8, prox: 4 };
+// Default composite weighting (the client can override live via the Tune panel).
+// This project's own edge research found the DEAD factors — volume-surge (`vol`,
+// rank-IC ≈ −0.004) and base-quality/VCP (`base`) — carry no forward-return edge,
+// while accumulation ratio (`accum`, IC ~0.075) and up/down volume (`ud`, ~0.071)
+// DO. So the default now zeroes base+vol and routes their weight to accum+ud
+// alongside the validated momentum family (rs/mom/trend/volAdj/prox). base+vol are
+// kept in the shape (weight 0) so the Tune panel can still expose them and a user
+// can opt back into the classic breakout view. Keep in sync with SCR_DEFAULT_W in
+// public/js/app.js.
+const DEFAULT_WEIGHTS = { rs: 22, mom: 20, trend: 16, volAdj: 14, accum: 12, ud: 10, prox: 6, base: 0, vol: 0 };
 
 // Cross-sectional percentile components for one name (0-100 each).
 function pctComponents(it) {
@@ -327,13 +333,44 @@ module.exports = async function handler(req, res) {
     });
     valid.forEach(c => { c.pct = pctComponents(c); c.quant = { score: composite(c.pct, DEFAULT_WEIGHTS) }; });
 
-    // 3. Keep breakouts/setups, rank by default composite (breakouts first).
-    //    Return a buffer beyond `cap` so client re-weighting can swap names in.
+    // ── Market regime (large/unfiltered only): SPY vs 200-DMA + breadth ──
+    // Computed BEFORE selection so the emerging-leader admission (below) can be
+    // regime-gated. Blended with the VIX/credit MACRO layer (leads the index).
+    let regime = null;
+    if (!isSmallScope && sectorFilter === 'all' && exchangeFilter === 'ALL') {
+      let indexAbove200 = null;
+      if (spyCandles) { const cl = spyCandles.map(x => x.close), li = cl.length - 1, s200 = smaAt(cl, 200, li); indexAbove200 = s200 != null ? cl[li] > s200 : null; }
+      const breadthPct = valid.length ? Math.round((valid.filter(c => c.above50).length / valid.length) * 100) : null;
+      // Bearish regime: SPY below its 200-DMA OR fewer than 40% of names above
+      // their 50-DMA. Breakouts fail at much higher rates here, so the UI warns
+      // and downgrades long breakout scores when this is true.
+      const bearish = indexAbove200 === false || (breadthPct != null && breadthPct < 40);
+      regime = {
+        indexAbove200,
+        breadthPct,
+        bearish,
+        riskOn: indexAbove200 === true && (breadthPct == null || breadthPct >= 45),
+      };
+    }
+    // Macro (VIX + credit) — the promise was kicked off early; resolves once.
+    let macro = null;
+    try { macro = await macroPromise; } catch {}
+    const macroRiskOff = !!(macro && macro.riskOff);
+
+    // 3. Select the display buffer, ranked PURELY by the (cleaned) quant composite —
+    //    NOT breakouts-first (breakout PF < 1 in this project's research), so a
+    //    confirmed breakout is a metadata BADGE (c.qualifies), not a sort key.
+    //    ADMISSION (item 5): also admit emergingLeader names — fresh RS leadership +
+    //    accumulation, not extended, built only on validated factors — that lack a
+    //    base-pattern status. Gated by the 5y admission backtest (lib/emerging.js):
+    //    LARGE only (small/micro incremental names backtested NEGATIVE — the
+    //    falling-knife archetype the detector can't distinguish) and only OUTSIDE
+    //    risk-off (the +1.5% incremental fwd excess fades risk-off). Return a buffer
+    //    beyond `cap` so client re-weighting can swap names in.
+    const admitEmerging = !isSmallScope && !(!!(regime && regime.bearish) || macroRiskOff);
     const buffer = cap + (isSmallScope ? 6 : 8);
-    let candidates = valid.filter(c => c.include).sort((a, b) => {
-      if (a.qualifies !== b.qualifies) return a.qualifies ? -1 : 1;
-      return b.quant.score - a.quant.score;
-    }).slice(0, buffer);
+    let candidates = valid.filter(c => c.include || (admitEmerging && c.emergingLeader))
+      .sort((a, b) => b.quant.score - a.quant.score).slice(0, buffer);
 
     // 4. Enrich candidates — LLM narrative + real fundamentals + insider data —
     //    ALL IN PARALLEL (independent calls). Previously serialized, which made a
@@ -354,31 +391,9 @@ module.exports = async function handler(req, res) {
       narrative: c.narrative, narrativeStrength: c.narrativeStrength, theme: c.theme,
     }));
 
-    // ── Market regime (large/unfiltered only): SPY vs 200-DMA + breadth ──
-    let regime = null;
-    if (!isSmallScope && sectorFilter === 'all' && exchangeFilter === 'ALL') {
-      let indexAbove200 = null;
-      if (spyCandles) { const cl = spyCandles.map(x => x.close), li = cl.length - 1, s200 = smaAt(cl, 200, li); indexAbove200 = s200 != null ? cl[li] > s200 : null; }
-      const breadthPct = valid.length ? Math.round((valid.filter(c => c.above50).length / valid.length) * 100) : null;
-      // Bearish regime: SPY below its 200-DMA OR fewer than 40% of names above
-      // their 50-DMA. Breakouts fail at much higher rates here, so the UI warns
-      // and downgrades long breakout scores when this is true.
-      const bearish = indexAbove200 === false || (breadthPct != null && breadthPct < 40);
-      regime = {
-        indexAbove200,
-        breadthPct,
-        bearish,
-        riskOn: indexAbove200 === true && (breadthPct == null || breadthPct >= 45),
-      };
-    }
-
     // ── Ghost Accumulation Index (GAI) — score the candidate pool through an
     //    accumulation lens, server-side (single source of truth in lib/ghost.js).
-    //    Regime now blends the SPY-trend read with the VIX/credit MACRO layer
-    //    (leads the index), and risk-off flips the kill switch (tiers downgraded).
-    let macro = null;
-    try { macro = await macroPromise; } catch {}
-    const macroRiskOff = !!(macro && macro.riskOff);
+    //    `regime` + `macro`/`macroRiskOff` were computed ABOVE (before selection).
     // Market TAPE (trend vs chop) from SPY efficiency ratio — breakouts fail in
     // choppy tapes too, so the UI downgrades them there (in addition to bearish).
     if (regime && spyCandles) {
@@ -388,7 +403,14 @@ module.exports = async function handler(req, res) {
       bearish: !!(regime && regime.bearish) || macroRiskOff,
       riskOn: !!(regime && regime.riskOn) && (!macro || macro.riskOn),
     };
-    const ghostResult = runGhostAccumulationIndex(candidates, ghostRegimeInput, {
+    // GAI + conviction are scored over the FULL scanned cross-section (`valid`),
+    // NOT the ~28-name display buffer. The walk-forward harness that validated the
+    // conviction ranker defines "top-quintile" over the whole cohort, so scoring
+    // only the pre-sorted buffer here would ship a DIFFERENT ranker than the one
+    // back-tested (train/serve skew). Pillar percentiles are already cross-sectional
+    // over `valid`; only the buffer carries real BONUS/IN enrichment — the rest use
+    // neutral 50, exactly as the harness pins those pillars where no feed exists.
+    const ghostResult = runGhostAccumulationIndex(valid, ghostRegimeInput, {
       killSwitch: !!(regime && regime.bearish) || macroRiskOff,
     });
     const ghostByTicker = {};
@@ -398,23 +420,25 @@ module.exports = async function handler(req, res) {
     candidates.forEach(c => { c.ghost = ghostByTicker[c.ticker] || null; });
 
     // ── Conviction score (Edge Book · Sleeve A) — the regime-gated ranker the
-    //    walk-forward harness validated (momentum core + BONUS, IN dropped),
-    //    computed LIVE over the GAI pillars. Sleeve A = top-quintile conviction
-    //    names, long-eligible only when the regime gate allows (not risk-off).
+    //    walk-forward harness validated (momentum core + BONUS, IN dropped).
+    //    Sleeve A = top-quintile conviction across the FULL cross-section (the same
+    //    denominator the harness used), long-eligible only when the regime gate
+    //    allows (not risk-off). The displayed candidates then read their percentile
+    //    off this whole-cohort distribution.
     const convRegime = ghostResult.regime;
     const convCanLong = longOk(convRegime);
-    const convVals = [];
-    candidates.forEach(c => {
-      const score = c.ghost ? convictionScore(c.ghost.pillars, convRegime) : null;
-      c.conviction = score != null ? { score } : null;
-      if (score != null) convVals.push(score);
-    });
-    const convSorted = [...convVals].sort((a, b) => a - b);
+    const convAll = [];
+    for (const g of ghostResult.longs) {
+      const score = convictionScore(g.pillars, convRegime);
+      if (score != null) convAll.push(score);
+    }
+    const convSorted = convAll.sort((a, b) => a - b);
     const convPctile = x => { if (!convSorted.length) return null; let lo = 0, hi = convSorted.length; while (lo < hi) { const m = (lo + hi) >> 1; if (convSorted[m] <= x) lo = m + 1; else hi = m; } return Math.round((lo / convSorted.length) * 100); };
     candidates.forEach(c => {
-      if (!c.conviction) return;
-      c.conviction.pctile = convPctile(c.conviction.score);
-      c.conviction.sleeveA = convCanLong && c.conviction.pctile >= 80;   // top quintile, long-eligible
+      const score = c.ghost ? convictionScore(c.ghost.pillars, convRegime) : null;
+      if (score == null) { c.conviction = null; return; }
+      const pctile = convPctile(score);
+      c.conviction = { score, pctile, sleeveA: convCanLong && pctile >= 80 };   // top quintile of the full cohort, long-eligible
     });
 
     // Fresh for 15m; then serve the STALE cached response INSTANTLY for up to a
