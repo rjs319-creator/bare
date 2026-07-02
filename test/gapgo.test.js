@@ -1,7 +1,8 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { scoreGapGo, GAP_STRONG, GAP_MODERATE, MIN_DOLLAR_VOL } = require('../lib/gapgo');
+const { scoreGapGo, GAP_STRONG, GAP_MODERATE, MIN_DOLLAR_VOL,
+        continuationScore, gapTake, suggestedRiskPct, TIER_STATS } = require('../lib/gapgo');
 
 // Build a flat, liquid base of `n` candles at price `p`, then a final GAP-UP day whose
 // open is `gapPct`% above the prior close. Volume kept well above the liquidity floor.
@@ -57,4 +58,41 @@ test('excessPct is computed when SPY history is supplied', () => {
   candles.forEach((c, i) => { spyByDate[c.date] = 400 + i * 0.1; });   // gently rising SPY
   const s = scoreGapGo(candles, spyByDate);
   assert.ok(s && typeof s.excessPct === 'number', 'excessPct should be a number vs SPY');
+});
+
+// ── Meta-label (#1) + fractional-Kelly sizing (#2) — validated pure functions ──
+test('continuationScore: bounded 0-100 and monotone in gap size', () => {
+  const a = continuationScore(3, 2, 'neutral'), b = continuationScore(8, 2, 'neutral'), c = continuationScore(15, 2, 'neutral');
+  assert.ok(a >= 0 && c <= 100);
+  assert.ok(b > a && c > b);
+});
+
+test('continuationScore: monotone in relVol', () => {
+  assert.ok(continuationScore(6, 4, 'neutral') > continuationScore(6, 1, 'neutral'));
+});
+
+test('continuationScore: risk-off < neutral < risk-on (regime is the leak)', () => {
+  assert.ok(continuationScore(6, 3, 'risk-off') < continuationScore(6, 3, 'neutral'));
+  assert.ok(continuationScore(6, 3, 'neutral') < continuationScore(6, 3, 'risk-on'));
+});
+
+test('gapTake: never take in risk-off regardless of score', () => {
+  assert.equal(gapTake(100, 'risk-off'), false);
+});
+
+test('gapTake: take when score >= threshold and not risk-off', () => {
+  assert.equal(gapTake(60, 'risk-on'), true);
+  assert.equal(gapTake(10, 'neutral'), false);
+});
+
+test('suggestedRiskPct: zero in risk-off, and unknown tier is fail-safe zero', () => {
+  assert.equal(suggestedRiskPct('STRONG', 90, 'risk-off'), 0);
+  assert.equal(suggestedRiskPct('WEAK', 80, 'risk-on'), 0);
+});
+
+test('suggestedRiskPct: STRONG > MODERATE, scales with score, within fractional-Kelly cap', () => {
+  assert.ok(suggestedRiskPct('STRONG', 70, 'risk-on') > suggestedRiskPct('MODERATE', 70, 'risk-on'));
+  assert.ok(suggestedRiskPct('STRONG', 90, 'neutral') > suggestedRiskPct('STRONG', 40, 'neutral'));
+  const cap = TIER_STATS.STRONG.fullKelly * 0.25 * 100;
+  assert.ok(suggestedRiskPct('STRONG', 100, 'risk-on') <= cap + 1e-9);
 });

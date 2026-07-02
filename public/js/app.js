@@ -4509,7 +4509,7 @@
         <li><b>What this is.</b> Stocks that <b>gapped up hard today on NON-earnings news</b> — a live catalyst that's still repricing. In testing, these keep running intraday; earnings gaps don't.</li>
         <li><b>Entry (the tested rule).</b> Don't chase the open. Wait ~30 min, then buy <b>only if it breaks the opening-range high</b> (📈 trigger below).</li>
         <li><b>Risk.</b> 🛑 <b>Stop</b> = 2.5×ATR below the trigger. 🏁 <b>Target</b> = 1:2. Time-stop after ~3 sessions.</li>
-        <li><b>Size by risk.</b> Shares ≈ (1% of account) ÷ (Trigger − Stop). This tilts to volatile names — <b>size small</b>, the P&amp;L is lumpy (a few big winners carry it).</li>
+        <li><b>Size by risk.</b> Each card shows a 💰 <b>suggested risk %</b> of capital (0.25× fractional Kelly, scaled by the continuation score, <b>0 in risk-off</b>). Shares ≈ (that % × account) ÷ (Trigger − Stop). Sizing, not a signal — the P&amp;L is lumpy (a few winners carry it), so the model stays conservative.</li>
         <li><b>Watchlist, not advice.</b> Confirm on a chart. This is a validated <b>lead being forward-tracked</b>, not a guarantee.</li>
       </ol>
     </div>`;
@@ -4520,6 +4520,7 @@
           <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
         </div>
         <div class="dt-card-sub"><b style="color:#22d3ee">▲ gap +${r.gapPct}%</b> <span class="dt-dim">· ${L('rvol', 'RVOL')} ${r.relVol}×${r.excessPct != null ? ' · vs SPY ' + (r.excessPct >= 0 ? '+' : '') + r.excessPct + '%' : ''}</span></div>
+        ${r.continuationScore != null ? `<div class="dt-card-sub">🎯 <b title="Take/skip meta-label: gap size + RVOL + regime. Top-third beat bottom in 6/6 years OOS. Ranks a right-skewed edge — it does not raise the ~50% hit rate.">Continuation ${r.continuationScore}</b>/100 ${r.take ? '<span class="dt-tier-a" style="background:#22c55e33;color:#22c55e">✅ TAKE</span>' : '<span class="dt-dim">· watch</span>'}${r.suggestedRiskPct ? ` &nbsp;·&nbsp; 💰 <b title="0.25× fractional Kelly by tier, scaled by score, zeroed in risk-off. Position = this% × equity ÷ (trigger − stop).">risk ${r.suggestedRiskPct}%</b> <span class="dt-dim">of capital</span>` : (r.suggestedRiskPct === 0 ? ' <span class="dt-dim">· risk-off: size 0</span>' : '')}</div>` : ''}
         <div class="dt-card-plan">📈 <b>Opening-range breakout</b> — break above <b>$${r.plan.trigger}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${r.plan.stop}</b> <span class="dt-dim">(−${r.plan.riskPct}%, 2.5×ATR)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${r.plan.target}</b> <span class="dt-dim">${L('rr', 'R:R')} 1:${r.plan.rr}</span></div>
         <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
         <div class="chart-panel" data-chart-panel style="display:none"></div>
@@ -4528,8 +4529,11 @@
       const body = (rows || []).map(card).join('');
       return `<div class="rot-panel"><div class="rot-head">${title}</div><div class="rot-sub">${sub}</div>${body || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No qualifying gappers right now — this is a selective, event-driven screen; empty on quiet days.</span></div>'}</div>`;
     };
-    const strong = list('🔥 STRONG — gap ≥5% <span class="dt-dim">(the validated primary)</span>', t.strong, 'Big unscheduled gaps. Backtested +1.9%/trade net, PF 1.47, positive all 4 years, passes deflation. Ranked by gap size (the validated monotone signal).');
-    const moderate = list('⚡ MODERATE — gap 3–5%', t.moderate, 'Smaller gaps — positive but weaker than the ≥5% tier. Ranked by gap size.');
+    const regimeNote = t.regime === 'risk-off'
+      ? `<div class="dt-note" style="border-left-color:#ef4444"><b>🛑 Risk-off regime — suggested size is 0.</b> Non-earnings gaps were net-negative in risk-off across the backtest (the edge is a risk-on/neutral phenomenon). Names still shown for the watchlist, but the sizing model stands down.</div>`
+      : '';
+    const strong = list('🔥 STRONG — gap ≥5% <span class="dt-dim">(the validated primary)</span>', t.strong, 'Big unscheduled gaps. Intraday exp08: +1.9%/trade, PF 1.47, all 4 years, passes deflation (broad survivorship-corrected daily-bar re-test: PF 1.29). Ranked by the 🎯 continuation meta-label (gap + RVOL + regime) — top-third beat bottom in 6/6 years OOS.');
+    const moderate = list('⚡ MODERATE — gap 3–5%', t.moderate, 'Smaller gaps — positive but weaker than the ≥5% tier. Same continuation ranking + sizing.');
 
     // Self-validation ledger (forward excess-vs-SPY of logged picks, by tier).
     let bookPanel = '';
@@ -4541,7 +4545,7 @@
         ${rows || `<div class="bt-ic-row"><span style="color:var(--text-dim)">${book.resolved || 0} resolved · ${book.stillOpen || 0} open — accrues as picks mature (~${t.horizon} sessions).</span></div>`}</div>`;
     }
 
-    el.innerHTML = evidence + filtered + howto + strong + moderate + bookPanel;
+    el.innerHTML = evidence + filtered + regimeNote + howto + strong + moderate + bookPanel;
     // Wire each card's chart toggle (reuses the shared /api/chart canvas renderer).
     el.querySelectorAll('.dt-card[data-ticker]').forEach(cardEl => {
       const tk = cardEl.dataset.ticker;
