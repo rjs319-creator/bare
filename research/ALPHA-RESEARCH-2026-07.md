@@ -174,3 +174,38 @@ risk-adjusted edge in the app) and optionally blend momentum in for a smoother r
 true Sharpe lift from diversification would need a 3rd genuinely-uncorrelated sleeve.
 Caveats: GAP's Sharpe is still somewhat optimistic (simple capacity model, hard intraday
 execution, sub-50% hit rate, 37mo).
+
+# Round 5 — can we beat the SHIPPED Gap & Go meta-label? (2026-07-02)
+
+Two head-to-head tests against the shipped `continuationScore` + `skipFadeCauses`
+gate, on the survivorship-corrected 19,326-event set. Both **NULL / no-ship** — the
+shipped configuration is already the better one. Full writeup:
+`research/GAP-INTERACTIONS-CAUSE-2026-07.md`. Scripts: `36-gap-events.js`,
+`37-gap-interactions.py`, `38-gap-cause-join.js`, `39-gap-cause-eval.py`; helpers
+`research/intraday/src/intraday/metalabel.py` (+20 tests).
+
+- **E1 interactions (`37`) = ❌ NULL.** Purged expanding walk-forward (2023H1..2026H1,
+  7-day purge). Three rankers vs the shipped linear score: logit-mains (control),
+  logit+10 pairwise products, shallow GBM. **All three underperform the shipped
+  heuristic's pooled OOS top-third** (+0.060 expR / PF 1.35) — LOGIT-MAIN +0.037,
+  LOGIT-INT +0.041, GBM +0.026 — with cluster-bootstrap Δ-vs-baseline CIs all
+  reaching ≤0 and beating the baseline in only 1–3 of 7 folds. Mean per-fold rank-IC:
+  baseline +0.012 vs GBM −0.011. **Refitting parameters *loses* signal vs the fixed
+  prior-weighted score** — the classic small-signal case where economic priors beat
+  estimated coefficients. (GBM's DSR≈1.0 is a within-edge artifact of a
+  positive-expectancy subset, NOT a ship signal — the decisive delta is negative.)
+- **E2 gap-cause de-lumping (`38`/`39`) = ❌ NULL, and it HURTS.** Joined the shipped
+  headline `classifyGapCause` onto strategy events in the news window (≥2025-10);
+  3-pass fetch drove failures to 0. **News coverage 73% (3007/4147) — more than double
+  the step-27 pilot's 32%**, so coverage bias is resolved. On the *strategy's* ORB
+  R-outcome the pilot's FADE-drag vanishes/reverses: FADE vs non-FADE Δ −0.007 (CI
+  [−0.080,+0.060], straddles 0); skip-FADE leaves expR/PF/top-5-share **unchanged** (no
+  de-lumping); and **excluding FADE from the top decile HALVES precision** (+0.054→+0.025
+  ALL; +0.046→+0.0005 STRONG) with winsorized mean going negative — the high-gap FADE
+  names that rank into the decile carry positive expectancy. FADE drag also flips sign
+  between the two halves. M&A is NOT the pilot's −5.7% disaster on the intraday outcome
+  (+0.010, win 0.527 — the buyout pop is captured before it fades). **`skipFadeCauses`
+  stays OFF by default; this study is independent evidence FOR the current default.**
+
+**Net Round 5:** the shipped Gap & Go meta-label is at the ceiling of its features;
+neither interactions nor gap-cause conditioning beat it OOS. No `gapgo.js` change.
