@@ -27,6 +27,24 @@ function badgeHTML(q) {
     + `$${esc(q.price)} <span style="color:${col}">${pct > 0 ? '+' : ''}${esc(q.changePct)}%</span>${ext}`;
 }
 
+// Cards render a headline % from cached daily (EOD) screener data, which can be a
+// full day stale (yesterday's close-over-close) versus today's live move. Once we
+// have the live quote for a card, overwrite that headline so it reflects today's
+// regular-session change (vs previous close) — one truth on screen.
+const HEADLINE_SEL = '.scr-chg, .cx-chg, [data-change]';
+function syncHeadline(liveEl, q) {
+  const card = liveEl.closest('.scr-card, .cx-card, .dt-card, .fade-card, .bt-card');
+  if (!card) return;
+  const chg = card.querySelector(HEADLINE_SEL);
+  if (!chg) return;
+  const pct = parseFloat(q.changePct);
+  if (Number.isNaN(pct)) return;
+  const up = pct >= 0;
+  chg.textContent = (up ? '▲ +' : '▼ ') + q.changePct + '%';
+  chg.classList.toggle('up', up);
+  chg.classList.toggle('down', !up);
+}
+
 // "🟢 live · HH:MM:SS · N names" indicator in the section header (updated on refresh).
 function updateAsOf(section, n) {
   let el = section.querySelector('.live-asof');
@@ -58,6 +76,7 @@ async function hydrate(section) {
     let badge = el.querySelector(':scope > .live-px');
     if (!badge) { badge = document.createElement('span'); badge.className = 'live-px'; el.appendChild(badge); }
     badge.innerHTML = badgeHTML(q);
+    syncHeadline(el, q);
     n++;
   }
   if (n) updateAsOf(section, n);
