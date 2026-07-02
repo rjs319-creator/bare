@@ -5075,6 +5075,41 @@
       </div>`;
   }
 
+  // Cross-sleeve allocation panel — inverse-vol (risk-parity) blend of the app's edge
+  // sleeves. Framed as RISK REDUCTION (research Round 4/S3: it cuts vol & drawdown at
+  // ~equal Sharpe; it is NOT an alpha booster). Server does the math in lib/allocation.js.
+  function allocationPanelHTML(a) {
+    if (!a) return '';
+    if (a.status === 'accruing') {
+      const have = (a.sleeves || []).length, om = a.overlapMonths || 0;
+      return `<div class="rot-panel" style="border-color:#8a6dff55;background:#8a6dff0d">
+        <div class="rot-head" style="color:#8a6dff">🧩 Cross-Sleeve Allocation <span class="dt-dim">(risk reduction)</span></div>
+        <div class="rot-sub">Blends the app's edge sleeves into one inverse-vol (risk-parity) book to <b>reduce volatility &amp; drawdown</b> — a risk tool, not an alpha booster. <b>Accruing:</b> need ≥${a.need.sleeves} sleeves × ${a.need.months} overlapping months; have ${have} sleeve${have === 1 ? '' : 's'}, ${om} overlapping month${om === 1 ? '' : 's'}. Fills in as the ledgers mature.</div>
+      </div>`;
+    }
+    if (a.status !== 'ok') return '';
+    const rr = a.riskReduction || {};
+    const bar = s => `<div class="sb-alloc-row">
+        <span class="sb-alloc-nm">${esc(s.name)}</span>
+        <span class="sb-alloc-track"><span class="sb-alloc-fill" style="width:${Math.max(2, s.weight)}%"></span></span>
+        <span class="sb-alloc-w"><b>${s.weight}%</b></span>
+        <span class="sb-alloc-meta dt-dim">vol ${s.volAnn}% · Sharpe ${s.sharpe == null ? '—' : s.sharpe} · maxDD ${s.maxDD}% · ${s.months}mo</span>
+      </div>`;
+    const corrs = (a.correlations || []).map(c => `${esc(c.a)}↔${esc(c.b)} ${c.corr >= 0 ? '+' : ''}${c.corr}`).join(' · ');
+    const b = a.blended || {};
+    const divTxt = rr.diversificationRatio != null
+      ? `diversification ratio <b>${rr.diversificationRatio}×</b>${rr.volVsWeightedAvg < 0 ? ` — cuts book vol by <b>${Math.abs(rr.volVsWeightedAvg)}%</b> vs the components` : ''}`
+      : '';
+    return `<div class="rot-panel" style="border-color:#8a6dff55;background:#8a6dff0d">
+      <div class="rot-head" style="color:#8a6dff">🧩 Cross-Sleeve Allocation <span class="dt-dim">(risk reduction · inverse-vol)</span></div>
+      <div class="rot-sub" style="margin-bottom:8px">${esc(a.note || '')}</div>
+      <div class="sb-alloc">${a.sleeves.map(bar).join('')}</div>
+      <div class="sb-alloc-blend">📉 <b>Blended book:</b> vol <b>${b.volAnn}%</b> · maxDD <b>${b.maxDD}%</b> · Sharpe <b>${b.sharpe == null ? '—' : b.sharpe}</b> &nbsp;·&nbsp; ${divTxt}</div>
+      ${corrs ? `<div class="sb-alloc-corr dt-dim">correlations: ${corrs}</div>` : ''}
+      <div class="sb-alloc-corr dt-dim">weights = inverse-vol (risk parity) over ${a.overlapMonths} overlapping months (${esc((a.window || [])[0] || '')}…${esc((a.window || [])[1] || '')}). Leans toward the lower-vol, validated event sleeve. Illustrative — see research caveats (small sample; blending buys smoothness, not Sharpe).</div>
+    </div>`;
+  }
+
   function renderScoreboard(data) {
     if (data.generatedAt) scoreboardGenTime.textContent = `Updated ${new Date(data.generatedAt).toLocaleTimeString()}`;
     if (!data.configured) {
@@ -5107,7 +5142,7 @@
       `<div class="sb-secgroup"><div class="sb-secgroup-h">${SB_SECTIONS[sec] || esc(sec)}</div><div class="sb-grid">${bySec[sec].map(sbCard).join('')}</div></div>`
     ).join('');
 
-    scoreboardContainer.innerHTML = intro + regimeBar + html;
+    scoreboardContainer.innerHTML = intro + allocationPanelHTML(data.allocation) + regimeBar + html;
     const regimeSel = document.getElementById('sb-regime-sel');
     if (regimeSel) regimeSel.addEventListener('change', e => setSbRegime(e.target.value));
     scoreboardContainer.querySelectorAll('[data-sig-toggle]').forEach(btn => {
