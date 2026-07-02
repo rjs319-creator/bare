@@ -38,10 +38,23 @@ test('isLockupEligibleTicker rejects malformed symbols', () => {
 });
 
 // ── Fix 2: LOCKUP_EXPIRY is counterfactual-log-only ─────────────────────────
-test('LOCKUP_EXPIRY is flagged logOnly; other types are not', () => {
+test('LOCKUP_EXPIRY and FORCED_DOWNGRADE are logOnly; trade-eligible types are not', () => {
   assert.equal(EVENT_TYPES.LOCKUP_EXPIRY.logOnly, true);
+  assert.equal(EVENT_TYPES.FORCED_DOWNGRADE.logOnly, true, 'proven Scoreboard loser → log-only');
   assert.ok(!EVENT_TYPES.INDEX_DELETE.logOnly, 'INDEX_DELETE stays trade-eligible');
   assert.ok(!EVENT_TYPES.FIRE_SALE.logOnly, 'FIRE_SALE stays trade-eligible');
+});
+
+test('dailyTick never returns TRADE or PROBE for a FORCED_DOWNGRADE event', () => {
+  const cern = new CERN();
+  const bars = dislocationBars();
+  const nowMs = bars[bars.length - 1].dateMs;
+  cern.addEvent({ type: 'FORCED_DOWNGRADE', symbol: 'DGX', dateMs: bars[bars.length - 6].dateMs, estFlowShares: 1e6, direction: -1, meta: {} });
+  const out = cern.dailyTick(makeDataFor(bars), { regime: 'risk-on', costBps: 30 }, nowMs);
+  for (const d of out.decisions.filter(d => d.type === 'FORCED_DOWNGRADE')) {
+    assert.equal(d.action, 'LOG_ONLY', `FORCED_DOWNGRADE must be LOG_ONLY, got ${d.action}`);
+    assert.equal(d.size, 0, 'LOG_ONLY carries no size');
+  }
 });
 
 // Build a bar series that triggers a SIGNAL: a sharp dislocation down + an
