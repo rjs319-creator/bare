@@ -584,6 +584,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   // ── 🛠️ Unusual Options Flow (quantitative — op=optionsflow + op=optionsperf) ──
   let optionsFlowAll = [];
+  // ticker -> baseline overlay from the server (op=optionsflow byTicker): is today's
+  // option volume abnormal vs THIS name's own archived history? Powers the 🔊 badge.
+  let ofBaseline = {};
   const ofFilters = { type: '', sentiment: '', ticker: '', money: '', minPrem: 0, aggr: '' };
   let ofSort = (() => { try { return localStorage.getItem('ofSort') || 'premium'; } catch { return 'premium'; } })();
   let ofNovice = (() => { try { return localStorage.getItem('ofNovice') !== 'pro'; } catch { return true; } })();
@@ -602,6 +605,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const data = await res.json();
       if (!data.ok) { showOptionsError(data.error || 'No options flow available right now.'); return; }
       optionsFlowAll = data.signals || [];
+      ofBaseline = {};
+      (data.byTicker || []).forEach(r => { if (r && r.ticker) ofBaseline[r.ticker] = { abnormalVsNormal: !!r.abnormalVsNormal, baselineNote: r.baselineNote || '', optVol: r.baseline && r.baseline.optVol }; });
       renderOptionsFlowShell(data);
       applyOptionsView();
       loadOptionsPerf();
@@ -884,17 +889,26 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       ? `<div class="cx-narrative" style="margin-top:8px">💡 ${esc(r.ticker)}'s options activity grades <b style="color:${gcol}">${r.grade} (${r.score > 0 ? '+' : ''}${r.score})</b> — ${ofUsd(r.callPremium)} in call (bullish) premium vs ${ofUsd(r.putPremium)} in puts, across ${r.contracts.length} unusual trade${r.contracts.length > 1 ? 's' : ''}.${beNote}</div>${flowEarningsWarn(r)}${lean ? flowAction(lean) : ''}`
       : flowEarningsWarn(r);
     const erChip = r.earningsBeforeExpiry ? `<span class="cx-tierbadge" style="color:var(--amber,#f0a832);border-color:currentColor" title="Earnings report lands before these options expire — an event/IV-crush risk">⚠ ER ${r.earningsInDays}d</span>` : '';
+    // Baseline overlay: flag names whose option volume is abnormally high vs their OWN
+    // archived history — "unusual relative to normal", not just a big absolute number.
+    const bl = ofBaseline[r.ticker], blAbn = bl && bl.abnormalVsNormal;
+    const blChip = blAbn
+      ? `<span class="cx-tierbadge" style="color:#a78bfa;border-color:currentColor" title="Option volume ${esc(bl.baselineNote || 'is unusually high')} — unusual relative to ${esc(r.ticker)}'s OWN recent history, not just an absolute size threshold">🔊 ${bl.optVol && bl.optVol.z != null ? '+' + bl.optVol.z + 'σ vol' : 'abnormal vol'}</span>`
+      : '';
+    const blNote = (blAbn && ofNovice)
+      ? `<div class="cx-narrative" style="margin-top:6px;color:#a78bfa">🔊 <b>Unusual for this name:</b> its option volume is ${esc(bl.baselineNote || 'well above its own recent norm')} — a spike vs its own history, not just a big absolute number.</div>`
+      : '';
     const aggrMark = s => s.aggressor === 'ask' ? ' <span style="color:var(--green)">⬆@ask</span>' : s.aggressor === 'bid' ? ' <span style="color:var(--red)">⬇@bid</span>' : '';
     const contractRow = s => `<div class="dt-dim" style="font-size:0.74rem;padding:2px 0">${esc(s.type)} $${esc(String(s.strike))} ${esc(s.expiry || '')} (${s.dte}d) · ${ofUsd(s.premium)} · ${OF_KIND[s.kind] || esc(s.kind)} · ${s.sentiment === 'bullish' ? '▲' : '▼'}${aggrMark(s)}${s.lastTradeTs ? ` · ${ofTime(s.lastTradeTs)}` : ''}</div>`;
     const expand = `<button class="of-expand dt-btn" data-n="${r.contracts.length}" style="margin-top:8px;font-size:0.74rem;padding:3px 8px">▸ show ${r.contracts.length} contract${r.contracts.length > 1 ? 's' : ''}</button>`
       + `<div style="display:none;margin-top:6px;border-top:1px solid #222;padding-top:6px">${r.contracts.map(contractRow).join('')}</div>`;
     return `<div class="cx-card" style="border-left:3px solid ${gcol}">`
       + `<div class="cx-top"><div><div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(r.ticker)}">$${esc(r.ticker)}</span>`
-      + ofGradeBadge(r.score, r.grade) + erChip + (tc ? ofAggrChip(tc) : '') + `</div>`
+      + ofGradeBadge(r.score, r.grade) + erChip + blChip + (tc ? ofAggrChip(tc) : '') + `</div>`
       + `<div class="cx-company">${r.contracts.length} unusual contract${r.contracts.length > 1 ? 's' : ''}${r.sweep ? ` · ${r.sweep}⚡` : ''}${r.block ? ` · ${r.block}🧱` : ''}${r.underlying ? ` · spot $${r.underlying}${r.undChgPct != null ? ` (${ofChg(r.undChgPct)})` : ''}` : ''}</div></div>`
       + `<div class="cx-score-col"><div class="cx-score" style="color:#06c4d4;font-size:1.05rem">${ofUsd(r.totalPremium)}</div><div class="cx-price">${r.bullishPct}% calls</div></div></div>`
       + `<div style="display:flex;height:7px;border-radius:4px;overflow:hidden;margin-top:8px"><div style="width:${r.bullishPct}%;background:var(--green)"></div><div style="width:${100 - r.bullishPct}%;background:var(--red)"></div></div>`
-      + ofConfluenceHTML(r.ticker) + novice + expand + `</div>`;
+      + ofConfluenceHTML(r.ticker) + blNote + novice + expand + `</div>`;
   }
 
   function ofUsd(n) { return n >= 1e6 ? '$' + (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? '$' + Math.round(n / 1e3) + 'k' : '$' + n; }
