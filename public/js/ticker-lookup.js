@@ -1,9 +1,13 @@
 // Ticker lookup modal — the "search any stock" surface. Type a ticker in the
-// command palette and this opens a single card that answers three questions:
+// command palette and this opens a single card that answers:
 //   1. What's it doing now?  → live price + change (+ pre/after-hours)
 //   2. Is it a good time to buy?  → plain-English verdict from the app's own
 //      technical signal engine (lib/signal.js, via /api/chart)
-//   3. Where else does the app mention it?  → jump-to chips for any tab already
+//   3. Is smart money positioning?  → unusual bullish/bearish options flow for
+//      the name (from the same feed as the Options tab, /api/tracker?op=optionsflow)
+//   4. Is the crowd talking about it?  → mentions in the Trade Alerts social
+//      screener (/api/tracker?op=alerts)
+//   5. Where else does the app mention it?  → jump-to chips for any tab already
 //      showing the ticker.
 // The grade + chart itself is delegated to the app's shared renderChart so the
 // verdict here always matches what every card in the app shows.
@@ -18,8 +22,22 @@ const VERDICT = {
   STRONG_SELL: { cls: 'strong_sell',icon: '⛔', head: 'No',                    sub: 'Sellers are firmly in control.' },
 };
 
+const OF_KIND = { sweep: '⚡ Sweep', block: '🧱 Block', large: '💰 Large' };
+
+// Compact USD for option premiums (matches the Options tab's ofUsd style).
+function fmtPrem(n) {
+  if (n == null || isNaN(n)) return '';
+  return n >= 1e6 ? '$' + (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? '$' + Math.round(n / 1e3) + 'k' : '$' + n;
+}
+
 let cfg = null;           // { renderChart, findMentions, onReveal }
 let overlay = null, body = null, refreshTimer = null, curTicker = null;
+
+// Options-flow + social mentions for the open ticker, fetched once per open (the
+// 60s chart refresh does NOT re-fetch these). undefined = loading, null = fetch
+// failed, array = loaded (possibly empty). Kept in state so it survives the
+// chart refresh's body re-render via paintExtras().
+let extras = { ticker: null, options: undefined, social: undefined };
 
 function build() {
   overlay = document.createElement('div');
@@ -72,6 +90,97 @@ function mentionsBlock(ticker) {
     <div class="tkl-chips">${chips}</div></div>`;
 }
 
+// ── Unusual options flow (bullish/bearish) — same feed as the Options tab ──
+function optionsSection(signals) {
+  const title = '⚡ Unusual options flow';
+  if (signals === undefined) return sectionLoading(title);
+  if (signals === null) return sectionNote(title, 'Options-flow data is unavailable right now.');
+  if (!signals.length) return sectionNote(title, 'No unusual options flow flagged for this name in the latest scan.');
+
+  const bull = signals.filter(s => s.sentiment === 'bullish').length;
+  const bear = signals.filter(s => s.sentiment === 'bearish').length;
+  const lean = `<div class="tkl-lean">
+    <span class="tkl-pill bull">▲ Bullish ${bull}</span>
+    <span class="tkl-pill bear">▼ Bearish ${bear}</span></div>`;
+
+  const rows = [...signals]
+    .sort((a, b) => (b.premium || 0) - (a.premium || 0))
+    .slice(0, 3)
+    .map(s => {
+      const bullS = s.sentiment === 'bullish';
+      const bits = [
+        `${(s.type || '').toUpperCase()}${s.strike != null ? ' $' + s.strike : ''}`,
+        s.expiry || null,
+        fmtPrem(s.premium) || null,
+        OF_KIND[s.kind] || (s.kind ? esc(s.kind) : null),
+      ].filter(Boolean).map(esc).join(' · ');
+      return `<div class="tkl-flow-row"><span class="tkl-dir ${bullS ? 'bull' : 'bear'}">${bullS ? '▲' : '▼'}</span><span>${bits}</span></div>`;
+    }).join('');
+
+  return `<div class="tkl-sec"><div class="tkl-mtitle">${title}</div>${lean}${rows}
+    <div class="tkl-fine">Directional lean inferred from call/put side on delayed chains — not live tape.</div></div>`;
+}
+
+// ── Social screener mentions — the Trade Alerts feed (tracked trader accounts) ──
+function socialSection(alerts) {
+  const title = '💬 Social buzz (Trade Alerts)';
+  if (alerts === undefined) return sectionLoading(title);
+  if (alerts === null) return sectionNote(title, 'Social screener data is unavailable right now.');
+  if (!alerts.length) return sectionNote(title, 'Not currently trending in the Trade Alerts social screener.');
+
+  const r = alerts[0];
+  const bull = r.direction === 'bullish', bear = r.direction === 'bearish';
+  const dirCls = bull ? 'bull' : bear ? 'bear' : 'neutral';
+  const stars = r.score ? '★'.repeat(r.score) + '☆'.repeat(Math.max(0, 5 - r.score)) : '';
+  const accounts = Array.isArray(r.accounts) ? r.accounts.join(', ') : '';
+  const srcLine = [
+    r.distinctAccounts ? `${r.distinctAccounts} account${r.distinctAccounts > 1 ? 's' : ''}` : null,
+    r.independentSources ? `${r.independentSources} independent source${r.independentSources > 1 ? 's' : ''}` : null,
+  ].filter(Boolean).join(' · ');
+
+  return `<div class="tkl-sec"><div class="tkl-mtitle">${title}</div>
+    <div class="tkl-lean">
+      <span class="tkl-pill ${dirCls}">${bull ? '▲' : bear ? '▼' : '◆'} ${esc(r.direction || 'mentioned')}</span>
+      ${stars ? `<span class="tkl-stars">${stars}</span>` : ''}
+      ${r.coordinated ? '<span class="tkl-pill warn">⚠ coordinated</span>' : ''}
+    </div>
+    ${srcLine ? `<div class="tkl-fine">${esc(srcLine)}${accounts ? ' · ' + esc(accounts) : ''}</div>` : ''}
+    ${r.sampleText ? `<div class="tkl-quote">“${esc(String(r.sampleText).slice(0, 160))}”</div>` : ''}</div>`;
+}
+
+function sectionLoading(title) {
+  return `<div class="tkl-sec"><div class="tkl-mtitle">${title}</div><div class="tkl-mnone">Checking…</div></div>`;
+}
+function sectionNote(title, note) {
+  return `<div class="tkl-sec"><div class="tkl-mtitle">${title}</div><div class="tkl-mnone">${esc(note)}</div></div>`;
+}
+
+// Paint the options + social sections from current `extras` state (called on
+// first render and again whenever fetchExtras resolves).
+function paintExtras() {
+  const flowEl = body.querySelector('#tkl-flow');
+  const socEl = body.querySelector('#tkl-social');
+  if (flowEl) flowEl.innerHTML = optionsSection(extras.options);
+  if (socEl) socEl.innerHTML = socialSection(extras.social);
+}
+
+// Fetch unusual options flow + social mentions once per open, filter to the
+// ticker, then repaint. Each source degrades independently on failure.
+async function loadExtras(ticker) {
+  const T = ticker.toUpperCase();
+  extras = { ticker: T, options: undefined, social: undefined };
+  const [opt, soc] = await Promise.allSettled([
+    fetch('/api/tracker?op=optionsflow').then(r => (r.ok ? r.json() : null)),
+    fetch('/api/tracker?op=alerts').then(r => (r.ok ? r.json() : null)),
+  ]);
+  if (curTicker !== T) return;   // user moved on before both resolved
+  extras.options = opt.status === 'fulfilled' && opt.value && Array.isArray(opt.value.signals)
+    ? opt.value.signals.filter(s => (s.ticker || '').toUpperCase() === T) : null;
+  extras.social = soc.status === 'fulfilled' && soc.value && Array.isArray(soc.value.ranked)
+    ? soc.value.ranked.filter(x => (x.ticker || '').toUpperCase() === T) : null;
+  paintExtras();
+}
+
 function renderBody(data) {
   const { ticker, live, price } = data;
   body.innerHTML = `
@@ -79,12 +188,16 @@ function renderBody(data) {
     ${priceLine(price)}
     ${verdictBanner(live)}
     <div id="tkl-chart"></div>
+    <div id="tkl-flow"></div>
+    <div id="tkl-social"></div>
     ${mentionsBlock(ticker)}`;
 
   // Delegate the grade banner + levels + live chart to the app's shared renderer.
   const chartPanel = body.querySelector('#tkl-chart');
   try { cfg.renderChart(chartPanel, data); }
   catch { chartPanel.innerHTML = `<div class="chart-err">Chart unavailable.</div>`; }
+
+  paintExtras();  // fill options/social from state (loading first time, data on refresh)
 
   body.querySelectorAll('.tkl-chip').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.reveal;
@@ -115,9 +228,11 @@ export function openTickerLookup(ticker) {
   curTicker = tk;
   overlay.hidden = false;
   document.body.style.overflow = 'hidden';
+  extras = { ticker: tk, options: undefined, social: undefined };
   body.innerHTML = `<div class="tkl-head"><span class="tkl-tk">📈 ${esc(tk)}</span></div>
     <div class="chart-loading"><div class="mom-spinner"></div>Loading live price, chart &amp; signal for ${esc(tk)}…</div>`;
   load(tk);
+  loadExtras(tk);   // options flow + social mentions — once per open, not on refresh
   // Keep it live while open — /api/chart is cached 60s server-side, so cheap.
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = setInterval(() => load(tk, true), 60 * 1000);
@@ -128,6 +243,7 @@ function close() {
   overlay.hidden = true;
   document.body.style.overflow = '';
   curTicker = null;
+  extras = { ticker: null, options: undefined, social: undefined };
   if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
 }
 
