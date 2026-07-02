@@ -28,7 +28,7 @@ const { runFadeOpt, runFadeSeed, runFadeSignals, runFadeTick, runFadeBook,
         runGapGo, runGapGoTick, runGapGoBook,
         runTiming, runTimingLog, runTimingBook, runTimingTune } = require('../lib/screener-routes');
 const { runAlertsIngest, runAlerts, runAlertsGrade } = require('../lib/alerts-routes');
-const { runArchive, runInsiderIngest, runInsider, runFundBuild, runFundamentals,
+const { runArchive, runBaseline, runInsiderIngest, runInsider, runFundBuild, runFundamentals,
         runCernTickOp, runCern, runCernFsProbe, runCernLockProbe } = require('../lib/capture-routes');
 const { runTrack, runScoreboard, runApexLog, runGhostLog, runEdgeLog, runEdgeBook, runVReversal, runVReversalTest,
         runDrift, runRecalibrate, runResearchOp, runExitsOp, runEmergingOp, runLongShortOp, runPeadOp, runBackfillOp, runModel, runNarrative, runMoverStudyOp } = require('../lib/apex-routes');
@@ -87,6 +87,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'trendtick') return runTrendTick(req, res);
   if (req.query.op === 'trendbook') return runTrendBook(req, res);
   if (req.query.op === 'archive') return runArchive(req, res);
+  if (req.query.op === 'baseline') return runBaseline(req, res);
   if (req.query.op === 'insideringest') return runInsiderIngest(req, res);
   if (req.query.op === 'insider') return runInsider(req, res);
   if (req.query.op === 'fundbuild') return runFundBuild(req, res);
