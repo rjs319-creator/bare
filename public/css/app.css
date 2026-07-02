@@ -880,6 +880,15 @@
 
     /* ── SIGNAL SCOREBOARD ── */
     .sb-intro { font-size: 0.78rem; color: var(--text-dim); line-height: 1.5; margin-bottom: 14px; }
+    .sb-alloc { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
+    .sb-alloc-row { display: flex; align-items: center; gap: 8px; font-size: 0.72rem; }
+    .sb-alloc-nm { width: 84px; font-weight: 700; color: var(--text); flex-shrink: 0; }
+    .sb-alloc-track { flex: 1; height: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; overflow: hidden; min-width: 60px; }
+    .sb-alloc-fill { display: block; height: 100%; background: #8a6dff; }
+    .sb-alloc-w { width: 40px; text-align: right; color: var(--text); flex-shrink: 0; }
+    .sb-alloc-meta { flex-shrink: 0; font-size: 0.66rem; }
+    .sb-alloc-blend { font-size: 0.74rem; color: var(--text); margin-top: 4px; }
+    .sb-alloc-corr { font-size: 0.66rem; margin-top: 5px; }
     .sb-regime-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;
       padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
     .sb-regime-lb { font-size: 0.72rem; font-weight: 800; color: var(--text); }
