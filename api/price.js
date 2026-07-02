@@ -32,7 +32,10 @@ async function fetchYahoo(ticker) {
       const closes = (result.indicators?.quote?.[0]?.close || []).filter(v => v != null);
       const livePrice    = closes.length ? closes[closes.length - 1] : meta.regularMarketPrice;
       const regularPrice = meta.regularMarketPrice ?? livePrice;
-      const prevClose    = meta.chartPreviousClose ?? meta.previousClose ?? regularPrice;
+      // previousClose = yesterday's regular close (correct day-change base);
+      // chartPreviousClose is window-relative. Equal on range=1d, but prefer
+      // previousClose so this stays correct if the range ever widens.
+      const prevClose    = meta.previousClose ?? meta.chartPreviousClose ?? regularPrice;
       const marketState  = deriveSession(meta, ts[ts.length - 1]);
       const isExtended   = (marketState === 'PRE' || marketState === 'POST') &&
                            Math.abs(livePrice - regularPrice) > 0.001;
