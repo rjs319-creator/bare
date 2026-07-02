@@ -87,3 +87,30 @@ Lowest-risk actions surfaced (none taken — need review): (1) high-SI% **soft-e
 flag** on long screens, sibling to MAX; (2) **log gap-cause forward** + opt-in offering-
 skip in `gapTake`, accumulate ≥150/class across regimes; (3) both new pulls are cached
 and repeatable (`research/data/short-interest.json`, `research/data/gapnews/`).
+
+---
+
+# Round 3 — cutting-edge METHODS frontier (2026-07-02)
+
+The prior hunt was almost entirely *linear, univariate* factor IC. Round 3 attacks the
+**methods** blind spot: nonlinear ML with proper overfitting control, learned regime
+detection, and intraday microstructure on the one validated edge. Nothing shipped.
+
+| Exp | Method | Result | Verdict |
+|---|---|---|---|
+| **N1 Nonlinear ML ranker** (`28-mlrank.py`) | HistGradientBoosting over existing factors + regime interactions vs Ridge on identical features; **Combinatorial Purged CV** (28 paths, purge ±1mo) + purged walk-forward + Deflated Sharpe | OOS rank-IC: **GBM −0.013, Ridge −0.019, raw mom +0.018** (79% pos paths). GBM−Ridge delta +0.005 **p=0.11 (ns)**. Walk-forward LS Sharpe GBM 0.16 (**DSR 0.28**), Ridge 0.03, mom −0.02. Multi-factor combo *degrades* OOS vs raw momentum. | ❌ **No nonlinear/conditional alpha.** The linear verdict survives a proper nonlinear+CPCV test. |
+| **N2 Learned regime** (`29-regime.py`) | 3-state Gaussian **HMM** on {VIX, VIX-chg, SPY rvol, SPY ret, credit}, fit on ≤2020, **causal Viterbi filtering** on 2021-26, vs the threshold gate | HMM-gate TEST Sharpe 0.82 / **maxDD −25.4% (no protection)** / ret +89.6% vs threshold-gate 0.78 / **−19.6%** / +54.3% vs buy&hold 0.85 / −25.4%. HMM's "risk-off" state is either capitulation (fwd **+7.65%**, wrong way) or a low-vol grind with zero DD protection. | ❌ **HMM doesn't beat the threshold gate.** Its Sharpe edge is just staying invested more in the bull, not better risk timing. (Caveat: ~1-2 stress events in test.) |
+| **N3 Intraday microstructure** (`intraday/experiments/10_microstructure.py`) | Microstructure meta-label (OR width, opening/breakout volume, VWAP dist, time-to-break, gap) on the validated unscheduled-gap ORB edge; OOS split + **deflation (PSR/DSR/PBO)** | take-ALL ORB +1.91%/trade PF 1.48 (n=449). Combined meta-label OOS **+6.32%** (n=12, 3/4 yrs) — but **DSR 0.799 < 0.95**, n=23 total. Best single feature = **breakout-bar volume thrust** (+2.17% OOS edge, intuitive). | 🟡 **LEAD, not shippable.** Improves OOS + year-consistent but fails deflation on a tiny sample — same trap as rig exp05/06 (stacked intraday gates = search luck). |
+
+**Round-3 headline: the ceiling held even at the methods frontier.** Proper nonlinear
+ML + CPCV found no conditional alpha the linear tests missed; a learned HMM didn't
+out-time the crude threshold gate; the only positive is an *unconfirmed* intraday
+microstructure LEAD (breakout-volume confirmation) that fails deflation. Net across all
+three rounds this session: **no new shippable alpha** — momentum + regime avoidance
+remain the only durable levers, now confirmed under materially stronger methodology.
+
+Only defensible follow-up (instrumentation, not a bet): **forward-log the Gap & Go
+breakout-bar volume / microstructure features on the live ledger** so the N3 lead can be
+validated out-of-sample without sizing on it. Reproduce: `research/28-mlrank.py`,
+`29-regime.py`, `research/intraday/experiments/10_microstructure.py` (all in the
+`research/intraday/.venv` which now has scikit-learn + hmmlearn).
