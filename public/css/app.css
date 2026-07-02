@@ -770,6 +770,19 @@
       border-radius: 999px; padding: 5px 12px; font-size: 0.72rem; font-weight: 600; cursor: pointer;
     }
     .tkl-chip:hover { border-color: var(--cyan); color: var(--cyan); }
+    .tkl-sec { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+    .tkl-lean { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .tkl-pill { font-size: 0.68rem; font-weight: 800; border-radius: 999px; padding: 3px 10px; border: 1px solid var(--border); }
+    .tkl-pill.bull { color: var(--green); border-color: #10d98a55; background: var(--green-dim); }
+    .tkl-pill.bear { color: var(--red); border-color: #ef505055; background: var(--red-dim); }
+    .tkl-pill.neutral { color: var(--text-dim); }
+    .tkl-pill.warn { color: var(--amber); border-color: #f0a83244; background: var(--amber-dim); }
+    .tkl-stars { color: #8a6dff; font-size: 0.82rem; letter-spacing: 1px; }
+    .tkl-flow-row { display: flex; align-items: baseline; gap: 8px; font-size: 0.74rem; color: var(--text); padding: 3px 0; }
+    .tkl-dir { font-weight: 800; flex-shrink: 0; }
+    .tkl-dir.bull { color: var(--green); } .tkl-dir.bear { color: var(--red); }
+    .tkl-quote { font-size: 0.74rem; color: var(--text-dim); line-height: 1.45; margin-top: 6px; font-style: italic; }
+    .tkl-fine { font-size: 0.62rem; color: var(--text-muted); line-height: 1.4; margin-top: 6px; }
 
     /* ── Strong Buy/Sell live verdict badge (shown on the toggle button) ── */
     .sig-badge {
