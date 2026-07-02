@@ -268,9 +268,12 @@ module.exports = async function handler(req, res) {
     }
     mark.scan = Date.now() - reqT0;
 
-    // Liquidity floor so results are actually tradeable
+    // Liquidity floor so results are actually tradeable. Raised from $0.3M/$2M
+    // after the Scoreboard showed the illiquid small/micro names — and the Ghost
+    // picks that ride on these same candidates — were the biggest money-losers:
+    // thin spread + slippage on close-to-close paper moves they never capture.
     if (isSmallScope) {
-      const floor = isMicro ? 300000 : 2000000;
+      const floor = isMicro ? 1_000_000 : 3_000_000;
       valid = valid.filter(c => (c.factors.dollarVol || 0) >= floor);
     }
 
