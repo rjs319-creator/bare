@@ -27,7 +27,7 @@ async function fetchYahoo(symbol) {
       const m = j?.chart?.result?.[0]?.meta;
       if (!m || m.regularMarketPrice == null) continue;
       const price = m.regularMarketPrice;
-      const prev  = m.chartPreviousClose ?? m.previousClose ?? price;
+      const prev  = m.previousClose ?? m.chartPreviousClose ?? price;   // previousClose = yesterday's close; chartPreviousClose is window-relative
       const changePct = prev ? ((price - prev) / prev * 100) : 0;
       return { price, changePct: parseFloat(changePct.toFixed(2)) };
     } catch { /* try next host */ }
