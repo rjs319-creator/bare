@@ -145,6 +145,18 @@ module.exports = async function handler(req, res) {
     gapgotick = await r.json();
   } catch (e) { gapgotick = { error: String(e && e.message || e) }; }
 
+  // 🟢 Timing light — log today's picks' grades (accountability) then run the adaptive
+  //    weight tuner (self-improvement; dormant until the ledger matures).
+  let timinglog = null, timingtune = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=timinglog', { headers: { 'x-warm': '1' } });
+    timinglog = await r.json();
+  } catch (e) { timinglog = { error: String(e && e.message || e) }; }
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=timingtune', { headers: { 'x-warm': '1' } });
+    timingtune = await r.json();
+  } catch (e) { timingtune = { error: String(e && e.message || e) }; }
+
   // 🔮 Forecast — resolve matured predictions + (weekly) generate a fresh batch.
   let predicttick = null;
   try {
@@ -186,7 +198,7 @@ module.exports = async function handler(req, res) {
   catch (e) { coredrift = { error: String(e && e.message || e) }; }
 
   const warmedExtra = await extraWarm;   // already resolved — ran during the tail above
-  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, at: new Date().toISOString() };
+  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, at: new Date().toISOString() };
 
   // Observability: persist a compact health record so failed ticks / stale data are visible (op=health).
   try { const { summarizeRun, writeHealthRun } = require('../lib/health'); await writeHealthRun(summarizeRun(result)); }

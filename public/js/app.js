@@ -4283,14 +4283,32 @@
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning movers…</p></div>`;
     try {
-      const [t, book] = await Promise.all([
+      const [t, book, timingBook] = await Promise.all([
         fetch('/api/tracker?op=daytrade').then(r => r.json()),
         fetch('/api/tracker?op=daytradebook').then(r => r.json()).catch(() => null),
+        fetch('/api/tracker?op=timingbook').then(r => r.json()).catch(() => null),
       ]);
-      renderDaytrade(t, book);
+      renderDaytrade(t, book, timingBook);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Day Trade.</p></div>`; }
   }
-  function renderDaytrade(t, book) {
+  // 🟢 Timing-light ACCOUNTABILITY scorecard — the grade's own forward track record.
+  function timingScorecard(tb) {
+    if (!tb || !tb.ok || !tb.byBucket) return '';
+    const b = tb.byBucket, resolved = tb.resolved || 0;
+    if (resolved < 20) {
+      return `<div class="rot-panel rot-panel-pending"><div class="rot-head">🟢 Timing-light accountability — building…</div><div class="rot-sub">${resolved} graded pick${resolved === 1 ? '' : 's'} resolved so far. Once ~20+ mature, this shows whether a greener light actually preceded a better ${tb.horizon || 3}-session entry (and the adaptive tuner re-weights the factors if not). Accrues via the daily cron.</div></div>`;
+    }
+    const row = (lbl, s, emoji) => !s || !s.n ? '' : `<div class="bt-ic-row"><span>${emoji} ${lbl} <span style="color:var(--text-dim)">${s.n}</span></span><span>fwd exc <b style="color:${s.avgExc >= 0 ? 'var(--green)' : 'var(--red)'}">${s.avgExc >= 0 ? '+' : ''}${s.avgExc}%</b></span><span>${s.beatRate}% beat</span></div>`;
+    const icGood = tb.ic != null && tb.ic > 0;
+    return `<div class="rot-panel" style="border-color:${icGood ? '#10d98a55' : '#f59e0b55'}">
+        <div class="rot-head">🟢 Timing-light accountability <span class="dt-dim">(self-scoring)</span></div>
+        <div class="rot-sub">Realized forward <b>${tb.horizon}-session excess vs SPY</b> of every logged pick, split by the light it showed. <b>Grade→outcome IC: ${tb.ic == null ? 'n/a' : (tb.ic >= 0 ? '+' : '') + tb.ic}</b> ${icGood ? '— greener has been marking better entries.' : '— not clearly separating yet; the adaptive tuner will re-weight the factors as more resolve.'}</div>
+        ${row('Green (7-10)', b.green, '🟢')}${row('Amber (4-6)', b.amber, '🟡')}${row('Red (1-3)', b.red, '🔴')}
+        <div class="bt-ic-row" style="border-top:1px solid var(--border);margin-top:4px"><span></span><span></span><span>${resolved} resolved · ${tb.daysLogged || 0} days</span></div>
+      </div>`;
+  }
+
+  function renderDaytrade(t, book, timingBook) {
     const el = document.getElementById('dt-container');
     if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Day Trade unavailable.</p></div>`; return; }
     const REG = { 'risk-on': ['#22c55e', 'RISK-ON', 'Hunt momentum'], neutral: ['#eab308', 'NEUTRAL', 'Be selective'], 'risk-off': ['#ef4444', 'RISK-OFF', 'Stand down — momentum fails here'] };
@@ -4397,7 +4415,7 @@
         <div class="rot-sub">Ranked by <b>🔮 carry odds</b> (pcarry) across the whole pool. <b>The honest truth</b> (research/33, survivorship-corrected 26k candidate-days): <b>tradeable 3-session continuation is ~a coin-flip</b> — the strongly-predictable part lives in the <b>un-tradeable overnight leg</b> (you buy at the next open, after it's gone). So carry odds sit ~40–60% and mainly <b>flag fade risk</b> (⚠ overextended blow-offs, dilution/M&amp;A pops, risk-off tape) to help you <b>avoid traps</b> — they do <b>not</b> predict winners. Overextended/explosive names now flow through but the model <b>discounts</b> them, so they sort to the bottom.</div>
         <div class="dt-best-grid">${best.map(bestCard).join('')}</div>
       </div>`;
-    el.innerHTML = banner + tapeBadge + bestSection + configBanner + howto + ml + es + runSection + track +
+    el.innerHTML = banner + tapeBadge + bestSection + configBanner + howto + ml + es + runSection + track + timingScorecard(timingBook) +
       `<div class="fade-caveats"><b>How to use.</b> Today's relative-volume + momentum movers (the EOD version of the Finviz day-trade scans), regime-gated and self-learning. <b>Honest validation</b> (5y, forward 3-session excess vs SPY): large-cap momentum-chasing does <b>not</b> beat the market (it mean-reverts, −1.3% out-of-sample); explosive small-caps carry a <b>positive average excess</b> (~+1.7–2.3% in risk-on/neutral) but a <b>sub-50% hit-rate</b> — a few big runners carry it, and it dies in risk-off. So treat these as a <b>ranked movers watchlist</b>, not a win-rate edge; the per-stock learner tilts toward names whose momentum actually continues and drops the rest. <b>The 🧪 experimental config above</b> (opening-range-breakout entry + 2.5×ATR stop + top-half selection) is the one variant that tested out-of-sample positive on <b>real intraday execution</b> — but it <b>failed formal deflation</b> (deflated Sharpe 0.59), so it's a paper-trading lead to confirm forward, not a proven edge. Confirm entries in TradingView (MACD / RSI / Smart-Money). Research, not advice.</div>`;
     // Wire each card's chart toggle (reuses the shared /api/chart canvas renderer)
     // and start live-price polling for the recommended names.
