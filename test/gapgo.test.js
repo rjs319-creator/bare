@@ -45,6 +45,26 @@ test('an illiquid name is rejected even with a big gap', () => {
   assert.equal(scoreGapGo(withGap(8, { vol: thinVol })), null);
 });
 
+function flatBase(n = 25, p = 20, vol = 3_000_000) {
+  const c = [];
+  for (let i = 0; i < n; i++) c.push({ date: `2026-02-${String((i % 28) + 1).padStart(2, '0')}`, open: p, high: p * 1.01, low: p * 0.99, close: p, volume: vol });
+  return c;
+}
+
+test('a split-adjustment artifact (huge move, NO volume spike) is rejected', () => {
+  const c = flatBase();
+  c.push({ date: '2026-03-02', open: 80, high: 81, low: 79, close: 80, volume: 1_000_000 }); // ~4× price, sub-avg volume
+  assert.equal(scoreGapGo(c), null, 'a ~300% "gap" that volume did not confirm is a data artifact, not a signal');
+});
+
+test('a real large gap WITH a volume spike still signals (guard is volume-gated, not a blunt cap)', () => {
+  const c = flatBase();
+  c.push({ date: '2026-03-02', open: 26, high: 27, low: 25.8, close: 26.5, volume: 15_000_000 }); // +30% on 5× volume
+  const s = scoreGapGo(c);
+  assert.ok(s, 'a real high-volume catalyst gap must still signal');
+  assert.equal(s.tier, 'STRONG');
+});
+
 test('the stop is a ~2.5×ATR distance below the trigger (wide stop, the validated exit)', () => {
   const s = scoreGapGo(withGap(6));
   const risk = s.plan.trigger - s.plan.stop;
