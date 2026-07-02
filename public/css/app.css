@@ -1766,6 +1766,7 @@
 
 /* ⚡ Day Trade — relative-strength score, tier badge, and Today's Best Opportunities */
 .dt-relscore { display: inline-block; min-width: 24px; text-align: center; font-weight: 800; font-size: .74rem; color: #0b0f17; background: linear-gradient(90deg,#f59e0b,#fbbf24); border-radius: 5px; padding: 1px 5px; vertical-align: middle; }
+.dt-carry { display: inline-block; font-weight: 800; font-size: .68rem; border: 1px solid; border-radius: 5px; padding: 1px 5px; vertical-align: middle; }
 .dt-tier-b { font-size: .64rem; font-weight: 800; color: #94a3b8; border: 1px solid #475569; border-radius: 4px; padding: 0 3px; vertical-align: middle; }
 .dt-best-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; margin-top: 8px; }
 .dt-best-card { background: var(--surface); border: 1px solid #f59e0b44; border-radius: 10px; padding: 8px 11px; }

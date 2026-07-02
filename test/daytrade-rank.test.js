@@ -25,32 +25,39 @@ test('assignRelScores: single pick gets a valid score, no divide-by-zero', () =>
   assert.ok(Number.isFinite(one[0].relScore));
 });
 
-test('buildBestOpportunities: excludes explosive small-caps (validated-inverted) — only ml/runs', () => {
-  const mlA = [mk('BIG', 4, 9, 8, { tier: 'A' })];
-  const runs = [mk('RUN', 2.2, 6, 5, { pct5d: 30 })];
-  assignRelScores([mlA, runs]);
-  const best = buildBestOpportunities(mlA, runs);
-  const sources = new Set(best.map(b => b.source));
-  assert.ok(sources.has('Momentum & Liquid') || sources.has('Multi-day run'));
-  assert.ok(![...sources].some(s => /explosive/i.test(s)), 'no explosive small-caps in best-of');
+test('buildBestOpportunities: ranks the whole green pool by carry odds (explosive flows through, discounted)', () => {
+  // explosive with HIGH carry should still rank ahead of a liquid name with LOW carry —
+  // no hard exclusion; the carry odds do the discounting.
+  const pool = [
+    mk('LIQLOW', 4, 9, 8, { scan: 'momentum_liquid', tier: 'A', carry: 42 }),
+    mk('EXPHI', 3, 12, 10, { scan: 'explosive_small', carry: 55 }),
+  ];
+  assignRelScores([pool]);
+  const best = buildBestOpportunities(pool);
+  assert.equal(best[0].ticker, 'EXPHI', 'higher carry ranks first regardless of scan');
+  assert.equal(best[0].source, 'Explosive small-cap');
 });
 
-test('buildBestOpportunities: drops names that are RED today (a best pick must be green)', () => {
-  const mlA = [mk('UP', 3, 7, 6, { tier: 'A' }), mk('DOWN', 3, -4, -5, { tier: 'A' })];
-  assignRelScores([mlA]);
-  const best = buildBestOpportunities(mlA, []);
-  assert.ok(best.every(b => b.pctChange > 0), 'no red-today picks');
+test('buildBestOpportunities: drops names that are RED today or unscored', () => {
+  const pool = [
+    mk('UP', 3, 7, 6, { scan: 'momentum_liquid', tier: 'A', carry: 52 }),
+    mk('DOWN', 3, -4, -5, { scan: 'momentum_liquid', tier: 'A', carry: 52 }),
+    mk('NOCARRY', 3, 5, 4, { scan: 'momentum_liquid', tier: 'A' }),   // no carry → excluded
+  ];
+  assignRelScores([pool]);
+  const best = buildBestOpportunities(pool);
+  assert.ok(best.every(b => b.pctChange > 0 && b.carry != null));
   assert.ok(best.some(b => b.ticker === 'UP'));
-  assert.ok(!best.some(b => b.ticker === 'DOWN'));
+  assert.ok(!best.some(b => b.ticker === 'DOWN' || b.ticker === 'NOCARRY'));
 });
 
-test('buildBestOpportunities: ranks #1..N by relScore and caps the list', () => {
-  const mlA = Array.from({ length: 10 }, (_, i) => mk('T' + i, 2 + i * 0.3, 4 + i, 3 + i, { tier: 'A' }));
-  assignRelScores([mlA]);
-  const best = buildBestOpportunities(mlA, [], 6);
-  assert.equal(best.length, 6);
-  assert.deepEqual(best.map(b => b.rank), [1, 2, 3, 4, 5, 6]);
-  for (let i = 1; i < best.length; i++) assert.ok(best[i - 1].relScore >= best[i].relScore, 'sorted by relScore desc');
+test('buildBestOpportunities: ranks #1..N by carry odds and caps the list', () => {
+  const pool = Array.from({ length: 12 }, (_, i) => mk('T' + i, 2 + i * 0.3, 4 + i, 3 + i, { scan: 'momentum_liquid', tier: 'A', carry: 40 + i }));
+  assignRelScores([pool]);
+  const best = buildBestOpportunities(pool, 8);
+  assert.equal(best.length, 8);
+  assert.deepEqual(best.map(b => b.rank), [1, 2, 3, 4, 5, 6, 7, 8]);
+  for (let i = 1; i < best.length; i++) assert.ok(best[i - 1].carry >= best[i].carry, 'sorted by carry desc');
 });
 
 test('SCANS.momentum_building is a real relaxation of momentum_liquid (surfaces more picks)', () => {

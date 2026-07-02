@@ -4328,9 +4328,16 @@
     const orb = r => r.orb || null;
     const relBadge = r => r.relScore == null ? '' : `<span class="dt-relscore" title="Relative strength vs today's other picks (0–100)">${r.relScore}</span>`;
     const tierBadge = r => r.tier === 'B' ? ' <span class="dt-tier-b" title="Building tier — relaxed threshold (RVOL≥1.2, ≥+3%)">B</span>' : '';
+    // 🔮 pcarry — honest, calibrated carry ODDS (%). Colored by level; flags fade risk.
+    const carryBadge = r => {
+      if (r.carry == null) return '';
+      const c = r.carry, col = c >= 55 ? 'var(--green)' : c >= 48 ? 'var(--amber,#f59e0b)' : 'var(--red)';
+      const flags = [r.overextended ? '⚠ overextended' : '', r.catalyst === 'FADE_OFFERING' ? '⚠ offering/dilution' : r.catalyst === 'MA' ? '⚠ buyout' : ''].filter(Boolean).join(' · ');
+      return `<span class="dt-carry" style="color:${col};border-color:${col}55" title="Honest continuation odds over ~3 sessions (price overextension + news catalyst + regime + scan base-rate). Tradeable continuation is ~coin-flip — this mainly flags FADE risk, it does NOT predict winners.${flags ? ' ' + flags : ''}">🔮 ${c}%${r.overextended ? ' ⚠' : ''}</span>`;
+    };
     const card = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
-          <span>${relBadge(r)} <b>${esc(r.ticker)}</b>${r.preferred ? ' <span class="dt-star" title="Top-half by rank — the experimental config\'s preferred selection">⭐</span>' : ''}${tierBadge(r)} <span class="dt-sec">${esc(r.sector || '')}</span></span>
+          <span>${carryBadge(r)} ${relBadge(r)} <b>${esc(r.ticker)}</b>${r.preferred ? ' <span class="dt-star" title="Top-half by rank — the experimental config\'s preferred selection">⭐</span>' : ''}${tierBadge(r)} <span class="dt-sec">${esc(r.sector || '')}</span></span>
           <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
         </div>
         <div class="dt-card-sub">${r.pctChange >= 0 ? '+' : ''}${r.pctChange}% today <span class="dt-dim">· ${L('rvol', 'RVOL')} ${r.relVol}×${r.beta != null ? ' · ' + L('beta', 'β') + ' ' + r.beta : ''}${r.gapPct != null ? ' · gap ' + r.gapPct + '%' : ''}</span></div>
@@ -4354,7 +4361,7 @@
     // day cards: 5-day move, # unusual-volume days, proximity to the run high.
     const runCard = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
-          <span>${r.relScore != null ? `<span class="dt-relscore" title="Relative strength (0–100)">${r.relScore}</span> ` : ''}<b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span></span>
+          <span>${carryBadge(r)} ${r.relScore != null ? `<span class="dt-relscore" title="Relative strength (0–100)">${r.relScore}</span> ` : ''}<b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span></span>
           <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
         </div>
         <div class="dt-card-sub"><b style="color:var(--green)">+${r.pct5d}% / 5d</b> <span class="dt-dim">· ${r.highVolDays5} high-vol days · ${Math.round((r.nearHighFrac5 || 0) * 100)}% of run-high · today ${r.pctChange >= 0 ? '+' : ''}${r.pctChange}% · RVOL ${r.relVol}×</span></div>
@@ -4381,13 +4388,13 @@
     // ⭐ Today's Best Opportunities — ranked, from the validated positive-edge scans only.
     const best = (t.bestOpportunities || []);
     const bestCard = o => `<div class="dt-best-card">
-        <div class="dt-best-top"><span class="dt-best-rank">#${o.rank}</span> <b>${esc(o.ticker)}</b> <span class="dt-relscore" title="Relative strength (0–100)">${o.relScore}</span> <span class="dt-sec">${esc(o.source)}${o.tier === 'B' ? ' · B' : ''}</span></div>
+        <div class="dt-best-top"><span class="dt-best-rank">#${o.rank}</span> ${carryBadge(o)} <b>${esc(o.ticker)}</b> <span class="dt-relscore" title="Relative strength (0–100)">${o.relScore}</span> <span class="dt-sec">${esc(o.source)}${o.tier === 'B' ? ' · B' : ''}</span></div>
         <div class="dt-card-sub">${o.pctChange >= 0 ? '+' : ''}${o.pctChange}% today · RVOL ${o.relVol}× · <span class="dt-dim">${esc(o.why)}</span></div>
         ${o.orb ? `<div class="dt-card-plan">📈 <b>ORB</b> break &gt;<b>$${o.orb.trigger}</b> · 🛑 <b>$${o.orb.stop}</b> · 🏁 <b>$${o.orb.target}</b> <span class="dt-dim">1:${o.orb.rr}</span></div>` : (o.stop ? `<div class="dt-card-plan">🛑 <b>$${o.stop}</b> · 🏁 <b>$${o.target}</b>${o.rr != null ? ` <span class="dt-dim">1:${o.rr}</span>` : ''}</div>` : '')}
       </div>`;
     const bestSection = (t.riskOff || !best.length) ? '' : `<div class="rot-panel" style="border-color:#f59e0b66;background:#f59e0b0d">
         <div class="rot-head" style="color:#f59e0b">⭐ Today's Best Opportunities <span class="dt-dim">(${best.length})</span></div>
-        <div class="rot-sub">Ranked #1..${best.length} across today's picks by <b>relative strength</b>, drawn only from the scans with a <b>validated +3-day continuation edge</b> (Momentum &amp; Liquid + multi-day runs). Explosive small-caps are excluded here — they backtested <b>inverted</b> (the most explosive tend to fade next day).</div>
+        <div class="rot-sub">Ranked by <b>🔮 carry odds</b> (pcarry) across the whole pool. <b>The honest truth</b> (research/33, survivorship-corrected 26k candidate-days): <b>tradeable 3-session continuation is ~a coin-flip</b> — the strongly-predictable part lives in the <b>un-tradeable overnight leg</b> (you buy at the next open, after it's gone). So carry odds sit ~40–60% and mainly <b>flag fade risk</b> (⚠ overextended blow-offs, dilution/M&amp;A pops, risk-off tape) to help you <b>avoid traps</b> — they do <b>not</b> predict winners. Overextended/explosive names now flow through but the model <b>discounts</b> them, so they sort to the bottom.</div>
         <div class="dt-best-grid">${best.map(bestCard).join('')}</div>
       </div>`;
     el.innerHTML = banner + tapeBadge + bestSection + configBanner + howto + ml + es + runSection + track +
