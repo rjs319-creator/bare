@@ -812,6 +812,8 @@
     .scr-tag.obv { color: var(--green); border-color: #10d98a44; background: var(--green-dim); }
     .scr-tag.ud  { color: var(--amber); border-color: #f0a83244; background: var(--amber-dim); }
     .scr-tag.earn { color: var(--red); border-color: #ef505055; background: var(--red-dim); }
+    .scr-tag.si { color: var(--amber); border-color: #f0a83244; background: var(--amber-dim); }
+    .scr-tag.si.hi { color: var(--red); border-color: #ef505055; background: var(--red-dim); }
     .scr-tag.rsnh { color: #06c4d4; border-color: #06c4d455; background: var(--cyan-dim); }
     .scr-tag.lbase { color: var(--text-dim); border-color: var(--border-hi); }
     .scr-tag.model { color: #8a6dff; border-color: #8a6dff55; background: #120c24; }
