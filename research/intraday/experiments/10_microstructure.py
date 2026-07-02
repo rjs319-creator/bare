@@ -219,7 +219,11 @@ def run():
     (OUT / "microstructure.json").write_text(json.dumps(
         {"n_signals": len(sigs), "n_fills": len(rows), "split_at": mid, "keepers": [k[0] for k in keepers],
          "take_all": base, "verdict": verdict}, indent=2, default=str))
-    print(f"Saved: {OUT/'microstructure.json'}")
+    # per-trade stream for the cross-sleeve diversification + hardened book sims (steps 31/32)
+    (OUT / "gap_trades.json").write_text(json.dumps(
+        [{"date": r["s"]["date"], "ret": r["ret"], "bars_held": r["tr"].bars_held,
+          "exit_reason": r["tr"].exit_reason} for r in rows], default=str))
+    print(f"Saved: {OUT/'microstructure.json'} + gap_trades.json ({len(rows)} trades)")
 
 
 if __name__ == "__main__":

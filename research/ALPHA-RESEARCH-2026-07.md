@@ -114,3 +114,63 @@ breakout-bar volume / microstructure features on the live ledger** so the N3 lea
 validated out-of-sample without sizing on it. Reproduce: `research/28-mlrank.py`,
 `29-regime.py`, `research/intraday/experiments/10_microstructure.py` (all in the
 `research/intraday/.venv` which now has scikit-learn + hmmlearn).
+
+---
+
+# Round 4 — realized-edge levers (portfolio construction, 2026-07-02)
+
+Reframe: after 3 rounds proved there's no new *signal* to find, the goal ("higher
+edge/alpha") is reachable only through **realized-return** levers on the edges that
+already work. Two tests:
+
+**S1 — single-sleeve sizing overlays (`30-sizing.py`) = ❌ no free win.** Long top-decile
+small/mid momentum book, 48mo. Fixed Sharpe 0.55 / maxDD −31.5%. Regime-gating a *held*
+book HURTS (Sharpe →0.00: the VIX/SMA gate fires near bottoms and misses the rebound —
+regime avoidance is for not *entering* new breakouts, not de-risking a held book). Vol-
+targeting halves drawdown (−31%→−17%) but cuts Sharpe (0.55→0.37) because this book's
+returns concentrate in high-vol periods, so it de-levers exactly when paying.
+
+**S2 — cross-sleeve DIVERSIFICATION (`31-multisleeve.py`) = ✅ THE ONE WIN.** Combining
+two low-correlation edges — MOM (top-decile momentum, monthly) and GAP (unscheduled-gap
+ORB event sleeve, in cash between signals):
+
+| Book (37mo overlap) | Sharpe | maxDD | Calmar | OOS Sharpe | OOS maxDD |
+|---|---|---|---|---|---|
+| MOM only | 0.35 | −31.5% | 0.19 | 0.12 | −31.5% |
+| GAP only | 1.18 | −12.1% | 1.98 | 1.36 | −10.2% |
+| 50/50 equal | 1.14 | −9.1% | 1.82 | 0.98 | −7.3% |
+| **inverse-vol (risk parity)** | **1.19** | −11.6% | 1.49 | **1.42** | **−6.3%** |
+
+Sleeve correlation **−0.26**. The inverse-vol combined book **beats the best single
+sleeve on Sharpe both in-sample (1.19>1.18) and OOS (1.42>1.36)** with the shallowest
+drawdown (−6.3% OOS). This is real diversification (negative correlation) plus the event
+sleeve simply being the better edge.
+
+**Honest caveats:** (1) the win leans heavily on GAP ≫ MOM (Sharpe 1.2 vs 0.35) — it's
+"add the better edge + diversify," and momentum barely contributes OOS. (2) The GAP
+monthly return = mean of that month's ORB trades — a proxy that ignores capacity/overlap
+and flatters the event sleeve's Sharpe via within-month averaging; the *direction* is
+robust, the magnitude (Sharpe ~1.4) is optimistic. (3) 37mo / 19mo OOS is modest.
+
+**S3 — HARDENING (`32-hardened.py`) TEMPERS S2.** Rebuilt GAP as a real capital-aware book
+(K parallel equal-capital slots, capacity-capped — a signal is SKIPPED when all K are
+busy given each trade's actual hold — compounding, no within-month averaging) + momentum
+turnover cost. Result: the "combined **beats** the best single sleeve" claim **does NOT
+survive** — combined-minus-best-single Sharpe is ~0 to slightly negative across K∈{3,5,10}
+× cost∈{0,15,30}bps, and a moving-block bootstrap of the joint series gives that delta a
+**90% CI of [−0.89, +0.51]** (straddles zero). The naive S2 Sharpe-lift was largely the
+within-month-averaging flattery.
+
+What **does** survive: the combined book matches the GAP sleeve's Sharpe (~1.08) at
+**~half the volatility and a shallower drawdown** (vol 30%→17%, maxDD −20%→−16% IS; OOS
+combined Sharpe 1.96 / vol 10% / maxDD −2.4%). And the real takeaway — the **Gap & Go
+event sleeve IS the edge** (Sharpe ~1.1–1.4 even after capacity + costs), while momentum
+is weak (Sharpe ~0.3, ~0 OOS) and mostly a smoother.
+
+**Corrected actionable conclusion:** blending sleeves is a genuine **risk/drawdown
+reducer at equal Sharpe**, not a Sharpe booster (with only 2 sleeves, one dominant). The
+highest-yield realized-edge move is to **lean into the Gap & Go event sleeve** (the best
+risk-adjusted edge in the app) and optionally blend momentum in for a smoother ride. A
+true Sharpe lift from diversification would need a 3rd genuinely-uncorrelated sleeve.
+Caveats: GAP's Sharpe is still somewhat optimistic (simple capacity model, hard intraday
+execution, sub-50% hit rate, 37mo).
