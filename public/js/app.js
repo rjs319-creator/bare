@@ -3758,14 +3758,90 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading the event engine…</p></div>`;
     try {
-      const r = await fetch('/api/tracker?op=cern');
+      // State + decay curves (excess-vs-market by day, per event type) in parallel.
+      const [r, dr] = await Promise.all([
+        fetch('/api/tracker?op=cern'),
+        fetch('/api/tracker?op=cerndecay').catch(() => null),
+      ]);
       const d = await r.json();
       if (!d.ok) { el.innerHTML = `<div class="mom-status error"><p>${esc(d.error || 'CERN unavailable')}</p></div>`; return; }
-      renderCern(d);
+      let decay = null;
+      try { decay = dr ? await dr.json() : null; } catch { decay = null; }
+      renderCern(d, decay);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the event engine.</p></div>`; }
   }
 
-  function renderCern(d) {
+  // Build a { EVENT_TYPE: {recommendedHold, trustworthy, fades, holdExcess, daysNeeded} }
+  // lookup from the decay response so pick cards can show a holding window inline.
+  function cernHoldMap(decay) {
+    const m = {};
+    if (decay && decay.types) for (const [t, v] of Object.entries(decay.types)) m[t] = v;
+    return m;
+  }
+  // A short holding-window chip for a pick card / posterior row.
+  function cernHoldChip(hv) {
+    if (!hv) return '';
+    if (hv.recommendedHold != null && hv.trustworthy)
+      return `<span class="cx-hold ok" title="On average this event type's market-beating edge peaks around day ${hv.recommendedHold} (excess vs the S&P +${hv.holdExcess}%), then decays. Based on ${hv.n20} events resolved to the full 20-day window.">🕒 Hold ~${hv.recommendedHold} day${hv.recommendedHold === 1 ? '' : 's'}</span>`;
+    if (hv.recommendedHold != null)
+      return `<span class="cx-hold prov" title="Provisional: only ${hv.n20} of ${20} events have run the full 20 days. Trustworthy after ${hv.daysNeeded} more resolve.">🕒 Hold ~${hv.recommendedHold}d <i>(provisional)</i></span>`;
+    if (hv.fades)
+      return `<span class="cx-hold bad" title="On the data so far this event type does not beat the S&P at any horizon — it's underwater from day 1. No positive holding window.">🕒 No edge (fades)</span>`;
+    return `<span class="cx-hold wait" title="Not enough resolved events yet to draw a decay curve (${hv.daysNeeded} more needed).">🕒 Window: building</span>`;
+  }
+
+  // Compact SVG decay curve — average excess-vs-S&P (%) by day 1..20 for one event
+  // type. Zero line, a marker at the recommended-hold day. Matches the app's inline-
+  // SVG chart style (coreperfChart) — no chart library.
+  function cernDecaySvg(v) {
+    const pts = (v.curve || []).filter(c => c.avgExcess != null);
+    if (pts.length < 2) return `<div class="cx-decay-empty">Curve appears once ≥2 days have enough resolved events.</div>`;
+    const W = 300, H = 84, padL = 30, padR = 8, padT = 8, padB = 16;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    const maxDay = v.curve.length || 20;
+    let maxAbs = 1; pts.forEach(p => { maxAbs = Math.max(maxAbs, Math.abs(p.avgExcess)); });
+    const x = day => padL + ((day - 1) / (maxDay - 1)) * plotW;
+    const zeroY = padT + plotH / 2, y = val => zeroY - (val / maxAbs) * (plotH / 2);
+    const line = pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.day).toFixed(1)},${y(p.avgExcess).toFixed(1)}`).join(' ');
+    const dots = pts.map(p => `<circle cx="${x(p.day).toFixed(1)}" cy="${y(p.avgExcess).toFixed(1)}" r="1.6" fill="${p.avgExcess >= 0 ? '#10d98a' : '#ef4444'}"/>`).join('');
+    const hold = v.recommendedHold != null
+      ? `<line x1="${x(v.recommendedHold).toFixed(1)}" y1="${padT}" x2="${x(v.recommendedHold).toFixed(1)}" y2="${H - padB}" stroke="#f0a832" stroke-width="1" stroke-dasharray="3 2"/>`
+      : '';
+    const grid = `<line x1="${padL}" y1="${zeroY}" x2="${W - padR}" y2="${zeroY}" stroke="#3a4150"/>`
+      + `<text x="${padL - 4}" y="${padT + 4}" text-anchor="end" font-size="8" fill="#8a93a6">+${maxAbs.toFixed(1)}%</text>`
+      + `<text x="${padL - 4}" y="${zeroY + 3}" text-anchor="end" font-size="8" fill="#8a93a6">0</text>`
+      + `<text x="${padL - 4}" y="${H - padB}" text-anchor="end" font-size="8" fill="#8a93a6">-${maxAbs.toFixed(1)}%</text>`
+      + `<text x="${padL}" y="${H - 3}" font-size="8" fill="#8a93a6">day 1</text>`
+      + `<text x="${W - padR}" y="${H - 3}" text-anchor="end" font-size="8" fill="#8a93a6">day ${maxDay}</text>`;
+    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;font-family:inherit" role="img" aria-label="Excess vs S&P by day">${grid}${hold}<path d="${line}" fill="none" stroke="#06c4d4" stroke-width="1.5"/>${dots}</svg>`;
+  }
+
+  // The full "How long each event stays profitable" panel — one row per event type
+  // with a decay curve, recommended hold window, and honest trust status.
+  function cernDecayPanel(decay) {
+    if (!decay || !decay.types || !Object.keys(decay.types).length) {
+      return `<div class="bt-eff"><div class="bt-eff-head">📉 Decay curves — how long each event stays profitable</div>
+        <div class="bt-eff-sub">Appears once the engine has logged forced-flow events. Each event's return vs the S&P is tracked day 1→20; the average shows how long the edge lasts.</div></div>`;
+    }
+    const order = Object.entries(decay.types).sort((a, b) => (b[1].n20 - a[1].n20) || (b[1].n - a[1].n));
+    const rows = order.map(([t, v]) => `
+      <div class="cx-decay-row">
+        <div class="cx-decay-hd">
+          <span class="cx-decay-nm">${esc(CERN_LABEL[t] || t)}</span>
+          ${cernHoldChip(v)}
+          <span class="cx-decay-n">${v.trustworthy ? `${v.n20} resolved` : `${v.n20}/${decay.minTrust} resolved${v.daysNeeded ? ` · ${v.daysNeeded} more to trust` : ''}`}</span>
+        </div>
+        <div class="cx-decay-chart">${cernDecaySvg(v)}</div>
+      </div>`).join('');
+    return `<div class="bt-eff">
+      <div class="bt-eff-head">📉 Decay curves — how long each event stays profitable</div>
+      <div class="bt-eff-sub">Average return <b>vs the S&P 500</b> at each day after the signal fires (excess = beat-the-market). The <span style="color:#f0a832">amber dashed line</span> marks the recommended hold — the day the edge peaks before it decays. Curves need ~${decay.minTrust} events resolved to the full 20-day window before the window is trustworthy; until then it reads "provisional" or "building".</div>
+      ${rows}
+    </div>`;
+  }
+
+  function renderCern(d, decay) {
+    const holdMap = cernHoldMap(decay);
     const el = document.getElementById('events-container');
     if (!d.configured) {
       el.innerHTML = `<div class="mom-status"><p>${esc(d.note || 'CERN has not run yet.')} It runs daily with the warm cron — check back after the next run.</p></div>`;
@@ -3800,6 +3876,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
               <div class="at-box"><div class="at-label">Target</div><div class="at-val target">${o.target != null ? '$' + o.target : '—'}</div></div>
               <div class="at-box"><div class="at-label">Stop</div><div class="at-val stop">${o.stop != null ? '$' + o.stop : '—'}</div></div>
             </div>
+            ${cernHoldChip(holdMap[o.type]) ? `<div class="cx-card-hold">${cernHoldChip(holdMap[o.type])}</div>` : ''}
           </div>`).join('');
         return `<div class="cx-tier-head"><span class="cx-tier-name">${name}</span><span class="cx-tier-sub">${items.length} · ${sub}</span></div><div class="scr-grid">${cards}</div>`;
       }).join('');
@@ -3825,6 +3902,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       <div class="bt-note">CERN logs and resolves <b>every</b> qualifying forced-flow event whether it trades or not — the archive is the moat. <b>${d.archiveCount}</b> resolved · <b>${(d.open || []).length}</b> live signal${(d.open || []).length === 1 ? '' : 's'} · <b>${d.pendingCount}</b> building. Real size is gated behind posterior t≥2 per type; early on, expect mostly Probe / Log-only.</div>
       ${decHtml}
       ${alertHtml}
+      ${cernDecayPanel(decay)}
       <div class="bt-eff">
         <div class="bt-eff-head">🧠 Response-kernel posteriors (κ per event type)</div>
         <div class="bt-eff-sub">κ = the fraction of the dislocation the engine has learned reverts, ±uncertainty. Updated Bayesian-style as events resolve; rare types borrow strength from common ones. All seven types are live: <b>${CERN_FED.map(k => CERN_LABEL[k]).join(', ')}</b>.</div>

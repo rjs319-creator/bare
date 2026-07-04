@@ -31,7 +31,7 @@ const { runAlertsIngest, runAlerts, runAlertsGrade } = require('../lib/alerts-ro
 const { runArchive, runBaseline, runInsiderIngest, runInsider, runFundBuild, runFundamentals,
         runCernTickOp, runCern, runCernFsProbe, runCernLockProbe } = require('../lib/capture-routes');
 const { runTrack, runScoreboard, runApexLog, runGhostLog, runEdgeLog, runEdgeBook, runVReversal, runVReversalTest,
-        runDrift, runRecalibrate, runResearchOp, runExitsOp, runEmergingOp, runLongShortOp, runPeadOp, runBackfillOp, runModel, runNarrative, runMoverStudyOp } = require('../lib/apex-routes');
+        runDrift, runRecalibrate, runResearchOp, runExitsOp, runEmergingOp, runLongShortOp, runPeadOp, runBackfillOp, runModel, runNarrative, runMoverStudyOp, runCernDecay } = require('../lib/apex-routes');
 const { runHealth } = require('../lib/health');
 const { runLeaderboard, runLeaderboardTick } = require('../lib/leaderboard');
 const { runCoreBuild, runCore, runCoreLog, runCoreDrift, runCorePerf } = require('../lib/stablecore-routes');
@@ -118,5 +118,6 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'corelog') return runCoreLog(req, res);
   if (req.query.op === 'coredrift') return runCoreDrift(req, res);
   if (req.query.op === 'coreperf') return runCorePerf(req, res);
+  if (req.query.op === 'cerndecay') return runCernDecay(req, res);
   return runScoreboard(req, res);
 };
