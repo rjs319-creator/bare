@@ -1,8 +1,31 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { buildTriggers, parseGraph, alreadyMovedFlag, rankItems, MAX_TRIGGERS } = require('../lib/readthrough');
+const { buildTriggers, parseGraph, alreadyMovedFlag, rankItems, benchFor, MAX_TRIGGERS } = require('../lib/readthrough');
 const { tierFor } = require('../lib/readthrough-routes');
+
+test('benchFor: GICS sector → sector ETF, else null', () => {
+  assert.equal(benchFor('Energy'), 'XLE');
+  assert.equal(benchFor('Health Care'), 'XLV');
+  assert.equal(benchFor('Technology'), 'XLK');
+  assert.equal(benchFor('Not A Sector'), null);
+  assert.equal(benchFor(null), null);
+  assert.equal(benchFor(undefined), null);
+});
+
+test('parseGraph: carries a valid sector → bench ETF, nulls an invalid one', () => {
+  const { items } = parseGraph({ items: [
+    { beneficiary_ticker: 'BKR', trigger_ticker: 'APD', mechanism: 'compression supplier', directness: 3, beneficiary_sector: 'Energy', thesis: 't' },
+    { beneficiary_ticker: 'ZZZ', trigger_ticker: 'APD', mechanism: 'x', directness: 3, beneficiary_sector: 'Bogus', thesis: 't' },
+  ], notes: '' }, [{ ticker: 'APD' }]);
+  assert.equal(items.length, 2);
+  const bkr = items.find(x => x.beneficiary_ticker === 'BKR');
+  assert.equal(bkr.beneficiary_sector, 'Energy');
+  assert.equal(bkr.bench, 'XLE');
+  const zzz = items.find(x => x.beneficiary_ticker === 'ZZZ');
+  assert.equal(zzz.beneficiary_sector, null);
+  assert.equal(zzz.bench, null);
+});
 
 test('tierFor: Fresh / Moved / Unknown from the tape flag', () => {
   assert.equal(tierFor({ moved: { alreadyMoved: false } }), 'Fresh');

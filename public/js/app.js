@@ -5297,7 +5297,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     CERN: 'Forced-selling events (index changes, lockups, fire-sales, downgrades). One row per event type, showing how the reaction played out.',
     Tone: 'How upbeat or evasive management sounded on the recent earnings call, scored by Claude. Does a bullish-sounding call actually beat the market? This shows it.',
     Attention: 'Social attention split two ways: STICKY = interest sustained over many days (tends to keep drifting up); FAST = a short hype spike (tends to fade/reverse). Compare the two buckets’ returns to see if the split holds.',
-    ReadThrough: 'Second-order beneficiaries of the day’s big movers (a supplier/customer/rival linked to a gapper). FRESH = hadn’t repriced when surfaced; MOVED = already jumped. The test: do the Fresh (un-moved) read-throughs actually beat the market — and beat the already-Moved ones? (Excess is vs the S&P; sector-relative is the intended refinement.)',
+    ReadThrough: 'Second-order beneficiaries of the day’s big movers (a supplier/customer/rival linked to a gapper). FRESH = hadn’t repriced when surfaced; MOVED = already jumped. The test: do the Fresh (un-moved) read-throughs actually beat their peers — and beat the already-Moved ones? Excess here is vs each name’s own SECTOR ETF (beat your peers, not just the market); falls back to the S&P if the sector is unknown.',
   };
   const SB_HZ_HELP = 'Average return this many trading days after the pick. The green/red “vs S&P” line under it is the market-beating number: the pick’s return minus what the S&P 500 did over the same days.';
 
