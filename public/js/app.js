@@ -29,6 +29,43 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
     leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
+  // Plain-English "what is this tab?" hovers for a novice investor — one line per
+  // sub-tab, shown when you hover the tab button.
+  const SECTION_HELP = {
+    today: 'Your daily home base: the market mood and where to start.',
+    start: 'A beginner’s guide to what everything in this app means.',
+    opportunities: 'The best setups across all the screeners, gathered in one ranked list.',
+    screener: 'Stocks breaking out of chart patterns (classic breakout setups).',
+    custom: 'A momentum model that adapts its scoring to the current market regime.',
+    coremo: 'Steady, confirmed uptrends with the strongest 12-month momentum.',
+    daytrade: 'Short-term setups for same-day trading, with a live entry-timing grade.',
+    gapgo: 'Stocks gapping up on news and continuing — the one validated event edge.',
+    coil: 'Names coiling in tight compression before a potential explosive move.',
+    confluence: 'Stocks flagged by several screeners at once (agreement = higher conviction).',
+    ghost: 'Quiet accumulation — big money building a position before the breakout.',
+    trendrider: 'Ride established uptrends; the model drops names once they stop trending.',
+    fade: 'Overheated names that may be due to pull back (short/caution ideas).',
+    rotation: 'Which sectors money is rotating into and out of, week over week.',
+    sectors: 'Sector performance heatmap — what’s leading and lagging.',
+    momentum: 'Strong-buy and strong-sell momentum calls right now.',
+    news: 'Market-moving headlines, summarized.',
+    options: 'Unusual options activity — where the big option bets are landing.',
+    picks: 'Your saved / tracked picks.',
+    pulse: 'What the crowd is buzzing about on social + finance media (attention, not advice).',
+    gameplan: 'A plain-English daily game plan for the market.',
+    brief: 'A concise market brief — the current stance and why.',
+    forecast: 'Falsifiable market predictions, auto-graded against real prices.',
+    crowd: 'Prediction-market odds on macro events.',
+    sharp: 'Signs of “smart money” positioning worth a look.',
+    alerts: 'Auto-caught events — sharp-money flags and stance flips.',
+    backtest: 'Test the models against history: does the edge hold up over time?',
+    events: 'CERN — the forced-selling event engine (index changes, lockups, fire-sales).',
+    edge: 'The Edge Book: two independent strategy sleeves and their beat-the-market rate.',
+    leaderboard: 'A leaderboard ranking the app’s own algorithms by track record.',
+    scoreboard: 'The honest report card: how every signal type has actually performed vs the market.',
+    coreperf: 'Quarterly performance of the Core Momentum model vs the market.',
+    xalerts: 'Ranked trade alerts scraped from social accounts, graded on forward returns.',
+  };
   const topOf = sec => TOP_TABS.find(t => TAB_GROUPS[t].includes(sec));
 
   // Mark each section as a switchable screen
@@ -60,7 +97,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (group.length <= 1) { el.innerHTML = ''; el.style.display = 'none'; return; }
     el.style.display = '';
     el.innerHTML = `<div class="hub-sub">` + group.map(s =>
-      `<button class="hub-sub-btn ${s === sub ? 'active' : ''}" data-sub="${s}">${SUB_LABEL[s] || s}</button>`
+      `<button class="hub-sub-btn ${s === sub ? 'active' : ''}" data-sub="${s}"${SECTION_HELP[s] ? ` title="${esc(SECTION_HELP[s])}"` : ''}>${SUB_LABEL[s] || s}</button>`
     ).join('') + `</div>`;
     el.querySelectorAll('.hub-sub-btn').forEach(b => b.onclick = () => showTab(b.dataset.sub));
   }
@@ -1146,6 +1183,15 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     ['narrative',    'Story'],
     ['early',        'Early'],
   ];
+  // Plain-English hover for each criterion chip (novice investor).
+  const SCR_CRITERIA_HELP = {
+    accumulation: 'Accumulation — signs that big buyers are steadily building a position (more up-volume than down-volume).',
+    vcp: 'Volatility Contraction Pattern — the price swings are getting tighter, like a coiled spring before a move.',
+    resistance: 'Resistance — the stock is pushing up against a price ceiling it has struggled to break before.',
+    volume: 'Volume — trading activity is elevated, meaning more people are participating in the move.',
+    narrative: 'Story — there’s a real-world catalyst or theme (earnings, product, sector) driving interest.',
+    early: 'Early — this is an early-stage setup, before a confirmed breakout (more upside, but less certain).',
+  };
 
   // The four hard-gate filters every surfaced candidate must pass. Shown on each
   // card so it's explicit which requirements the name cleared.
@@ -2128,7 +2174,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
     const chips = SCR_CRITERIA.map(([key, label]) => {
       const met = c.criteria && c.criteria[key];
-      return `<div class="scr-chip ${met ? 'met' : ''}"><div class="scc-ic">${met ? '✓' : '·'}</div><span class="scc-lb">${label}</span></div>`;
+      const help = SCR_CRITERIA_HELP[key] ? ` title="${esc(SCR_CRITERIA_HELP[key])}${met ? '' : ' (this one is NOT met for this stock)'}"` : '';
+      return `<div class="scr-chip ${met ? 'met' : ''}"${help}><div class="scc-ic">${met ? '✓' : '·'}</div><span class="scc-lb">${label}</span></div>`;
     }).join('');
 
     // The four required hard-gate filters, each with the figure behind it.
@@ -2273,6 +2320,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   };
   const APEX_RG_LABEL = { RISK_ON: 'Risk-On', NEUTRAL: 'Neutral', RISK_OFF: 'Risk-Off' };
   const APEX_PILLAR_LABEL = { p1: 'Momentum / RS', p2: 'Technical structure', p3: 'Fundamental acceleration', p4: 'Supply / smart money' };
+  // Plain-English hovers for each scoring pillar (novice investor). w## = its weight.
+  const APEX_PILLAR_HELP = {
+    p1: 'Momentum / Relative Strength — is the stock outrunning the market lately? Higher = stronger recent trend. (w## is how much this counts toward the score.)',
+    p2: 'Technical structure — how clean the chart setup is (above key moving averages, orderly base). Higher = healthier chart.',
+    p3: 'Fundamental acceleration — are revenue and earnings growth speeding up, not just positive? Higher = improving business.',
+    p4: 'Supply / smart money — accumulation and buying pressure vs selling. Higher = big money leaning in.',
+  };
   const APEX_KEYS = ['p1', 'p2', 'p3', 'p4'];
 
   let apexLoaded = false, apexState = null, apexLast = null, apexDrift = null, apexModel = null;
@@ -2759,7 +2813,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const scopeTag = c._scope && c._scope !== 'large' ? ` · ${c._scope} cap` : '';
 
     const pill = (k, label) =>
-      `<div class="cx-pill ${k}"><div class="cx-pill-top"><span>${label} <span class="cx-pill-wt">w${preset[k]}</span></span><b>${pl[k]}</b></div><div class="cx-pill-track"><div class="cx-pill-fill" style="width:${pl[k]}%"></div></div></div>`;
+      `<div class="cx-pill ${k}"${APEX_PILLAR_HELP[k] ? ` title="${esc(APEX_PILLAR_HELP[k])}"` : ''}><div class="cx-pill-top"><span>${label} <span class="cx-pill-wt">w${preset[k]}</span></span><b>${pl[k]}</b></div><div class="cx-pill-track"><div class="cx-pill-fill" style="width:${pl[k]}%"></div></div></div>`;
 
     const weakKey = APEX_KEYS.find(k => pl[k] === minP);
     const weak = minP < 45 ? `<div class="cx-weak">⚠ Weakest pillar ${minP} — ${APEX_PILLAR_LABEL[weakKey]}</div>` : '';
@@ -3574,6 +3628,15 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   let ghostLoaded = false, ghostLast = null;
   const GHOST_PILLAR_ORDER = ['RM', 'AF', 'AV', 'SF', 'BONUS', 'IN'];
   const GHOST_PILLAR_SHORT = { RM: '① Rel. strength', AF: '② Accum. footprint', AV: '③ Accum. vacuum', SF: '④ Smart flow', BONUS: '⑤ Catalyst', IN: '⑥ Insider' };
+  // Plain-English hovers for each Ghost pillar (novice investor).
+  const GHOST_PILLAR_HELP = {
+    RM: 'Relative strength — is the stock quietly outperforming the market? Higher = leading.',
+    AF: 'Accumulation footprint — steady buying pressure (more up-volume than down-volume) even without a breakout yet.',
+    AV: 'Accumulation vacuum — a quiet, low-supply base. (Deliberately low-weighted — the app’s research found this factor weak.)',
+    SF: 'Smart flow — up/down volume and volume-adjusted signs of informed buying.',
+    BONUS: 'Catalyst — a fundamental or news reason for the accumulation (earnings acceleration, story).',
+    IN: 'Insider — real open-market buying by company insiders (Form 4 filings). A genuine confirmation flag.',
+  };
   const GHOST_RG_LABEL = { 'risk-on': 'Risk-On', 'neutral': 'Neutral', 'risk-off': 'Risk-Off' };
   const GHOST_TIER_CSS = { GHOST: 'apex', STALKING: 'loaded', WATCH: 'watch' }; // reuse existing card colors
 
@@ -3668,7 +3731,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
     const pill = (k) => {
       const w = weights[k] != null ? `<span class="cx-pill-wt">w${Math.round(weights[k] * 100)}</span>` : '';
-      return `<div class="cx-pill"><div class="cx-pill-top"><span>${GHOST_PILLAR_SHORT[k]} ${w}</span><b>${pl[k]}</b></div><div class="cx-pill-track"><div class="cx-pill-fill" style="width:${pl[k]}%"></div></div></div>`;
+      return `<div class="cx-pill"${GHOST_PILLAR_HELP[k] ? ` title="${esc(GHOST_PILLAR_HELP[k])}"` : ''}><div class="cx-pill-top"><span>${GHOST_PILLAR_SHORT[k]} ${w}</span><b>${pl[k]}</b></div><div class="cx-pill-track"><div class="cx-pill-fill" style="width:${pl[k]}%"></div></div></div>`;
     };
 
     // Insider line — the genuinely new signal; surface the raw net when present.

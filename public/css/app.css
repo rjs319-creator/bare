@@ -954,6 +954,8 @@
     .sb-secgroup-h[title] { cursor: help; }
     .sb-help-i { display: inline-block; font-size: 0.62rem; color: var(--cyan); border: 1px solid #06c4d455; border-radius: 999px; width: 13px; height: 13px; line-height: 12px; text-align: center; cursor: help; vertical-align: middle; opacity: 0.85; }
     .sb-h-lb[title] { cursor: help; }
+    /* Novice hover affordance on annotated chips / pillars across the older tabs. */
+    .scr-chip[title], .cx-pill[title], .scr-criteria .scr-chip[title] { cursor: help; }
     .sb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
     .sb-card { border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: var(--bg); position: relative; }
     .sb-card.pos { border-color: #10d98a44; }
