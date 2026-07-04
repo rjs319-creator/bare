@@ -2,6 +2,14 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const { buildTriggers, parseGraph, alreadyMovedFlag, rankItems, MAX_TRIGGERS } = require('../lib/readthrough');
+const { tierFor } = require('../lib/readthrough-routes');
+
+test('tierFor: Fresh / Moved / Unknown from the tape flag', () => {
+  assert.equal(tierFor({ moved: { alreadyMoved: false } }), 'Fresh');
+  assert.equal(tierFor({ moved: { alreadyMoved: true } }), 'Moved');
+  assert.equal(tierFor({ moved: { alreadyMoved: null } }), 'Unknown');
+  assert.equal(tierFor({}), 'Unknown');
+});
 
 test('buildTriggers: dedups, sorts by gap desc, caps at MAX_TRIGGERS', () => {
   const gapDay = { picks: [

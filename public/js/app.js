@@ -15,7 +15,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     start:     ['today', 'start'],
     screeners: ['opportunities', 'screener', 'custom', 'coremo', 'daytrade', 'gapgo', 'coil', 'confluence', 'ghost', 'trendrider', 'fade'],
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
-    predict:   ['pulse', 'gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
+    predict:   ['pulse', 'readthrough', 'gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     research:  ['backtest', 'events', 'edge'],
     track:     ['leaderboard', 'scoreboard', 'coreperf', 'xalerts'],
   };
@@ -25,7 +25,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     today: '🏠 Today', start: '📘 Guide',
     opportunities: '⭐ Opportunities', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
-    pulse: '📡 Market Pulse', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
+    pulse: '📡 Market Pulse', readthrough: '🔗 Read-Through', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
     leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
@@ -52,6 +52,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     options: 'Unusual options activity — where the big option bets are landing.',
     picks: 'Your saved / tracked picks.',
     pulse: 'What the crowd is buzzing about on social + finance media (attention, not advice).',
+    readthrough: 'Second-order “who benefits and hasn’t moved yet” — names linked to today’s gappers by supply chain or competition.',
     gameplan: 'A plain-English daily game plan for the market.',
     brief: 'A concise market brief — the current stance and why.',
     forecast: 'Falsifiable market predictions, auto-graded against real prices.',
@@ -137,6 +138,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'options' && typeof ensureOptions === 'function') ensureOptions();
     if (sub === 'picks' && typeof ensurePicks === 'function') ensurePicks();
     if (sub === 'pulse' && typeof ensurePulse === 'function') ensurePulse();
+    if (sub === 'readthrough' && typeof ensureReadThrough === 'function') ensureReadThrough();
     if (sub === 'gameplan' && typeof ensureGamePlan === 'function') ensureGamePlan();
     if (sub === 'brief' && typeof ensureBrief === 'function') ensureBrief();
     if (sub === 'forecast' && typeof ensureForecast === 'function') ensureForecast();
@@ -3156,6 +3158,65 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (rb) rb.onclick = () => runPulseUI(true);
   }
 
+  // ── 🔗 READ-THROUGH — second-order beneficiaries of today's gappers (server-side
+  // lib/readthrough-routes.js via Fable 5). "Who benefits and hasn't moved yet?" — a
+  // relational lead-lag a per-stock model can't see. Names that already repriced today
+  // are demoted (the edge is the lag). A LEAD to forward-track, NOT a buy signal.
+  let readthroughLoaded = false;
+  function ensureReadThrough() { if (!readthroughLoaded) { readthroughLoaded = true; runReadThroughUI(false); } }
+  async function runReadThroughUI(force) {
+    const el = document.getElementById('readthrough-container');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Rebuilding the read-through graph… <span class="dt-dim">(Fable 5 reasons the beneficiaries — can take ~50s)</span>' : 'Loading read-through graph…'}</p></div>`;
+    try {
+      const p = await fetch('/api/tracker?op=readthrough' + (force ? '&force=1' : '')).then(r => r.json());
+      renderReadThrough(p);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Read-Through.</p></div>`; }
+  }
+  const RT_LINK = { supplier: ['🔧', 'Supplier'], customer: ['🛒', 'Customer'], tollbooth: ['🛣️', 'Toll-booth'], substitute: ['🔀', 'Substitute'], input_cost: ['⛽', 'Input cost'], partner: ['🤝', 'Partner'] };
+  function renderReadThrough(p) {
+    const el = document.getElementById('readthrough-container');
+    if (!el) return;
+    if (!p || !p.ok || !(p.items || []).length) {
+      const why = p && p.error ? ' — ' + esc(p.error) : (p && !(p.items || []).length ? ' — no read-throughs from the latest gappers yet' : '');
+      el.innerHTML = `<div class="mom-status error"><p>Read-Through is warming up${why}. It builds off the day's Gap & Go movers — try Refresh in a moment.</p></div>`;
+      return;
+    }
+    const gt = document.getElementById('readthrough-gen-time');
+    if (gt && p.generatedAt) gt.textContent = `· ${p.triggerDate ? 'from ' + esc(p.triggerDate) + ' gappers · ' : ''}updated ${p.ageMins != null && p.ageMins < 90 ? (p.ageMins + 'm ago') : new Date(p.generatedAt).toLocaleString()}`;
+    const dots = n => '●'.repeat(Math.max(0, Math.min(5, n))) + '○'.repeat(5 - Math.max(0, Math.min(5, n)));
+    const trig = (p.triggers || []).map(t => `<span class="pulse-tk">$${esc(t.ticker)}${t.gapPct != null ? ' +' + t.gapPct + '%' : ''}</span>`).join(' ');
+    const card = it => {
+      const [le, ll] = RT_LINK[it.link_type] || RT_LINK.partner;
+      const mv = it.moved || {};
+      const tape = mv.alreadyMoved === true
+        ? `<span class="rt-tape rt-moved" title="Already moved ${mv.movedPct}% today — likely priced in">⚪ moved ${mv.movedPct > 0 ? '+' : ''}${mv.movedPct}%</span>`
+        : mv.alreadyMoved === false
+          ? `<span class="rt-tape rt-fresh" title="Hasn't repriced yet (${mv.movedPct != null ? mv.movedPct + '% today' : 'flat'})">🟢 not yet moved${mv.movedPct != null ? ' (' + (mv.movedPct > 0 ? '+' : '') + mv.movedPct + '%)' : ''}</span>`
+          : `<span class="rt-tape rt-unknown" title="Tape unavailable">◽ tape n/a</span>`;
+      return `<div class="pulse-card${mv.alreadyMoved === true ? ' rt-dim' : ''}">
+        <div class="pulse-top">
+          <span class="pulse-head"><b>$${esc(it.beneficiary_ticker)}</b> ${esc(it.beneficiary_name || '')}</span>
+          ${tape}
+        </div>
+        <div class="pulse-meta">
+          <span class="rt-link" title="${esc(ll)} relationship">${le} ${esc(ll)}</span>
+          <span class="rt-from">← $${esc(it.trigger_ticker)}</span>
+          <span class="rt-direct" title="Directness of the link (5 = single-name dependency)">${dots(it.directness)}</span>
+        </div>
+        <div class="pulse-idea"><b>Link:</b> ${esc(it.mechanism)}</div>
+        <div class="pulse-why">${esc(it.thesis)}</div>
+        ${it.caution ? `<div class="pulse-caution">⚠️ ${esc(it.caution)}</div>` : ''}
+      </div>`;
+    };
+    el.innerHTML = `
+      <div class="dt-note" style="border-left-color:#14b8a6"><b>🔗 Second-order read-throughs.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''}</div>
+      ${trig ? `<div class="rt-triggers">Off today's movers: ${trig}</div>` : ''}
+      <div class="pulse-grid">${p.items.map(card).join('')}</div>`;
+    const rb = document.getElementById('readthrough-refresh-btn');
+    if (rb) rb.onclick = () => runReadThroughUI(true);
+  }
+
   // ── 🗞️ DAILY GAME PLAN — news + sentiment + the app's own signals synthesized
   // (server-side, lib/gameplan.js) into one succinct plan + predictions, tiered
   // novice↔pro, building on a rolling multi-day narrative. UI just renders op=gameplan.
@@ -5219,11 +5280,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const scoreboardMeta       = document.getElementById('scoreboard-meta');
   let   lastScoreboard       = null;
 
-  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)' };
+  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)' };
   const SB_TIER_LABEL = { Breakout: 'Breakout', Setup: 'Setup', Early: 'Early', StrongBuy: 'Strong Buy', StrongSell: 'Strong Sell', GHOST: '👻 Ghost', STALKING: '🥷 Stalking', SHORT: 'Short', SHORT_LIGHT: 'Short (light)',
     INDEX_DELETE: 'Index Delete', INDEX_ADD_FADE: 'Index Add (fade)', LOCKUP_EXPIRY: 'Lockup Expiry', TAX_LOSS: 'Tax-Loss Selling', FIRE_SALE: 'Fire Sale', MARGIN_SPIRAL: 'Margin Spiral', FORCED_DOWNGRADE: 'Forced Downgrade',
     Bullish: '📈 Bullish tone', Neutral: '➖ Neutral tone', Bearish: '📉 Bearish tone',
-    Sticky: '📈 Sticky attention', Fast: '⚡ Fast hype' };
+    Sticky: '📈 Sticky attention', Fast: '⚡ Fast hype',
+    Fresh: '🟢 Fresh (not yet moved)', Moved: '⚪ Moved (priced in)', Unknown: '◽ Unknown' };
   const SB_HZ         = [['1d', '1-Day'], ['5d', '5-Day'], ['10d', '10-Day'], ['20d', '20-Day'], ['1m', '1-Month'], ['3m', '3-Month']];
   // Plain-English "what is this?" hovers for a novice investor — shown on each
   // Scoreboard section header and horizon column.
@@ -5235,6 +5297,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     CERN: 'Forced-selling events (index changes, lockups, fire-sales, downgrades). One row per event type, showing how the reaction played out.',
     Tone: 'How upbeat or evasive management sounded on the recent earnings call, scored by Claude. Does a bullish-sounding call actually beat the market? This shows it.',
     Attention: 'Social attention split two ways: STICKY = interest sustained over many days (tends to keep drifting up); FAST = a short hype spike (tends to fade/reverse). Compare the two buckets’ returns to see if the split holds.',
+    ReadThrough: 'Second-order beneficiaries of the day’s big movers (a supplier/customer/rival linked to a gapper). FRESH = hadn’t repriced when surfaced; MOVED = already jumped. The test: do the Fresh (un-moved) read-throughs actually beat the market — and beat the already-Moved ones? (Excess is vs the S&P; sector-relative is the intended refinement.)',
   };
   const SB_HZ_HELP = 'Average return this many trading days after the pick. The green/red “vs S&P” line under it is the market-beating number: the pick’s return minus what the S&P 500 did over the same days.';
 

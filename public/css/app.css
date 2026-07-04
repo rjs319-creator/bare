@@ -1864,3 +1864,16 @@
 .pulse-why { font-size: .86rem; color: var(--text-dim); margin: 3px 0; }
 .pulse-caution { font-size: .82rem; color: var(--amber, #f59e0b); margin: 4px 0; }
 .pulse-src { font-size: .78rem; color: var(--text-dim); margin-top: 4px; font-style: italic; }
+
+/* 🔗 Read-Through — reuses .pulse-card/.pulse-grid; teal accent + tape/link badges */
+#readthrough .pulse-card { border-left-color: #14b8a6; }
+#readthrough .pulse-tk { background: #14b8a622; color: #5eead4; }
+.rt-triggers { font-size: .84rem; color: var(--text-dim); margin: 8px 0 10px; }
+.rt-link { font-weight: 700; }
+.rt-from { color: var(--text-dim); font-weight: 700; }
+.rt-direct { color: #14b8a6; letter-spacing: -1px; }
+.rt-tape { font-size: .78rem; font-weight: 700; white-space: nowrap; }
+.rt-fresh { color: var(--green); }
+.rt-moved { color: var(--text-dim); }
+.rt-unknown { color: var(--text-dim); }
+.rt-dim { opacity: .62; }
