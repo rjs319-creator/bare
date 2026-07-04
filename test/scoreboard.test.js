@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { forwardReturn, forwardPath, summarizeReturns, cernPicksFrom, fadeRowsFrom, regimeBucketOf } = require('../lib/apex-routes');
+const { forwardReturn, forwardPath, spyForwardReturn, summarizeReturns, cernPicksFrom, fadeRowsFrom, regimeBucketOf } = require('../lib/apex-routes');
 
 // ── regimeBucketOf: map a macro state into a Scoreboard regime bucket ─────────
 test('regimeBucketOf: null / missing state yields no bucket', () => {
@@ -140,7 +140,26 @@ test('forwardPath: returns null when the horizon has not elapsed yet', () => {
   assert.equal(forwardPath(PATH, { date: '2026-01-01' }, 5), null);
 });
 
-// ── summarizeReturns: expectancy + big-winner reach ──────────────────────────
+// ── spyForwardReturn: the market benchmark over the same window ───────────────
+
+const SPY = [
+  { date: '2026-01-01', close: 500 },
+  { date: '2026-01-02', close: 505 },  // +1%
+  { date: '2026-01-03', close: 490 },  // -3% from anchor
+];
+
+test('spyForwardReturn: SPY return over the window from the pick date', () => {
+  const r = spyForwardReturn(SPY, { date: '2026-01-01' }, 1);
+  assert.equal(r, 1); // 500 → 505 = +1%
+});
+
+test('spyForwardReturn: null when the window has not elapsed or no data', () => {
+  assert.equal(spyForwardReturn(SPY, { date: '2026-01-01' }, 9), null);
+  assert.equal(spyForwardReturn(null, { date: '2026-01-01' }, 1), null);
+  assert.equal(spyForwardReturn([], { date: '2026-01-01' }, 1), null);
+});
+
+// ── summarizeReturns: expectancy + big-winner reach + market-beating ─────────
 
 test('summarizeReturns: reports big-winner rates from the MFE distribution', () => {
   const s = summarizeReturns([
@@ -153,6 +172,26 @@ test('summarizeReturns: reports big-winner rates from the MFE distribution', () 
   assert.equal(s.big20, 25);   // only 25 crosses +20%
   assert.equal(s.avgMfe, 12.5); // (12+4+25+9)/4
   assert.equal(summarizeReturns([]), null);
+});
+
+test('summarizeReturns: excess vs market — avg excess + beat rate over records that have it', () => {
+  const s = summarizeReturns([
+    { ret: 5, mfe: 6, exc: 3 },   // beat market
+    { ret: 2, mfe: 3, exc: -1 },  // lagged market
+    { ret: 4, mfe: 5, exc: 2 },   // beat market
+    { ret: 1, mfe: 2 },           // no benchmark yet → excluded from excess stats
+  ]);
+  assert.equal(s.n, 4);          // raw stats still count every record
+  assert.equal(s.excessN, 3);    // only 3 have a benchmark
+  assert.equal(s.avgExcess, 1.33); // (3 - 1 + 2) / 3
+  assert.equal(s.beatMktRate, 67); // 2 of 3 beat the market
+});
+
+test('summarizeReturns: null excess fields when no record carries a benchmark', () => {
+  const s = summarizeReturns([{ ret: 5, mfe: 6 }, { ret: -2, mfe: 1 }]);
+  assert.equal(s.excessN, 0);
+  assert.equal(s.avgExcess, null);
+  assert.equal(s.beatMktRate, null);
 });
 
 // ── fadeRowsFrom: flatten the fade ledger into Scoreboard short rows ──────────

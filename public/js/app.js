@@ -5039,7 +5039,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events' };
   const SB_TIER_LABEL = { Breakout: 'Breakout', Setup: 'Setup', Early: 'Early', StrongBuy: 'Strong Buy', StrongSell: 'Strong Sell', GHOST: '👻 Ghost', STALKING: '🥷 Stalking', SHORT: 'Short', SHORT_LIGHT: 'Short (light)',
     INDEX_DELETE: 'Index Delete', INDEX_ADD_FADE: 'Index Add (fade)', LOCKUP_EXPIRY: 'Lockup Expiry', TAX_LOSS: 'Tax-Loss Selling', FIRE_SALE: 'Fire Sale', MARGIN_SPIRAL: 'Margin Spiral', FORCED_DOWNGRADE: 'Forced Downgrade' };
-  const SB_HZ         = [['1w', '1-Week'], ['1m', '1-Month'], ['3m', '3-Month']];
+  const SB_HZ         = [['1d', '1-Day'], ['5d', '5-Day'], ['10d', '10-Day'], ['20d', '20-Day'], ['1m', '1-Month'], ['3m', '3-Month']];
 
   // Regime filter — split every track record by the macro regime live at each
   // pick's trigger (the project's one validated edge lever). 'all' = unsplit.
@@ -5090,7 +5090,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // from the currently-selected regime bucket.
   function sbVerdict(g) {
     const h = sbHz(g);
-    const pick = h['1m'] || h['1w'] || h['3m'];
+    const pick = h['20d'] || h['1m'] || h['10d'] || h['5d'] || h['1d'] || h['3m'];
     if (!pick) return { cls: 'pending', label: 'Pending', val: null };
     return { cls: pick.avg > 0 ? 'pos' : 'neg', label: pick.avg > 0 ? 'Positive' : 'Negative', val: pick.avg };
   }
@@ -5105,9 +5105,15 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const s = h[k];
       if (!s) return `<div class="sb-h"><div class="sb-h-lb">${lb}</div><div class="sb-h-ret na">—</div><div class="sb-h-sub">pending</div></div>`;
       const up = s.avg >= 0;
-      return `<div class="sb-h"><div class="sb-h-lb">${lb}</div><div class="sb-h-ret ${up ? 'up' : 'down'}">${up ? '+' : ''}${s.avg}%</div><div class="sb-h-sub">${s.winRate}% win · n=${s.n}</div></div>`;
+      // Market-relative line — the Step-1 headline: excess vs the S&P over the same
+      // window, plus how often the signal beat the market. null until SPY resolves.
+      const exUp = s.avgExcess != null && s.avgExcess >= 0;
+      const exLine = s.avgExcess == null
+        ? `<div class="sb-h-exc na">vs S&amp;P: —</div>`
+        : `<div class="sb-h-exc ${exUp ? 'up' : 'down'}" title="Average return minus the S&P 500 over the same ${lb} window — this is 'did it beat the market'. Beat rate = share of picks that outran the S&P.">vs S&amp;P ${exUp ? '+' : ''}${s.avgExcess}% · beat ${s.beatMktRate}%</div>`;
+      return `<div class="sb-h"><div class="sb-h-lb">${lb}</div><div class="sb-h-ret ${up ? 'up' : 'down'}">${up ? '+' : ''}${s.avg}%</div><div class="sb-h-sub">${s.winRate}% win · n=${s.n}</div>${exLine}</div>`;
     }).join('');
-    const hl = h['1m'] || h['1w'] || h['3m'];
+    const hl = h['20d'] || h['1m'] || h['10d'] || h['5d'] || h['1d'] || h['3m'];
     // In a regime view, show that regime's logged-pick count; flag thin samples so
     // a 2-pick win-rate isn't mistaken for a real edge (the project's small-n rule).
     const regCount = sbRegime === 'all' ? g.picks : ((g.regimePicks && g.regimePicks[sbRegime]) || 0);
