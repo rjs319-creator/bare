@@ -196,6 +196,11 @@ module.exports = async function handler(req, res) {
   let coredrift = null;
   try { const r = await fetch('https://' + HOST + '/api/tracker?op=coredrift', { headers: { 'x-warm': '1' } }); coredrift = await r.json(); }
   catch (e) { coredrift = { error: String(e && e.message || e) }; }
+  // Fast-vs-sticky attention — cheap (no API): classify the day's archived mentions and
+  // log Sticky/Fast names for the Scoreboard. Runs after op=archive wrote today's file.
+  let attentiontick = null;
+  try { const r = await fetch('https://' + HOST + '/api/tracker?op=attentiontick', { headers: { 'x-warm': '1' } }); attentiontick = await r.json(); }
+  catch (e) { attentiontick = { error: String(e && e.message || e) }; }
   // Earnings-call tone — LAST on purpose: it makes bounded Claude calls, so if it's
   // slow it never blocks the critical logging ops above. Small per-run limit caps time.
   let tonetick = null;
@@ -203,7 +208,7 @@ module.exports = async function handler(req, res) {
   catch (e) { tonetick = { error: String(e && e.message || e) }; }
 
   const warmedExtra = await extraWarm;   // already resolved — ran during the tail above
-  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, tonetick, at: new Date().toISOString() };
+  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, at: new Date().toISOString() };
 
   // Observability: persist a compact health record so failed ticks / stale data are visible (op=health).
   try { const { summarizeRun, writeHealthRun } = require('../lib/health'); await writeHealthRun(summarizeRun(result)); }

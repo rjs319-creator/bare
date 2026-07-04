@@ -37,6 +37,7 @@ const { runLeaderboard, runLeaderboardTick } = require('../lib/leaderboard');
 const { runCoreBuild, runCore, runCoreLog, runCoreDrift, runCorePerf } = require('../lib/stablecore-routes');
 const { runGamePlan } = require('../lib/gameplan-routes');
 const { runToneTick, runTone } = require('../lib/tone-routes');
+const { runAttention, runAttentionTick } = require('../lib/attention-routes');
 const { runOptionsFlow, runOptionsPerf } = require('../lib/optionsflow-routes');
 const { runPulse } = require('../lib/pulse-routes');
 
@@ -122,5 +123,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'cerndecay') return runCernDecay(req, res);
   if (req.query.op === 'tonetick') return runToneTick(req, res);
   if (req.query.op === 'tone') return runTone(req, res);
+  if (req.query.op === 'attentiontick') return runAttentionTick(req, res);
+  if (req.query.op === 'attention') return runAttention(req, res);
   return runScoreboard(req, res);
 };

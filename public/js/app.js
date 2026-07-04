@@ -606,6 +606,23 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const sign = t.tone > 0 ? '+' : '';
     return `<span class="scr-tone ${cls}" title="Earnings-call tone ${sign}${t.tone}/10 (${esc(t.tier || '')}): ${esc(t.reason || '')}${t.callDate ? ' — call ' + esc(String(t.callDate).slice(0,10)) : ''}">🎙 ${sign}${t.tone}</span>`;
   }
+  // ticker -> fast-vs-sticky attention (op=attention): { class, note, presence, ... }.
+  let attnMap = {};
+  let attnLoaded = false;
+  function ensureAttnMap(onLoad) {
+    if (attnLoaded) return;
+    attnLoaded = true;
+    fetch('/api/tracker?op=attention').then(r => r.json()).then(d => {
+      if (d && d.byTicker) { attnMap = d.byTicker; if (typeof onLoad === 'function') onLoad(); }
+    }).catch(() => {});
+  }
+  // 📈 Sticky (positive) / ⚡ Fast-hype (caution) chip. Building attention is not shown.
+  function attnChip(ticker) {
+    const a = attnMap[ticker];
+    if (!a || (a.class !== 'Sticky' && a.class !== 'Fast')) return '';
+    const sticky = a.class === 'Sticky';
+    return `<span class="scr-attn ${sticky ? 'sticky' : 'fast'}" title="${esc(a.note || '')}">${sticky ? '📈 Sticky' : '⚡ Fast hype'}</span>`;
+  }
   const ofFilters = { type: '', sentiment: '', ticker: '', money: '', minPrem: 0, aggr: '' };
   let ofSort = (() => { try { return localStorage.getItem('ofSort') || 'premium'; } catch { return 'premium'; } })();
   let ofNovice = (() => { try { return localStorage.getItem('ofNovice') !== 'pro'; } catch { return true; } })();
@@ -1203,9 +1220,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function rankAndRender(scope) {
     const raw = scrRaw[scope];
     if (raw == null) return; // still loading — leave spinner
-    // Lazy-load earnings-call tone once; re-render this scope when it arrives so the
-    // 🎙 chips appear without blocking the initial paint.
+    // Lazy-load earnings-call tone + attention once; re-render this scope when they
+    // arrive so the 🎙 / 📈 / ⚡ chips appear without blocking the initial paint.
     ensureToneMap(() => rankAndRender(scope));
+    ensureAttnMap(() => rankAndRender(scope));
     const cap = scrCaps[scope] || 10;
     const w = SCR_W[scope] || SCR_DEFAULT_W;
     const bear = !!(lastRegime && lastRegime.bearish);
@@ -2208,6 +2226,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
               <span class="scr-status ${cls}">${stLabel}</span>
               ${tierHtml}
               ${toneChip(c.ticker)}
+              ${attnChip(c.ticker)}
             </div>
             <div class="scr-company">${esc(c.company || c.ticker)}${c.sector ? ` · ${esc(c.sector)}` : ''}${c.exchange ? ` · ${esc(c.exchange)}` : ''}${c.theme ? ` · <span class="scr-theme">${esc(c.theme)}</span>` : ''}</div>
           </div>
@@ -5137,10 +5156,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const scoreboardMeta       = document.getElementById('scoreboard-meta');
   let   lastScoreboard       = null;
 
-  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone' };
+  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)' };
   const SB_TIER_LABEL = { Breakout: 'Breakout', Setup: 'Setup', Early: 'Early', StrongBuy: 'Strong Buy', StrongSell: 'Strong Sell', GHOST: '👻 Ghost', STALKING: '🥷 Stalking', SHORT: 'Short', SHORT_LIGHT: 'Short (light)',
     INDEX_DELETE: 'Index Delete', INDEX_ADD_FADE: 'Index Add (fade)', LOCKUP_EXPIRY: 'Lockup Expiry', TAX_LOSS: 'Tax-Loss Selling', FIRE_SALE: 'Fire Sale', MARGIN_SPIRAL: 'Margin Spiral', FORCED_DOWNGRADE: 'Forced Downgrade',
-    Bullish: '📈 Bullish tone', Neutral: '➖ Neutral tone', Bearish: '📉 Bearish tone' };
+    Bullish: '📈 Bullish tone', Neutral: '➖ Neutral tone', Bearish: '📉 Bearish tone',
+    Sticky: '📈 Sticky attention', Fast: '⚡ Fast hype' };
   const SB_HZ         = [['1d', '1-Day'], ['5d', '5-Day'], ['10d', '10-Day'], ['20d', '20-Day'], ['1m', '1-Month'], ['3m', '3-Month']];
 
   // Regime filter — split every track record by the macro regime live at each
