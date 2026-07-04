@@ -1,8 +1,37 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { buildTriggers, parseGraph, alreadyMovedFlag, rankItems, benchFor, MAX_TRIGGERS } = require('../lib/readthrough');
+const { buildTriggers, parseGraph, alreadyMovedFlag, rankItems, benchFor, batchTriggers, mergeGraphs, MAX_TRIGGERS, MAX_TRIGGERS_RAW, BATCH_SIZE } = require('../lib/readthrough');
 const { tierFor } = require('../lib/readthrough-routes');
+
+test('batchTriggers: splits into <=BATCH_SIZE chunks for parallel calls', () => {
+  const six = Array.from({ length: 6 }, (_, i) => ({ ticker: 'T' + i }));
+  const b = batchTriggers(six);
+  assert.equal(b.length, Math.ceil(6 / BATCH_SIZE));
+  assert.ok(b.every(chunk => chunk.length <= BATCH_SIZE));
+  assert.equal(b.flat().length, 6);                       // no triggers lost
+  assert.deepEqual(batchTriggers([]), []);
+});
+
+test('mergeGraphs: concats items, dedups beneficiary to highest directness, joins notes', () => {
+  const merged = mergeGraphs([
+    { items: [{ beneficiary_ticker: 'AAA', directness: 3 }, { beneficiary_ticker: 'BBB', directness: 2 }], notes: 'n1' },
+    { items: [{ beneficiary_ticker: 'AAA', directness: 5 }, { beneficiary_ticker: 'CCC', directness: 4 }], notes: 'n2' },
+    { items: [], notes: '' },
+  ]);
+  assert.equal(merged.items.length, 3);                   // AAA/BBB/CCC
+  assert.equal(merged.items.find(x => x.beneficiary_ticker === 'AAA').directness, 5);  // kept the stronger AAA
+  assert.match(merged.notes, /n1/);
+  assert.match(merged.notes, /n2/);
+});
+
+test('buildTriggers: honors a custom cap (Stage-1 raw count > default)', () => {
+  const picks = Array.from({ length: 8 }, (_, i) => ({ ticker: 'T' + i, gapPct: 20 - i, cause: 'FDA' }));
+  assert.equal(buildTriggers({ picks }).length, MAX_TRIGGERS);               // default cap
+  assert.equal(buildTriggers({ picks }, MAX_TRIGGERS_RAW).length, MAX_TRIGGERS_RAW);
+  assert.ok(MAX_TRIGGERS_RAW > MAX_TRIGGERS);                                // the split raises the count
+  assert.deepEqual(buildTriggers({ picks }, 2).map(t => t.ticker), ['T0', 'T1']);
+});
 
 test('benchFor: GICS sector → sector ETF, else null', () => {
   assert.equal(benchFor('Energy'), 'XLE');

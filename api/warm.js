@@ -145,6 +145,11 @@ module.exports = async function handler(req, res) {
     gapgotick = await r.json();
   } catch (e) { gapgotick = { error: String(e && e.message || e) }; }
 
+  // 🔗 Read-Through Stage 1 (slow Fable call) — kicked NOW, right after the gap ledger is
+  // fresh, so it runs concurrently in its own 60s invocation during the tail below. Awaited
+  // at the very end, then Stage 2 (fast enrich + forward-log) runs off the raw graph.
+  const rtRawWarm = warmOne('/api/tracker?op=readthroughtick');
+
   // 🟢 Timing light — log today's picks' grades (accountability) then run the adaptive
   //    weight tuner (self-improvement; dormant until the ledger matures).
   let timinglog = null, timingtune = null;
@@ -208,7 +213,18 @@ module.exports = async function handler(req, res) {
   catch (e) { tonetick = { error: String(e && e.message || e) }; }
 
   const warmedExtra = await extraWarm;   // already resolved — ran during the tail above
-  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, at: new Date().toISOString() };
+
+  // 🔗 Read-Through: the Stage-1 tick ran concurrently through the tail; await it, then run
+  // Stage 2 (fast enrich + daily forward-log) off the fresh raw graph. Last on purpose —
+  // both self-heal on the next cron / first user visit if a slow day cuts them.
+  let readthroughtick = await rtRawWarm.catch(e => ({ error: String(e && e.message || e) }));
+  let readthrough = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=readthrough&force=1', { headers: { 'x-warm': '1' } });
+    readthrough = await r.json();
+  } catch (e) { readthrough = { error: String(e && e.message || e) }; }
+
+  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, readthroughtick, readthrough, at: new Date().toISOString() };
 
   // Observability: persist a compact health record so failed ticks / stale data are visible (op=health).
   try { const { summarizeRun, writeHealthRun } = require('../lib/health'); await writeHealthRun(summarizeRun(result)); }

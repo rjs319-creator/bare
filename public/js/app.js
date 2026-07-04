@@ -3167,8 +3167,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   async function runReadThroughUI(force) {
     const el = document.getElementById('readthrough-container');
     if (!el) return;
-    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Rebuilding the read-through graph… <span class="dt-dim">(Fable 5 reasons the beneficiaries — can take ~50s)</span>' : 'Loading read-through graph…'}</p></div>`;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Rebuilding the read-through graph… <span class="dt-dim">(Fable 5 reasons the beneficiaries — can take ~60s)</span>' : 'Loading read-through graph…'}</p></div>`;
     try {
+      // Two-stage: a manual Refresh first regenerates the raw Fable graph (Stage 1, slow),
+      // then re-enriches (Stage 2). A normal open just hits the fast serve/enrich path.
+      if (force) await fetch('/api/tracker?op=readthroughtick').then(r => r.json()).catch(() => {});
       const p = await fetch('/api/tracker?op=readthrough' + (force ? '&force=1' : '')).then(r => r.json());
       renderReadThrough(p);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Read-Through.</p></div>`; }

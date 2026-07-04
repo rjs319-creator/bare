@@ -71,6 +71,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'confluenceopt') return runConfluenceOpt(req, res);
   if (req.query.op === 'pulse') return runPulse(req, res);
   if (req.query.op === 'readthrough') return require('../lib/readthrough-routes').runReadThrough(req, res);
+  if (req.query.op === 'readthroughtick') return require('../lib/readthrough-routes').runReadThroughTick(req, res);
   if (req.query.op === 'predict') return runPredict(req, res);
   if (req.query.op === 'predicttick') return runPredictTick(req, res);
   if (req.query.op === 'crowd') return runCrowd(req, res);
