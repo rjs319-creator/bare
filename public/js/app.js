@@ -3873,7 +3873,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           ${cernHoldChip(v)}
           <span class="cx-decay-n">${v.trustworthy ? `${v.n20} resolved` : `${v.n20}/${decay.minTrust} resolved${v.daysNeeded ? ` · ${v.daysNeeded} more to trust` : ''}`}</span>
         </div>
-        <div class="cx-decay-chart">${cernDecaySvg(v)}</div>
+        <div class="cx-decay-chart" title="How this event type's market-beating edge (return vs the S&P) changes each day after it fires. Above the middle line = beating the market; below = lagging. The amber dashed line marks the day the edge peaks — the suggested time to be out by.">${cernDecaySvg(v)}</div>
       </div>`).join('');
     return `<div class="bt-eff">
       <div class="bt-eff-head">📉 Decay curves — how long each event stays profitable</div>
@@ -5162,6 +5162,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     Bullish: '📈 Bullish tone', Neutral: '➖ Neutral tone', Bearish: '📉 Bearish tone',
     Sticky: '📈 Sticky attention', Fast: '⚡ Fast hype' };
   const SB_HZ         = [['1d', '1-Day'], ['5d', '5-Day'], ['10d', '10-Day'], ['20d', '20-Day'], ['1m', '1-Month'], ['3m', '3-Month']];
+  // Plain-English "what is this?" hovers for a novice investor — shown on each
+  // Scoreboard section header and horizon column.
+  const SB_SECTION_HELP = {
+    screener: 'Stocks flagged by the breakout screener (chart setups). Each row shows how that quality tier has actually performed since it was flagged.',
+    momentum: 'Strong-buy / strong-sell momentum calls, and how they panned out afterward.',
+    Ghost: 'Quiet pre-breakout accumulation picks (the Ghost model). Track record of each tier.',
+    Fade: 'Overheated names flagged to SHORT (bet they fall). A win here means the stock dropped.',
+    CERN: 'Forced-selling events (index changes, lockups, fire-sales, downgrades). One row per event type, showing how the reaction played out.',
+    Tone: 'How upbeat or evasive management sounded on the recent earnings call, scored by Claude. Does a bullish-sounding call actually beat the market? This shows it.',
+    Attention: 'Social attention split two ways: STICKY = interest sustained over many days (tends to keep drifting up); FAST = a short hype spike (tends to fade/reverse). Compare the two buckets’ returns to see if the split holds.',
+  };
+  const SB_HZ_HELP = 'Average return this many trading days after the pick. The green/red “vs S&P” line under it is the market-beating number: the pick’s return minus what the S&P 500 did over the same days.';
 
   // Regime filter — split every track record by the macro regime live at each
   // pick's trigger (the project's one validated edge lever). 'all' = unsplit.
@@ -5225,7 +5237,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const disabled = isSignalDisabled(g.section, g.tier);
     const hz = SB_HZ.map(([k, lb]) => {
       const s = h[k];
-      if (!s) return `<div class="sb-h"><div class="sb-h-lb">${lb}</div><div class="sb-h-ret na">—</div><div class="sb-h-sub">pending</div></div>`;
+      if (!s) return `<div class="sb-h"><div class="sb-h-lb" title="${esc(SB_HZ_HELP)}">${lb}</div><div class="sb-h-ret na">—</div><div class="sb-h-sub">pending</div></div>`;
       const up = s.avg >= 0;
       // Market-relative line — the Step-1 headline: excess vs the S&P over the same
       // window, plus how often the signal beat the market. null until SPY resolves.
@@ -5233,7 +5245,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const exLine = s.avgExcess == null
         ? `<div class="sb-h-exc na">vs S&amp;P: —</div>`
         : `<div class="sb-h-exc ${exUp ? 'up' : 'down'}" title="Average return minus the S&P 500 over the same ${lb} window — this is 'did it beat the market'. Beat rate = share of picks that outran the S&P.">vs S&amp;P ${exUp ? '+' : ''}${s.avgExcess}% · beat ${s.beatMktRate}%</div>`;
-      return `<div class="sb-h"><div class="sb-h-lb">${lb}</div><div class="sb-h-ret ${up ? 'up' : 'down'}">${up ? '+' : ''}${s.avg}%</div><div class="sb-h-sub">${s.winRate}% win · n=${s.n}</div>${exLine}</div>`;
+      return `<div class="sb-h"><div class="sb-h-lb" title="${esc(SB_HZ_HELP)}">${lb}</div><div class="sb-h-ret ${up ? 'up' : 'down'}">${up ? '+' : ''}${s.avg}%</div><div class="sb-h-sub">${s.winRate}% win · n=${s.n}</div>${exLine}</div>`;
     }).join('');
     const hl = h['20d'] || h['1m'] || h['10d'] || h['5d'] || h['1d'] || h['3m'];
     // In a regime view, show that regime's logged-pick count; flag thin samples so
@@ -5324,7 +5336,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const bySec = {};
     data.groups.forEach(g => { (bySec[g.section] = bySec[g.section] || []).push(g); });
     const html = Object.keys(bySec).map(sec =>
-      `<div class="sb-secgroup"><div class="sb-secgroup-h">${SB_SECTIONS[sec] || esc(sec)}</div><div class="sb-grid">${bySec[sec].map(sbCard).join('')}</div></div>`
+      `<div class="sb-secgroup"><div class="sb-secgroup-h"${SB_SECTION_HELP[sec] ? ` title="${esc(SB_SECTION_HELP[sec])}"` : ''}>${SB_SECTIONS[sec] || esc(sec)}${SB_SECTION_HELP[sec] ? ' <span class="sb-help-i" title="' + esc(SB_SECTION_HELP[sec]) + '">ⓘ</span>' : ''}</div><div class="sb-grid">${bySec[sec].map(sbCard).join('')}</div></div>`
     ).join('');
 
     scoreboardContainer.innerHTML = intro + allocationPanelHTML(data.allocation) + regimeBar + html;
