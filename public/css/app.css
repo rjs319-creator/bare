@@ -884,6 +884,11 @@
     .scr-status.early    { color: #8a6dff; background: #120c24; border: 1px solid #8a6dff55; }
     .scr-company { font-size: 0.72rem; color: var(--text-dim); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .scr-company .scr-theme { color: var(--cyan); font-weight: 600; }
+    /* 🎙 earnings-call tone chip (roadmap Step 3). */
+    .scr-tone { font-size: 0.55rem; font-weight: 800; padding: 2px 7px; border-radius: 4px; cursor: help; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .scr-tone.bull { color: var(--green); background: var(--green-dim); border: 1px solid #10d98a55; }
+    .scr-tone.bear { color: var(--red);   background: var(--red-dim);   border: 1px solid #ef505055; }
+    .scr-tone.neu  { color: var(--text-dim); background: var(--surface); border: 1px solid var(--border); }
     .scr-score-col { text-align: right; flex-shrink: 0; }
     .scr-score { font-size: 1.15rem; font-weight: 900; color: var(--green); line-height: 1; }
     .scr-score small { font-size: 0.58rem; color: var(--text-dim); font-weight: 700; }
