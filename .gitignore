@@ -7,3 +7,4 @@ research/.env
 
 # Claude Code local settings (personal, not committed)
 .claude/settings.local.json
+.claude/worktrees/
