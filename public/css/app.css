@@ -1809,6 +1809,13 @@
     .opp-theme-chip { font-size: 0.7rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: color-mix(in srgb, #f0a832 12%, var(--card)); border: 1px solid #f0a83255; color: var(--text); }
     .opp-theme-chip .opp-theme-mom { color: var(--green); }
     .opp-themes-hint { font-size: 0.66rem; width: 100%; margin-top: 2px; }
+    /* 🤖 AI Screeners strip on Opportunities */
+    .opp-ai { display: flex; flex-direction: column; gap: 5px; margin: 6px 0 2px; }
+    .opp-ai-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 7px; padding: 5px 9px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); }
+    .opp-ai-tk { font-weight: 800; font-size: 0.82rem; min-width: 52px; }
+    .opp-ai-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+    .opp-ai-src { font-size: 0.66rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, #8b5cf6 12%, var(--card)); border: 1px solid #8b5cf655; color: var(--text); cursor: pointer; white-space: nowrap; }
+    .opp-ai-note { font-size: 0.72rem; color: var(--text-dim); flex: 1 1 200px; }
     .opp-badge.opp-theme-lead { color: #f0a832; border-color: #f0a83266; background: color-mix(in srgb, #f0a832 8%, var(--card)); }
     /* Smart-money / fundamental signal chips on Opportunities */
     .opp-sigs { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }

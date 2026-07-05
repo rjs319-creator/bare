@@ -186,15 +186,35 @@ function oppCard(c) {
     + `</div>`;
 }
 
+// The 5 AI-reasoning screeners → their ACTIONABLE ("good class") picks, flattened for the
+// Opportunities strip. Each maps to {src, ticker, note, score}. Cross-cutting: these names
+// often aren't in the breakout pool, so they're shown as their own AI-signals section.
+const AI_SRC = {
+  rt: ['🔗', 'Read-Through', 'readthrough'], an: ['🕵️', 'Stealth', 'anomaly'],
+  sw: ['🌊', 'Second Wave', 'secondwave'], ca: ['🌐', 'Cross-Asset', 'crossasset'],
+  ts: ['🎚️', 'Tone Shift', 'toneshift'],
+};
+function collectAiSignals(c) {
+  const out = [];
+  const add = (src, ticker, note, score) => { if (ticker) out.push({ src, ticker: String(ticker).toUpperCase(), note: String(note || '').slice(0, 140), score: score || 0 }); };
+  (c.rt && c.rt.items || []).filter(i => i.moved && i.moved.alreadyMoved === false).forEach(i => add('rt', i.beneficiary_ticker, `reads through from $${i.trigger_ticker} — ${i.mechanism || i.thesis || ''}`, i.directness));
+  (c.an && c.an.items || []).filter(i => i.classification === 'ACCUMULATION').forEach(i => add('an', i.ticker, i.thesis || 'moving on volume, no catalyst found', i.confidence));
+  (c.sw && c.sw.items || []).filter(i => i.classification === 'PRIMED').forEach(i => add('sw', i.ticker, i.catalyst || i.thesis || '', i.virality));
+  (c.ca && c.ca.items || []).filter(i => i.classification === 'LEAD').forEach(i => add('ca', i.ticker, i.lead_asset || '', i.confidence));
+  (c.ts && c.ts.items || []).filter(i => i.shift === 'BRIGHTENING').forEach(i => add('ts', i.ticker, i.change || '', i.confidence));
+  return out.sort((a, b) => b.score - a.score);
+}
+
 export async function loadOpportunities(container, scope = 'large', limit = 6) {
   if (!container) return;
   container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Finding the best setups to buy before they run…</p></div>`;
-  let d, sb, drift;
+  let d, sb, drift, rt, an, sw, ca, ts;
+  const j = op => fetch('/api/tracker?op=' + op).then(r => r.json()).catch(() => null);
   try {
-    [d, sb, drift] = await Promise.all([
+    [d, sb, drift, rt, an, sw, ca, ts] = await Promise.all([
       fetch('/api/screener?scope=' + scope).then(r => r.json()),
-      fetch('/api/tracker?op=scoreboard').then(r => r.json()).catch(() => null),
-      fetch('/api/tracker?op=drift').then(r => r.json()).catch(() => null),
+      j('scoreboard'), j('drift'),
+      j('readthrough'), j('anomaly'), j('secondwave'), j('crossasset'), j('toneshift'),
     ]);
   } catch { d = null; }
   if (!d) { container.innerHTML = `<div class="dt-note">Couldn't load opportunities right now.</div>`; return; }
@@ -240,6 +260,22 @@ export async function loadOpportunities(container, scope = 'large', limit = 6) {
   }
   html += `<div class="dt-note" style="border-left-color:${trackCol}">${trackLine}</div>`;
   html += top.length ? top.map(oppCard).join('') : `<div class="dt-note">No clean pre-breakout setups passed the screen today — that's normal on some days. Check back, or browse the full ${L('breakout', 'screeners')}.</div>`;
+
+  // 🤖 AI Screeners strip — the actionable picks from the 5 AI-reasoning screeners (each a
+  // different, non-price angle). Cross-cutting, so shown as their own section; every one is
+  // a LEAD to forward-track, not a green light. Deduped by ticker (same name can appear
+  // under two screeners = stronger).
+  const ai = collectAiSignals({ rt, an, sw, ca, ts });
+  if (ai.length) {
+    const byTk = new Map();
+    ai.forEach(s => { const cur = byTk.get(s.ticker) || { ticker: s.ticker, srcs: [], note: s.note, score: s.score }; cur.srcs.push(s.src); if (s.score > cur.score) { cur.score = s.score; cur.note = s.note; } byTk.set(s.ticker, cur); });
+    const rows = [...byTk.values()].sort((a, b) => (b.srcs.length - a.srcs.length) || (b.score - a.score)).slice(0, 12);
+    html += `<div class="rot-head" style="margin-top:16px">🤖 AI Screeners <span class="dt-dim">· cross-cutting signals from the 5 AI models — non-price angles, forward-tracked (not green lights)</span></div>`;
+    html += `<div class="opp-ai">` + rows.map(r => {
+      const badges = r.srcs.map(s => { const [e, lbl, tab] = AI_SRC[s]; return `<span class="opp-ai-src" data-go="${tab}" title="${esc(lbl)} — open tab">${e} ${esc(lbl)}</span>`; }).join('');
+      return `<div class="opp-ai-row"><span class="opp-ai-tk">$${esc(r.ticker)}</span><span class="opp-ai-badges">${badges}</span><span class="opp-ai-note">${esc(r.note)}</span></div>`;
+    }).join('') + `</div>`;
+  }
   html += `<div class="dt-dim opp-foot">Scored on accumulation, setup stage, momentum &amp; the model's ${L('conviction', 'results-trained conviction')}, then tilted by how its own recent picks are actually resolving — so the ranking adapts as results come in. Not advice; always confirm and use a ${L('stop', 'stop')}.</div>`;
   container.innerHTML = html;
 }
