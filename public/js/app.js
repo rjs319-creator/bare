@@ -15,7 +15,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     start:     ['today', 'start'],
     screeners: ['opportunities', 'screener', 'custom', 'coremo', 'daytrade', 'gapgo', 'coil', 'confluence', 'ghost', 'trendrider', 'fade'],
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
-    predict:   ['pulse', 'readthrough', 'anomaly', 'gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
+    predict:   ['pulse', 'readthrough', 'anomaly', 'secondwave', 'gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     research:  ['backtest', 'events', 'edge'],
     track:     ['leaderboard', 'scoreboard', 'coreperf', 'xalerts'],
   };
@@ -25,7 +25,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     today: '🏠 Today', start: '📘 Guide',
     opportunities: '⭐ Opportunities', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
-    pulse: '📡 Market Pulse', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
+    pulse: '📡 Market Pulse', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', secondwave: '🌊 Second Wave', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
     leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
@@ -54,6 +54,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     pulse: 'What the crowd is buzzing about on social + finance media (attention, not advice).',
     readthrough: 'Second-order “who benefits and hasn’t moved yet” — names linked to today’s gappers by supply chain or competition.',
     anomaly: 'Stocks quietly climbing on volume with NO news — the AI investigates each for a hidden catalyst (possible stealth accumulation).',
+    secondwave: 'Stocks with a first move up that the crowd hasn’t piled into yet — the AI forecasts which are primed for a reflexive second wave of buyers.',
     gameplan: 'A plain-English daily game plan for the market.',
     brief: 'A concise market brief — the current stance and why.',
     forecast: 'Falsifiable market predictions, auto-graded against real prices.',
@@ -141,6 +142,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'pulse' && typeof ensurePulse === 'function') ensurePulse();
     if (sub === 'readthrough' && typeof ensureReadThrough === 'function') ensureReadThrough();
     if (sub === 'anomaly' && typeof ensureAnomaly === 'function') ensureAnomaly();
+    if (sub === 'secondwave' && typeof ensureSecondWave === 'function') ensureSecondWave();
     if (sub === 'gameplan' && typeof ensureGamePlan === 'function') ensureGamePlan();
     if (sub === 'brief' && typeof ensureBrief === 'function') ensureBrief();
     if (sub === 'forecast' && typeof ensureForecast === 'function') ensureForecast();
@@ -3273,6 +3275,57 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (rb) rb.onclick = () => runAnomalyUI(true);
   }
 
+  // ── 🌊 SECOND WAVE — first-leg movers the crowd hasn't piled into yet; an AI forecasts
+  // a reflexive SECOND wave (server-side lib/secondwave-routes.js, Sonnet 5 + web search).
+  // PRIMED = fresh story, crowd light; EARLY = needs a trigger; FADED = already crowded.
+  let secondwaveLoaded = false;
+  function ensureSecondWave() { if (!secondwaveLoaded) { secondwaveLoaded = true; runSecondWaveUI(false); } }
+  async function runSecondWaveUI(force) {
+    const el = document.getElementById('secondwave-container');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Re-scanning first-leg movers & forecasting second waves… <span class="dt-dim">(the AI gauges the crowd — ~50s)</span>' : 'Loading the second-wave scan…'}</p></div>`;
+    try {
+      if (force) await fetch('/api/tracker?op=secondwavetick').then(r => r.json()).catch(() => {});
+      const p = await fetch('/api/tracker?op=secondwave').then(r => r.json());
+      renderSecondWave(p);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the Second Wave scan.</p></div>`; }
+  }
+  const SW_CLASS = { PRIMED: ['🌊', 'var(--green)', 'Primed'], EARLY: ['🌱', '#f59e0b', 'Early'], FADED: ['🥱', 'var(--text-dim)', 'Faded'] };
+  function renderSecondWave(p) {
+    const el = document.getElementById('secondwave-container');
+    if (!el) return;
+    if (!p || !p.ok || !(p.items || []).length) {
+      const why = p && p.error ? ' — ' + esc(p.error) : (p && p.ok ? ' — no first-leg movers on the latest tape' : '');
+      el.innerHTML = `<div class="mom-status error"><p>Second Wave is warming up${why}. It looks for early movers the crowd hasn’t found yet — try Refresh in a moment.</p></div>`;
+      return;
+    }
+    const gt = document.getElementById('secondwave-gen-time');
+    if (gt && p.generatedAt) gt.textContent = `· ${p.asOf ? 'as of ' + esc(p.asOf) + ' · ' : ''}updated ${p.ageMins != null && p.ageMins < 90 ? (p.ageMins + 'm ago') : new Date(p.generatedAt).toLocaleString()}`;
+    const dots = n => '●'.repeat(Math.max(0, Math.min(5, n))) + '○'.repeat(5 - Math.max(0, Math.min(5, n)));
+    const cand = t => (p.candidates || []).find(c => c.ticker === t) || {};
+    const card = it => {
+      const [ce, cc, cl] = SW_CLASS[it.classification] || SW_CLASS.EARLY;
+      const c = cand(it.ticker);
+      const move = c.ret10 != null ? `<span class="anom-move">+${c.ret10}% / ${c.relVol}x vol</span>` : '';
+      return `<div class="pulse-card${it.classification === 'FADED' ? ' rt-dim' : ''}">
+        <div class="pulse-top">
+          <span class="pulse-head"><b>$${esc(it.ticker)}</b> ${move}</span>
+          <span class="anom-class" style="color:${cc}" title="${esc(cl)}">${ce} ${esc(cl)} <span class="anom-conf" title="Virality potential">${dots(it.virality)}</span></span>
+        </div>
+        <div class="pulse-idea"><b>Catalyst:</b> ${esc(it.catalyst)}</div>
+        <div class="pulse-meta"><span class="sw-crowd">Crowd: ${esc(it.crowd_state || '—')}</span></div>
+        <div class="pulse-why">${esc(it.thesis)}</div>
+        ${it.caution ? `<div class="pulse-caution">⚠️ ${esc(it.caution)}</div>` : ''}
+      </div>`;
+    };
+    el.innerHTML = `
+      <div class="dt-note" style="border-left-color:#0ea5e9"><b>🌊 Reflexive second waves.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''}</div>
+      <div class="anom-meta">${p.detected != null ? 'Found ' + p.detected + ' first-leg movers → ' : ''}forecast ${(p.items || []).length}.</div>
+      <div class="pulse-grid">${p.items.map(card).join('')}</div>`;
+    const rb = document.getElementById('secondwave-refresh-btn');
+    if (rb) rb.onclick = () => runSecondWaveUI(true);
+  }
+
   // ── 🗞️ DAILY GAME PLAN — news + sentiment + the app's own signals synthesized
   // (server-side, lib/gameplan.js) into one succinct plan + predictions, tiered
   // novice↔pro, building on a rolling multi-day narrative. UI just renders op=gameplan.
@@ -5336,13 +5389,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const scoreboardMeta       = document.getElementById('scoreboard-meta');
   let   lastScoreboard       = null;
 
-  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)' };
+  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', SecondWave: '🌊 Second Wave (Primed vs Faded)' };
   const SB_TIER_LABEL = { Breakout: 'Breakout', Setup: 'Setup', Early: 'Early', StrongBuy: 'Strong Buy', StrongSell: 'Strong Sell', GHOST: '👻 Ghost', STALKING: '🥷 Stalking', SHORT: 'Short', SHORT_LIGHT: 'Short (light)',
     INDEX_DELETE: 'Index Delete', INDEX_ADD_FADE: 'Index Add (fade)', LOCKUP_EXPIRY: 'Lockup Expiry', TAX_LOSS: 'Tax-Loss Selling', FIRE_SALE: 'Fire Sale', MARGIN_SPIRAL: 'Margin Spiral', FORCED_DOWNGRADE: 'Forced Downgrade',
     Bullish: '📈 Bullish tone', Neutral: '➖ Neutral tone', Bearish: '📉 Bearish tone',
     Sticky: '📈 Sticky attention', Fast: '⚡ Fast hype',
     Fresh: '🟢 Fresh (not yet moved)', Moved: '⚪ Moved (priced in)', Unknown: '◽ Unknown',
-    Accumulation: '🕵️ Accumulation (no reason)', Explained: '📰 Explained (priced)', Noise: '🌫️ Noise' };
+    Accumulation: '🕵️ Accumulation (no reason)', Explained: '📰 Explained (priced)', Noise: '🌫️ Noise',
+    Primed: '🌊 Primed (2nd wave)', Early: '🌱 Early', Faded: '🥱 Faded (crowded)' };
   const SB_HZ         = [['1d', '1-Day'], ['5d', '5-Day'], ['10d', '10-Day'], ['20d', '20-Day'], ['1m', '1-Month'], ['3m', '3-Month']];
   // Plain-English "what is this?" hovers for a novice investor — shown on each
   // Scoreboard section header and horizon column.
@@ -5356,6 +5410,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     Attention: 'Social attention split two ways: STICKY = interest sustained over many days (tends to keep drifting up); FAST = a short hype spike (tends to fade/reverse). Compare the two buckets’ returns to see if the split holds.',
     ReadThrough: 'Second-order beneficiaries of the day’s big movers (a supplier/customer/rival linked to a gapper). FRESH = hadn’t repriced when surfaced; MOVED = already jumped. The test: do the Fresh (un-moved) read-throughs actually beat their peers — and beat the already-Moved ones? Excess here is vs each name’s own SECTOR ETF (beat your peers, not just the market); falls back to the S&P if the sector is unknown.',
     Anomaly: 'Stocks that were climbing on volume with NO news, then investigated by AI. ACCUMULATION = no public catalyst found (possible stealth buying); EXPLAINED = a reason was found (already priced); NOISE = technical/illiquid. The test: do the ACCUMULATION names actually beat their sector — and beat the Explained/Noise buckets? Excess is vs each name’s own SECTOR ETF.',
+    SecondWave: 'Stocks that had a first leg up but the crowd hasn’t piled into yet, then judged by AI. PRIMED = fresh story with room to spread (possible reflexive second wave); EARLY = needs a trigger; FADED = already crowded/late. The test: do PRIMED names actually get the second leg — beating their sector and the Faded ones? Excess is vs each name’s own SECTOR ETF.',
   };
   const SB_HZ_HELP = 'Average return this many trading days after the pick. The green/red “vs S&P” line under it is the market-beating number: the pick’s return minus what the S&P 500 did over the same days.';
 

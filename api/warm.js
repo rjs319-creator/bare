@@ -152,6 +152,8 @@ module.exports = async function handler(req, res) {
   // 🕵️ Stealth (Anomaly) — detect no-news movers + AI-investigate + forward-log, its own
   // ~50s invocation, concurrent with the tail. Reads the candle caches the screener warm built.
   const anomWarm = warmOne('/api/tracker?op=anomalytick');
+  // 🌊 Second Wave — detect first-leg movers + AI second-wave forecast + forward-log, concurrent.
+  const swWarm = warmOne('/api/tracker?op=secondwavetick');
 
   // 🟢 Timing light — log today's picks' grades (accountability) then run the adaptive
   //    weight tuner (self-improvement; dormant until the ledger matures).
@@ -227,10 +229,11 @@ module.exports = async function handler(req, res) {
     readthrough = await r.json();
   } catch (e) { readthrough = { error: String(e && e.message || e) }; }
 
-  // 🕵️ Stealth (Anomaly) — the tick self-logs; just await the concurrent invocation.
+  // 🕵️ Stealth + 🌊 Second Wave — the ticks self-log; just await the concurrent invocations.
   const anomalytick = await anomWarm.catch(e => ({ error: String(e && e.message || e) }));
+  const secondwavetick = await swWarm.catch(e => ({ error: String(e && e.message || e) }));
 
-  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, readthroughtick, readthrough, anomalytick, at: new Date().toISOString() };
+  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, readthroughtick, readthrough, anomalytick, secondwavetick, at: new Date().toISOString() };
 
   // Observability: persist a compact health record so failed ticks / stale data are visible (op=health).
   try { const { summarizeRun, writeHealthRun } = require('../lib/health'); await writeHealthRun(summarizeRun(result)); }

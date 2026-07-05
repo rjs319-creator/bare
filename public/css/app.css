@@ -1884,3 +1884,7 @@
 .anom-move { font-size: .82rem; color: var(--green); font-weight: 700; }
 .anom-class { font-size: .8rem; font-weight: 700; white-space: nowrap; }
 .anom-conf { letter-spacing: -1px; opacity: .8; }
+
+/* 🌊 Second Wave — reuses .pulse-card/.pulse-grid; sky accent */
+#secondwave .pulse-card { border-left-color: #0ea5e9; }
+.sw-crowd { font-size: .8rem; color: var(--text-dim); }
