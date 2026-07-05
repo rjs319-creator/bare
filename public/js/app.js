@@ -14,7 +14,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // ── App tabs with a "Markets" hub (Screener / Rotation / Sectors) ──
   const TAB_GROUPS = {
     start:     ['today', 'start'],
-    screeners: ['quickhit', 'opportunities', 'screener', 'custom', 'coremo', 'daytrade', 'gapgo', 'coil', 'confluence', 'ghost', 'trendrider', 'fade'],
+    quickhit:  ['quickhit'],
+    screeners: ['opportunities', 'screener', 'custom', 'coremo', 'daytrade', 'gapgo', 'coil', 'confluence', 'ghost', 'trendrider', 'fade'],
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
     predict:   ['pulse', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     research:  ['backtest', 'events', 'edge'],
@@ -78,7 +79,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // Mark each section as a switchable screen
   SECTION_IDS.forEach(id => document.getElementById(id)?.classList.add('tabbable'));
 
-  let hubSub = { start: 'today', screeners: 'quickhit', markets: 'rotation', predict: 'gameplan', research: 'backtest', track: 'leaderboard' };
+  let hubSub = { start: 'today', screeners: 'opportunities', markets: 'rotation', predict: 'gameplan', research: 'backtest', track: 'leaderboard' };
   try { const hs = JSON.parse(localStorage.getItem('hubSub')); if (hs) hubSub = { ...hubSub, ...hs }; } catch {}
   // Sanitize stored hubSub: after the nav regrouping a saved sub may no longer
   // belong to its group (e.g. markets→screener). Reset any stale entry to the
@@ -3002,7 +3003,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     };
     apply();
   }
-  const GROUP_LABEL = { start: 'Home', screeners: 'Screeners', markets: 'Markets', predict: 'Predict', research: 'Research', track: 'Track' };
+  const GROUP_LABEL = { start: 'Home', quickhit: 'Quick Hit', screeners: 'Screeners', markets: 'Markets', predict: 'Predict', research: 'Research', track: 'Track' };
   initCommandPalette({
     sections: SECTION_IDS.map(id => ({ id, label: (SUB_LABEL[id] || id).replace(/^[^\w]+\s*/, ''), group: GROUP_LABEL[topOf(id)] || '' })),
     learn: Object.keys(LEARN).map(key => ({ key, label: LEARN[key].t, group: LEARN[key].g })),
