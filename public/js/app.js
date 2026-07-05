@@ -5107,9 +5107,15 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const bc = book.byCause || {};
       const causeRows = Object.keys(CAUSE_LBL).map(k => { const s = bc[k]; return s && s.n ? row(`${CAUSE_LBL[k]} <span class="dt-dim">(${s.n}/${book.causeTarget || 150})</span>`, s) : ''; }).join('');
       const causeBlock = causeRows ? `<div class="bt-ic-row" style="margin-top:6px"><span style="color:var(--text-dim);font-weight:700">By gap-cause (pilot — accruing):</span><span></span></div>${causeRows}` : '';
+      // Meta-label forward test (exp11). The backtest said NO LIFT (rank-IC ~0); this is the
+      // live OOS check — if HIGH ≈ LOW once ~40/class resolve, the flag retires. Shown only
+      // once meta-scored picks exist (older picks are 'unscored').
+      const bm = book.byMeta || {};
+      const metaRows = row(`🤖 Meta HIGH <span class="dt-dim">(${(bm.HIGH && bm.HIGH.n) || 0}/${book.metaTarget || 40})</span>`, bm.HIGH) + row(`🤖 Meta LOW <span class="dt-dim">(${(bm.LOW && bm.LOW.n) || 0}/${book.metaTarget || 40})</span>`, bm.LOW);
+      const metaBlock = metaRows ? `<div class="bt-ic-row" style="margin-top:6px"><span style="color:var(--text-dim);font-weight:700">By meta-label (exp11 said NO LIFT — testing live):</span><span></span></div>${metaRows}` : '';
       bookPanel = `<div class="rot-panel"><div class="rot-head">📋 Live forward track record <span class="dt-dim">(self-validation)</span></div>
         <div class="rot-sub">${esc(book.note || '')}</div>
-        ${rows || `<div class="bt-ic-row"><span style="color:var(--text-dim)">${book.resolved || 0} resolved · ${book.stillOpen || 0} open — accrues as picks mature (~${t.horizon} sessions).</span></div>`}${causeBlock}</div>`;
+        ${rows || `<div class="bt-ic-row"><span style="color:var(--text-dim)">${book.resolved || 0} resolved · ${book.stillOpen || 0} open — accrues as picks mature (~${t.horizon} sessions).</span></div>`}${causeBlock}${metaBlock}</div>`;
     }
 
     el.innerHTML = evidence + filtered + regimeNote + howto + strong + moderate + bookPanel;

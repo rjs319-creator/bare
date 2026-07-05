@@ -2,7 +2,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { scoreGapGo, GAP_STRONG, GAP_MODERATE, MIN_DOLLAR_VOL,
-        continuationScore, gapTake, suggestedRiskPct, TIER_STATS } = require('../lib/gapgo');
+        continuationScore, gapTake, suggestedRiskPct, TIER_STATS,
+        META_MODEL, gapMetaFeatures, metaProbFromVector, metaProb, metaTier } = require('../lib/gapgo');
 
 // Build a flat, liquid base of `n` candles at price `p`, then a final GAP-UP day whose
 // open is `gapPct`% above the prior close. Volume kept well above the liquidity floor.
@@ -115,4 +116,49 @@ test('suggestedRiskPct: STRONG > MODERATE, scales with score, within fractional-
   assert.ok(suggestedRiskPct('STRONG', 90, 'neutral') > suggestedRiskPct('STRONG', 40, 'neutral'));
   const cap = TIER_STATS.STRONG.fullKelly * 0.25 * 100;
   assert.ok(suggestedRiskPct('STRONG', 100, 'risk-on') <= cap + 1e-9);
+});
+
+// ── Meta-label serve model (exp11) — PINNED to the exported Python LogisticRegression ──
+// Fixtures from `python experiments/11_metalabel.py export`. If lib/gapgo.js META_MODEL and
+// the study's serve model ever drift, these fail loudly (same guard as continuationScore).
+const META_FIXTURES = [
+  { feat: { gap: 0.20517, atr_pct: 0.1642, log_adv: 16.6177, prior_ret: 0.28889, gap_to_atr: 1.2495, reg_norm: 0.55, dow: 0, rel_vol: 4.0 }, prob: 0.156953 },
+  { feat: { gap: 0.04023, atr_pct: 0.06838, log_adv: 8.5724, prior_ret: 0.06221, gap_to_atr: 0.5883, reg_norm: 0.0, dow: 2, rel_vol: 0.8704 }, prob: 0.447931 },
+  { feat: { gap: 0.1102, atr_pct: 0.07599, log_adv: 8.3214, prior_ret: 0.06004, gap_to_atr: 1.4501, reg_norm: 1.0, dow: 2, rel_vol: 0.9197 }, prob: 0.482774 },
+  { feat: { gap: 0.04583, atr_pct: 0.08524, log_adv: 7.7485, prior_ret: 0.08597, gap_to_atr: 0.5377, reg_norm: 1.0, dow: 3, rel_vol: 0.6369 }, prob: 0.518723 },
+  { feat: { gap: 0.04615, atr_pct: 0.14918, log_adv: 7.4258, prior_ret: 0.04334, gap_to_atr: 0.3094, reg_norm: 1.0, dow: 3, rel_vol: 0.7883 }, prob: 0.560111 },
+  { feat: { gap: 0.06723, atr_pct: 0.1443, log_adv: 7.853, prior_ret: -0.3, gap_to_atr: 0.4659, reg_norm: 1.0, dow: 1, rel_vol: 3.1106 }, prob: 0.708625 },
+];
+
+test('metaProbFromVector matches the exported sklearn LogisticRegression (pinned fixtures)', () => {
+  for (const { feat, prob } of META_FIXTURES) {
+    assert.ok(Math.abs(metaProbFromVector(feat) - prob) < 1e-4,
+      `meta prob for ${JSON.stringify(feat)} = ${metaProbFromVector(feat)} != ${prob}`);
+  }
+});
+
+test('gapMetaFeatures reproduces the rig feature formulas (gap, dow Mon=0, prior_ret)', () => {
+  const c = flatBase(25, 20, 3_000_000);
+  // prior (last base) day closes green so prior_ret > 0; gap day opens +6%
+  c[c.length - 1] = { ...c[c.length - 1], open: 19.5, close: 20 };   // prior_ret = 20/19.5-1
+  c.push({ date: '2026-03-02', open: 21.2, high: 21.6, low: 21.0, close: 21.5, volume: 6_000_000 }); // Monday
+  const f = gapMetaFeatures(c);
+  assert.ok(f, 'features should build');
+  assert.ok(Math.abs(f.gap - (21.2 / 20 - 1)) < 1e-4, 'gap = open/prevClose - 1');
+  assert.ok(Math.abs(f.prior_ret - (20 / 19.5 - 1)) < 1e-4, 'prior_ret = prevClose/prevOpen - 1');
+  assert.equal(f.dow, 0, '2026-03-02 is a Monday → weekday 0 (Python convention)');
+  assert.equal(f.reg_norm, null, 'reg_norm is filled by the route, not the feature builder');
+});
+
+test('metaProb injects regime and metaTier splits at the training median', () => {
+  const c = flatBase(25, 20, 3_000_000);
+  c.push({ date: '2026-03-02', open: 21.2, high: 21.6, low: 21.0, close: 21.5, volume: 6_000_000 });
+  const feat = gapMetaFeatures(c);
+  const p = metaProb(feat, 'risk-on');
+  assert.ok(p > 0 && p < 1, 'probability in (0,1)');
+  // risk-on reg_norm (1.0) has a positive coefficient → not below risk-off
+  assert.ok(metaProb(feat, 'risk-on') >= metaProb(feat, 'risk-off'));
+  assert.equal(metaTier(META_MODEL.median_prob + 0.01), 'HIGH');
+  assert.equal(metaTier(META_MODEL.median_prob - 0.01), 'LOW');
+  assert.equal(metaProb(null, 'risk-on'), null, 'null features → null prob (never fabricate)');
 });

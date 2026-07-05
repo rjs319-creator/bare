@@ -16,6 +16,55 @@ slippage/fill + 2 bps commission/leg), no lookahead (select on T close, act on T
 | 04 entry timing | **Buying the gap (next-open) was the leak.** Opening-range-breakout entry: OOS −0.589 → **−0.124**. |
 | 05 stacked | Stacking the levers turns it **OOS-positive** (+1.56%/trade OOS). |
 | 06 deflation | **The gate fails.** After penalising for the 24-variant search, DSR **0.59** (<0.95) and the walk-forward-selected variant ≠ the chosen one and dies OOS (Sharpe −0.007). The magnitude is search luck. |
+| 11 meta-label | **No lift.** A purged-walk-forward logistic meta-filter on entry-time features does not beat ranking by gap size, doesn't clear significance, and *raises* lumpiness. The shipped edge already captures what's capturable. |
+
+## Experiment 11 — meta-labeling the Gap & Go edge (the "does the López de Prado upgrade help?" test)
+
+Motivated by an external "trading-platform constitution" whose headline proposed upgrade was
+**triple-barrier + meta-labeling**. exp08's gap-up ORB edge is lumpy and low-hit-rate — the
+textbook case for a precision filter — so we tested the claim head-on with the machinery
+`metalabel.py` was built for (`experiments/11_metalabel.py`, `data/metalabel.json`).
+
+Setup: 750 unscheduled gap-up (≥4%, non-earnings, liquid) ORB trades, 2022–2025H1. Meta-label =
+did the trade end profitably. Meta-model = **logistic regression** (not XGBoost — a few hundred
+trades can't support a tree) on entry-time features {gap, atr%, log$ADV, opening-range width,
+prior-day return, gap/atr, regime, day-of-week}, trained **purged walk-forward** (7-day embargo,
+half-year folds). Keep the top 60% of each fold. Three rankers vs the unfiltered baseline, judged
+on the SAME pooled OOS trades (n=658) by expectancy, PF, lumpiness, and a date-clustered bootstrap.
+
+| ranker (top 60%/fold) | n | win% | expR% | PF | top-5 share | boot Δ>0 p | rank-IC |
+|---|---|---|---|---|---|---|---|
+| **all trades** | 658 | 49.5 | 1.56 | 1.40 | 0.09 | — | — |
+| gap size (validated rank) | 392 | 52.6 | 2.35 | 1.60 | 0.13 | 0.77 | 0.032 |
+| continuation_score (shipped) | 392 | 51.0 | 2.45 | 1.61 | 0.13 | 0.75 | −0.025 |
+| lr_meta (walk-forward ML) | 392 | 50.8 | 2.01 | 1.52 | 0.15 | 0.65 | 0.007 |
+
+**Verdict: ❌ NO LIFT.** Three honest reads:
+1. The learned meta-filter (rank-IC **0.007** ≈ zero) does **not** beat ranking by gap size
+   (2.35% vs 2.01% expR). The ML adds nothing over the one factor exp08 already validated.
+2. **No ranker clears significance** — bootstrap P(Δ>0) tops out at 0.77, well under 0.95.
+3. Filtering **worsens** the thing it was meant to fix: top-5 P&L share rises 0.09 → 0.13–0.15.
+   Dropping trades *concentrates* the right-skew rather than taming it.
+
+**What this settles about the constitution:** its flagship upgrade (meta-labeling) empirically
+does **not** improve the app's one real edge on free/Starter data — consistent with the whole
+investigation. Ranking gap-ups by gap magnitude is already as good as a learned filter. The
+useful residue (triple-barrier-style vol-scaled exits, Kelly sizing) the app had already built.
+This is a lead-rejecting result — but the only true OOS test is live, so it is now **forward-tracked** (not gated on).
+
+### Shipped as a forward-track (deployed + verified 2026-07-05)
+
+`python experiments/11_metalabel.py export` trains the final LR on all 750 trades (8 live-log-
+available features — drops the intraday-only opening-range width) and writes `data/metamodel_serve.json`.
+That model is embedded in `lib/gapgo.js` as `META_MODEL`; `metaProbFromVector` is the exact sklearn
+forward pass, **pinned to Python by `test/gapgo.test.js` fixtures** (ATR is byte-identical across the
+JS/Python ports, so features match; the one acknowledged difference is reg_norm's source — live=macro
+VIX/credit vs rig=IWM tape — immaterial at coef≈0.07 on a ~zero-IC model). Each live Gap & Go pick now
+carries `metaProb` + `metaTier` (HIGH/LOW at the training median 0.499), logged to the `gap/` ledger;
+`op=gapgobook` splits the resolved record `byMeta`. **The live test:** if HIGH ≈ LOW once ~40/class
+resolve, the backtest was right and the flag retires; a HIGH>LOW separation would be the (unexpected)
+live confirmation. Meta stays out of the pick cards on purpose — a no-lift score shouldn't look actionable.
+App suite 365/365.
 
 ## Best configuration found (Experiment 05, rung L4)
 
