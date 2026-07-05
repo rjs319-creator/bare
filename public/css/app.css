@@ -1888,3 +1888,6 @@
 /* 🌊 Second Wave — reuses .pulse-card/.pulse-grid; sky accent */
 #secondwave .pulse-card { border-left-color: #0ea5e9; }
 .sw-crowd { font-size: .8rem; color: var(--text-dim); }
+
+/* 🌐 Cross-Asset — reuses .pulse-card/.pulse-grid; orange accent */
+#crossasset .pulse-card { border-left-color: #f97316; }
