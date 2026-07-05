@@ -1797,6 +1797,24 @@
     .opp-scope-btn:hover { color: var(--text); border-color: var(--border-hi); }
     .opp-scope-btn.active { background: var(--green-dim); color: var(--green); border-color: #10d98a66; }
     .opp-scope-hint { font-size: 0.68rem; margin-left: 4px; }
+    /* ⚡ Quick Hit — cross-cap Top 5 shortlist */
+    .qh-caps { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 10px 0 2px; }
+    .qh-caps-h { font-size: 0.72rem; font-weight: 800; color: var(--text-dim); }
+    .qh-capchip { font-size: 0.7rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); }
+    .qh-capchip.on { cursor: pointer; transition: all .12s; }
+    .qh-capchip.on:hover { background: var(--card-hover); filter: brightness(1.1); }
+    .qh-capchip.off { color: var(--text-dim); opacity: .6; }
+    .qh-card { border-left: 3px solid #fbbf24; }
+    .qh-top { display: flex; align-items: baseline; gap: 8px; }
+    .qh-rank { font-size: 0.92rem; font-weight: 800; color: #fbbf24; min-width: 1.6em; }
+    .qh-cap { font-size: 0.66rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); white-space: nowrap; }
+    .qh-top .opp-id { flex: 1 1 auto; }
+    .qh-crossconf { font-size: 0.74rem; color: var(--green); margin: 6px 0 2px; }
+    .qh-refs { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--border); font-size: 0.7rem; }
+    .qh-refs-h { color: var(--text-dim); font-weight: 700; }
+    .qh-ref { font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); color: var(--text); cursor: pointer; transition: all .12s; }
+    .qh-ref:hover { border-color: var(--border-hi); background: var(--card-hover); }
+    .qh-ref-ai { color: var(--cyan); border-color: #06c4d444; }
     /* ⭐ Opportunity proximity-to-trigger line */
     .opp-prox { font-size: 0.76rem; font-weight: 600; margin: 0 0 8px; padding: 6px 10px; border-radius: 8px; background: var(--surface); }
     .opp-prox.prox-coiled { border-left: 3px solid var(--green); }

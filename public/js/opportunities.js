@@ -18,7 +18,7 @@ const GHOST_LABEL = { GHOST: 'heavy accumulation', STALKING: 'quiet accumulation
 // Build a per-(section|tier) reliability map from the live scoreboard, and a
 // confidence-aware weight: the app literally uses its own realized results to tilt
 // the ranking. Small samples → neutral (we don't over-trust a handful of picks).
-function buildReliability(groups) {
+export function buildReliability(groups) {
   const map = {};
   (groups || []).forEach(g => {
     const h = g.horizons || {};
@@ -107,7 +107,7 @@ function setupSignals(c) {
   return out;
 }
 
-function conviction(opp) {
+export function conviction(opp) {
   if (opp >= 80) return { label: 'High conviction', col: 'var(--green)', stars: '⭐⭐⭐' };
   if (opp >= 68) return { label: 'Solid setup', col: 'var(--amber,#f59e0b)', stars: '⭐⭐' };
   return { label: 'On watch', col: 'var(--text-dim)', stars: '⭐' };
@@ -164,13 +164,10 @@ function expertDetail(c) {
     + (c.narrative ? `<div class="dt-dim">${esc(c.narrative)}</div>` : '') + `</div>`;
 }
 
-function oppCard(c) {
-  const cv = conviction(c.opp);
-  return `<div class="opp-card" data-go="screener" data-opp="${esc(c.ticker)}">`
-    + `<div class="opp-head">`
-    + `<div class="opp-id"><span class="opp-tk" data-live="${esc(c.ticker)}">${esc(c.ticker)}</span> <span class="opp-co">${esc(c.company || '')}</span></div>`
-    + `<div class="opp-conv" style="color:${cv.col}" title="${cv.label}">${cv.stars}</div></div>`
-    + `<div class="opp-badges"><span class="opp-badge">${STAGE_LABEL[c.status] || c.status}</span>`
+// The card BODY (badges → expert detail), shared by the Opportunities strip and the
+// ⚡ Quick Hit shortlist so both render an identical thesis/levels/sizing block.
+export function oppCardInner(c) {
+  return `<div class="opp-badges"><span class="opp-badge">${STAGE_LABEL[c.status] || c.status}</span>`
     + `<span class="opp-badge ghost-${(c.ghost.tier || '').toLowerCase()}">${L('ghost', c.ghost.tier)}</span>`
     + (c.conviction?.sleeveA ? `<span class="opp-badge opp-sleevea expert-only" title="Top-quintile by the results-trained conviction model">🏅 ${L('conviction', 'top-quintile')}</span>` : '')
     + (c.inLeadingTheme ? `<span class="opp-badge opp-theme-lead" title="In a leading theme">🔥 ${esc(c.canonTheme)}</span>` : `<span class="dt-dim">${esc(c.canonTheme || c.sector || '')}</span>`)
@@ -182,19 +179,28 @@ function oppCard(c) {
     + ((c.smBadges && c.smBadges.length) || c.rsTheme ? `<div class="opp-sigs expert-only">`
         + (c.rsTheme === 'leads' ? `<span class="opp-sig sig-rs-lead">⚡ ${L('relStrength', 'leads its theme')}</span>` : c.rsTheme === 'lags' ? `<span class="opp-sig sig-rs-lag">🐢 ${L('relStrength', 'lags its theme — catch-up')}</span>` : '')
         + (c.smBadges || []).join('') + `</div>` : '')
-    + expertDetail(c)
+    + expertDetail(c);
+}
+
+function oppCard(c) {
+  const cv = conviction(c.opp);
+  return `<div class="opp-card" data-go="screener" data-opp="${esc(c.ticker)}">`
+    + `<div class="opp-head">`
+    + `<div class="opp-id"><span class="opp-tk" data-live="${esc(c.ticker)}">${esc(c.ticker)}</span> <span class="opp-co">${esc(c.company || '')}</span></div>`
+    + `<div class="opp-conv" style="color:${cv.col}" title="${cv.label}">${cv.stars}</div></div>`
+    + oppCardInner(c)
     + `</div>`;
 }
 
 // The 5 AI-reasoning screeners → their ACTIONABLE ("good class") picks, flattened for the
 // Opportunities strip. Each maps to {src, ticker, note, score}. Cross-cutting: these names
 // often aren't in the breakout pool, so they're shown as their own AI-signals section.
-const AI_SRC = {
+export const AI_SRC = {
   rt: ['🔗', 'Read-Through', 'readthrough'], an: ['🕵️', 'Stealth', 'anomaly'],
   sw: ['🌊', 'Second Wave', 'secondwave'], ca: ['🌐', 'Cross-Asset', 'crossasset'],
   ts: ['🎚️', 'Tone Shift', 'toneshift'],
 };
-function collectAiSignals(c) {
+export function collectAiSignals(c) {
   const out = [];
   const add = (src, ticker, note, score) => { if (ticker) out.push({ src, ticker: String(ticker).toUpperCase(), note: String(note || '').slice(0, 140), score: score || 0 }); };
   (c.rt && c.rt.items || []).filter(i => i.moved && i.moved.alreadyMoved === false).forEach(i => add('rt', i.beneficiary_ticker, `reads through from $${i.trigger_ticker} — ${i.mechanism || i.thesis || ''}`, i.directness));

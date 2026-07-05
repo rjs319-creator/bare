@@ -4,6 +4,7 @@
   import { initCommandPalette, openPalette, revealTicker } from './command-palette.js';
 import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadOpportunities, mountOpportunitiesTab } from './opportunities.js';
+  import { loadQuickHit } from './quickhit.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
 
@@ -13,7 +14,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // ── App tabs with a "Markets" hub (Screener / Rotation / Sectors) ──
   const TAB_GROUPS = {
     start:     ['today', 'start'],
-    screeners: ['opportunities', 'screener', 'custom', 'coremo', 'daytrade', 'gapgo', 'coil', 'confluence', 'ghost', 'trendrider', 'fade'],
+    screeners: ['quickhit', 'opportunities', 'screener', 'custom', 'coremo', 'daytrade', 'gapgo', 'coil', 'confluence', 'ghost', 'trendrider', 'fade'],
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
     predict:   ['pulse', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     research:  ['backtest', 'events', 'edge'],
@@ -23,7 +24,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
     today: '🏠 Today', start: '📘 Guide',
-    opportunities: '⭐ Opportunities', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
+    quickhit: '⚡ Quick Hit', opportunities: '⭐ Opportunities', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
@@ -34,6 +35,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const SECTION_HELP = {
     today: 'Your daily home base: the market mood and where to start.',
     start: 'A beginner’s guide to what everything in this app means.',
+    quickhit: 'The Top 5 plays across large, small AND micro caps — one fast shortlist with links to where each lives.',
     opportunities: 'The best setups across all the screeners, gathered in one ranked list.',
     screener: 'Stocks breaking out of chart patterns (classic breakout setups).',
     custom: 'A momentum model that adapts its scoring to the current market regime.',
@@ -76,7 +78,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // Mark each section as a switchable screen
   SECTION_IDS.forEach(id => document.getElementById(id)?.classList.add('tabbable'));
 
-  let hubSub = { start: 'today', screeners: 'opportunities', markets: 'rotation', predict: 'gameplan', research: 'backtest', track: 'leaderboard' };
+  let hubSub = { start: 'today', screeners: 'quickhit', markets: 'rotation', predict: 'gameplan', research: 'backtest', track: 'leaderboard' };
   try { const hs = JSON.parse(localStorage.getItem('hubSub')); if (hs) hubSub = { ...hubSub, ...hs }; } catch {}
   // Sanitize stored hubSub: after the nav regrouping a saved sub may no longer
   // belong to its group (e.g. markets→screener). Reset any stale entry to the
@@ -119,6 +121,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('active', el.dataset.tab === top));
     renderHubSubnav(top, sub);
     if (typeof updateTapeBadge === 'function') updateTapeBadge(top === 'screeners' ? sub : null);
+    if (sub === 'quickhit' && typeof ensureQuickHit === 'function') ensureQuickHit();
     if (sub === 'opportunities' && typeof ensureOpportunities === 'function') ensureOpportunities();
     if (sub === 'screener' && typeof ensureScreener === 'function') ensureScreener();
     if (sub === 'backtest' && typeof ensureBacktest === 'function') ensureBacktest();
@@ -3050,6 +3053,16 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const sec = document.getElementById('opportunities'); if (sec) startScreenerLive(sec);   // re-arm live prices after each (re)load
     });
   }
+  let quickHitLoaded = false;
+  function ensureQuickHit() {
+    const el = document.getElementById('quickhit-container'); if (!el || quickHitLoaded) return;
+    quickHitLoaded = true;
+    loadQuickHit(el).then(() => {
+      el.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.go)));
+      const sec = document.getElementById('quickhit'); if (sec) startScreenerLive(sec);   // live prices on the tickers
+    });
+  }
+  document.getElementById('quickhit-refresh-btn')?.addEventListener('click', () => { quickHitLoaded = false; ensureQuickHit(); });
   let leaderboardLoaded = false;
   function ensureLeaderboard() {
     const el = document.getElementById('leaderboard-container'); if (!el || leaderboardLoaded) return;
