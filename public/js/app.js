@@ -122,7 +122,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     renderHubSubnav(top, sub);
     if (typeof updateTapeBadge === 'function') updateTapeBadge(top === 'screeners' ? sub : null);
     if (sub === 'quickhit' && typeof ensureQuickHit === 'function') ensureQuickHit();
-    if (sub === 'opportunities' && typeof ensureOpportunities === 'function') ensureOpportunities();
+    if (sub === 'opportunities' && typeof ensureOpportunities === 'function') { ensureOpportunities(); syncOppScope(); }
     if (sub === 'screener' && typeof ensureScreener === 'function') ensureScreener();
     if (sub === 'backtest' && typeof ensureBacktest === 'function') ensureBacktest();
     if (sub === 'custom' && typeof ensureCustom === 'function') ensureCustom();
@@ -3052,6 +3052,15 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       body.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.go)));
       const sec = document.getElementById('opportunities'); if (sec) startScreenerLive(sec);   // re-arm live prices after each (re)load
     });
+  }
+  // When a Quick Hit "Found in · {cap}" link navigates to ⭐ Opportunities, it stores the
+  // desired cap in localStorage.oppScope. First mount reads that automatically; if the tab
+  // was ALREADY mounted, re-apply by clicking its scope button (reuses the reload path).
+  function syncOppScope() {
+    let want; try { want = localStorage.getItem('oppScope'); } catch {}
+    if (!want) return;
+    const btn = document.getElementById('opportunities')?.querySelector(`.opp-scope-btn[data-scope="${want}"]`);
+    if (btn && !btn.classList.contains('active')) btn.click();
   }
   let quickHitLoaded = false;
   function ensureQuickHit() {
