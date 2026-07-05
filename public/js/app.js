@@ -15,7 +15,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     start:     ['today', 'start'],
     screeners: ['opportunities', 'screener', 'custom', 'coremo', 'daytrade', 'gapgo', 'coil', 'confluence', 'ghost', 'trendrider', 'fade'],
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
-    predict:   ['pulse', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
+    predict:   ['pulse', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     research:  ['backtest', 'events', 'edge'],
     track:     ['leaderboard', 'scoreboard', 'coreperf', 'xalerts'],
   };
@@ -25,7 +25,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     today: '🏠 Today', start: '📘 Guide',
     opportunities: '⭐ Opportunities', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
-    pulse: '📡 Market Pulse', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
+    pulse: '📡 Market Pulse', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
     leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
@@ -56,6 +56,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     anomaly: 'Stocks quietly climbing on volume with NO news — the AI investigates each for a hidden catalyst (possible stealth accumulation).',
     secondwave: 'Stocks with a first move up that the crowd hasn’t piled into yet — the AI forecasts which are primed for a reflexive second wave of buyers.',
     crossasset: 'US stocks levered to a move in another asset (a commodity, an overnight foreign market, crypto, or rates) that they haven’t caught up to yet.',
+    toneshift: 'Companies whose latest earnings call sounded more confident (or more cautious) than last quarter — a language shift before the numbers catch up.',
     gameplan: 'A plain-English daily game plan for the market.',
     brief: 'A concise market brief — the current stance and why.',
     forecast: 'Falsifiable market predictions, auto-graded against real prices.',
@@ -145,6 +146,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'anomaly' && typeof ensureAnomaly === 'function') ensureAnomaly();
     if (sub === 'secondwave' && typeof ensureSecondWave === 'function') ensureSecondWave();
     if (sub === 'crossasset' && typeof ensureCrossAsset === 'function') ensureCrossAsset();
+    if (sub === 'toneshift' && typeof ensureToneShift === 'function') ensureToneShift();
     if (sub === 'gameplan' && typeof ensureGamePlan === 'function') ensureGamePlan();
     if (sub === 'brief' && typeof ensureBrief === 'function') ensureBrief();
     if (sub === 'forecast' && typeof ensureForecast === 'function') ensureForecast();
@@ -3376,6 +3378,52 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (rb) rb.onclick = () => runCrossAssetUI(true);
   }
 
+  // ── 🎚️ TONE SHIFT — earnings-call language DELTA vs the prior quarter (server-side
+  // lib/toneshift-routes.js, Haiku 5 + web search). BRIGHTENING = more confident than last
+  // quarter; DARKENING = more cautious. A slower swing-horizon lead, forward-tracked.
+  let toneshiftLoaded = false;
+  function ensureToneShift() { if (!toneshiftLoaded) { toneshiftLoaded = true; runToneShiftUI(false); } }
+  async function runToneShiftUI(force) {
+    const el = document.getElementById('toneshift-container');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Comparing recent calls to last quarter’s tone… <span class="dt-dim">(~45s)</span>' : 'Loading the tone-shift scan…'}</p></div>`;
+    try {
+      if (force) await fetch('/api/tracker?op=toneshifttick').then(r => r.json()).catch(() => {});
+      const p = await fetch('/api/tracker?op=toneshift').then(r => r.json());
+      renderToneShift(p);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the Tone Shift scan.</p></div>`; }
+  }
+  const TS_CLASS = { BRIGHTENING: ['📈', 'var(--green)', 'Brightening'], STABLE: ['➖', 'var(--text-dim)', 'Stable'], DARKENING: ['📉', 'var(--red)', 'Darkening'] };
+  function renderToneShift(p) {
+    const el = document.getElementById('toneshift-container');
+    if (!el) return;
+    if (!p || !p.ok || !(p.items || []).length) {
+      const why = p && p.error ? ' — ' + esc(p.error) : (p && p.ok ? ' — no recent reporters to compare yet' : '');
+      el.innerHTML = `<div class="mom-status error"><p>Tone Shift is warming up${why}. It compares recent earnings calls to last quarter — try Refresh in a moment.</p></div>`;
+      return;
+    }
+    const gt = document.getElementById('toneshift-gen-time');
+    if (gt && p.generatedAt) gt.textContent = `· ${p.asOf ? 'as of ' + esc(p.asOf) + ' · ' : ''}updated ${p.ageMins != null && p.ageMins < 90 ? (p.ageMins + 'm ago') : new Date(p.generatedAt).toLocaleString()}`;
+    const dots = n => '●'.repeat(Math.max(0, Math.min(5, n))) + '○'.repeat(5 - Math.max(0, Math.min(5, n)));
+    const card = it => {
+      const [ce, cc, cl] = TS_CLASS[it.shift] || TS_CLASS.STABLE;
+      return `<div class="pulse-card${it.shift === 'STABLE' ? ' rt-dim' : ''}">
+        <div class="pulse-top">
+          <span class="pulse-head"><b>$${esc(it.ticker)}</b></span>
+          <span class="anom-class" style="color:${cc}" title="${esc(cl)}">${ce} ${esc(cl)} <span class="anom-conf">${dots(it.confidence)}</span></span>
+        </div>
+        <div class="pulse-idea"><b>Change:</b> ${esc(it.change)}</div>
+        <div class="pulse-why">${esc(it.thesis)}</div>
+        ${it.caution ? `<div class="pulse-caution">⚠️ ${esc(it.caution)}</div>` : ''}
+      </div>`;
+    };
+    el.innerHTML = `
+      <div class="dt-note" style="border-left-color:#a855f7"><b>🎚️ Earnings tone shifts.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''}</div>
+      <div class="pulse-grid">${p.items.map(card).join('')}</div>`;
+    const rb = document.getElementById('toneshift-refresh-btn');
+    if (rb) rb.onclick = () => runToneShiftUI(true);
+  }
+
   // ── 🗞️ DAILY GAME PLAN — news + sentiment + the app's own signals synthesized
   // (server-side, lib/gameplan.js) into one succinct plan + predictions, tiered
   // novice↔pro, building on a rolling multi-day narrative. UI just renders op=gameplan.
@@ -5439,7 +5487,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const scoreboardMeta       = document.getElementById('scoreboard-meta');
   let   lastScoreboard       = null;
 
-  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)' };
+  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)' };
   const SB_TIER_LABEL = { Breakout: 'Breakout', Setup: 'Setup', Early: 'Early', StrongBuy: 'Strong Buy', StrongSell: 'Strong Sell', GHOST: '👻 Ghost', STALKING: '🥷 Stalking', SHORT: 'Short', SHORT_LIGHT: 'Short (light)',
     INDEX_DELETE: 'Index Delete', INDEX_ADD_FADE: 'Index Add (fade)', LOCKUP_EXPIRY: 'Lockup Expiry', TAX_LOSS: 'Tax-Loss Selling', FIRE_SALE: 'Fire Sale', MARGIN_SPIRAL: 'Margin Spiral', FORCED_DOWNGRADE: 'Forced Downgrade',
     Bullish: '📈 Bullish tone', Neutral: '➖ Neutral tone', Bearish: '📉 Bearish tone',
@@ -5447,7 +5495,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     Fresh: '🟢 Fresh (not yet moved)', Moved: '⚪ Moved (priced in)', Unknown: '◽ Unknown',
     Accumulation: '🕵️ Accumulation (no reason)', Explained: '📰 Explained (priced)', Noise: '🌫️ Noise',
     Primed: '🌊 Primed (2nd wave)', Early: '🌱 Early', Faded: '🥱 Faded (crowded)',
-    Lead: '🌐 Lead (lagging)', Inline: '🔗 Inline (caught up)', Weak: '🌫️ Weak link' };
+    Lead: '🌐 Lead (lagging)', Inline: '🔗 Inline (caught up)', Weak: '🌫️ Weak link',
+    Brightening: '📈 Brightening', Stable: '➖ Stable', Darkening: '📉 Darkening' };
   const SB_HZ         = [['1d', '1-Day'], ['5d', '5-Day'], ['10d', '10-Day'], ['20d', '20-Day'], ['1m', '1-Month'], ['3m', '3-Month']];
   // Plain-English "what is this?" hovers for a novice investor — shown on each
   // Scoreboard section header and horizon column.
@@ -5463,6 +5512,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     Anomaly: 'Stocks that were climbing on volume with NO news, then investigated by AI. ACCUMULATION = no public catalyst found (possible stealth buying); EXPLAINED = a reason was found (already priced); NOISE = technical/illiquid. The test: do the ACCUMULATION names actually beat their sector — and beat the Explained/Noise buckets? Excess is vs each name’s own SECTOR ETF.',
     SecondWave: 'Stocks that had a first leg up but the crowd hasn’t piled into yet, then judged by AI. PRIMED = fresh story with room to spread (possible reflexive second wave); EARLY = needs a trigger; FADED = already crowded/late. The test: do PRIMED names actually get the second leg — beating their sector and the Faded ones? Excess is vs each name’s own SECTOR ETF.',
     CrossAsset: 'US stocks levered to a move in ANOTHER asset (a commodity, an overnight foreign market/ADR, crypto, or rates) that they may not have caught up to yet. LEAD = still lagging the tell (actionable); INLINE = already tracking; WEAK = loose link. The test: do the LEAD names actually catch up — beating the market and the Inline ones?',
+    ToneShift: 'How a company’s latest earnings call sounded vs LAST quarter’s. BRIGHTENING = management got more confident/specific (dropped hedges, added guidance-raise language); DARKENING = more cautious. The test: do BRIGHTENING names beat their sector — and beat the Darkening ones? A slower swing-horizon signal.',
   };
   const SB_HZ_HELP = 'Average return this many trading days after the pick. The green/red “vs S&P” line under it is the market-beating number: the pick’s return minus what the S&P 500 did over the same days.';
 

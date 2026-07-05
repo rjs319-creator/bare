@@ -1891,3 +1891,6 @@
 
 /* 🌐 Cross-Asset — reuses .pulse-card/.pulse-grid; orange accent */
 #crossasset .pulse-card { border-left-color: #f97316; }
+
+/* 🎚️ Tone Shift — reuses .pulse-card/.pulse-grid; purple accent */
+#toneshift .pulse-card { border-left-color: #a855f7; }

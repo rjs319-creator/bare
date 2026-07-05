@@ -78,6 +78,8 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'secondwavetick') return require('../lib/secondwave-routes').runSecondWaveTick(req, res);
   if (req.query.op === 'crossasset') return require('../lib/crossasset-routes').runCrossAsset(req, res);
   if (req.query.op === 'crossassettick') return require('../lib/crossasset-routes').runCrossAssetTick(req, res);
+  if (req.query.op === 'toneshift') return require('../lib/toneshift-routes').runToneShift(req, res);
+  if (req.query.op === 'toneshifttick') return require('../lib/toneshift-routes').runToneShiftTick(req, res);
   if (req.query.op === 'predict') return runPredict(req, res);
   if (req.query.op === 'predicttick') return runPredictTick(req, res);
   if (req.query.op === 'crowd') return runCrowd(req, res);
