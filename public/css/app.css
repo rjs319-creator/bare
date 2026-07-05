@@ -1877,3 +1877,10 @@
 .rt-moved { color: var(--text-dim); }
 .rt-unknown { color: var(--text-dim); }
 .rt-dim { opacity: .62; }
+
+/* 🕵️ Stealth (Anomaly) — reuses .pulse-card/.pulse-grid; violet accent */
+#anomaly .pulse-card { border-left-color: #8b5cf6; }
+.anom-meta { font-size: .82rem; color: var(--text-dim); margin: 6px 0 10px; }
+.anom-move { font-size: .82rem; color: var(--green); font-weight: 700; }
+.anom-class { font-size: .8rem; font-weight: 700; white-space: nowrap; }
+.anom-conf { letter-spacing: -1px; opacity: .8; }

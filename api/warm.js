@@ -149,6 +149,9 @@ module.exports = async function handler(req, res) {
   // fresh, so it runs concurrently in its own 60s invocation during the tail below. Awaited
   // at the very end, then Stage 2 (fast enrich + forward-log) runs off the raw graph.
   const rtRawWarm = warmOne('/api/tracker?op=readthroughtick');
+  // 🕵️ Stealth (Anomaly) — detect no-news movers + AI-investigate + forward-log, its own
+  // ~50s invocation, concurrent with the tail. Reads the candle caches the screener warm built.
+  const anomWarm = warmOne('/api/tracker?op=anomalytick');
 
   // 🟢 Timing light — log today's picks' grades (accountability) then run the adaptive
   //    weight tuner (self-improvement; dormant until the ledger matures).
@@ -224,7 +227,10 @@ module.exports = async function handler(req, res) {
     readthrough = await r.json();
   } catch (e) { readthrough = { error: String(e && e.message || e) }; }
 
-  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, readthroughtick, readthrough, at: new Date().toISOString() };
+  // 🕵️ Stealth (Anomaly) — the tick self-logs; just await the concurrent invocation.
+  const anomalytick = await anomWarm.catch(e => ({ error: String(e && e.message || e) }));
+
+  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, readthroughtick, readthrough, anomalytick, at: new Date().toISOString() };
 
   // Observability: persist a compact health record so failed ticks / stale data are visible (op=health).
   try { const { summarizeRun, writeHealthRun } = require('../lib/health'); await writeHealthRun(summarizeRun(result)); }
