@@ -145,19 +145,16 @@ module.exports = async function handler(req, res) {
     gapgotick = await r.json();
   } catch (e) { gapgotick = { error: String(e && e.message || e) }; }
 
-  // 🔗 Read-Through Stage 1 (slow Fable call) — kicked NOW, right after the gap ledger is
-  // fresh, so it runs concurrently in its own 60s invocation during the tail below. Awaited
-  // at the very end, then Stage 2 (fast enrich + forward-log) runs off the raw graph.
-  const rtRawWarm = warmOne('/api/tracker?op=readthroughtick');
-  // 🕵️ Stealth (Anomaly) — detect no-news movers + AI-investigate + forward-log, its own
-  // ~50s invocation, concurrent with the tail. Reads the candle caches the screener warm built.
-  const anomWarm = warmOne('/api/tracker?op=anomalytick');
-  // 🌊 Second Wave — detect first-leg movers + AI second-wave forecast + forward-log, concurrent.
-  const swWarm = warmOne('/api/tracker?op=secondwavetick');
-  // 🌐 Cross-Asset — AI sweeps cross-asset moves + names levered US stocks + forward-log, concurrent.
-  const caWarm = warmOne('/api/tracker?op=crossassettick');
-  // 🎚️ Tone Shift — AI tone-delta vs prior quarter for recent reporters (reads the tone ledger), concurrent.
-  const tsWarm = warmOne('/api/tracker?op=toneshifttick');
+  // ── 5 AI-reasoning screeners (Read-Through / Stealth / Second Wave / Cross-Asset / Tone
+  // Shift) — each tick is SELF-CONTAINED (detect + AI + forward-log + cache) in its own 60s
+  // invocation. FIRE-AND-FORGET: we kick them and do NOT await (awaiting the slow AI calls
+  // is what blew warm's own 60s wall → 504). The kicks dispatch during warm's long tail
+  // below; each tick then runs + logs independently of warm's lifetime. `.catch` only to
+  // avoid unhandled rejections.
+  const aiTicks = [
+    '/api/tracker?op=readthroughtick', '/api/tracker?op=anomalytick', '/api/tracker?op=secondwavetick',
+    '/api/tracker?op=crossassettick', '/api/tracker?op=toneshifttick',
+  ].map(p => warmOne(p).catch(() => null));
 
   // 🟢 Timing light — log today's picks' grades (accountability) then run the adaptive
   //    weight tuner (self-improvement; dormant until the ledger matures).
@@ -223,23 +220,13 @@ module.exports = async function handler(req, res) {
 
   const warmedExtra = await extraWarm;   // already resolved — ran during the tail above
 
-  // 🔗 Read-Through: the Stage-1 tick ran concurrently through the tail; await it, then run
-  // Stage 2 (fast enrich + daily forward-log) off the fresh raw graph. Last on purpose —
-  // both self-heal on the next cron / first user visit if a slow day cuts them.
-  let readthroughtick = await rtRawWarm.catch(e => ({ error: String(e && e.message || e) }));
-  let readthrough = null;
-  try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=readthrough&force=1', { headers: { 'x-warm': '1' } });
-    readthrough = await r.json();
-  } catch (e) { readthrough = { error: String(e && e.message || e) }; }
+  // The 5 AI screener ticks were kicked fire-and-forget (not awaited) — they self-log to
+  // their own ledgers in their own invocations. `aiTicksKicked` just confirms the fetches
+  // were dispatched; we do NOT block warm's return on the ~30-50s AI calls (that caused the
+  // 504). void-reference so the array isn't dropped before the requests flush.
+  void aiTicks;
 
-  // 🕵️ Stealth + 🌊 Second Wave — the ticks self-log; just await the concurrent invocations.
-  const anomalytick = await anomWarm.catch(e => ({ error: String(e && e.message || e) }));
-  const secondwavetick = await swWarm.catch(e => ({ error: String(e && e.message || e) }));
-  const crossassettick = await caWarm.catch(e => ({ error: String(e && e.message || e) }));
-  const toneshifttick = await tsWarm.catch(e => ({ error: String(e && e.message || e) }));
-
-  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, readthroughtick, readthrough, anomalytick, secondwavetick, crossassettick, toneshifttick, at: new Date().toISOString() };
+  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, aiTicksKicked: 5, at: new Date().toISOString() };
 
   // Observability: persist a compact health record so failed ticks / stale data are visible (op=health).
   try { const { summarizeRun, writeHealthRun } = require('../lib/health'); await writeHealthRun(summarizeRun(result)); }

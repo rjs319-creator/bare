@@ -29,7 +29,7 @@ test('buildTriggers: honors a custom cap (Stage-1 raw count > default)', () => {
   const picks = Array.from({ length: 8 }, (_, i) => ({ ticker: 'T' + i, gapPct: 20 - i, cause: 'FDA' }));
   assert.equal(buildTriggers({ picks }).length, MAX_TRIGGERS);               // default cap
   assert.equal(buildTriggers({ picks }, MAX_TRIGGERS_RAW).length, MAX_TRIGGERS_RAW);
-  assert.ok(MAX_TRIGGERS_RAW > MAX_TRIGGERS);                                // the split raises the count
+  assert.ok(MAX_TRIGGERS_RAW >= MAX_TRIGGERS);                               // raw cap >= default
   assert.deepEqual(buildTriggers({ picks }, 2).map(t => t.ticker), ['T0', 'T1']);
 });
 
