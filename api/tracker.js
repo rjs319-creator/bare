@@ -27,7 +27,7 @@ const { runFadeOpt, runFadeSeed, runFadeSignals, runFadeTick, runFadeBook,
         runCoil, runCoilTick, runCoilBook,
         runGapGo, runGapGoTick, runGapGoBook,
         runTiming, runTimingLog, runTimingBook, runTimingTune } = require('../lib/screener-routes');
-const { runAlertsIngest, runAlerts, runAlertsGrade } = require('../lib/alerts-routes');
+const { runAlertsIngest, runAlerts, runAlertsGrade, runAlertsAssess } = require('../lib/alerts-routes');
 const { runArchive, runBaseline, runInsiderIngest, runInsider, runFundBuild, runFundamentals,
         runCernTickOp, runCern, runCernFsProbe, runCernLockProbe, runIntraCapture, runIntraday } = require('../lib/capture-routes');
 const { runTrack, runScoreboard, runApexLog, runGhostLog, runEdgeLog, runEdgeBook, runVReversal, runVReversalTest,
@@ -123,6 +123,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'alertsingest') return runAlertsIngest(req, res);
   if (req.query.op === 'alerts') return runAlerts(req, res);
   if (req.query.op === 'alertsgrade') return runAlertsGrade(req, res);
+  if (req.query.op === 'alertsassess') return runAlertsAssess(req, res);
   if (req.query.op === 'model') return runModel(req, res);
   if (req.query.op === 'narrative') return runNarrative(req, res);
   if (req.query.op === 'health') return runHealth(req, res);

@@ -108,6 +108,14 @@ module.exports = async function handler(req, res) {
     alertsgrade = await r.json();
   } catch (e) { alertsgrade = { error: String(e && e.message || e) }; }
 
+  // Bounded Fable-5 review over the current top ranked alerts: annotate cards and
+  // stamp the pending log entries with Fable's direction for the A/B edge test.
+  let alertsassess = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=alertsassess', { headers: { 'x-warm': '1' } });
+    alertsassess = await r.json();
+  } catch (e) { alertsassess = { error: String(e && e.message || e) }; }
+
   // Self-improving fade engine: resolve matured logged shorts → update per-stock
   // posteriors → log today's setups. Last (candle data is CDN-warm by now); a
   // skipped slow day self-heals next run (it re-resolves all still-open signals).
@@ -242,7 +250,7 @@ module.exports = async function handler(req, res) {
   void aiTicks;
   void calibKick; // fire-and-forget like the ticks — recomputes on its own invocation
 
-  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, intracapture, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, aiTicksKicked: 5, calibKicked: true, at: new Date().toISOString() };
+  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, intracapture, cern, edgelog, alertsgrade, alertsassess, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, aiTicksKicked: 5, calibKicked: true, at: new Date().toISOString() };
 
   // Observability: persist a compact health record so failed ticks / stale data are visible (op=health).
   try { const { summarizeRun, writeHealthRun } = require('../lib/health'); await writeHealthRun(summarizeRun(result)); }
