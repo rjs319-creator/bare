@@ -9,6 +9,8 @@ const PATHS = [
   '/api/screener?scope=large&lookback=1M',
   '/api/screener?scope=small',
   '/api/screener?scope=micro',
+  '/api/screener?scope=biotech',   // build candles/biotech.json for the 🧬 Biotech Radar
+
   '/api/sectors',
   '/api/tracker?op=optionsflow&refresh=1',  // build + log the day's options flow (~1.5s) for the track record
 ];
@@ -170,7 +172,7 @@ module.exports = async function handler(req, res) {
   // avoid unhandled rejections.
   const aiTicks = [
     '/api/tracker?op=readthroughtick', '/api/tracker?op=anomalytick', '/api/tracker?op=secondwavetick',
-    '/api/tracker?op=crossassettick', '/api/tracker?op=toneshifttick',
+    '/api/tracker?op=crossassettick', '/api/tracker?op=toneshifttick', '/api/tracker?op=biotechtick',
   ].map(p => warmOne(p).catch(() => null));
 
   // Predict-tab feedback loop — recompute each class's live track-record grade (Wilson-
@@ -250,7 +252,7 @@ module.exports = async function handler(req, res) {
   void aiTicks;
   void calibKick; // fire-and-forget like the ticks — recomputes on its own invocation
 
-  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, intracapture, cern, edgelog, alertsgrade, alertsassess, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, aiTicksKicked: 5, calibKicked: true, at: new Date().toISOString() };
+  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, intracapture, cern, edgelog, alertsgrade, alertsassess, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, aiTicksKicked: 6, calibKicked: true, at: new Date().toISOString() };
 
   // Observability: persist a compact health record so failed ticks / stale data are visible (op=health).
   try { const { summarizeRun, writeHealthRun } = require('../lib/health'); await writeHealthRun(summarizeRun(result)); }

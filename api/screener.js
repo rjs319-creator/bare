@@ -179,12 +179,15 @@ module.exports = async function handler(req, res) {
   const mark = {};
   const scope = (req.query.scope || 'large').toLowerCase();
   const isMicro = scope === 'micro';
-  const isSmallScope = scope === 'small' || isMicro;
+  const isBiotech = scope === 'biotech';
+  // Biotech is a cross-cap but high-volatility set → use the looser small-scope thresholds.
+  const isSmallScope = scope === 'small' || isMicro || isBiotech;
 
   // Build the universe for this scope (dedupe; tag cap tier)
   let list, tier, cap;
   if (isMicro)            { list = MICRO_CAPS; tier = 'Micro'; cap = 10; }
   else if (scope === 'small') { list = SMALL_CAPS; tier = 'Small'; cap = 10; }
+  else if (isBiotech)     { list = require('../lib/universe').BIOTECH; tier = 'Biotech'; cap = 12; }
   else                    { list = LARGE; tier = 'Large'; cap = 20; }
   // Optional filters
   const sectorFilter = (req.query.sector || 'all');

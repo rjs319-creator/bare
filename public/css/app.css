@@ -1934,6 +1934,16 @@
 .anom-class { font-size: .8rem; font-weight: 700; white-space: nowrap; }
 .anom-conf { letter-spacing: -1px; opacity: .8; }
 
+/* 🧬 Biotech Radar — reuses .pulse-card/.pulse-grid; emerald accent */
+#biotech .pulse-card { border-left-color: #10b981; }
+.bio-score { font-size: .82rem; font-weight: 800; white-space: nowrap; border: 1px solid; border-radius: 6px; padding: 1px 7px; }
+.bio-score-max { font-size: .68rem; font-weight: 600; opacity: .7; }
+.bio-chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin: 6px 0 2px; }
+.bio-chip { font-size: .72rem; color: var(--text-dim); background: var(--surface-2, rgba(127,127,127,.12)); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
+.bio-chip.bio-warn { color: #ef4444; background: rgba(239,68,68,.12); font-weight: 700; }
+.bio-flags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.bio-flag { font-size: .7rem; color: #f59e0b; background: rgba(245,158,11,.12); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
+
 /* 🌊 Second Wave — reuses .pulse-card/.pulse-grid; sky accent */
 #secondwave .pulse-card { border-left-color: #0ea5e9; }
 .sw-crowd { font-size: .8rem; color: var(--text-dim); }

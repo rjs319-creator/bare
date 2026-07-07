@@ -17,7 +17,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     quickhit:  ['quickhit'],
     screeners: ['opportunities', 'screener', 'custom', 'coremo', 'daytrade', 'gapgo', 'coil', 'confluence', 'ghost', 'trendrider', 'fade'],
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
-    predict:   ['pulse', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
+    predict:   ['pulse', 'readthrough', 'anomaly', 'biotech', 'secondwave', 'crossasset', 'toneshift', 'gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     research:  ['backtest', 'events', 'edge'],
     track:     ['leaderboard', 'scoreboard', 'coreperf', 'xalerts'],
   };
@@ -27,7 +27,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     today: '🏠 Today', start: '📘 Guide',
     quickhit: '⚡ Quick Hit', opportunities: '⭐ Opportunities', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
-    pulse: '📡 Market Pulse', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
+    pulse: '📡 Market Pulse', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
     leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
@@ -57,6 +57,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     pulse: 'What the crowd is buzzing about on social + finance media (attention, not advice).',
     readthrough: 'Second-order “who benefits and hasn’t moved yet” — names linked to today’s gappers by supply chain or competition.',
     anomaly: 'Stocks quietly climbing on volume with NO news — the AI investigates each for a hidden catalyst (possible stealth accumulation).',
+    biotech: 'Biotech names that just started running (micro→large cap), scored 0–100 with a catalyst-aware model — the AI finds WHY each is moving (FDA/data/M&A/deal) or flags it Unknown, and the score penalizes dilution & pump-and-dump traps.',
     secondwave: 'Stocks with a first move up that the crowd hasn’t piled into yet — the AI forecasts which are primed for a reflexive second wave of buyers.',
     crossasset: 'US stocks levered to a move in another asset (a commodity, an overnight foreign market, crypto, or rates) that they haven’t caught up to yet.',
     toneshift: 'Companies whose latest earnings call sounded more confident (or more cautious) than last quarter — a language shift before the numbers catch up.',
@@ -148,6 +149,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'pulse' && typeof ensurePulse === 'function') ensurePulse();
     if (sub === 'readthrough' && typeof ensureReadThrough === 'function') ensureReadThrough();
     if (sub === 'anomaly' && typeof ensureAnomaly === 'function') ensureAnomaly();
+    if (sub === 'biotech' && typeof ensureBiotech === 'function') ensureBiotech();
     if (sub === 'secondwave' && typeof ensureSecondWave === 'function') ensureSecondWave();
     if (sub === 'crossasset' && typeof ensureCrossAsset === 'function') ensureCrossAsset();
     if (sub === 'toneshift' && typeof ensureToneShift === 'function') ensureToneShift();
@@ -3215,6 +3217,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const PREDICT_TIER = {
     ReadThrough: it => (!it.moved || it.moved.alreadyMoved == null) ? 'Unknown' : it.moved.alreadyMoved ? 'Moved' : 'Fresh',
     Anomaly:     it => it.classification === 'ACCUMULATION' ? 'Accumulation' : it.classification === 'EXPLAINED' ? 'Explained' : 'Noise',
+    Biotech:     it => it.tier || (it.score >= 75 ? 'Hot' : it.score >= 60 ? 'Emerging' : 'Watch'),
     SecondWave:  it => it.classification === 'PRIMED' ? 'Primed' : it.classification === 'EARLY' ? 'Early' : 'Faded',
     CrossAsset:  it => it.classification === 'LEAD' ? 'Lead' : it.classification === 'INLINE' ? 'Inline' : 'Weak',
     ToneShift:   it => it.shift === 'BRIGHTENING' ? 'Brightening' : it.shift === 'DARKENING' ? 'Darkening' : 'Stable',
@@ -3222,7 +3225,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const CALIB_VRANK = { PROVEN: 0, CALIBRATING: 1, DUD: 2 };
   // Mirror of lib/calibration.js ATTR_SPEC.conviction.key — the per-item field holding the
   // AI's 1–5 conviction. Used by Layer 3b to rank within a class once that score proves out.
-  const PREDICT_CONV = { ReadThrough: 'directness', Anomaly: 'confidence', SecondWave: 'virality', CrossAsset: 'confidence', ToneShift: 'confidence' };
+  const PREDICT_CONV = { ReadThrough: 'directness', Anomaly: 'confidence', Biotech: 'confidence', SecondWave: 'virality', CrossAsset: 'confidence', ToneShift: 'confidence' };
   function calibFor(section, it) {
     const sec = _calib && _calib.sections && _calib.sections[section];
     const tf = PREDICT_TIER[section];
@@ -3441,6 +3444,82 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     hydratePredictPrices(el);
     const rb = document.getElementById('anomaly-refresh-btn');
     if (rb) rb.onclick = () => runAnomalyUI(true);
+  }
+
+  // ── 🧬 BIOTECH RADAR — biotech names that just started running (micro→large), scored 0–100
+  // by a catalyst-aware model (server-side lib/biotech-routes.js). An AI investigator (Haiku +
+  // web search) finds WHY each is moving — or flags it Unknown — and the score penalizes
+  // dilution risk & pump-and-dump traps. Benchmarked vs XBI, the biotech ETF.
+  let biotechLoaded = false;
+  function ensureBiotech() { if (!biotechLoaded) { biotechLoaded = true; runBiotechUI(false); } }
+  async function runBiotechUI(force) {
+    const el = document.getElementById('biotech-container');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Re-scanning biotech for early runners & investigating each… <span class="dt-dim">(the AI web-searches each — ~50s)</span>' : 'Loading the biotech scan…'}</p></div>`;
+    try {
+      if (force) await fetch('/api/tracker?op=biotechtick').then(r => r.json()).catch(() => {});
+      const [p] = await Promise.all([fetch('/api/tracker?op=biotech').then(r => r.json()), loadCalibration()]);
+      renderBiotech(p);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the Biotech Radar.</p></div>`; }
+  }
+  // Catalyst class → [emoji, colour, label] for the reason chip.
+  const BIO_CLASS = {
+    FDA: ['💊', 'var(--green)', 'FDA / Regulatory'], DATA: ['🧪', 'var(--green)', 'Clinical Data'],
+    MA: ['🤝', 'var(--green)', 'M&A / Buyout'], PARTNER: ['🔗', 'var(--text)', 'Partnership'],
+    ANALYST: ['📈', 'var(--text-dim)', 'Analyst'], SYMPATHY: ['🌊', 'var(--text-dim)', 'Sympathy'],
+    FINANCING: ['💧', 'var(--red)', 'Financing / Dilution'], STEALTH: ['🕵️', 'var(--text)', 'Stealth (no news)'],
+    NOISE: ['🌫️', 'var(--text-dim)', 'Noise'],
+  };
+  const bioTierColor = t => t === 'Hot' ? '#10b981' : t === 'Emerging' ? '#eab308' : 'var(--text-dim)';
+  function renderBiotech(p) {
+    const el = document.getElementById('biotech-container');
+    if (!el) return;
+    if (!p || !p.ok || !(p.items || []).length) {
+      const why = p && p.error ? ' — ' + esc(p.error) : (p && p.ok ? ' — no biotech runners on the latest tape' : '');
+      el.innerHTML = `<div class="mom-status error"><p>Biotech Radar is warming up${why}. It scans ~200 biotech names for early runners — try Refresh in a moment.</p></div>`;
+      return;
+    }
+    const gt = document.getElementById('biotech-gen-time');
+    if (gt && p.generatedAt) gt.textContent = `· ${p.asOf ? 'as of ' + esc(p.asOf) + ' · ' : ''}updated ${p.ageMins != null && p.ageMins < 90 ? (p.ageMins + 'm ago') : new Date(p.generatedAt).toLocaleString()}`;
+    const dots = n => '●'.repeat(Math.max(0, Math.min(5, n))) + '○'.repeat(5 - Math.max(0, Math.min(5, n)));
+    const card = it => {
+      const [ce, cc, cl] = BIO_CLASS[it.classification] || BIO_CLASS.NOISE;
+      const { dim, feat, c: cal } = calibState('Biotech', it, it.tier === 'Hot');
+      const tc = bioTierColor(it.tier);
+      const move = `<span class="anom-move">+${it.pct5d}% / ${it.relVol}x vol${it.runAge != null ? ` · day ~${it.runAge}` : ''}${it.adrDaysConsumed != null ? ` · ${it.adrDaysConsumed} ADR-days` : ''}</span>`;
+      // Evidence + timing chips (Fable B1/B8): reaction-to-catalyst vs running-into-a-binary.
+      const evChip = it.evidence ? `<span class="bio-chip" title="Evidence grade">${it.evidence === 'Verified' ? '✅ Verified' : it.evidence === 'Inferred' ? '≈ Inferred' : '❔ Unconfirmed'}</span>` : '';
+      const tmChip = it.catalyst_timing === 'Ahead'
+        ? `<span class="bio-chip bio-warn" title="Running INTO a dated binary event — holding through it risks a large gap either way">⚠️ binary ahead</span>`
+        : it.catalyst_timing === 'Behind' ? `<span class="bio-chip" title="Reacting to a catalyst already out — no pending binary event">↩︎ reaction</span>` : '';
+      const subChip = it.subsector ? `<span class="bio-chip">${esc(it.subsector)}</span>` : '';
+      const dilChip = it.dilution_risk && it.dilution_risk !== 'None' ? `<span class="bio-chip${it.dilution_risk === 'High' ? ' bio-warn' : ''}" title="Dilution / offering risk">💧 ${esc(it.dilution_risk)} dilution risk</span>` : '';
+      // Trap-flag row (Fable B6).
+      const fl = it.flags || {};
+      const flags = [fl.dilutionHigh ? '💧 offering risk' : '', fl.serialSpiker ? '🔁 serial spike-fade' : '', fl.penny ? '💵 sub-$2' : '', fl.overextended ? '📛 overextended' : ''].filter(Boolean);
+      const flagRow = flags.length ? `<div class="bio-flags">${flags.map(f => `<span class="bio-flag">${f}</span>`).join('')}</div>` : '';
+      return `<div class="pulse-card${dim ? ' rt-dim' : ''}${feat ? ' calib-feat' : ''}">
+        <div class="pulse-top">
+          <span class="pulse-head"><b>$${esc(it.ticker)}</b> ${move}</span>
+          <span class="bio-score" style="color:${tc};border-color:${tc}" title="Biotech Radar score (0–100; 100 = highest conviction)">${it.score}<span class="bio-score-max">/100</span> · ${esc(it.tier)}</span>
+        </div>
+        ${priceBar(it.ticker)}
+        ${cal ? `<div class="pulse-calib">${calibBadge(cal)}</div>` : ''}
+        <div class="pulse-idea"><span style="color:${cc}">${ce} <b>${esc(cl)}</b></span> — ${esc(it.reason)}</div>
+        <div class="bio-chips">${evChip}${tmChip}${dilChip}${subChip}<span class="anom-conf" title="AI confidence">${dots(it.confidence)}</span></div>
+        ${it.thesis ? `<div class="pulse-why">${esc(it.thesis)}</div>` : ''}
+        ${it.bear_case ? `<div class="pulse-caution" style="border-left-color:#ef4444">🐻 <b>Bear:</b> ${esc(it.bear_case)}</div>` : ''}
+        ${it.caution ? `<div class="pulse-caution">⚠️ ${esc(it.caution)}</div>` : ''}
+        ${flagRow}
+      </div>`;
+    };
+    el.innerHTML = `
+      <div class="dt-note" style="border-left-color:#10b981"><b>🧬 Biotech Radar.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND} ${convictionLine('Biotech')}</div>
+      <div class="anom-meta">Scanned ~200 biotech names → ${p.detected != null ? p.detected + ' early runners' : ''}${p.regime ? ' · macro ' + esc(p.regime) : ''}${p.etfPct5d != null ? ' · XBI 5d ' + (p.etfPct5d > 0 ? '+' : '') + p.etfPct5d + '%' : ''} → scored + investigated ${(p.items || []).length}.</div>
+      <div class="pulse-grid">${calibSort('Biotech', p.items).map(card).join('')}</div>`;
+    hydratePredictPrices(el);
+    const rb = document.getElementById('biotech-refresh-btn');
+    if (rb) rb.onclick = () => runBiotechUI(true);
   }
 
   // ── 🌊 SECOND WAVE — first-leg movers the crowd hasn't piled into yet; an AI forecasts
@@ -5711,13 +5790,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const scoreboardMeta       = document.getElementById('scoreboard-meta');
   let   lastScoreboard       = null;
 
-  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)' };
+  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', Biotech: '🧬 Biotech Radar (Hot vs Watch)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)' };
   const SB_TIER_LABEL = { Breakout: 'Breakout', Setup: 'Setup', Early: 'Early', StrongBuy: 'Strong Buy', StrongSell: 'Strong Sell', GHOST: '👻 Ghost', STALKING: '🥷 Stalking', SHORT: 'Short', SHORT_LIGHT: 'Short (light)',
     INDEX_DELETE: 'Index Delete', INDEX_ADD_FADE: 'Index Add (fade)', LOCKUP_EXPIRY: 'Lockup Expiry', TAX_LOSS: 'Tax-Loss Selling', FIRE_SALE: 'Fire Sale', MARGIN_SPIRAL: 'Margin Spiral', FORCED_DOWNGRADE: 'Forced Downgrade',
     Bullish: '📈 Bullish tone', Neutral: '➖ Neutral tone', Bearish: '📉 Bearish tone',
     Sticky: '📈 Sticky attention', Fast: '⚡ Fast hype',
     Fresh: '🟢 Fresh (not yet moved)', Moved: '⚪ Moved (priced in)', Unknown: '◽ Unknown',
     Accumulation: '🕵️ Accumulation (no reason)', Explained: '📰 Explained (priced)', Noise: '🌫️ Noise',
+    Hot: '🔥 Hot (75+)', Emerging: '🌗 Emerging (60+)', Watch: '👀 Watch (45+)',
     Primed: '🌊 Primed (2nd wave)', Early: '🌱 Early', Faded: '🥱 Faded (crowded)',
     Lead: '🌐 Lead (lagging)', Inline: '🔗 Inline (caught up)', Weak: '🌫️ Weak link',
     Brightening: '📈 Brightening', Stable: '➖ Stable', Darkening: '📉 Darkening' };
@@ -5734,6 +5814,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     Attention: 'Social attention split two ways: STICKY = interest sustained over many days (tends to keep drifting up); FAST = a short hype spike (tends to fade/reverse). Compare the two buckets’ returns to see if the split holds.',
     ReadThrough: 'Second-order beneficiaries of the day’s big movers (a supplier/customer/rival linked to a gapper). FRESH = hadn’t repriced when surfaced; MOVED = already jumped. The test: do the Fresh (un-moved) read-throughs actually beat their peers — and beat the already-Moved ones? Excess here is vs each name’s own SECTOR ETF (beat your peers, not just the market); falls back to the S&P if the sector is unknown.',
     Anomaly: 'Stocks that were climbing on volume with NO news, then investigated by AI. ACCUMULATION = no public catalyst found (possible stealth buying); EXPLAINED = a reason was found (already priced); NOISE = technical/illiquid. The test: do the ACCUMULATION names actually beat their sector — and beat the Explained/Noise buckets? Excess is vs each name’s own SECTOR ETF.',
+    Biotech: 'Biotech names that just started running, scored 0–100 by a catalyst-aware model (HOT 75+, EMERGING 60+, WATCH 45+). The test: do the HOT-scored names actually beat the WATCH-scored ones — and beat the biotech index (XBI)? Excess here is measured vs XBI, the biotech ETF, not the S&P.',
     SecondWave: 'Stocks that had a first leg up but the crowd hasn’t piled into yet, then judged by AI. PRIMED = fresh story with room to spread (possible reflexive second wave); EARLY = needs a trigger; FADED = already crowded/late. The test: do PRIMED names actually get the second leg — beating their sector and the Faded ones? Excess is vs each name’s own SECTOR ETF.',
     CrossAsset: 'US stocks levered to a move in ANOTHER asset (a commodity, an overnight foreign market/ADR, crypto, or rates) that they may not have caught up to yet. LEAD = still lagging the tell (actionable); INLINE = already tracking; WEAK = loose link. The test: do the LEAD names actually catch up — beating the market and the Inline ones?',
     ToneShift: 'How a company’s latest earnings call sounded vs LAST quarter’s. BRIGHTENING = management got more confident/specific (dropped hedges, added guidance-raise language); DARKENING = more cautious. The test: do BRIGHTENING names beat their sector — and beat the Darkening ones? A slower swing-horizon signal.',
