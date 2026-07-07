@@ -1914,6 +1914,12 @@
 .calib-feat .pulse-head b::before { content: "★ "; color: var(--green); }
 .calib-legend { display: block; margin-top: 5px; font-size: .72rem; font-weight: 400; color: var(--text-dim); }
 
+/* Layer 3 — AI conviction calibration headline (rank-IC of its own conviction score) */
+.conv { display: inline-block; margin-top: 5px; font-size: .72rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); white-space: nowrap; }
+.conv-good { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, transparent); background: color-mix(in srgb, var(--green) 12%, transparent); }
+.conv-bad { color: var(--red); border-color: color-mix(in srgb, var(--red) 34%, transparent); background: color-mix(in srgb, var(--red) 10%, transparent); }
+.conv-cal { color: var(--text-dim); }
+
 /* Live price + 3-session trend on predict-tab lead cards */
 .pulse-pricebar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 5px 0 2px; min-height: 18px; }
 .pulse-px { font-size: .86rem; font-weight: 700; display: inline-flex; align-items: center; gap: 5px; }

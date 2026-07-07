@@ -1,6 +1,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { verdictFor, summarizeClass, firstAppearance, computeCalibration, MIN_RESOLVED } = require('../lib/calibration');
+const { verdictFor, summarizeClass, firstAppearance, computeCalibration, MIN_RESOLVED,
+  attributeStats, convictionVerdict, ATTR_MIN_IC } = require('../lib/calibration');
+const { spearman } = require('../lib/stats');
 
 test('verdictFor stays CALIBRATING below the minimum sample, whatever the streak', () => {
   assert.equal(verdictFor(MIN_RESOLVED - 1, MIN_RESOLVED - 1), 'CALIBRATING'); // perfect but too few
@@ -66,10 +68,50 @@ test('computeCalibration resolves excess vs the sector bench and groups by class
   ] }] }];
 
   const out = await computeCalibration(fetchHistory, sections);
-  const acc = out.sections.Anomaly.Accumulation;
+  const acc = out.sections.Anomaly.classes.Accumulation;
   assert.ok(acc, 'Accumulation class present');
   assert.equal(acc.n, 1);
   assert.equal(acc.beat, 1);          // +10% vs a flat sector = beat
   assert.ok(acc.avgExcess > 5, 'excess reflects the ~10% outperformance');
   assert.equal(acc.verdict, 'CALIBRATING'); // one pick is far below the floor
+});
+
+// ── Layer 3: attribute-level (conviction) calibration ──
+
+test('spearman orders a monotonic relationship as a strong positive rank-IC', () => {
+  const xs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const ys = xs.map(x => x * 2 - 1); // strictly increasing → IC = 1
+  assert.equal(spearman(xs, ys, 2), 1);
+  assert.equal(spearman(xs, [...ys].reverse(), 2), -1); // strictly decreasing → -1
+  assert.equal(spearman([1, 2], [3, 4], 5), null);      // below minN → null
+});
+
+test('convictionVerdict needs the sample floor, then splits on the ±0.10 edge', () => {
+  assert.equal(convictionVerdict(0.9, ATTR_MIN_IC - 1), 'CALIBRATING'); // too few
+  assert.equal(convictionVerdict(null, ATTR_MIN_IC + 5), 'CALIBRATING'); // no IC
+  assert.equal(convictionVerdict(0.2, ATTR_MIN_IC + 5), 'CALIBRATED');  // conviction predicts
+  assert.equal(convictionVerdict(-0.2, ATTR_MIN_IC + 5), 'INVERTED');   // backwards
+  assert.equal(convictionVerdict(0.03, ATTR_MIN_IC + 5), 'NOISE');      // no edge
+});
+
+test('attributeStats computes conviction rank-IC, buckets, and Read-Through link-type breakdown', () => {
+  // 24 records where higher confidence tracks higher excess → positive IC, CALIBRATED.
+  const records = Array.from({ length: 24 }, (_, i) => ({
+    pick: { confidence: (i % 5) + 1 }, exc: ((i % 5) + 1) - 3, // conf 1..5 → exc -2..+2
+  }));
+  const a = attributeStats('Anomaly', records);
+  assert.ok(a.conviction, 'conviction block present');
+  assert.equal(a.conviction.key, 'confidence');
+  assert.ok(a.conviction.rankIC > 0.9, 'near-perfect monotonic → high IC');
+  assert.equal(a.conviction.verdict, 'CALIBRATED');
+  assert.equal(a.conviction.buckets.length, 5); // one per confidence level
+
+  // Read-Through also breaks down by link type (categorical).
+  const rt = attributeStats('ReadThrough', [
+    { pick: { directness: 5, linkType: 'supplier' }, exc: 3 },
+    { pick: { directness: 4, linkType: 'supplier' }, exc: 1 },
+    { pick: { directness: 2, linkType: 'substitute' }, exc: -2 },
+  ]);
+  assert.ok(rt.categories.linkType, 'linkType breakdown present');
+  assert.equal(rt.categories.linkType.values[0].value, 'supplier'); // best avg excess first
 });
