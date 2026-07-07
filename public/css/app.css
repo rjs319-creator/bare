@@ -1903,6 +1903,24 @@
 .rt-unknown { color: var(--text-dim); }
 .rt-dim { opacity: .62; }
 
+/* Predict feedback loop — per-class live track-record badge + featured/demoted states.
+   A PROVEN class glows; a DUD class is dimmed via .rt-dim and sorted last by calibSort. */
+.pulse-calib { margin: 4px 0 2px; }
+.calib { display: inline-block; font-size: .72rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; border: 1px solid transparent; white-space: nowrap; }
+.calib-good { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); border-color: color-mix(in srgb, var(--green) 40%, transparent); }
+.calib-bad { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); border-color: color-mix(in srgb, var(--red) 34%, transparent); }
+.calib-cal { color: var(--text-dim); border-color: var(--border); }
+.calib-feat { border-left-width: 3px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--green) 34%, transparent); }
+.calib-feat .pulse-head b::before { content: "★ "; color: var(--green); }
+.calib-legend { display: block; margin-top: 5px; font-size: .72rem; font-weight: 400; color: var(--text-dim); }
+
+/* Live price + 3-session trend on predict-tab lead cards */
+.pulse-pricebar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 5px 0 2px; min-height: 18px; }
+.pulse-px { font-size: .86rem; font-weight: 700; display: inline-flex; align-items: center; gap: 5px; }
+.pulse-spark { display: inline-flex; width: 68px; height: 20px; opacity: .9; }
+.pulse-spark svg { width: 100%; height: 100%; }
+.pulse-spark-chg { font-size: .72rem; font-weight: 700; }
+
 /* 🕵️ Stealth (Anomaly) — reuses .pulse-card/.pulse-grid; violet accent */
 #anomaly .pulse-card { border-left-color: #8b5cf6; }
 .anom-meta { font-size: .82rem; color: var(--text-dim); margin: 6px 0 10px; }

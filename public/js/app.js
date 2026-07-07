@@ -3193,6 +3193,102 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // lib/readthrough-routes.js via Fable 5). "Who benefits and hasn't moved yet?" — a
   // relational lead-lag a per-stock model can't see. Names that already repriced today
   // are demoted (the edge is the lag). A LEAD to forward-track, NOT a buy signal.
+  // ── Predict-tab feedback loop (Layer 1 + 2, server: lib/calibration.js) ──────────────
+  // op=calibration grades every CLASS of each novel screener by its live track record —
+  // 1-week forward EXCESS vs its own sector ETF, Wilson-bounded so small samples can't lie.
+  // The cards stamp that record (Layer 1) and auto-feature PROVEN classes / dim + rank-last
+  // DUD classes (Layer 2). Fetched once per session and cached in memory.
+  let _calib = null, _calibPromise = null;
+  async function loadCalibration() {
+    if (_calib) return _calib;
+    if (!_calibPromise) {
+      _calibPromise = fetch('/api/tracker?op=calibration')
+        .then(r => r.json())
+        .then(j => (_calib = (j && j.sections) ? j : { sections: {}, minResolved: 15 }))
+        .catch(() => (_calib = { sections: {}, minResolved: 15 }));
+    }
+    return _calibPromise;
+  }
+  // Mirror of each route's server-side tierFor (lib/<x>-routes.js) — the calibration doc is
+  // keyed by the LEDGER tier, so a card maps its own class field to that tier to look it up.
+  // Keep these in sync with the routes' tierFor if a class label ever changes.
+  const PREDICT_TIER = {
+    ReadThrough: it => (!it.moved || it.moved.alreadyMoved == null) ? 'Unknown' : it.moved.alreadyMoved ? 'Moved' : 'Fresh',
+    Anomaly:     it => it.classification === 'ACCUMULATION' ? 'Accumulation' : it.classification === 'EXPLAINED' ? 'Explained' : 'Noise',
+    SecondWave:  it => it.classification === 'PRIMED' ? 'Primed' : it.classification === 'EARLY' ? 'Early' : 'Faded',
+    CrossAsset:  it => it.classification === 'LEAD' ? 'Lead' : it.classification === 'INLINE' ? 'Inline' : 'Weak',
+    ToneShift:   it => it.shift === 'BRIGHTENING' ? 'Brightening' : it.shift === 'DARKENING' ? 'Darkening' : 'Stable',
+  };
+  const CALIB_VRANK = { PROVEN: 0, CALIBRATING: 1, DUD: 2 };
+  function calibFor(section, it) {
+    const sec = _calib && _calib.sections && _calib.sections[section];
+    const tf = PREDICT_TIER[section];
+    if (!sec || !tf) return null;
+    return sec[tf(it)] || null;
+  }
+  // Stable sort: PROVEN classes float up, DUD sink; server rank is preserved within a verdict.
+  function calibSort(section, items) {
+    const rank = it => CALIB_VRANK[(calibFor(section, it) || {}).verdict || 'CALIBRATING'];
+    return [...items].sort((a, b) => rank(a) - rank(b));
+  }
+  // Layer-1 badge: the class's real, sector-relative track record on this card.
+  function calibBadge(c) {
+    if (!c || !c.n) return '';
+    if (c.verdict === 'PROVEN')
+      return `<span class="calib calib-good" title="This class has beaten its sector on ${c.n} resolved pick${c.n === 1 ? '' : 's'} (1-week excess). Wilson 90% floor ${c.lo}% · avg excess ${c.avgExcess > 0 ? '+' : ''}${c.avgExcess}%. Auto-featured.">✅ beats sector ${c.beatRate}% · n${c.n}</span>`;
+    if (c.verdict === 'DUD')
+      return `<span class="calib calib-bad" title="This class has failed to beat its sector on ${c.n} resolved picks — best-case only ${c.hi}% · avg excess ${c.avgExcess > 0 ? '+' : ''}${c.avgExcess}%. Auto-dimmed and sorted last.">⚠️ lags sector · ${c.beatRate}% · n${c.n}</span>`;
+    return `<span class="calib calib-cal" title="Not enough resolved picks yet to grade this class (${c.n}/${c.min}). It's being tracked — the loop stays neutral until the sample matures, so it never acts on noise.">◷ calibrating ${c.n}/${c.min}</span>`;
+  }
+  // Per-card visual state driven by the class verdict, falling back to the screener's own
+  // "good class" heuristic while a class is still calibrating. Returns { dim, feat }.
+  function calibState(section, it, isGoodClass) {
+    const c = calibFor(section, it);
+    if (c && c.verdict === 'PROVEN') return { dim: false, feat: true, c };
+    if (c && c.verdict === 'DUD') return { dim: true, feat: false, c };
+    return { dim: !isGoodClass, feat: false, c };
+  }
+  const CALIB_LEGEND = '<span class="calib-legend">🔄 <b>Self-tuning:</b> each class shows its live record vs its own sector; classes that prove they can’t beat it are dimmed &amp; sorted last, and proven ones are featured — automatically, once enough picks resolve.</span>';
+
+  // ── Live price + 3-session trend for predict-tab lead cards ─────────────────────────
+  // Cards render a placeholder <span class="pulse-live" data-ptick="TICKER">; after render
+  // we batch-fetch /api/price?spark=1 (live quote + last ~4 daily closes) and fill in the
+  // current price, today's %, and a 3-session sparkline. Makes each lead concrete: where is
+  // it now, and which way has it been going. One-shot per render (leads refresh slowly).
+  const priceBar = ticker => `<div class="pulse-pricebar"><span class="pulse-live" data-ptick="${esc(ticker)}"></span></div>`;
+  function predictPriceHTML(q) {
+    const pct = parseFloat(q.changePct);
+    const col = pct > 0 ? 'var(--green)' : pct < 0 ? 'var(--red)' : 'var(--text-dim)';
+    const dot = `<span class="live-dot live-${(q.marketState || 'CLOSED').toLowerCase()}"></span>`;
+    const ext = q.afterHours ? ` <span class="live-ext">${q.afterHours.session === 'pre' ? 'pre' : 'aft'} $${esc(q.afterHours.price)}</span>` : '';
+    const px = `<span class="pulse-px">${dot}$${esc(q.price)} <span style="color:${col}">${pct > 0 ? '+' : ''}${esc(q.changePct)}%</span>${ext}</span>`;
+    const s = Array.isArray(q.spark) ? q.spark : [];
+    if (s.length < 2) return px;
+    const mn = Math.min(...s), mx = Math.max(...s), up = s[s.length - 1] >= s[0];
+    const chg = s[0] ? ((s[s.length - 1] - s[0]) / s[0]) * 100 : 0;
+    const trend = `<span class="pulse-spark" title="Last ${s.length} daily closes: ${s.map(v => '$' + v).join(' → ')}">${sparkSvg(s, mn, mx, up)}</span>`
+      + `<span class="pulse-spark-chg" style="color:${up ? 'var(--green)' : 'var(--red)'}">3-sess ${chg > 0 ? '+' : ''}${chg.toFixed(1)}%</span>`;
+    return px + trend;
+  }
+  async function hydratePredictPrices(container) {
+    if (!container) return;
+    const els = [...container.querySelectorAll('[data-ptick]')];
+    const tickers = [...new Set(els.map(e => (e.dataset.ptick || '').toUpperCase()).filter(Boolean))];
+    if (!tickers.length) return;
+    const quotes = {};
+    for (let i = 0; i < tickers.length; i += 12) {           // /api/price caps at 12/call
+      const chunk = tickers.slice(i, i + 12);
+      try {
+        const d = await fetch('/api/price?spark=1&tickers=' + encodeURIComponent(chunk.join(','))).then(r => r.json());
+        if (d && !d.error) Object.assign(quotes, d);
+      } catch { /* offline / rate-limited — leave the card without a live price */ }
+    }
+    for (const el of els) {
+      const q = quotes[(el.dataset.ptick || '').toUpperCase()];
+      if (q) el.innerHTML = predictPriceHTML(q);
+    }
+  }
+
   let readthroughLoaded = false;
   function ensureReadThrough() { if (!readthroughLoaded) { readthroughLoaded = true; runReadThroughUI(false); } }
   async function runReadThroughUI(force) {
@@ -3203,7 +3299,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       // Two-stage: a manual Refresh first regenerates the raw Fable graph (Stage 1, slow),
       // then re-enriches (Stage 2). A normal open just hits the fast serve/enrich path.
       if (force) await fetch('/api/tracker?op=readthroughtick').then(r => r.json()).catch(() => {});
-      const p = await fetch('/api/tracker?op=readthrough' + (force ? '&force=1' : '')).then(r => r.json());
+      const [p] = await Promise.all([
+        fetch('/api/tracker?op=readthrough' + (force ? '&force=1' : '')).then(r => r.json()),
+        loadCalibration(),
+      ]);
       renderReadThrough(p);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Read-Through.</p></div>`; }
   }
@@ -3223,16 +3322,19 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const card = it => {
       const [le, ll] = RT_LINK[it.link_type] || RT_LINK.partner;
       const mv = it.moved || {};
+      const { dim, feat, c } = calibState('ReadThrough', it, mv.alreadyMoved === false);
       const tape = mv.alreadyMoved === true
         ? `<span class="rt-tape rt-moved" title="Already moved ${mv.movedPct}% today — likely priced in">⚪ moved ${mv.movedPct > 0 ? '+' : ''}${mv.movedPct}%</span>`
         : mv.alreadyMoved === false
           ? `<span class="rt-tape rt-fresh" title="Hasn't repriced yet (${mv.movedPct != null ? mv.movedPct + '% today' : 'flat'})">🟢 not yet moved${mv.movedPct != null ? ' (' + (mv.movedPct > 0 ? '+' : '') + mv.movedPct + '%)' : ''}</span>`
           : `<span class="rt-tape rt-unknown" title="Tape unavailable">◽ tape n/a</span>`;
-      return `<div class="pulse-card${mv.alreadyMoved === true ? ' rt-dim' : ''}">
+      return `<div class="pulse-card${dim ? ' rt-dim' : ''}${feat ? ' calib-feat' : ''}">
         <div class="pulse-top">
           <span class="pulse-head"><b>$${esc(it.beneficiary_ticker)}</b> ${esc(it.beneficiary_name || '')}</span>
           ${tape}
         </div>
+        ${priceBar(it.beneficiary_ticker)}
+        ${c ? `<div class="pulse-calib">${calibBadge(c)}</div>` : ''}
         <div class="pulse-meta">
           <span class="rt-link" title="${esc(ll)} relationship">${le} ${esc(ll)}</span>
           <span class="rt-from">← $${esc(it.trigger_ticker)}</span>
@@ -3244,9 +3346,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       </div>`;
     };
     el.innerHTML = `
-      <div class="dt-note" style="border-left-color:#14b8a6"><b>🔗 Second-order read-throughs.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''}</div>
+      <div class="dt-note" style="border-left-color:#14b8a6"><b>🔗 Second-order read-throughs.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND}</div>
       ${trig ? `<div class="rt-triggers">Off today's movers: ${trig}</div>` : ''}
-      <div class="pulse-grid">${p.items.map(card).join('')}</div>`;
+      <div class="pulse-grid">${calibSort('ReadThrough', p.items).map(card).join('')}</div>`;
+    hydratePredictPrices(el);
     const rb = document.getElementById('readthrough-refresh-btn');
     if (rb) rb.onclick = () => runReadThroughUI(true);
   }
@@ -3263,7 +3366,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Re-scanning for unexplained movers & investigating… <span class="dt-dim">(the AI web-searches each — ~50s)</span>' : 'Loading the anomaly scan…'}</p></div>`;
     try {
       if (force) await fetch('/api/tracker?op=anomalytick').then(r => r.json()).catch(() => {});
-      const p = await fetch('/api/tracker?op=anomaly').then(r => r.json());
+      const [p] = await Promise.all([fetch('/api/tracker?op=anomaly').then(r => r.json()), loadCalibration()]);
       renderAnomaly(p);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the Stealth scan.</p></div>`; }
   }
@@ -3284,20 +3387,24 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const [ce, cc, cl] = ANOM_CLASS[it.classification] || ANOM_CLASS.NOISE;
       const c = cand(it.ticker);
       const move = c.pct5d != null ? `<span class="anom-move">+${c.pct5d}% / ${c.relVol}x vol</span>` : '';
-      return `<div class="pulse-card${it.classification !== 'ACCUMULATION' ? ' rt-dim' : ''}">
+      const { dim, feat, c: cal } = calibState('Anomaly', it, it.classification === 'ACCUMULATION');
+      return `<div class="pulse-card${dim ? ' rt-dim' : ''}${feat ? ' calib-feat' : ''}">
         <div class="pulse-top">
           <span class="pulse-head"><b>$${esc(it.ticker)}</b> ${move}</span>
           <span class="anom-class" style="color:${cc}" title="${esc(cl)}">${ce} ${esc(cl)} <span class="anom-conf" title="Confidence">${dots(it.confidence)}</span></span>
         </div>
+        ${priceBar(it.ticker)}
+        ${cal ? `<div class="pulse-calib">${calibBadge(cal)}</div>` : ''}
         <div class="pulse-idea"><b>${it.classification === 'ACCUMULATION' ? 'No catalyst found:' : 'Reason:'}</b> ${esc(it.reason_found)}</div>
         <div class="pulse-why">${esc(it.thesis)}</div>
         ${it.caution ? `<div class="pulse-caution">⚠️ ${esc(it.caution)}</div>` : ''}
       </div>`;
     };
     el.innerHTML = `
-      <div class="dt-note" style="border-left-color:#8b5cf6"><b>🕵️ Unexplained movers.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''}</div>
+      <div class="dt-note" style="border-left-color:#8b5cf6"><b>🕵️ Unexplained movers.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND}</div>
       <div class="anom-meta">Scanned the tape → ${p.detected != null ? p.detected + ' movers, ' : ''}${p.noNews != null ? p.noNews + ' with no news' : ''} → investigated ${(p.items || []).length}.</div>
-      <div class="pulse-grid">${p.items.map(card).join('')}</div>`;
+      <div class="pulse-grid">${calibSort('Anomaly', p.items).map(card).join('')}</div>`;
+    hydratePredictPrices(el);
     const rb = document.getElementById('anomaly-refresh-btn');
     if (rb) rb.onclick = () => runAnomalyUI(true);
   }
@@ -3313,7 +3420,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Re-scanning first-leg movers & forecasting second waves… <span class="dt-dim">(the AI gauges the crowd — ~50s)</span>' : 'Loading the second-wave scan…'}</p></div>`;
     try {
       if (force) await fetch('/api/tracker?op=secondwavetick').then(r => r.json()).catch(() => {});
-      const p = await fetch('/api/tracker?op=secondwave').then(r => r.json());
+      const [p] = await Promise.all([fetch('/api/tracker?op=secondwave').then(r => r.json()), loadCalibration()]);
       renderSecondWave(p);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the Second Wave scan.</p></div>`; }
   }
@@ -3334,11 +3441,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const [ce, cc, cl] = SW_CLASS[it.classification] || SW_CLASS.EARLY;
       const c = cand(it.ticker);
       const move = c.ret10 != null ? `<span class="anom-move">+${c.ret10}% / ${c.relVol}x vol</span>` : '';
-      return `<div class="pulse-card${it.classification === 'FADED' ? ' rt-dim' : ''}">
+      const { dim, feat, c: cal } = calibState('SecondWave', it, it.classification === 'PRIMED');
+      return `<div class="pulse-card${dim ? ' rt-dim' : ''}${feat ? ' calib-feat' : ''}">
         <div class="pulse-top">
           <span class="pulse-head"><b>$${esc(it.ticker)}</b> ${move}</span>
           <span class="anom-class" style="color:${cc}" title="${esc(cl)}">${ce} ${esc(cl)} <span class="anom-conf" title="Virality potential">${dots(it.virality)}</span></span>
         </div>
+        ${priceBar(it.ticker)}
+        ${cal ? `<div class="pulse-calib">${calibBadge(cal)}</div>` : ''}
         <div class="pulse-idea"><b>Catalyst:</b> ${esc(it.catalyst)}</div>
         <div class="pulse-meta"><span class="sw-crowd">Crowd: ${esc(it.crowd_state || '—')}</span></div>
         <div class="pulse-why">${esc(it.thesis)}</div>
@@ -3346,9 +3456,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       </div>`;
     };
     el.innerHTML = `
-      <div class="dt-note" style="border-left-color:#0ea5e9"><b>🌊 Reflexive second waves.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''}</div>
+      <div class="dt-note" style="border-left-color:#0ea5e9"><b>🌊 Reflexive second waves.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND}</div>
       <div class="anom-meta">${p.detected != null ? 'Found ' + p.detected + ' first-leg movers → ' : ''}forecast ${(p.items || []).length}.</div>
-      <div class="pulse-grid">${p.items.map(card).join('')}</div>`;
+      <div class="pulse-grid">${calibSort('SecondWave', p.items).map(card).join('')}</div>`;
+    hydratePredictPrices(el);
     const rb = document.getElementById('secondwave-refresh-btn');
     if (rb) rb.onclick = () => runSecondWaveUI(true);
   }
@@ -3364,7 +3475,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Sweeping commodities, overnight markets, crypto & rates… <span class="dt-dim">(~45s)</span>' : 'Loading the cross-asset scan…'}</p></div>`;
     try {
       if (force) await fetch('/api/tracker?op=crossassettick').then(r => r.json()).catch(() => {});
-      const p = await fetch('/api/tracker?op=crossasset').then(r => r.json());
+      const [p] = await Promise.all([fetch('/api/tracker?op=crossasset').then(r => r.json()), loadCalibration()]);
       renderCrossAsset(p);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the Cross-Asset scan.</p></div>`; }
   }
@@ -3383,11 +3494,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const card = it => {
       const [ce, cc, cl] = CA_CLASS[it.classification] || CA_CLASS.WEAK;
       const mv = it.movedPct != null ? `<span class="anom-move" style="color:${it.movedPct >= 0 ? 'var(--green)' : 'var(--red)'}">today ${it.movedPct > 0 ? '+' : ''}${it.movedPct}%</span>` : '';
-      return `<div class="pulse-card${it.classification !== 'LEAD' ? ' rt-dim' : ''}">
+      const { dim, feat, c: cal } = calibState('CrossAsset', it, it.classification === 'LEAD');
+      return `<div class="pulse-card${dim ? ' rt-dim' : ''}${feat ? ' calib-feat' : ''}">
         <div class="pulse-top">
           <span class="pulse-head"><b>$${esc(it.ticker)}</b> ${mv}</span>
           <span class="anom-class" style="color:${cc}" title="${esc(cl)}">${ce} ${esc(cl)} <span class="anom-conf">${dots(it.confidence)}</span></span>
         </div>
+        ${priceBar(it.ticker)}
+        ${cal ? `<div class="pulse-calib">${calibBadge(cal)}</div>` : ''}
         <div class="pulse-idea"><b>Tell:</b> ${esc(it.lead_asset)}</div>
         <div class="pulse-meta"><span class="sw-crowd">${esc(it.linkage)}</span></div>
         <div class="pulse-why">${esc(it.thesis)}</div>
@@ -3395,8 +3509,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       </div>`;
     };
     el.innerHTML = `
-      <div class="dt-note" style="border-left-color:#f97316"><b>🌐 Cross-asset tells.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''}</div>
-      <div class="pulse-grid">${p.items.map(card).join('')}</div>`;
+      <div class="dt-note" style="border-left-color:#f97316"><b>🌐 Cross-asset tells.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND}</div>
+      <div class="pulse-grid">${calibSort('CrossAsset', p.items).map(card).join('')}</div>`;
+    hydratePredictPrices(el);
     const rb = document.getElementById('crossasset-refresh-btn');
     if (rb) rb.onclick = () => runCrossAssetUI(true);
   }
@@ -3412,7 +3527,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Comparing recent calls to last quarter’s tone… <span class="dt-dim">(~45s)</span>' : 'Loading the tone-shift scan…'}</p></div>`;
     try {
       if (force) await fetch('/api/tracker?op=toneshifttick').then(r => r.json()).catch(() => {});
-      const p = await fetch('/api/tracker?op=toneshift').then(r => r.json());
+      const [p] = await Promise.all([fetch('/api/tracker?op=toneshift').then(r => r.json()), loadCalibration()]);
       renderToneShift(p);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the Tone Shift scan.</p></div>`; }
   }
@@ -3430,19 +3545,23 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const dots = n => '●'.repeat(Math.max(0, Math.min(5, n))) + '○'.repeat(5 - Math.max(0, Math.min(5, n)));
     const card = it => {
       const [ce, cc, cl] = TS_CLASS[it.shift] || TS_CLASS.STABLE;
-      return `<div class="pulse-card${it.shift === 'STABLE' ? ' rt-dim' : ''}">
+      const { dim, feat, c: cal } = calibState('ToneShift', it, it.shift === 'BRIGHTENING');
+      return `<div class="pulse-card${dim ? ' rt-dim' : ''}${feat ? ' calib-feat' : ''}">
         <div class="pulse-top">
           <span class="pulse-head"><b>$${esc(it.ticker)}</b></span>
           <span class="anom-class" style="color:${cc}" title="${esc(cl)}">${ce} ${esc(cl)} <span class="anom-conf">${dots(it.confidence)}</span></span>
         </div>
+        ${priceBar(it.ticker)}
+        ${cal ? `<div class="pulse-calib">${calibBadge(cal)}</div>` : ''}
         <div class="pulse-idea"><b>Change:</b> ${esc(it.change)}</div>
         <div class="pulse-why">${esc(it.thesis)}</div>
         ${it.caution ? `<div class="pulse-caution">⚠️ ${esc(it.caution)}</div>` : ''}
       </div>`;
     };
     el.innerHTML = `
-      <div class="dt-note" style="border-left-color:#a855f7"><b>🎚️ Earnings tone shifts.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''}</div>
-      <div class="pulse-grid">${p.items.map(card).join('')}</div>`;
+      <div class="dt-note" style="border-left-color:#a855f7"><b>🎚️ Earnings tone shifts.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND}</div>
+      <div class="pulse-grid">${calibSort('ToneShift', p.items).map(card).join('')}</div>`;
+    hydratePredictPrices(el);
     const rb = document.getElementById('toneshift-refresh-btn');
     if (rb) rb.onclick = () => runToneShiftUI(true);
   }

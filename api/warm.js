@@ -165,6 +165,12 @@ module.exports = async function handler(req, res) {
     '/api/tracker?op=crossassettick', '/api/tracker?op=toneshifttick',
   ].map(p => warmOne(p).catch(() => null));
 
+  // Predict-tab feedback loop — recompute each class's live track-record grade (Wilson-
+  // bounded excess vs sector) so the cards auto-feature/demote classes as picks resolve.
+  // Fire-and-forget: it resolves only picks ≥1 week old, so it's independent of today's
+  // ticks above, and it's heavy enough (fetches history) to keep off warm's critical path.
+  const calibKick = warmOne('/api/tracker?op=calibration&force=1').catch(() => null);
+
   // 🟢 Timing light — log today's picks' grades (accountability) then run the adaptive
   //    weight tuner (self-improvement; dormant until the ledger matures).
   let timinglog = null, timingtune = null;
@@ -234,8 +240,9 @@ module.exports = async function handler(req, res) {
   // were dispatched; we do NOT block warm's return on the ~30-50s AI calls (that caused the
   // 504). void-reference so the array isn't dropped before the requests flush.
   void aiTicks;
+  void calibKick; // fire-and-forget like the ticks — recomputes on its own invocation
 
-  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, intracapture, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, aiTicksKicked: 5, at: new Date().toISOString() };
+  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, intracapture, cern, edgelog, alertsgrade, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, aiTicksKicked: 5, calibKicked: true, at: new Date().toISOString() };
 
   // Observability: persist a compact health record so failed ticks / stale data are visible (op=health).
   try { const { summarizeRun, writeHealthRun } = require('../lib/health'); await writeHealthRun(summarizeRun(result)); }

@@ -86,6 +86,28 @@ async function fetchQuote(ticker) {
   return (await fetchYahoo(ticker)) || (await fetchStooq(ticker));
 }
 
+// Last ~4 daily closes (the 3-session trend) for a sparkline. A second, lightweight
+// Yahoo call (daily bars) only made when the caller asks for it (?spark=1) — the live
+// quote above uses 5-minute bars, so it can't supply multi-day history on its own.
+async function fetchSpark(ticker) {
+  const sym = ticker.toUpperCase();
+  const path = `/v8/finance/chart/${sym}?range=5d&interval=1d`;
+  for (const host of ['query1.finance.yahoo.com', 'query2.finance.yahoo.com']) {
+    try {
+      const r = await fetch(`https://${host}${path}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36', 'Accept': 'application/json' },
+      });
+      if (!r.ok) continue;
+      const closes = ((await r.json())?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [])
+        .filter(v => v != null)
+        .map(v => +v.toFixed(2));
+      if (closes.length >= 2) return closes.slice(-4); // ~3 prior sessions + today
+      return null;
+    } catch { /* try next host */ }
+  }
+  return null;
+}
+
 module.exports = async function handler(req, res) {
   const { tickers } = req.query;
   if (!tickers) return res.status(400).json({ error: 'Missing tickers' });
@@ -98,6 +120,14 @@ module.exports = async function handler(req, res) {
     tickerList.forEach((t, i) => {
       if (quotes[i]) results[t.trim().toUpperCase()] = quotes[i];
     });
+    // Optional 3-session daily trend (?spark=1) — attach a compact close series per name.
+    if (req.query.spark) {
+      const sparks = await Promise.all(tickerList.map(t => fetchSpark(t.trim())));
+      tickerList.forEach((t, i) => {
+        const key = t.trim().toUpperCase();
+        if (results[key] && sparks[i]) results[key].spark = sparks[i];
+      });
+    }
     res.setHeader('Cache-Control', 's-maxage=30'); // 30s — keep prices near-live
     return res.json(results);
   } catch (e) {
