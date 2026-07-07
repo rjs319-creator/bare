@@ -3224,7 +3224,26 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const sec = _calib && _calib.sections && _calib.sections[section];
     const tf = PREDICT_TIER[section];
     if (!sec || !tf) return null;
-    return sec[tf(it)] || null;
+    const cm = sec.classes || sec;   // new {classes,attributes} shape; tolerate an older flat cache
+    return cm[tf(it)] || null;
+  }
+  // Layer 3: does the AI's own conviction score (directness/confidence/virality) order realized
+  // excess? Read the rank-IC verdict for a screener and render a one-line headline for its note.
+  function convAttr(section) {
+    const sec = _calib && _calib.sections && _calib.sections[section];
+    return (sec && sec.attributes && sec.attributes.conviction) || null;
+  }
+  function convictionLine(section) {
+    const c = convAttr(section);
+    if (!c) return '';
+    const label = esc(c.label), ic = `${c.rankIC > 0 ? '+' : ''}${c.rankIC}`;
+    if (c.verdict === 'CALIBRATED')
+      return `<span class="conv conv-good" title="Rank-IC ${ic} over ${c.n} resolved picks — the AI's ${label} score has ordered realized excess vs sector (higher ${label} → more excess). Trustworthy enough to rank on.">🎯 AI ${label} predicts · IC ${ic} (n${c.n})</span>`;
+    if (c.verdict === 'INVERTED')
+      return `<span class="conv conv-bad" title="Rank-IC ${ic} over ${c.n} — higher ${label} did WORSE. The AI's conviction scale is backwards on this screener.">⚠️ AI ${label} INVERTED · IC ${ic} (n${c.n})</span>`;
+    if (c.verdict === 'NOISE')
+      return `<span class="conv conv-cal" title="Rank-IC ${ic} over ${c.n} — the AI's ${label} score hasn't ordered excess. Treat the conviction dots as descriptive, not a ranking.">🎯 AI ${label}: no edge yet · IC ${ic} (n${c.n})</span>`;
+    return `<span class="conv conv-cal" title="Not enough resolved picks yet to test whether the AI's ${label} predicts (${c.n}/${c.minN}).">🎯 ${label} check: calibrating ${c.n}/${c.minN}</span>`;
   }
   // Stable sort: PROVEN classes float up, DUD sink; server rank is preserved within a verdict.
   function calibSort(section, items) {
@@ -3346,7 +3365,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       </div>`;
     };
     el.innerHTML = `
-      <div class="dt-note" style="border-left-color:#14b8a6"><b>🔗 Second-order read-throughs.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND}</div>
+      <div class="dt-note" style="border-left-color:#14b8a6"><b>🔗 Second-order read-throughs.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND} ${convictionLine('ReadThrough')}</div>
       ${trig ? `<div class="rt-triggers">Off today's movers: ${trig}</div>` : ''}
       <div class="pulse-grid">${calibSort('ReadThrough', p.items).map(card).join('')}</div>`;
     hydratePredictPrices(el);
@@ -3401,7 +3420,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       </div>`;
     };
     el.innerHTML = `
-      <div class="dt-note" style="border-left-color:#8b5cf6"><b>🕵️ Unexplained movers.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND}</div>
+      <div class="dt-note" style="border-left-color:#8b5cf6"><b>🕵️ Unexplained movers.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND} ${convictionLine('Anomaly')}</div>
       <div class="anom-meta">Scanned the tape → ${p.detected != null ? p.detected + ' movers, ' : ''}${p.noNews != null ? p.noNews + ' with no news' : ''} → investigated ${(p.items || []).length}.</div>
       <div class="pulse-grid">${calibSort('Anomaly', p.items).map(card).join('')}</div>`;
     hydratePredictPrices(el);
@@ -3456,7 +3475,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       </div>`;
     };
     el.innerHTML = `
-      <div class="dt-note" style="border-left-color:#0ea5e9"><b>🌊 Reflexive second waves.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND}</div>
+      <div class="dt-note" style="border-left-color:#0ea5e9"><b>🌊 Reflexive second waves.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND} ${convictionLine('SecondWave')}</div>
       <div class="anom-meta">${p.detected != null ? 'Found ' + p.detected + ' first-leg movers → ' : ''}forecast ${(p.items || []).length}.</div>
       <div class="pulse-grid">${calibSort('SecondWave', p.items).map(card).join('')}</div>`;
     hydratePredictPrices(el);
@@ -3509,7 +3528,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       </div>`;
     };
     el.innerHTML = `
-      <div class="dt-note" style="border-left-color:#f97316"><b>🌐 Cross-asset tells.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND}</div>
+      <div class="dt-note" style="border-left-color:#f97316"><b>🌐 Cross-asset tells.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND} ${convictionLine('CrossAsset')}</div>
       <div class="pulse-grid">${calibSort('CrossAsset', p.items).map(card).join('')}</div>`;
     hydratePredictPrices(el);
     const rb = document.getElementById('crossasset-refresh-btn');
@@ -3559,7 +3578,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       </div>`;
     };
     el.innerHTML = `
-      <div class="dt-note" style="border-left-color:#a855f7"><b>🎚️ Earnings tone shifts.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND}</div>
+      <div class="dt-note" style="border-left-color:#a855f7"><b>🎚️ Earnings tone shifts.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND} ${convictionLine('ToneShift')}</div>
       <div class="pulse-grid">${calibSort('ToneShift', p.items).map(card).join('')}</div>`;
     hydratePredictPrices(el);
     const rb = document.getElementById('toneshift-refresh-btn');
