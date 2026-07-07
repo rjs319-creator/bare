@@ -1911,6 +1911,12 @@
 .pulse-why { font-size: .86rem; color: var(--text-dim); margin: 3px 0; }
 .pulse-caution { font-size: .82rem; color: var(--amber, #f59e0b); margin: 4px 0; }
 .pulse-src { font-size: .78rem; color: var(--text-dim); margin-top: 4px; font-style: italic; }
+.pulse-crowd { font-weight: 700; font-size: .8rem; }
+.pulse-contra { font-size: .84rem; margin: 4px 0; padding: 5px 8px; border-radius: 6px; background: #ec489912; border-left: 2px solid #ec4899; }
+/* Stage-2 (Fable) status chip + refined stamp in the header note */
+.pulse-refining { display: inline-block; color: #ec4899; font-weight: 700; font-size: .82rem; animation: pulseGlow 1.4s ease-in-out infinite; }
+@keyframes pulseGlow { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+.pulse-refined-tag { display: inline-block; background: #ec489922; color: #f9a8d4; border-radius: 5px; padding: 0 7px; font-weight: 700; font-size: .78rem; }
 
 /* 🔗 Read-Through — reuses .pulse-card/.pulse-grid; teal accent + tape/link badges */
 #readthrough .pulse-card { border-left-color: #14b8a6; }

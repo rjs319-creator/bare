@@ -3140,7 +3140,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // ── 📡 MARKET PULSE — top-10 trending distillations from social + finance media
   // (server-side lib/pulse-routes.js via Claude web search). Ranked by popularity +
   // how fast the news is trending. Attention digest, NOT buy signals. Refreshes ~4h.
-  let pulseLoaded = false;
+  let pulseLoaded = false, pulseRefining = false;
   function ensurePulse() { if (!pulseLoaded) { pulseLoaded = true; runPulseUI(false); } }
   async function runPulseUI(force) {
     const el = document.getElementById('pulse-container');
@@ -3149,10 +3149,28 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     try {
       const p = await fetch('/api/tracker?op=pulse' + (force ? '&force=1' : '')).then(r => r.json());
       renderPulse(p);
+      // STAGE 2: if we got the Haiku draft (not yet Fable-refined), upgrade it in the
+      // background — the draft is already useful, and Fable sharpens the read a few sec later.
+      if (p && p.ok && p.stage !== 'refined' && p.persisted) refinePulseUI(force);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Market Pulse.</p></div>`; }
+  }
+  async function refinePulseUI(force) {
+    if (pulseRefining) return;
+    pulseRefining = true;
+    const chip = document.getElementById('pulse-refine-chip');
+    if (chip) chip.innerHTML = `<span class="pulse-refining">🧠 Fable is sharpening the read…</span>`;
+    try {
+      const p = await fetch('/api/tracker?op=pulserefine' + (force ? '&force=1' : '')).then(r => r.json());
+      if (p && p.ok && p.stage === 'refined') renderPulse(p);
+      else if (chip) chip.innerHTML = '';   // refine failed → keep the draft, drop the chip
+    } catch { const c = document.getElementById('pulse-refine-chip'); if (c) c.innerHTML = ''; }
+    finally { pulseRefining = false; }
   }
   const PULSE_VEL = { exploding: ['🔥', '#ef4444', 'Exploding'], rising: ['📈', '#f59e0b', 'Rising'], steady: ['➡️', '#9ca3af', 'Steady'], cooling: ['❄️', '#60a5fa', 'Cooling'] };
   const PULSE_SENT = { bullish: ['var(--green)', '▲ Bullish'], bearish: ['var(--red)', '▼ Bearish'], mixed: ['var(--text-dim)', '▬ Mixed'] };
+  // How positioned the crowd already is — the contrarian lens. "crowded"/"capitulation"
+  // are the fade-risk buckets this desk treats skeptically (social sentiment is contrarian).
+  const PULSE_CROWD = { early: ['🌱', 'var(--green)', 'Early'], building: ['📶', '#f59e0b', 'Building'], crowded: ['🫧', '#ef4444', 'Crowded'], capitulation: ['💥', '#a855f7', 'Capitulation'] };
   function renderPulse(p) {
     const el = document.getElementById('pulse-container');
     if (!el) return;
@@ -3167,6 +3185,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const [ve, vc, vl] = PULSE_VEL[it.velocity] || PULSE_VEL.steady;
       const [sc, sl] = PULSE_SENT[it.sentiment] || PULSE_SENT.mixed;
       const tickers = (it.tickers || []).map(t => `<span class="pulse-tk">$${esc(t)}</span>`).join(' ');
+      const cw = it.crowding && PULSE_CROWD[it.crowding];
+      const crowd = cw ? `<span class="pulse-crowd" style="color:${cw[1]}" title="How positioned the crowd already is — ‘crowded’/‘capitulation’ carry fade risk">${cw[0]} ${cw[2]}</span>` : '';
+      const contra = it.contrarian ? `<div class="pulse-contra"><b>🎯 Contrarian read:</b> ${esc(it.contrarian)}</div>` : '';
       return `<div class="pulse-card">
         <div class="pulse-top">
           <span class="pulse-rank">#${it.rank}</span>
@@ -3176,16 +3197,22 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <div class="pulse-meta">
           ${tickers ? `<span class="pulse-tks">${tickers}</span>` : ''}
           <span class="pulse-sent" style="color:${sc}">${sl}</span>
+          ${crowd}
           <span class="pulse-pop" title="Popularity ${it.popularity}/100"><span class="pulse-bars">${bars(it.popularity)}</span> ${it.popularity}</span>
         </div>
         <div class="pulse-idea">${esc(it.idea)}</div>
         <div class="pulse-why"><b>Why it matters:</b> ${esc(it.whyMoves)}</div>
+        ${contra}
         ${it.caution ? `<div class="pulse-caution">⚠️ ${esc(it.caution)}</div>` : ''}
         <div class="pulse-src"><b>Trending on:</b> ${esc(it.sources)}</div>
       </div>`;
     };
+    const refined = p.stage === 'refined';
+    const stamp = refined
+      ? '<span class="pulse-refined-tag" title="De-duplicated, re-ranked and given a contrarian read by Fable 5">🧠 Fable-refined</span>'
+      : '<span id="pulse-refine-chip"></span>';
     el.innerHTML = `
-      <div class="dt-note" style="border-left-color:#ec4899"><b>📡 What the crowd is watching.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''}</div>
+      <div class="dt-note" style="border-left-color:#ec4899"><b>📡 What the crowd is watching.</b> ${stamp} ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''}</div>
       <div class="pulse-grid">${p.items.map(card).join('')}</div>`;
     const rb = document.getElementById('pulse-refresh-btn');
     if (rb) rb.onclick = () => runPulseUI(true);

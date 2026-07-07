@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parsePulse, PULSE_TOOL } = require('../lib/pulse-routes');
+const { parsePulse, parseRefinedPulse, PULSE_TOOL, PULSE_REFINE_TOOL } = require('../lib/pulse-routes');
 
 const toolMsg = items => ({ content: [{ type: 'tool_use', name: 'submit_pulse', input: { items } }] });
 
@@ -44,4 +44,35 @@ test('parsePulse: empty / non-tool message yields empty list, no throw', () => {
 test('PULSE_TOOL schema requires the render-critical fields', () => {
   const req = PULSE_TOOL.input_schema.properties.items.items.required;
   ['rank', 'headline', 'tickers', 'idea', 'whyMoves', 'sentiment', 'popularity', 'velocity', 'sources'].forEach(f => assert.ok(req.includes(f), `${f} required`));
+});
+
+test('parsePulse: accepts a wider cap for the raw gather stage', () => {
+  const many = Array.from({ length: 16 }, (_, i) => ({ headline: 'h' + i, idea: 'i', whyMoves: 'w', sentiment: 'bullish', popularity: 50 + i, velocity: 'rising', sources: 's', tickers: [] }));
+  assert.equal(parsePulse(toolMsg(many), 16).length, 16);
+  assert.equal(parsePulse(toolMsg(many)).length, 10);   // default cap unchanged
+});
+
+const refineMsg = items => ({ items });
+
+test('parseRefinedPulse: keeps Fable ordering, sanitizes crowding + contrarian, caps at 10', () => {
+  const items = parseRefinedPulse(refineMsg([
+    { headline: 'first', idea: 'x', whyMoves: 'y', sentiment: 'bullish', popularity: 40, velocity: 'steady', sources: 's', tickers: ['aapl'], crowding: 'crowded', contrarian: 'likely a fade' },
+    { headline: 'second', idea: 'x', whyMoves: 'y', sentiment: 'mixed', popularity: 99, velocity: 'exploding', sources: 's', tickers: ['tsla'], crowding: 'nope', contrarian: '' },
+  ]));
+  // Fable's order is trusted — NOT re-sorted by buzz (99/exploding stays #2).
+  assert.equal(items[0].headline, 'first');
+  assert.equal(items[0].rank, 1);
+  assert.equal(items[0].crowding, 'crowded');
+  assert.equal(items[0].contrarian, 'likely a fade');
+  assert.equal(items[1].crowding, 'building');   // bad enum defaults
+});
+
+test('parseRefinedPulse: drops items missing headline/idea, no throw on junk', () => {
+  assert.deepEqual(parseRefinedPulse({}), []);
+  assert.deepEqual(parseRefinedPulse({ items: [{ idea: 'no headline' }] }), []);
+});
+
+test('PULSE_REFINE_TOOL schema requires crowding + contrarian', () => {
+  const req = PULSE_REFINE_TOOL.input_schema.properties.items.items.required;
+  ['rank', 'headline', 'tickers', 'idea', 'whyMoves', 'sentiment', 'popularity', 'velocity', 'crowding', 'contrarian', 'sources'].forEach(f => assert.ok(req.includes(f), `${f} required`));
 });
