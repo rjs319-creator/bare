@@ -5542,10 +5542,27 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       <div class="cx-pf-head">📊 Edge test · ${edge.n} graded calls <span style="margin-left:auto;color:${good ? 'var(--green)' : 'var(--red)'}">${good ? '✅ EDGE' : '❌ NO EDGE'}</span></div>
       <p class="cx-mp-p" style="margin:8px 0 0">Hit rate <b>${edge.hitRatePct}%</b> [${edge.hitRateCI90[0]}–${edge.hitRateCI90[1]}] vs 50% base · conviction rank-IC <b>${edge.convictionRankIC}</b> (t ${edge.rankICtStat}) · mean excess ${edge.meanExcessPct}%/call. <b>${esc(edge.verdict)}.</b></p></div>`;
   }
+  // 🧠 Fable A/B panel — does the AI's directional read beat the keyword bot? Stays
+  // in "tracking" until enough paired calls grade, then flips to PROMOTED (Fable drives
+  // ranking + filtering). Refuses to flatter small samples, like the mechanical edge test.
+  function renderXalertsFableEdge(fe) {
+    const el = document.getElementById('xalerts-fable'); if (!el) return;
+    if (!fe || fe.n == null) { el.innerHTML = ''; return; }
+    if (fe.n < (fe.minGraded || 40)) {
+      el.innerHTML = `<div class="cx-portfolio" style="border-color:#8a6dff44"><div class="cx-pf-head">🧠 AI review · A/B vs the keyword bot</div>
+        <p class="cx-mp-p" style="margin:8px 0 0">Fable re-reads each alert for true direction, credibility and pump-risk, and annotates every card. It won't take over the ranking until its direction has <b>beaten the keyword bot</b> on ${fe.minGraded || 40} paired graded calls. ${esc(fe.verdict)}.</p></div>`;
+      return;
+    }
+    const promoted = fe.promoted;
+    el.innerHTML = `<div class="cx-portfolio" style="border-color:${promoted ? '#8a6dff88' : '#8a6dff44'}">
+      <div class="cx-pf-head">🧠 AI review · A/B vs the keyword bot <span style="margin-left:auto;color:${promoted ? '#8a6dff' : 'var(--text-dim)'}">${promoted ? '✅ PROMOTED' : '⏳ TRACKING'}</span></div>
+      <p class="cx-mp-p" style="margin:8px 0 0">Fable direction <b>${fe.fableHitRatePct}%</b> [LB ${fe.fableHitRateLB90}%] vs keyword bot <b>${fe.mechHitRatePct}%</b> over ${fe.n} paired calls${fe.overrides ? ` · ${fe.overrides} overrides hit ${fe.overrideHitRatePct}%` : ''}. <b>${esc(fe.verdict)}.</b>${promoted ? ' Fable now drives card order and hides junk.' : ''}</p></div>`;
+  }
   function renderXalerts(d) {
     renderXalertsEdge(d.edge);
+    renderXalertsFableEdge(d.fableEdge);
     const c = document.getElementById('xalerts-container'), meta = document.getElementById('xalerts-meta');
-    if (meta) meta.textContent = d.generatedAt ? `· ${d.bufferSize} posts · updated ${new Date(d.generatedAt).toLocaleString()} · ${d.gradedTotal}/${d.loggedTotal} graded` : '· awaiting data from the collector';
+    if (meta) meta.textContent = d.generatedAt ? `· ${d.bufferSize} posts · updated ${new Date(d.generatedAt).toLocaleString()} · ${d.gradedTotal}/${d.loggedTotal} graded${d.aiPromoted ? ' · 🧠 AI-ranked' : d.aiAssessedAt ? ' · 🧠 AI-reviewed' : ''}` : '· awaiting data from the collector';
     const ranked = d.ranked || [];
     if (!ranked.length) {
       c.innerHTML = `<div class="mom-status"><p style="text-align:left;line-height:1.7">
@@ -5579,6 +5596,25 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const col = c >= 75 ? 'var(--red)' : c >= 50 ? 'var(--amber,#f0a832)' : c >= 25 ? '#06c4d4' : 'var(--text-dim)';
     return { label, col, c };
   }
+  const XA_PUMP = { low: null, medium: { t: '⚠ pump-risk med', c: 'var(--amber,#f0a832)' }, high: { t: '🚩 pump-risk HIGH', c: 'var(--red)' } };
+  // 🧠 Fable-5 review block — the reasoned read that corrects the keyword bot's
+  // direction/conviction. Shows corrected direction, confidence (thesis right?),
+  // credibility (genuine vs pump), disagreement flag, and a one-line synthesis.
+  function buildXalertAi(r) {
+    const ai = r.ai; if (!ai) return '';
+    const aiColor = ai.direction === 'bullish' ? 'var(--green)' : ai.direction === 'bearish' ? 'var(--red)' : 'var(--text-dim)';
+    const chips = [`<span class="xa-chip" style="color:${aiColor};border-color:currentColor">${esc(ai.direction)}</span>`];
+    if (ai.confidence != null) chips.push(`<span class="xa-chip">conf ${ai.confidence}</span>`);
+    if (ai.credibility != null) chips.push(`<span class="xa-chip">cred ${ai.credibility}</span>`);
+    const pump = XA_PUMP[ai.pumpRisk];
+    if (pump) chips.push(`<span class="xa-chip" style="color:${pump.c};border-color:currentColor">${pump.t}</span>`);
+    if (!ai.agrees) chips.push(`<span class="xa-chip" style="color:var(--amber,#f0a832);border-color:currentColor" title="Fable disagrees with the keyword bot's direction (${esc(r.direction)})">↔ overrides bot</span>`);
+    const thesis = ai.thesis ? `<div class="cx-narrative" style="margin-top:4px;font-style:italic">${esc(ai.thesis)}</div>` : '';
+    const caution = ai.caution ? `<div class="xa-conv-lb" style="color:var(--amber,#f0a832);margin-top:3px">⚠ ${esc(ai.caution)}</div>` : '';
+    return `<div class="xa-ai" style="margin-top:7px;padding-top:7px;border-top:1px dashed var(--border,#ffffff1a)">
+        <div class="xa-conv-lb" style="color:#8a6dff;margin-bottom:4px">🧠 Fable review</div>
+        <div class="xa-chips">${chips.join('')}</div>${thesis}${caution}</div>`;
+  }
   function buildXalertCard(r) {
     const card = document.createElement('div'); card.className = 'cx-card';
     const stars = '★'.repeat(r.score) + '☆'.repeat(5 - r.score);
@@ -5608,7 +5644,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       </div>
       <div class="cx-score-col"><div class="cx-score" style="color:#8a6dff;font-size:1.05rem">${stars}</div>
         <div class="cx-price">signal ${r.weightedSignal}</div></div></div>
-      ${chipRow}${convHtml}${levelsHtml}
+      ${chipRow}${convHtml}${levelsHtml}${buildXalertAi(r)}
       <div class="cx-narrative">${esc(r.sampleText)}</div>`;
     return card;
   }
