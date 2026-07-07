@@ -159,9 +159,9 @@
     /* ── NEWS ── */
     .news-section { margin-bottom: 32px; }
     .news-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+      display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px;
     }
-    @media (max-width: 860px) { .news-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 860px) { .news-grid { grid-template-columns: minmax(0, 1fr); } }
 
     .news-col-head {
       display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
@@ -316,9 +316,9 @@
 
     /* Picks grid */
     .picks-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+      display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px;
     }
-    @media (max-width: 860px) { .picks-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 860px) { .picks-grid { grid-template-columns: minmax(0, 1fr); } }
 
     /* ── Two-track picks (Short-Term / Long-Term) ── */
     .pick-track { margin-bottom: 26px; }
@@ -433,9 +433,9 @@
     .options-section { margin-bottom: 32px; }
 
     .opt-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+      display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px;
     }
-    @media (max-width: 860px) { .opt-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 860px) { .opt-grid { grid-template-columns: minmax(0, 1fr); } }
 
     .opt-card {
       background: var(--card); border: 1px solid var(--border);
@@ -805,8 +805,8 @@
     .card-flash-sell { animation: cardFlashSell 1.4s ease 3; }
 
     /* ── Momentum two-column layout (Strong Buy / Strong Sell) ── */
-    .mom-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
-    @media (max-width: 860px) { .mom-columns { grid-template-columns: 1fr; } }
+    .mom-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+    @media (max-width: 860px) { .mom-columns { grid-template-columns: minmax(0, 1fr); } }
     .mom-col { min-width: 0; }
     .mom-col-head {
       display: flex; align-items: center; gap: 8px;
@@ -1111,9 +1111,9 @@
 
     /* Sector rotation panel */
     .rot-panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
-    .rot-dw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .rot-dw-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
     .rot-dw-grid .rot-panel { margin-bottom: 0; }
-    @media (max-width: 760px) { .rot-dw-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 760px) { .rot-dw-grid { grid-template-columns: minmax(0, 1fr); } }
     .rot-head { font-size: 0.78rem; font-weight: 800; color: var(--text); margin-bottom: 4px; }
     .rot-sub { font-size: 0.62rem; color: var(--text-dim); margin-bottom: 12px; }
     .rot-row { display: grid; grid-template-columns: 120px 1fr 70px; align-items: center; gap: 10px; padding: 4px 0; cursor: pointer; border-radius: 6px; }
@@ -1360,8 +1360,8 @@
     }
 
     /* ── Skeleton loaders ── */
-    .skel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    @media (max-width: 860px) { .skel-grid { grid-template-columns: 1fr; } }
+    .skel-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+    @media (max-width: 860px) { .skel-grid { grid-template-columns: minmax(0, 1fr); } }
     .skel { position: relative; overflow: hidden; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
     .skel::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent); animation: shimmer 1.3s infinite; }
     @keyframes shimmer { 100% { transform: translateX(100%); } }
@@ -1378,8 +1378,8 @@
     .bt-ic-row.head { font-weight: 800; color: var(--text); border-bottom: 1px solid var(--border); }
     .bt-ic-bar { height: 6px; border-radius: 3px; background: var(--border); position: relative; overflow: hidden; }
     .bt-ic-fill { position: absolute; top: 0; bottom: 0; left: 50%; }
-    .bt-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-    @media (max-width: 760px) { .bt-grid { grid-template-columns: 1fr; } }
+    .bt-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    @media (max-width: 760px) { .bt-grid { grid-template-columns: minmax(0, 1fr); } }
     .bt-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; position: relative; overflow: hidden; }
     .bt-card::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 2px; }
     .bt-card.breakout::before { background: linear-gradient(90deg, #10d98a, #06c4d4, #10d98a); }
