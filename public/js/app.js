@@ -5610,9 +5610,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (pump) chips.push(`<span class="xa-chip" style="color:${pump.c};border-color:currentColor">${pump.t}</span>`);
     if (!ai.agrees) chips.push(`<span class="xa-chip" style="color:var(--amber,#f0a832);border-color:currentColor" title="Fable disagrees with the keyword bot's direction (${esc(r.direction)})">↔ overrides bot</span>`);
     const thesis = ai.thesis ? `<div class="cx-narrative" style="margin-top:4px;font-style:italic">${esc(ai.thesis)}</div>` : '';
-    const caution = ai.caution ? `<div class="xa-conv-lb" style="color:var(--amber,#f0a832);margin-top:3px">⚠ ${esc(ai.caution)}</div>` : '';
+    const caution = ai.caution ? `<div class="xa-caution" style="color:var(--amber,#f0a832)">⚠ ${esc(ai.caution)}</div>` : '';
     return `<div class="xa-ai" style="margin-top:7px;padding-top:7px;border-top:1px dashed var(--border,#ffffff1a)">
-        <div class="xa-conv-lb" style="color:#8a6dff;margin-bottom:4px">🧠 Fable review</div>
+        <div class="xa-ai-lb" style="color:#8a6dff;margin-bottom:4px">🧠 Fable review</div>
         <div class="xa-chips">${chips.join('')}</div>${thesis}${caution}</div>`;
   }
   function buildXalertCard(r) {

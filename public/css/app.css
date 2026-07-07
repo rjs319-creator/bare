@@ -832,8 +832,11 @@
     .sig-reasons-static { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
 
     /* ── BREAKOUT SCREENER ── */
-    .scr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    @media (max-width: 860px) { .scr-grid { grid-template-columns: 1fr; } }
+    /* minmax(0,1fr) (not bare 1fr) lets a column shrink below its content's min-width,
+       so a long unbreakable line inside a card can't blow the grid past the viewport
+       and clip the right column. */
+    .scr-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+    @media (max-width: 860px) { .scr-grid { grid-template-columns: minmax(0, 1fr); } }
     .scr-card {
       background: var(--card); border: 1px solid var(--border); border-radius: 12px;
       padding: 16px 18px; position: relative; overflow: hidden;
@@ -1530,17 +1533,18 @@
     .cx-tier-head.watch  .cx-tier-name { color: var(--text-dim); }
     .cx-tier-sub { font-size: 0.66rem; color: var(--text-dim); font-weight: 600; }
 
-    .cx-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 15px 16px 14px; position: relative; }
+    .cx-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 15px 16px 14px; position: relative; min-width: 0; overflow-wrap: anywhere; }
     .cx-card.apex   { border-color: #f0a83255; box-shadow: inset 0 0 0 1px #f0a83222; }
     .cx-card.loaded { border-color: #06c4d433; }
     .cx-top { display: flex; align-items: flex-start; gap: 11px; }
+    .cx-top > div:first-child { min-width: 0; }   /* allow the ticker/company column to shrink + wrap instead of forcing card width */
     .cx-tk-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .cx-ticker { font-size: 1.08rem; font-weight: 800; letter-spacing: 0.02em; }
     .cx-tierbadge { font-size: 0.56rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 5px; padding: 2px 7px; }
     .cx-tierbadge.apex   { color: #f0a832; background: var(--amber-dim); border: 1px solid #f0a83244; }
     .cx-tierbadge.loaded { color: #06c4d4; background: rgba(6,196,212,0.1); border: 1px solid #06c4d444; }
     .cx-tierbadge.watch  { color: var(--text-dim); background: var(--surface); border: 1px solid var(--border); }
-    .cx-company { font-size: 0.7rem; color: var(--text-dim); margin-top: 3px; }
+    .cx-company { font-size: 0.7rem; color: var(--text-dim); margin-top: 3px; overflow-wrap: anywhere; }
     .cx-score-col { margin-left: auto; text-align: right; flex-shrink: 0; }
     .cx-score { font-size: 1.5rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: #f0a832; }
     .cx-score small { font-size: 0.6rem; font-weight: 600; color: var(--text-dim); }
@@ -1576,6 +1580,8 @@
     .xa-conv-fill { height: 100%; }
     .xa-levels { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 9px; font-size: 0.68rem; color: var(--text-dim); }
     .xa-levels b { color: var(--text); }
+    .xa-ai-lb { font-size: 0.62rem; font-weight: 700; }   /* short label — safe to keep on one line */
+    .xa-caution { font-size: 0.64rem; line-height: 1.4; margin-top: 4px; overflow-wrap: anywhere; }   /* full-sentence flag — MUST wrap (was nowrap → grid blowout) */
     .cx-narr-str { color: var(--amber); font-weight: 700; }
 
     /* Model panel */
