@@ -33,6 +33,10 @@
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
     }
+    /* Page-wide horizontal-overflow guard: kills any stray horizontal scrollbar
+       that pushes content off the right edge. `clip` (not `hidden`) so it does NOT
+       create a scroll container — position:sticky headers keep working. */
+    html, body { overflow-x: clip; max-width: 100%; }
 
     /* ── HEADER ── */
     header {
