@@ -6665,18 +6665,25 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         }
       }
     } catch { /* keep the mechanical verdict */ }
-    // Quadrant track record — how this exact short×long combo has done vs SPY.
+    // Quadrant track record + self-tuner status — how this exact short×long combo
+    // has done vs SPY, and whether the learning loop has re-weighted yet.
     try {
       const book = await dualBook();
-      const row = book && book.byQuadrant && book.byQuadrant.find(b => b.quadrant === dual.quadrant);
+      if (!book) return;
+      const row = book.byQuadrant && book.byQuadrant.find(b => b.quadrant === dual.quadrant);
+      const eng = book.engine || {};
+      const engBit = eng.promoted
+        ? `⚙️ self-tuned <b>${esc(String(eng.version || ''))}</b>`
+        : `⚙️ learning <b>${eng.resolved || 0}/${eng.minResolved || 40}</b>`;
+      let html = '';
       if (row && row.n >= 5) {
-        const tEl = root.querySelector('[data-track]');
-        if (tEl) {
-          const sign = row.avgExcessPct >= 0 ? '+' : '';
-          tEl.innerHTML = `📊 This setup historically: <b>${sign}${row.avgExcessPct}%</b> vs SPY over ${book.horizon}d · <b>${row.beatRatePct}%</b> beat rate <span style="opacity:.6">(n=${row.n})</span>`;
-          tEl.hidden = false;
-        }
+        const sign = row.avgExcessPct >= 0 ? '+' : '';
+        html = `📊 This setup historically: <b>${sign}${row.avgExcessPct}%</b> vs SPY over ${book.horizon}d · <b>${row.beatRatePct}%</b> beat rate <span style="opacity:.6">(n=${row.n})</span> · ${engBit}`;
+      } else {
+        html = `📊 Track record building · ${engBit}`;
       }
+      const tEl = root.querySelector('[data-track]');
+      if (tEl) { tEl.innerHTML = html; tEl.hidden = false; }
     } catch { /* no track record yet */ }
   }
 
