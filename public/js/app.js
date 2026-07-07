@@ -3220,6 +3220,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     ToneShift:   it => it.shift === 'BRIGHTENING' ? 'Brightening' : it.shift === 'DARKENING' ? 'Darkening' : 'Stable',
   };
   const CALIB_VRANK = { PROVEN: 0, CALIBRATING: 1, DUD: 2 };
+  // Mirror of lib/calibration.js ATTR_SPEC.conviction.key — the per-item field holding the
+  // AI's 1–5 conviction. Used by Layer 3b to rank within a class once that score proves out.
+  const PREDICT_CONV = { ReadThrough: 'directness', Anomaly: 'confidence', SecondWave: 'virality', CrossAsset: 'confidence', ToneShift: 'confidence' };
   function calibFor(section, it) {
     const sec = _calib && _calib.sections && _calib.sections[section];
     const tf = PREDICT_TIER[section];
@@ -3238,17 +3241,29 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!c) return '';
     const label = esc(c.label), ic = `${c.rankIC > 0 ? '+' : ''}${c.rankIC}`;
     if (c.verdict === 'CALIBRATED')
-      return `<span class="conv conv-good" title="Rank-IC ${ic} over ${c.n} resolved picks — the AI's ${label} score has ordered realized excess vs sector (higher ${label} → more excess). Trustworthy enough to rank on.">🎯 AI ${label} predicts · IC ${ic} (n${c.n})</span>`;
+      return `<span class="conv conv-good" title="Rank-IC ${ic} over ${c.n} resolved picks — the AI's ${label} score has ordered realized excess vs sector (higher ${label} → more excess). Cards within each class are now sorted by it.">🎯 AI ${label} predicts · IC ${ic} (n${c.n}) · ranking by it</span>`;
     if (c.verdict === 'INVERTED')
-      return `<span class="conv conv-bad" title="Rank-IC ${ic} over ${c.n} — higher ${label} did WORSE. The AI's conviction scale is backwards on this screener.">⚠️ AI ${label} INVERTED · IC ${ic} (n${c.n})</span>`;
+      return `<span class="conv conv-bad" title="Rank-IC ${ic} over ${c.n} — higher ${label} did WORSE. The scale is backwards here, so higher-${label} picks are now sorted LAST.">⚠️ AI ${label} INVERTED · IC ${ic} (n${c.n}) · down-ranked</span>`;
     if (c.verdict === 'NOISE')
       return `<span class="conv conv-cal" title="Rank-IC ${ic} over ${c.n} — the AI's ${label} score hasn't ordered excess. Treat the conviction dots as descriptive, not a ranking.">🎯 AI ${label}: no edge yet · IC ${ic} (n${c.n})</span>`;
     return `<span class="conv conv-cal" title="Not enough resolved picks yet to test whether the AI's ${label} predicts (${c.n}/${c.minN}).">🎯 ${label} check: calibrating ${c.n}/${c.minN}</span>`;
   }
-  // Stable sort: PROVEN classes float up, DUD sink; server rank is preserved within a verdict.
+  // Sort picks by Layer 2 first (PROVEN classes float up, DUD sink), then — ONLY when the
+  // screener's conviction has proven predictive (Layer 3b) — order within a class by that
+  // conviction: CALIBRATED ranks higher-conviction first, INVERTED ranks it last. When the
+  // conviction is NOISE / still CALIBRATING, the server's own rank is preserved (stable sort).
   function calibSort(section, items) {
     const rank = it => CALIB_VRANK[(calibFor(section, it) || {}).verdict || 'CALIBRATING'];
-    return [...items].sort((a, b) => rank(a) - rank(b));
+    const cv = convAttr(section);
+    const dir = cv && cv.verdict === 'CALIBRATED' ? 1 : cv && cv.verdict === 'INVERTED' ? -1 : 0;
+    const key = PREDICT_CONV[section];
+    return [...items].sort((a, b) => {
+      const pr = rank(a) - rank(b);
+      if (pr !== 0 || !dir || !key) return pr;                 // Layer 2 primary; else keep order
+      const ca = a[key], cb = b[key];
+      if (!Number.isFinite(ca) || !Number.isFinite(cb)) return 0;
+      return (cb - ca) * dir;                                  // Layer 3b: within-class conviction
+    });
   }
   // Layer-1 badge: the class's real, sector-relative track record on this card.
   function calibBadge(c) {
