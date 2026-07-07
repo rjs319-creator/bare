@@ -1,7 +1,7 @@
 // Tests for the dual-read self-improvement tuner (lib/dualread-adapt.js).
 const test = require('node:test');
 const assert = require('node:assert');
-const { championChallenger, fitWeights, factorICs, DEFAULT_LT_WEIGHTS, LT_FACTORS } = require('../lib/dualread-adapt');
+const { championChallenger, championChallengerByGroup, fitWeights, factorICs, DEFAULT_LT_WEIGHTS, LT_FACTORS } = require('../lib/dualread-adapt');
 
 // Deterministic LCG so the synthetic ledger is reproducible (no flaky tests).
 function lcg(seed) { let s = seed >>> 0; return () => (s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32; }
@@ -52,4 +52,25 @@ test('keeps champion on pure noise (no promotion on randomness)', () => {
   const cc = championChallenger(ledger(160, null, 1), DEFAULT_LT_WEIGHTS);
   assert.equal(cc.promoted, false);
   assert.deepEqual(cc.weights, DEFAULT_LT_WEIGHTS);
+});
+
+// Tag a ledger with a group label.
+const tag = (rows, group) => rows.map(r => ({ ...r, group }));
+
+test('per-group: a group with real edge personalizes, a noisy group rides global', () => {
+  const rows = [
+    ...tag(ledger(160, 'rs3m', 0.4, 11), 'highvol'),   // this behavior bucket: rs3m genuinely predicts
+    ...tag(ledger(160, null, 1, 22), 'lowvol'),         // this bucket: pure noise
+  ];
+  const { groups } = championChallengerByGroup(rows, DEFAULT_LT_WEIGHTS);
+  assert.equal(groups.highvol.personalized, true, groups.highvol.reason);
+  assert.ok(groups.highvol.weights.rs3m > DEFAULT_LT_WEIGHTS.rs3m);
+  assert.equal(groups.lowvol.personalized, false);
+  assert.deepEqual(groups.lowvol.weights, DEFAULT_LT_WEIGHTS);
+});
+
+test('per-group: a thin group (< MIN_RESOLVED) stays on global', () => {
+  const { groups } = championChallengerByGroup(tag(ledger(15, 'rs3m', 0.4), 'midvol'), DEFAULT_LT_WEIGHTS);
+  assert.equal(groups.midvol.personalized, false);
+  assert.deepEqual(groups.midvol.weights, DEFAULT_LT_WEIGHTS);
 });

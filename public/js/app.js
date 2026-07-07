@@ -6672,9 +6672,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (!book) return;
       const row = book.byQuadrant && book.byQuadrant.find(b => b.quadrant === dual.quadrant);
       const eng = book.engine || {};
-      const engBit = eng.promoted
-        ? `⚙️ self-tuned <b>${esc(String(eng.version || ''))}</b>`
-        : `⚙️ learning <b>${eng.resolved || 0}/${eng.minResolved || 40}</b>`;
+      const grp = lt && lt.group;
+      const gInfo = grp && eng.groups && eng.groups[grp];
+      const engBit = (gInfo && gInfo.personalized)
+        ? `⚙️ tuned for ${esc(grp)} stocks <b>${esc(String(gInfo.version || ''))}</b>`
+        : eng.promoted
+          ? `⚙️ self-tuned <b>${esc(String(eng.version || ''))}</b>`
+          : `⚙️ learning <b>${eng.resolved || 0}/${eng.minResolved || 40}</b>${grp ? ` <span style="opacity:.6">(${esc(grp)})</span>` : ''}`;
       let html = '';
       if (row && row.n >= 5) {
         const sign = row.avgExcessPct >= 0 ? '+' : '';
