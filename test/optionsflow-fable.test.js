@@ -70,3 +70,41 @@ test('tickerBlock / contractLine render without throwing on sparse data', () => 
   const prompt = f.buildAnalysisPrompt([row]);
   assert.match(prompt, /submit_flow_analysis/);
 });
+
+// ── flowFableEdge: Fable bias vs mechanical lean on resolved entries ─────────
+test('flowFableEdge stays TRACKING below the resolved-entry floor', () => {
+  const r = f.flowFableEdge([{ aiBias: 'bullish', sentiment: 'bullish', ret: 0.05 }]);
+  assert.equal(r.promoted, false);
+  assert.equal(r.n, 1);
+  assert.match(r.verdict, /TRACKING/);
+  assert.equal(r.fableHitRatePct, undefined);   // no rates until the floor is cleared
+});
+
+test('flowFableEdge recovers the raw move and scores both reads on the same calls', () => {
+  // Build 24 resolved entries. Mechanical lean = call/put side; ret is lean-signed
+  // (ret>0 => the mechanical lean was right). aiBias sometimes overrides the lean.
+  const entries = [];
+  // 12 where a BEARISH mechanical lean was WRONG (stock went up: ret<0), but Fable
+  // called it bullish (correct on the raw up-move) → Fable beats mechanical here.
+  for (let i = 0; i < 12; i++) entries.push({ aiBias: 'bullish', sentiment: 'bearish', ret: -0.03 });
+  // 12 where the mechanical bullish lean was RIGHT (ret>0) and Fable agreed bullish.
+  for (let i = 0; i < 12; i++) entries.push({ aiBias: 'bullish', sentiment: 'bullish', ret: 0.04 });
+  const r = f.flowFableEdge(entries);
+  assert.equal(r.n, 24);
+  assert.equal(r.fableHitRatePct, 100);   // bullish was right on all 24 raw moves
+  assert.equal(r.mechHitRatePct, 50);     // mechanical lean right on only the 12 bullish
+  assert.equal(r.overrides, 12);          // the 12 bearish-lean entries Fable flipped
+  assert.equal(r.overrideHitRatePct, 100);
+  assert.equal(r.promoted, true);
+  assert.match(r.verdict, /BEATS/);
+});
+
+test('flowFableEdge excludes neutral bias and flat (undecidable) returns', () => {
+  const entries = [
+    { aiBias: 'neutral', sentiment: 'bullish', ret: 0.05 },   // neutral → skipped
+    { aiBias: 'bullish', sentiment: 'bullish', ret: 0 },       // flat → skipped
+    { aiBias: 'bullish', sentiment: 'bullish', ret: 0.02 },    // counted
+  ];
+  const r = f.flowFableEdge(entries);
+  assert.equal(r.n, 1);
+});

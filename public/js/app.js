@@ -1129,6 +1129,28 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + techVol + `</div></div>${body}${ofConfluenceHTML(s.ticker)}</div>`;
   }
 
+  // 🧠 Desk-read A/B: does the Fable bias beat the raw call/put lean on the SAME
+  // resolved calls? Stays "building" until enough AI-tagged entries mature (~a week
+  // of logging), then shows the head-to-head hit rates + a promote/tracking verdict.
+  function ofFableEdgeHTML(fableEdge) {
+    const fe = fableEdge && (fableEdge['1w'] || fableEdge['1m']);
+    if (!fe) return '';
+    const head = `<div class="rot-head" style="margin-top:16px;color:#a78bfa">🧠 Desk read vs. raw lean <span class="dt-dim" style="font-weight:400;font-size:0.74rem">— does the AI bias beat call/put alone?</span></div>`;
+    if (fe.fableHitRatePct == null) {
+      return head + `<div class="dt-note" style="margin-top:6px">Building — ${esc(fe.verdict || '')}. Each day's 🧠 desk calls are scored against the underlying's forward move and compared head-to-head with the mechanical lean. By design it won't claim the AI helps until the sample is real.</div>`;
+    }
+    const win = fe.promoted;
+    const col = win ? 'var(--green)' : 'var(--text-dim)';
+    const ov = fe.overrideHitRatePct != null
+      ? `<div class="bt-ic-row" style="opacity:.85"><span>When AI overrode the lean</span><span>${fe.overrideHitRatePct}% right · n=${fe.overrides}</span></div>` : '';
+    return head
+      + `<div class="rot-panel" style="margin-top:6px;border-left:3px solid ${col}">`
+      + `<div class="bt-ic-row"><span>🧠 Fable desk bias</span><span>${fe.fableHitRatePct}% right (90% floor ${fe.fableHitRateLB90}%) · n=${fe.n}</span></div>`
+      + `<div class="bt-ic-row"><span>⚙️ Raw call/put lean</span><span>${fe.mechHitRatePct}% right · same n</span></div>`
+      + ov
+      + `<div class="rot-sub" style="margin-top:8px;color:${col}">${win ? '✅ ' : '⏳ '}${esc(fe.verdict || '')}</div></div>`;
+  }
+
   async function loadOptionsPerf() {
     const el = document.getElementById('of-perf'); if (!el) return;
     try {
@@ -1143,6 +1165,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         + row('All signals', p.horizons[hk]) + bwRow(p.horizons[hk]) + row('Bullish', (p.bySentiment[hk] || {}).bullish) + row('Bearish', (p.bySentiment[hk] || {}).bearish);
       el.innerHTML = `<div class="rot-head">📊 Options Signal Track Record <span class="dt-dim">· ${p.logged} logged · ${p.resolved} resolved</span></div>`
         + `<div class="rot-panel" style="margin-top:6px">${block('1w')}${block('1m')}</div>`
+        + ofFableEdgeHTML(p.fableEdge)
         + `<div class="dt-dim" style="font-size:0.74rem;margin-top:6px">${esc(p.note || '')}</div>`;
     } catch { /* leave the panel as-is on error */ }
   }
