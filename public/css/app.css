@@ -33,10 +33,6 @@
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
     }
-    /* Page-wide horizontal-overflow guard: kills any stray horizontal scrollbar
-       that pushes content off the right edge. `clip` (not `hidden`) so it does NOT
-       create a scroll container — position:sticky headers keep working. */
-    html, body { overflow-x: clip; max-width: 100%; }
 
     /* ── HEADER ── */
     header {
@@ -548,15 +544,19 @@
     .momentum-section { margin-bottom: 32px; }
 
     .alert-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+      /* minmax(0,1fr) (not 1fr=minmax(auto,1fr)) so a card with long unbreakable
+         text can't blow its track wider than half the grid and shove the right
+         column off-screen. */
+      display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px;
     }
-    @media (max-width: 860px) { .alert-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 860px) { .alert-grid { grid-template-columns: minmax(0, 1fr); } }
 
     .alert-card {
       background: var(--card);
       border: 1px solid #2a1a0a;
       border-radius: 12px; padding: 18px 20px;
       position: relative; overflow: hidden;
+      min-width: 0; overflow-wrap: break-word;
       transition: border-color 0.15s, background 0.15s;
     }
     .alert-card::before {
