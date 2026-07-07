@@ -5188,6 +5188,31 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (meta) meta.textContent = `· ${t.regime} · ${(t.counts ? t.counts.momentumLiquid + t.counts.explosiveSmall + (t.counts.momentumRun || 0) : 0)} movers`;
     const gt = document.getElementById('dt-gen-time');
     if (gt && t.generatedAt) gt.textContent = new Date(t.generatedAt).toLocaleTimeString();
+    setTimeout(dtDebugOverflow, 350); // TEMP diagnostic — remove once the cutoff is pinned down
+  }
+
+  // TEMP: on-screen overflow diagnostic (no DevTools needed). Prints the viewport
+  // width and the single widest element poking past the right edge, so we can see
+  // what's causing the cutoff. Remove after diagnosis.
+  function dtDebugOverflow() {
+    const cont = document.getElementById('dt-container');
+    if (!cont) return;
+    const vw = window.innerWidth, sw = document.documentElement.scrollWidth;
+    let worst = null, worstRight = vw + 2;
+    document.querySelectorAll('body *').forEach(el => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.right > worstRight) { worstRight = r.right; worst = el; }
+    });
+    let desc = 'nothing wider than the viewport';
+    if (worst) {
+      const inDT = !!worst.closest('#daytrade');
+      const cls = (worst.className || '').toString().trim().replace(/\s+/g, '.').slice(0, 70);
+      desc = `${worst.tagName.toLowerCase()}${cls ? '.' + cls : ''} right=${Math.round(worstRight)} w=${Math.round(worst.getBoundingClientRect().width)} ${inDT ? '[in DayTrade]' : '[OUTSIDE DayTrade]'}`;
+    }
+    let el = cont.querySelector('.dt-debug');
+    if (!el) { el = document.createElement('div'); el.className = 'dt-debug'; cont.insertBefore(el, cont.firstChild); }
+    el.style.cssText = 'background:#7f1d1d;color:#fff;font:600 12px/1.45 monospace;padding:7px 10px;border-radius:6px;margin-bottom:8px;word-break:break-all';
+    el.textContent = `🔧 DEBUG  viewport=${vw}  outerWidth=${window.outerWidth}  pageScrollWidth=${sw}  overflows=${sw > vw}  dpr=${window.devicePixelRatio}  ·  widest: ${desc}`;
   }
 
   // Live current-price polling for Day Trade cards (pre/after-hours aware).
