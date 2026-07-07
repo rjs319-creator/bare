@@ -1725,8 +1725,16 @@
     .tr-howto li { font-size: 0.82rem; color: var(--text-dim); margin: 5px 0; line-height: 1.5; }
     .tr-howto li b { color: var(--text); }
     /* Day Trade pick cards (with trade plan) */
+    /* Hard guard: the Day Trade content must never overflow its column (was cutting
+       off the right side on narrow/zoomed screens — e.g. a 15" laptop). */
+    #dt-container { max-width: 100%; overflow-x: clip; }
+    #dt-container .rot-panel, #dt-container .dt-card, #dt-container .dt-best-card { max-width: 100%; box-sizing: border-box; }
     .dt-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; margin: 7px 0; }
-    .dt-card-top { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 0.9rem; }
+    /* min-width:0 lets the info column shrink & wrap instead of shoving the price (.dt-now) off the right edge */
+    .dt-card-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 0.9rem; }
+    .dt-card-top > span:first-child { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
+    .dt-card-top > .dt-now { flex: 0 0 auto; }
+    .dt-card-sub, .dt-card-plan { overflow-wrap: break-word; }
     .dt-sec { color: var(--text-dim); font-size: 0.74rem; }
     .dt-star { font-size: 0.82rem; cursor: help; }
     .dt-mv { color: var(--green); font-weight: 600; }
@@ -1872,7 +1880,9 @@
 .dt-relscore { display: inline-block; min-width: 24px; text-align: center; font-weight: 800; font-size: .74rem; color: #0b0f17; background: linear-gradient(90deg,#f59e0b,#fbbf24); border-radius: 5px; padding: 1px 5px; vertical-align: middle; }
 .dt-carry { display: inline-block; font-weight: 800; font-size: .68rem; border: 1px solid; border-radius: 5px; padding: 1px 5px; vertical-align: middle; }
 .dt-tier-b { font-size: .64rem; font-weight: 800; color: #94a3b8; border: 1px solid #475569; border-radius: 4px; padding: 0 3px; vertical-align: middle; }
-.dt-best-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; margin-top: 8px; }
+.dt-best-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 8px; margin-top: 8px; }
+.dt-best-top { flex-wrap: wrap; }
+.dt-best-card { min-width: 0; box-sizing: border-box; overflow-wrap: anywhere; }
 .dt-best-card { background: var(--surface); border: 1px solid #f59e0b44; border-radius: 10px; padding: 8px 11px; }
 .dt-best-top { display: flex; align-items: center; gap: 7px; font-size: .95rem; }
 .dt-best-rank { font-weight: 800; color: #f59e0b; font-size: .85rem; }
