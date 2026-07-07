@@ -5130,7 +5130,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // day cards: 5-day move, # unusual-volume days, proximity to the run high.
     const runCard = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
-          <span>${carryBadge(r)} ${r.relScore != null ? `<span class="dt-relscore" title="Relative strength (0–100)">${r.relScore}</span> ` : ''}<b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span></span>
+          <span>${carryBadge(r)} ${r.relScore != null ? `<span class="dt-relscore" title="Relative strength (0–100)">${r.relScore}</span> ` : ''}<b>${esc(r.ticker)}</b>${tierBadge(r)} <span class="dt-sec">${esc(r.sector || '')}</span></span>
           <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
         </div>
         <div class="dt-card-sub"><b style="color:var(--green)">+${r.pct5d}% / 5d</b> <span class="dt-dim">· ${r.highVolDays5} high-vol days · ${Math.round((r.nearHighFrac5 || 0) * 100)}% of run-high · today <span data-dt-daychg>${r.pctChange >= 0 ? '+' : ''}${r.pctChange}%</span> · RVOL ${r.relVol}×${rvMark}</span></div>
@@ -5142,7 +5142,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const runBody = runRows.map(runCard).join('');
     const runSection = `<div class="rot-panel" style="border-color:#06b6d455">
         <div class="rot-head" style="color:#22d3ee">🌊 Momentum Run — multi-day movers ${runRows.length ? `<span class="dt-dim">(${runRows.length})</span>` : ''}</div>
-        <div class="rot-sub">Names in a <b>sustained run</b> — up <b>≥20% over 5 sessions</b> with <b>≥2 unusual-volume days</b>, still trading near the run high. This is the <b>FCEL-style archetype</b>: a move that builds over days rather than a single spike, so it surfaces even on continuation days a single-day relative-volume gate misses. Shown in every regime (it's a <b>watchlist of names already moving</b>, not a trade signal).</div>
+        <div class="rot-sub">Names in a <b>sustained run</b> — strict (<b>A</b>): up <b>≥20% over 5 sessions</b>, <b>≥2 unusual-volume days</b>, within 8% of the run high. On quiet tapes a relaxed <b>building (B)</b> tier also surfaces earlier or slightly-pulled-back runs (≥15% / ≥1 vol day / within 12% of the high) — display-only, marked with a <b>B</b> chip. This is the <b>FCEL-style archetype</b>: a move that builds over days rather than a single spike, so it surfaces even on continuation days a single-day relative-volume gate misses. Shown in every regime (it's a <b>watchlist of names already moving</b>, not a trade signal).</div>
         ${runBody || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No multi-day runs right now.</span></div>'}
         <div class="dt-note" style="border-left-color:#06b6d4"><b>Honest framing.</b> This is <b>reactive momentum-continuation</b> — it catches a move <b>already underway</b> (recall), not a prediction of which name will start moving. This project's backtests show chasing momentum is <b>not</b> a forward edge, so expect false continuations and chop; use it to <b>spot and confirm</b> runs, then manage risk with the stop. The <b>bottom</b> of an FCEL-type move (the falling-knife low) is <b>not</b> predictable on this data — only the run, once it's confirmed, is catchable.</div>
       </div>`;
