@@ -6546,7 +6546,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       ? ` · <b style="color:${price.afterHours.change >= 0 ? 'var(--green)' : 'var(--red)'}">${price.afterHours.session === 'pre' ? 'Pre' : 'After'}-hrs $${price.afterHours.price} (${price.afterHours.change >= 0 ? '+' : ''}${price.afterHours.changePct}%)</b>`
       : '';
 
+    const dualHtml = data.dual ? buildDualBanner(data) : '';
+
     panel.innerHTML = `
+      ${dualHtml}
       <div class="sig-banner ${act}">
         <div class="sig-verdict">
           <div class="sig-action">${esc(actLabel)}</div>
@@ -6578,6 +6581,112 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     drawChart(canvas, candles, indicators, signals, source);
 
     handleSignalUpdate(data.ticker, live.action);
+
+    // Enrich the mechanical dual-read with the Fable narrative + quadrant track
+    // record (async — the banner already shows the instant mechanical verdict).
+    if (data.dual) enrichDualRead(panel, data);
+  }
+
+  // ── Dual-horizon read (short-term × long-term) ──────────────────────────────
+  const SETUP_TONE = {
+    'trend-continuation': 'pos', 'pullback-buy': 'pos', 'early-strength': 'pos', 'uptrend-pause': 'pos',
+    'range': 'mix', 'early-weakness': 'mix',
+    'bear-bounce': 'neg', 'downtrend': 'neg', 'downtrend-pause': 'neg',
+  };
+  const SETUP_LABEL = {
+    'trend-continuation': 'Trend continuation', 'pullback-buy': 'Pullback buy', 'early-strength': 'Early strength',
+    'uptrend-pause': 'Uptrend pause', 'range': 'Range / chop', 'early-weakness': 'Early weakness',
+    'bear-bounce': 'Bear bounce', 'downtrend': 'Downtrend', 'downtrend-pause': 'Downtrend pause',
+  };
+  const dhSide = action =>
+    (action === 'STRONG_BUY' || action === 'BUY') ? 'bullish'
+    : (action === 'STRONG_SELL' || action === 'SELL') ? 'bearish' : 'neutral';
+  const dhLabel = s => s === 'bullish' ? 'Bullish' : s === 'bearish' ? 'Bearish' : 'Neutral';
+  const dhArrow = s => s === 'bullish' ? '🔼' : s === 'bearish' ? '🔻' : '⏸';
+
+  function buildDualBanner(data) {
+    const lt = data.longTerm, dual = data.dual, live = data.live;
+    const st = dhSide(live.action);
+    const stSub = (live.reasons || [])[0] || live.label || '';
+    const ltSub = (lt.reasons || [])[0] || '';
+    const tone = SETUP_TONE[dual.setupClass] || 'mix';
+    const setupLabel = SETUP_LABEL[dual.setupClass] || dual.setupClass;
+    return `
+      <div class="dual-read" data-dual>
+        <div class="dual-horizons">
+          <div class="dh-cell ${st}">
+            <div class="dh-top">⏱ Short-term · intraday</div>
+            <div class="dh-val ${st}">${dhArrow(st)} ${dhLabel(st)}</div>
+            <div class="dh-sub">${esc(stSub)}</div>
+          </div>
+          <div class="dh-cell ${lt.trend}">
+            <div class="dh-top">📈 Long-term · ~1y</div>
+            <div class="dh-val ${lt.trend}">${dhArrow(lt.trend)} ${dhLabel(lt.trend)}</div>
+            <div class="dh-sub">${esc(ltSub)}</div>
+          </div>
+        </div>
+        <div class="dual-verdict">
+          <span class="dv-setup ${tone}" data-setup>${esc(setupLabel)}</span>
+          <span class="dv-text" data-verdict>${esc(dual.verdict)}</span>
+        </div>
+        <div class="dual-note" data-note hidden></div>
+        <div class="dual-track" data-track hidden></div>
+      </div>`;
+  }
+
+  async function enrichDualRead(panel, data) {
+    const root = panel.querySelector('[data-dual]');
+    if (!root) return;
+    const { live, longTerm: lt, dual } = data;
+    try {
+      const res = await fetch('/api/tracker?op=dualread', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticker: data.ticker, price: data.price && data.price.live,
+          st: { action: live.action, confidence: live.confidence, reasons: live.reasons },
+          lt: { trend: lt.trend, score: lt.score, reasons: lt.reasons, factors: lt.factors },
+          mech: { quadrant: dual.quadrant, verdict: dual.verdict, setupClass: dual.setupClass },
+        }),
+      });
+      const j = await res.json();
+      const ai = j && j.ai;
+      if (ai) {
+        if (ai.verdict) {
+          const vEl = root.querySelector('[data-verdict]');
+          if (vEl) vEl.innerHTML = esc(ai.verdict) + ' <span class="dv-ai">🧠 AI</span>';
+        }
+        if (ai.setupClass) {
+          const sEl = root.querySelector('[data-setup]');
+          if (sEl) { sEl.textContent = SETUP_LABEL[ai.setupClass] || ai.setupClass; sEl.className = 'dv-setup ' + (SETUP_TONE[ai.setupClass] || 'mix'); }
+        }
+        if (ai.note || ai.stance) {
+          const nEl = root.querySelector('[data-note]');
+          if (nEl) { nEl.innerHTML = (ai.stance ? `<span class="dn-stance">${esc(ai.stance)}</span>` : '') + `<span>${esc(ai.note || '')}</span>`; nEl.hidden = false; }
+        }
+      }
+    } catch { /* keep the mechanical verdict */ }
+    // Quadrant track record — how this exact short×long combo has done vs SPY.
+    try {
+      const book = await dualBook();
+      const row = book && book.byQuadrant && book.byQuadrant.find(b => b.quadrant === dual.quadrant);
+      if (row && row.n >= 5) {
+        const tEl = root.querySelector('[data-track]');
+        if (tEl) {
+          const sign = row.avgExcessPct >= 0 ? '+' : '';
+          tEl.innerHTML = `📊 This setup historically: <b>${sign}${row.avgExcessPct}%</b> vs SPY over ${book.horizon}d · <b>${row.beatRatePct}%</b> beat rate <span style="opacity:.6">(n=${row.n})</span>`;
+          tEl.hidden = false;
+        }
+      }
+    } catch { /* no track record yet */ }
+  }
+
+  // Cache the quadrant book for the session (server caches it 5 min too).
+  let _dualBookPromise = null;
+  function dualBook() {
+    if (!_dualBookPromise) {
+      _dualBookPromise = fetch('/api/tracker?op=dualreadbook').then(r => r.json()).catch(() => null);
+    }
+    return _dualBookPromise;
   }
 
   function drawChart(canvas, candles, ind, signals, source) {

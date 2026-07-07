@@ -725,6 +725,27 @@
     .sig-reason.bull .sr-dot { color: var(--green); }
     .sig-reason.bear .sr-dot { color: var(--red); }
 
+    /* Dual-horizon read (short-term × long-term) */
+    .dual-read { border: 1px solid var(--border-hi); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; background: var(--bg); }
+    .dual-horizons { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .dh-cell { display: flex; flex-direction: column; gap: 2px; border-radius: 6px; padding: 6px 8px; border: 1px solid var(--border); background: var(--bg-hi, rgba(255,255,255,0.02)); }
+    .dh-top { font-size: 0.56rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 700; }
+    .dh-val { font-size: 0.86rem; font-weight: 900; letter-spacing: -0.01em; }
+    .dh-sub { font-size: 0.6rem; color: #8aa6c8; line-height: 1.25; }
+    .dh-val.bullish { color: var(--green); } .dh-val.bearish { color: var(--red); } .dh-val.neutral { color: var(--amber); }
+    .dh-cell.bullish { border-color: #10d98a55; } .dh-cell.bearish { border-color: #ef505055; }
+    .dual-verdict { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .dv-setup { font-size: 0.58rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; padding: 3px 7px; border-radius: 999px; white-space: nowrap; }
+    .dv-setup.pos { background: var(--green-dim); color: var(--green); }
+    .dv-setup.neg { background: var(--red-dim); color: var(--red); }
+    .dv-setup.mix { background: rgba(240,168,50,0.14); color: var(--amber); }
+    .dv-text { font-size: 0.74rem; color: var(--text); font-weight: 600; line-height: 1.3; flex: 1; min-width: 0; }
+    .dv-ai { font-size: 0.56rem; color: var(--cyan); font-weight: 700; opacity: 0.85; }
+    .dual-note { font-size: 0.68rem; color: #8aa6c8; margin-top: 6px; line-height: 1.35; display: flex; gap: 6px; }
+    .dual-note .dn-stance { font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; flex-shrink: 0; }
+    .dual-track { font-size: 0.62rem; color: var(--text-dim); margin-top: 6px; border-top: 1px dashed var(--border); padding-top: 6px; }
+    .dual-track b { color: var(--text); }
+
     .chart-levels {
       display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px;
     }
