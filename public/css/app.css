@@ -1733,6 +1733,10 @@
     .dt-dim { color: var(--text-dim); font-weight: 400; }
     .dt-now { font-size: 0.95rem; white-space: nowrap; }
     .dt-now [data-dt-price] { color: var(--text); }
+    .dt-rank { display: inline-block; min-width: 22px; text-align: center; font-weight: 800; font-size: .74rem; color: var(--text-dim); border: 1px solid var(--border-hi, var(--border)); border-radius: 5px; padding: 1px 5px; vertical-align: middle; }
+    .dt-rank.dt-rank-top { color: #0b0f17; background: linear-gradient(90deg,#22c55e,#4ade80); border-color: transparent; }
+    .dt-price-asof { font-size: .72rem; color: var(--text-dim); margin: 2px 0 6px; }
+    .dt-price-asof .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #22c55e; margin-right: 5px; vertical-align: middle; }
     .dt-card-sub { font-size: 0.78rem; color: var(--text); margin-top: 2px; }
     .dt-card-plan { font-size: 0.8rem; color: var(--text); margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); line-height: 1.5; }
     .dt-card-plan b { color: var(--amber, #f59e0b); }

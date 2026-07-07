@@ -5014,12 +5014,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   document.getElementById('trendr-refresh-btn')?.addEventListener('click', runTrendRider);
 
   // ── Day Trade (momentum / relative-volume movers, regime-gated, self-learning) ──
-  let daytradeLoaded = false;
-  function ensureDaytrade() { if (!daytradeLoaded) { daytradeLoaded = true; runDaytradeUI(); } }
-  async function runDaytradeUI() {
+  let daytradeLoaded = false, dtListTimer = null;
+  const DT_LIST_REFRESH_MS = 15 * 60 * 1000; // re-pull the whole pick list every 15 min (matches the op=daytrade cache TTL)
+  function ensureDaytrade() {
+    if (!daytradeLoaded) { daytradeLoaded = true; runDaytradeUI(); }
+    if (!dtListTimer) dtListTimer = setInterval(() => runDaytradeUI(true), DT_LIST_REFRESH_MS);
+  }
+  // silent=true (the 15-min auto-refresh) keeps the current cards on screen until the
+  // fresh data arrives, so the list quietly updates instead of flashing a spinner.
+  async function runDaytradeUI(silent = false) {
     const el = document.getElementById('dt-container');
     if (!el) return;
-    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning movers…</p></div>`;
+    if (!silent) el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning movers…</p></div>`;
     try {
       const [t, book, timingBook] = await Promise.all([
         fetch('/api/tracker?op=daytrade').then(r => r.json()),
@@ -5027,7 +5033,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         fetch('/api/tracker?op=timingbook').then(r => r.json()).catch(() => null),
       ]);
       renderDaytrade(t, book, timingBook);
-    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Day Trade.</p></div>`; }
+    } catch { if (!silent) el.innerHTML = `<div class="mom-status error"><p>Could not load Day Trade.</p></div>`; }
   }
   // 🟢 Timing-light ACCOUNTABILITY scorecard — the grade's own forward track record.
   function timingScorecard(tb) {
@@ -5097,12 +5103,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const flags = [r.overextended ? '⚠ overextended' : '', r.catalyst === 'FADE_OFFERING' ? '⚠ offering/dilution' : r.catalyst === 'MA' ? '⚠ buyout' : ''].filter(Boolean).join(' · ');
       return `<span class="dt-carry" style="color:${col};border-color:${col}55" title="Honest continuation odds over ~3 sessions (price overextension + news catalyst + regime + scan base-rate). Tradeable continuation is ~coin-flip — this mainly flags FADE risk, it does NOT predict winners.${flags ? ' ' + flags : ''}">🔮 ${c}%${r.overextended ? ' ⚠' : ''}</span>`;
     };
-    const card = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
+    const rankChip = i => `<span class="dt-rank${i === 0 ? ' dt-rank-top' : ''}" title="Rank in this list — #1 is the strongest setup by the momentum-anomaly + learned tilt; recommendations weaken toward the bottom">#${i + 1}</span>`;
+    const card = (r, i) => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
-          <span>${carryBadge(r)} ${relBadge(r)} <b>${esc(r.ticker)}</b>${r.preferred ? ' <span class="dt-star" title="Top-half by rank — the experimental config\'s preferred selection">⭐</span>' : ''}${tierBadge(r)} <span class="dt-sec">${esc(r.sector || '')}</span></span>
+          <span>${rankChip(i)} ${carryBadge(r)} ${relBadge(r)} <b>${esc(r.ticker)}</b>${r.preferred ? ' <span class="dt-star" title="Top-half by rank — the experimental config\'s preferred selection">⭐</span>' : ''}${tierBadge(r)} <span class="dt-sec">${esc(r.sector || '')}</span></span>
           <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
         </div>
-        <div class="dt-card-sub">${r.pctChange >= 0 ? '+' : ''}${r.pctChange}% today <span class="dt-dim">· ${L('rvol', 'RVOL')} ${r.relVol}×${rvMark}${r.beta != null ? ' · ' + L('beta', 'β') + ' ' + r.beta : ''}${r.gapPct != null ? ' · gap ' + r.gapPct + '%' : ''}</span></div>
+        <div class="dt-card-sub"><span data-dt-daychg>${r.pctChange >= 0 ? '+' : ''}${r.pctChange}%</span> today <span class="dt-dim">· ${L('rvol', 'RVOL')} ${r.relVol}×${rvMark}${r.beta != null ? ' · ' + L('beta', 'β') + ' ' + r.beta : ''}${r.gapPct != null ? ' · gap ' + r.gapPct + '%' : ''}</span></div>
         ${orb(r) ? `<div class="dt-card-plan">📈 <b>Opening-range breakout</b> <span class="dt-dim">(next session)</span> — break above <b>$${orb(r).trigger}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${orb(r).stop}</b> <span class="dt-dim">(−${orb(r).riskPct}%, 2.5×ATR)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${orb(r).target}</b> <span class="dt-dim">${L('rr', 'R:R')} 1:${orb(r).rr}</span></div>` : ''}
         ${pb(r) ? `<div class="dt-card-plan">↩️ <b>${L('pullback', 'Pullback entry')}</b> <span class="dt-dim">(alt: wait for a dip)</span> <b>$${pb(r).entry}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${pb(r).stop}</b> <span class="dt-dim">(−${pb(r).riskPct}%)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${pb(r).target}</b> <span class="dt-dim">${L('rr', 'R:R')} 1:${pb(r).rr}</span></div>` : ''}
         <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
@@ -5126,7 +5133,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           <span>${carryBadge(r)} ${r.relScore != null ? `<span class="dt-relscore" title="Relative strength (0–100)">${r.relScore}</span> ` : ''}<b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span></span>
           <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
         </div>
-        <div class="dt-card-sub"><b style="color:var(--green)">+${r.pct5d}% / 5d</b> <span class="dt-dim">· ${r.highVolDays5} high-vol days · ${Math.round((r.nearHighFrac5 || 0) * 100)}% of run-high · today ${r.pctChange >= 0 ? '+' : ''}${r.pctChange}% · RVOL ${r.relVol}×${rvMark}</span></div>
+        <div class="dt-card-sub"><b style="color:var(--green)">+${r.pct5d}% / 5d</b> <span class="dt-dim">· ${r.highVolDays5} high-vol days · ${Math.round((r.nearHighFrac5 || 0) * 100)}% of run-high · today <span data-dt-daychg>${r.pctChange >= 0 ? '+' : ''}${r.pctChange}%</span> · RVOL ${r.relVol}×${rvMark}</span></div>
         ${r.stop ? `<div class="dt-card-plan">🛑 ${L('stop', 'Stop')} <b>$${r.stop}</b> <span class="dt-dim">(2.5×ATR)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${r.target}</b>${r.rr != null ? ` <span class="dt-dim">${L('rr', 'R:R')} 1:${r.rr}</span>` : ''}</div>` : ''}
         <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
         <div class="chart-panel" data-chart-panel style="display:none"></div>
@@ -5184,19 +5191,32 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
 
   // Live current-price polling for Day Trade cards (pre/after-hours aware).
+  // Prices tick every ~30s so the quotes stay live; the pick LIST is re-pulled on a
+  // separate 15-min cadence (dtListTimer). Fires once immediately on open.
+  const DT_PRICE_REFRESH_MS = 30 * 1000;
   let dtPriceTimer = null;
   function startDaytradePrices(tickers) {
     if (dtPriceTimer) { clearInterval(dtPriceTimer); dtPriceTimer = null; }
     if (!tickers.length) return;
     const upd = () => updateDaytradePrices(tickers);
-    upd();
-    dtPriceTimer = setInterval(upd, 30 * 1000); // 30s — near-live
+    upd();                                                  // current the moment the tab opens
+    dtPriceTimer = setInterval(upd, DT_PRICE_REFRESH_MS);
+  }
+  // "🟢 Live prices · updated HH:MM:SS · list refreshes every 15 min" line at the top of the list.
+  function setDtPriceAsOf() {
+    const cont = document.getElementById('dt-container');
+    if (!cont) return;
+    let el = cont.querySelector('.dt-price-asof');
+    if (!el) { el = document.createElement('div'); el.className = 'dt-price-asof'; cont.insertBefore(el, cont.firstChild); }
+    const t = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    el.innerHTML = `<span class="live-dot"></span>Live prices · updated ${t} · list refreshes every 15 min`;
   }
   async function updateDaytradePrices(tickers) {
     try {
       const res = await fetch('/api/price?tickers=' + encodeURIComponent(tickers.join(',')));
       if (!res.ok) return;
       const data = await res.json();
+      let updated = 0;
       document.querySelectorAll('#daytrade .dt-card[data-ticker]').forEach(cardEl => {
         const q = data[cardEl.dataset.ticker]; if (!q) return;
         const shown = q.afterHours ? q.afterHours.price : q.regularPrice;
@@ -5213,10 +5233,20 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           changeEl.textContent = `${tag}${up ? '▲ +' : '▼ '}${pct}%`;
           changeEl.style.color = up ? 'var(--green)' : 'var(--red)';
         }
+        // Keep the headline "% today" consistent with the live regular-session change
+        // (the card ships with the EOD scan value, which can be a full day stale).
+        const dayEl = cardEl.querySelector('[data-dt-daychg]');
+        if (dayEl && q.changePct != null && !Number.isNaN(parseFloat(q.changePct))) {
+          const up = parseFloat(q.changePct) >= 0;
+          dayEl.textContent = (up ? '+' : '') + q.changePct + '%';
+          dayEl.style.color = up ? 'var(--green)' : 'var(--red)';
+        }
+        updated++;
       });
+      if (updated) setDtPriceAsOf();
     } catch { /* keep last good prices */ }
   }
-  document.getElementById('dt-refresh-btn')?.addEventListener('click', runDaytradeUI);
+  document.getElementById('dt-refresh-btn')?.addEventListener('click', () => runDaytradeUI(false));
 
   // ── ⏱️ Entry-Timing Light (shared) ─────────────────────────────────────────
   // A 1-10 gauge of HOW GOOD A MOMENT it is to buy a pick RIGHT NOW (🟢10 optimal →
