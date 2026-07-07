@@ -235,3 +235,28 @@ test('summarize computes win rate + avg return + big-mover rates', () => {
   assert.equal(s.avgMfePct, 12);   // (12+3+25+8)/4
   assert.deepEqual(summarize([]), { n: 0 });
 });
+
+// ── multi-expiry scan: scanChain iterates EVERY expiry chain in result.options ──
+test('scanChain scans all expiry chains in result.options (multi-expiry)', () => {
+  const near = Math.floor(Date.now() / 1000) + 3 * 86400;   // ~3 DTE (nearest weekly)
+  const swing = Math.floor(Date.now() / 1000) + 30 * 86400; // ~30 DTE (swing)
+  const result = {
+    quote: { regularMarketPrice: 100 },
+    options: [
+      { expirationDate: near, calls: [{ strike: 105, lastPrice: 4, volume: 5000, openInterest: 100, expiration: near, impliedVolatility: 0.5 }], puts: [] },
+      { expirationDate: swing, calls: [], puts: [{ strike: 90, lastPrice: 3, volume: 4000, openInterest: 50, expiration: swing, impliedVolatility: 0.6 }] },
+    ],
+  };
+  const sigs = of.scanChain('TEST', result);
+  assert.equal(sigs.length, 2);                                  // one from each expiry
+  const dtes = sigs.map(s => s.dte).sort((a, b) => a - b);
+  assert.ok(dtes[0] <= 3 && dtes[1] >= 29);                      // short-dated + swing both surfaced
+  assert.ok(sigs.some(s => s.side === 'call') && sigs.some(s => s.side === 'put'));
+});
+
+test('scanChain single-expiry behavior unchanged (options with one entry)', () => {
+  const exp = Math.floor(Date.now() / 1000) + 20 * 86400;
+  const result = { quote: { regularMarketPrice: 100 }, options: [{ calls: [{ strike: 105, lastPrice: 4, volume: 5000, openInterest: 100, expiration: exp }], puts: [] }] };
+  assert.equal(of.scanChain('TEST', result).length, 1);
+  assert.equal(of.scanChain('TEST', { quote: {}, options: [] }).length, 0);
+});
