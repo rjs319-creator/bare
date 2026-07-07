@@ -29,7 +29,7 @@ const { runFadeOpt, runFadeSeed, runFadeSignals, runFadeTick, runFadeBook,
         runTiming, runTimingLog, runTimingBook, runTimingTune } = require('../lib/screener-routes');
 const { runAlertsIngest, runAlerts, runAlertsGrade } = require('../lib/alerts-routes');
 const { runArchive, runBaseline, runInsiderIngest, runInsider, runFundBuild, runFundamentals,
-        runCernTickOp, runCern, runCernFsProbe, runCernLockProbe } = require('../lib/capture-routes');
+        runCernTickOp, runCern, runCernFsProbe, runCernLockProbe, runIntraCapture, runIntraday } = require('../lib/capture-routes');
 const { runTrack, runScoreboard, runApexLog, runGhostLog, runEdgeLog, runEdgeBook, runVReversal, runVReversalTest,
         runDrift, runRecalibrate, runResearchOp, runExitsOp, runEmergingOp, runLongShortOp, runPeadOp, runBackfillOp, runModel, runNarrative, runMoverStudyOp, runCernDecay } = require('../lib/apex-routes');
 const { runHealth } = require('../lib/health');
@@ -80,6 +80,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'crossassettick') return require('../lib/crossasset-routes').runCrossAssetTick(req, res);
   if (req.query.op === 'toneshift') return require('../lib/toneshift-routes').runToneShift(req, res);
   if (req.query.op === 'toneshifttick') return require('../lib/toneshift-routes').runToneShiftTick(req, res);
+  if (req.query.op === 'calibration') return require('../lib/calibration').runCalibration(req, res);
   if (req.query.op === 'predict') return runPredict(req, res);
   if (req.query.op === 'predicttick') return runPredictTick(req, res);
   if (req.query.op === 'crowd') return runCrowd(req, res);
@@ -99,6 +100,8 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'trendtick') return runTrendTick(req, res);
   if (req.query.op === 'trendbook') return runTrendBook(req, res);
   if (req.query.op === 'archive') return runArchive(req, res);
+  if (req.query.op === 'intracapture') return runIntraCapture(req, res);
+  if (req.query.op === 'intraday') return runIntraday(req, res);
   if (req.query.op === 'baseline') return runBaseline(req, res);
   if (req.query.op === 'insideringest') return runInsiderIngest(req, res);
   if (req.query.op === 'insider') return runInsider(req, res);
