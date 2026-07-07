@@ -175,6 +175,13 @@ module.exports = async function handler(req, res) {
     '/api/tracker?op=crossassettick', '/api/tracker?op=toneshifttick', '/api/tracker?op=biotechtick',
   ].map(p => warmOne(p).catch(() => null));
 
+  // 📡 Market Pulse — pre-build a refined snapshot so users hit the cache instantly:
+  // gather (Haiku search, forced) THEN refine (Fable) in its own chained invocation.
+  // Fire-and-forget off warm's critical path — each stage is its own 60s budget.
+  const pulseKick = warmOne('/api/tracker?op=pulse&force=1')
+    .then(() => warmOne('/api/tracker?op=pulserefine&force=1'))
+    .catch(() => null);
+
   // Predict-tab feedback loop — recompute each class's live track-record grade (Wilson-
   // bounded excess vs sector) so the cards auto-feature/demote classes as picks resolve.
   // Fire-and-forget: it resolves only picks ≥1 week old, so it's independent of today's
@@ -251,6 +258,7 @@ module.exports = async function handler(req, res) {
   // 504). void-reference so the array isn't dropped before the requests flush.
   void aiTicks;
   void calibKick; // fire-and-forget like the ticks — recomputes on its own invocation
+  void pulseKick; // fire-and-forget: gather→refine chain builds the refined Pulse snapshot
 
   const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, intracapture, cern, edgelog, alertsgrade, alertsassess, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, aiTicksKicked: 6, calibKicked: true, at: new Date().toISOString() };
 

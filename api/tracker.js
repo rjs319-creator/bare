@@ -39,7 +39,7 @@ const { runGamePlan } = require('../lib/gameplan-routes');
 const { runToneTick, runTone } = require('../lib/tone-routes');
 const { runAttention, runAttentionTick } = require('../lib/attention-routes');
 const { runOptionsFlow, runOptionsPerf } = require('../lib/optionsflow-routes');
-const { runPulse } = require('../lib/pulse-routes');
+const { runPulse, runPulseRefine } = require('../lib/pulse-routes');
 
 module.exports = async function handler(req, res) {
   if (req.query.op === 'track') return runTrack(req, res);
@@ -70,6 +70,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'confluencebook') return runConfluenceBook(req, res);
   if (req.query.op === 'confluenceopt') return runConfluenceOpt(req, res);
   if (req.query.op === 'pulse') return runPulse(req, res);
+  if (req.query.op === 'pulserefine') return runPulseRefine(req, res);
   if (req.query.op === 'readthrough') return require('../lib/readthrough-routes').runReadThrough(req, res);
   if (req.query.op === 'readthroughtick') return require('../lib/readthrough-routes').runReadThroughTick(req, res);
   if (req.query.op === 'anomaly') return require('../lib/anomaly-routes').runAnomaly(req, res);
