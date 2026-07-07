@@ -38,7 +38,7 @@ const { runCoreBuild, runCore, runCoreLog, runCoreDrift, runCorePerf } = require
 const { runGamePlan } = require('../lib/gameplan-routes');
 const { runToneTick, runTone } = require('../lib/tone-routes');
 const { runAttention, runAttentionTick } = require('../lib/attention-routes');
-const { runOptionsFlow, runOptionsPerf } = require('../lib/optionsflow-routes');
+const { runOptionsFlow, runOptionsPerf, runOptionsAssess } = require('../lib/optionsflow-routes');
 const { runPulse, runPulseRefine } = require('../lib/pulse-routes');
 
 module.exports = async function handler(req, res) {
@@ -91,6 +91,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'gameplan') return runGamePlan(req, res);
   if (req.query.op === 'optionsflow') return runOptionsFlow(req, res);
   if (req.query.op === 'optionsperf') return runOptionsPerf(req, res);
+  if (req.query.op === 'optionsassess') return runOptionsAssess(req, res);
   if (req.query.op === 'brief') return runBrief(req, res);
   if (req.query.op === 'brieftick') return runBriefTick(req, res);
   if (req.query.op === 'alertfeed') return runAlertFeed(req, res);

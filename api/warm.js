@@ -175,6 +175,12 @@ module.exports = async function handler(req, res) {
     '/api/tracker?op=crossassettick', '/api/tracker?op=toneshifttick', '/api/tracker?op=biotechtick',
   ].map(p => warmOne(p).catch(() => null));
 
+  // 🧠 Options-flow Fable analysis — reads today's flow snapshot (built by op=optionsflow
+  // in PATHS above) and writes per-ticker trade plans + a desk read + stamps the ledger
+  // for the A/B. Fire-and-forget: it's a ~30-50s Fable call in its own 60s budget, so it
+  // must NOT be awaited on warm's critical path.
+  const optionsAssessKick = warmOne('/api/tracker?op=optionsassess').catch(() => null);
+
   // 📡 Market Pulse — pre-build a refined snapshot so users hit the cache instantly:
   // gather (Haiku search, forced) THEN refine (Fable) in its own chained invocation.
   // Fire-and-forget off warm's critical path — each stage is its own 60s budget.
@@ -259,6 +265,7 @@ module.exports = async function handler(req, res) {
   void aiTicks;
   void calibKick; // fire-and-forget like the ticks — recomputes on its own invocation
   void pulseKick; // fire-and-forget: gather→refine chain builds the refined Pulse snapshot
+  void optionsAssessKick; // fire-and-forget: Fable options-flow analysis in its own budget
 
   const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, intracapture, cern, edgelog, alertsgrade, alertsassess, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, aiTicksKicked: 6, calibKicked: true, at: new Date().toISOString() };
 

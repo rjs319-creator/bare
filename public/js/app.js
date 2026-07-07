@@ -685,6 +685,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   let ofConfluence = null;
   let ofConfLoaded = false;
   let ofRouteWired = false;
+  // ticker -> Fable-5 trade plan (op=optionsassess, served on op=optionsflow):
+  // { bias, conviction, interpretation, entry, invalidation, vehicle, timeframe,
+  //   catalyst, caution, agrees }. Powers the 🧠 per-card plan + the desk read.
+  let ofAnalyses = {};
+  let ofDeskRead = '';
 
   async function fetchOptions(refresh) {
     optionsRefreshBtn.disabled = true;
@@ -696,6 +701,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       optionsFlowAll = data.signals || [];
       ofBaseline = {};
       (data.byTicker || []).forEach(r => { if (r && r.ticker) ofBaseline[r.ticker] = { abnormalVsNormal: !!r.abnormalVsNormal, baselineNote: r.baselineNote || '', optVol: r.baseline && r.baseline.optVol }; });
+      ofAnalyses = data.analyses || {};
+      ofDeskRead = data.deskRead || '';
       renderOptionsFlowShell(data);
       applyOptionsView();
       loadOptionsPerf();
@@ -868,6 +875,45 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     return `<div class="of-conf-row" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">${sigs.map(badge).join('')}</div>`;
   }
 
+  // ── 🧠 Fable-5 trade analysis (op=optionsassess) ─────────────────────────────
+  const OF_VEHICLE = { shares: '📈 Own shares (simplest)', call_option: '🎟 Long calls (leveraged, decays)', put_option: '🎟 Long puts (leveraged, decays)', spread: '🎯 Defined-risk spread', avoid: '🚫 Avoid / no trade' };
+  const OF_TIMEFRAME = { intraday: 'intraday', swing: 'swing (days–weeks)', position: 'position (weeks–months)' };
+  function ofBiasChip(bias) {
+    const col = bias === 'bullish' ? 'var(--green)' : bias === 'bearish' ? 'var(--red)' : 'var(--text-dim)';
+    const lbl = bias === 'bullish' ? '▲ Bullish' : bias === 'bearish' ? '▼ Bearish' : '● Neutral';
+    return `<span class="cx-tierbadge" style="color:${col};border-color:currentColor">${lbl}</span>`;
+  }
+  function ofConvictionChip(n) {
+    const col = n >= 70 ? 'var(--green)' : n >= 40 ? 'var(--amber,#f0a832)' : 'var(--text-dim)';
+    return `<span class="cx-tierbadge" title="How real and tradeable this flow is — aggressive @-ask sweeps + abnormal-vs-own-norm volume + confirming tape score high; a lone block sold @bid scores low. Not premium size." style="color:${col};border-color:currentColor">🔩 ${n}/100 conviction</span>`;
+  }
+  // The per-ticker AI trade plan block, rendered on both Simple and Pro cards when
+  // op=optionsassess has run. Stock-specific — replaces the generic "what you could do".
+  function ofAiPlanHTML(ticker) {
+    const a = ofAnalyses[ticker];
+    if (!a) return '';
+    const refine = (a.agrees === false)
+      ? ` <span class="dt-dim" title="Fable's read differs from the raw call/put lean — it weighs the aggressor, DTE and tape, not just which side traded" style="font-size:0.72rem">↔ refines the raw lean</span>`
+      : '';
+    const line = (icon, lbl, val) => val ? `<div style="margin-top:4px"><b>${icon} ${lbl}:</b> ${esc(val)}</div>` : '';
+    const cat = a.catalyst ? ` <span class="cx-tierbadge" style="color:var(--text-dim);border-color:#444" title="Likely reason behind the positioning">${esc(a.catalyst)}</span>` : '';
+    const caution = a.caution ? `<div class="of-warn" style="margin-top:6px">⚠ ${esc(a.caution)}</div>` : '';
+    return `<div class="of-action" style="border-left-color:#a78bfa">`
+      + `<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:5px">`
+      + `<b style="color:#a78bfa">🧠 AI trade plan</b> ${ofBiasChip(a.bias)} ${ofConvictionChip(a.conviction)}${cat}${refine}</div>`
+      + (a.interpretation ? `<div style="line-height:1.55">${esc(a.interpretation)}</div>` : '')
+      + line('🎯', 'Entry', a.entry)
+      + line('🛑', 'Invalidation', a.invalidation)
+      + `<div style="margin-top:4px"><b>🛠 How to play:</b> ${OF_VEHICLE[a.vehicle] || esc(a.vehicle)}${a.timeframe ? ` · <span class="dt-dim">${OF_TIMEFRAME[a.timeframe] || esc(a.timeframe)}</span>` : ''}</div>`
+      + caution
+      + `<div class="dt-dim" style="font-size:0.7rem;margin-top:6px">AI read of the flow — not advice. Confirm on your chart and the Track Record below.</div></div>`;
+  }
+  // The desk read — one AI summary of the day's most tradeable flow, atop the grid.
+  function ofDeskReadHTML() {
+    if (!ofDeskRead) return '';
+    return `<div class="cx-narrative" style="margin-bottom:12px;border-left:3px solid #a78bfa;padding-left:10px">🧠 <b style="color:#a78bfa">Desk read:</b> ${esc(ofDeskRead)}</div>`;
+  }
+
   // One delegated handler on the persistent container: tap a badge → jump to that screener.
   function wireOfRoute() {
     if (ofRouteWired) return;
@@ -898,7 +944,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + `<li><b>⬆ @ ask / ⬇ @ bid</b> = whether the last order <b>lifted the ask</b> (a buyer paying up — backs the bull/bear read) or <b>hit the bid</b> (a seller — fades it, could be writing/closing). It reads the last print, not the whole day — a tell, not proof.</li>`
       + `<li><b>Breakeven & "needs +X%"</b> = how far the stock must actually move (and to what price) by expiry for the bet to make money — the real bar to clear, not just the direction.</li>`
       + `<li><b>⚠ ER (earnings)</b> = the company reports earnings <i>before</i> these options expire. That's an <b>event bet</b>: options often lose value after earnings even if the stock moves your way (volatility "crush"). Tread carefully.</li>`
-      + `<li><b>Confluence badges</b> (🔥 Breakout · 👻 Ghost · 🎯 Top conviction · 🚀 Day-trade mover) appear when the same ticker is <i>also</i> flagged by one of the app's own screeners — the options flow and the screen agreeing is a stronger read than either alone. Tap a badge to jump to that screener.</li></ul>`
+      + `<li><b>Confluence badges</b> (🔥 Breakout · 👻 Ghost · 🎯 Top conviction · 🚀 Day-trade mover) appear when the same ticker is <i>also</i> flagged by one of the app's own screeners — the options flow and the screen agreeing is a stronger read than either alone. Tap a badge to jump to that screener.</li>`
+      + `<li><b>🧠 AI trade plan</b> reads each name's actual flow (not just call vs put) and gives a stock-specific plan: a <b>bias</b>, a <b>conviction</b> score (how <i>real/tradeable</i> the flow is, not how big), an <b>entry</b> trigger, an <b>invalidation</b> level, and the lower-risk way to play it. The <b>🧠 Desk read</b> at the top ranks the day's most tradeable flow. It's an AI read of the data — a clue, not advice.</li></ul>`
       + `<b>Important:</b> this shows where money is <i>flowing</i>, not advice. We can't see whether they bought or sold, so treat it as a directional <i>lean</i> — and the Track Record below shows whether the signals actually predicted moves.</div></details>`
       + `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">`
       + `<select id="of-sent" style="${OF_SEL}"><option value="">All sentiment</option><option value="bullish">▲ Bullish</option><option value="bearish">▼ Bearish</option></select>`
@@ -949,7 +996,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function applyOptionsView() {
     const grid = document.getElementById('of-grid'); if (!grid) return;
     const items = ofFilteredItems();
-    const sm = document.getElementById('of-summary'); if (sm) sm.innerHTML = ofSummaryBar(ofSummary(items));
+    const sm = document.getElementById('of-summary'); if (sm) sm.innerHTML = ofDeskReadHTML() + ofSummaryBar(ofSummary(items));
     const cnt = document.getElementById('of-count');
     const empty = `<div class="rot-sub dt-dim">No signals match the filters.</div>`;
     if (ofView === 'contracts') {
@@ -974,9 +1021,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       ? ` Its biggest bet (the $${esc(String(tc.strike))} ${tc.side === 'call' ? 'calls' : 'puts'}) needs <b>${tc.moveToBePct > 0 ? '+' : ''}${tc.moveToBePct}%</b> to $${esc(String(tc.breakeven))} by ${esc(tc.expiry || 'expiry')} to break even.`
       : '';
     const lean = r.net === 'bullish' ? 'bullish' : r.net === 'bearish' ? 'bearish' : null;
-    const novice = ofNovice
-      ? `<div class="cx-narrative" style="margin-top:8px">💡 ${esc(r.ticker)}'s options activity grades <b style="color:${gcol}">${r.grade} (${r.score > 0 ? '+' : ''}${r.score})</b> — ${ofUsd(r.callPremium)} in call (bullish) premium vs ${ofUsd(r.putPremium)} in puts, across ${r.contracts.length} unusual trade${r.contracts.length > 1 ? 's' : ''}.${beNote}</div>${flowEarningsWarn(r)}${lean ? flowAction(lean) : ''}`
-      : flowEarningsWarn(r);
+    // Stock-specific Fable trade plan (both modes). When present it supersedes the
+    // generic "what you could do" template; fall back to that only without an AI plan.
+    const aiPlan = ofAiPlanHTML(r.ticker);
+    const narrative = ofNovice
+      ? `<div class="cx-narrative" style="margin-top:8px">💡 ${esc(r.ticker)}'s options activity grades <b style="color:${gcol}">${r.grade} (${r.score > 0 ? '+' : ''}${r.score})</b> — ${ofUsd(r.callPremium)} in call (bullish) premium vs ${ofUsd(r.putPremium)} in puts, across ${r.contracts.length} unusual trade${r.contracts.length > 1 ? 's' : ''}.${beNote}</div>`
+      : '';
+    const genericAction = (ofNovice && lean && !aiPlan) ? flowAction(lean) : '';
+    const body = `${narrative}${flowEarningsWarn(r)}${aiPlan}${genericAction}`;
     const erChip = r.earningsBeforeExpiry ? `<span class="cx-tierbadge" style="color:var(--amber,#f0a832);border-color:currentColor" title="Earnings report lands before these options expire — an event/IV-crush risk">⚠ ER ${r.earningsInDays}d</span>` : '';
     // Baseline overlay: flag names whose option volume is abnormally high vs their OWN
     // archived history — "unusual relative to normal", not just a big absolute number.
@@ -997,7 +1049,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + `<div class="cx-company">${r.contracts.length} unusual contract${r.contracts.length > 1 ? 's' : ''}${r.sweep ? ` · ${r.sweep}⚡` : ''}${r.block ? ` · ${r.block}🧱` : ''}${r.underlying ? ` · spot $${r.underlying}${r.undChgPct != null ? ` (${ofChg(r.undChgPct)})` : ''}` : ''}</div></div>`
       + `<div class="cx-score-col"><div class="cx-score" style="color:#06c4d4;font-size:1.05rem">${ofUsd(r.totalPremium)}</div><div class="cx-price">${r.bullishPct}% calls</div></div></div>`
       + `<div style="display:flex;height:7px;border-radius:4px;overflow:hidden;margin-top:8px"><div style="width:${r.bullishPct}%;background:var(--green)"></div><div style="width:${100 - r.bullishPct}%;background:var(--red)"></div></div>`
-      + ofConfluenceHTML(r.ticker) + blNote + novice + expand + `</div>`;
+      + ofConfluenceHTML(r.ticker) + blNote + body + expand + `</div>`;
   }
 
   function ofUsd(n) { return n >= 1e6 ? '$' + (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? '$' + Math.round(n / 1e3) + 'k' : '$' + n; }
