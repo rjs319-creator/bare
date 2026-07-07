@@ -5213,9 +5213,19 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
   async function updateDaytradePrices(tickers) {
     try {
-      const res = await fetch('/api/price?tickers=' + encodeURIComponent(tickers.join(',')));
-      if (!res.ok) return;
-      const data = await res.json();
+      // /api/price caps at 12 tickers/call — chunk so EVERY card gets a live quote,
+      // not just the first 12 (Day Trade routinely lists more than that).
+      const data = {};
+      for (let i = 0; i < tickers.length; i += 12) {
+        const chunk = tickers.slice(i, i + 12);
+        try {
+          const res = await fetch('/api/price?tickers=' + encodeURIComponent(chunk.join(',')));
+          if (!res.ok) continue;
+          const d = await res.json();
+          if (d && !d.error) Object.assign(data, d);
+        } catch { /* skip this chunk, keep the rest */ }
+      }
+      if (!Object.keys(data).length) return;
       let updated = 0;
       document.querySelectorAll('#daytrade .dt-card[data-ticker]').forEach(cardEl => {
         const q = data[cardEl.dataset.ticker]; if (!q) return;
