@@ -5,7 +5,9 @@
 import { esc } from './format.js';
 
 // Sub-tabs that get the overlay (daytrade already has its own live price).
-export const LIVE_SCREENERS = new Set(['opportunities', 'screener', 'custom', 'ghost', 'trendrider', 'fade', 'confluence']);
+// xalerts = Trade Alerts: cards carry data-live on .cx-ticker, so each alert shows a
+// live price + daily up/down change next to the ticker, refreshed ~every 30s.
+export const LIVE_SCREENERS = new Set(['opportunities', 'screener', 'custom', 'ghost', 'trendrider', 'fade', 'confluence', 'xalerts']);
 
 async function fetchPrices(tickers) {
   const out = {};

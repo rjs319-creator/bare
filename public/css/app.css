@@ -836,8 +836,11 @@
     .sig-reasons-static { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
 
     /* ── BREAKOUT SCREENER ── */
-    .scr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    @media (max-width: 860px) { .scr-grid { grid-template-columns: 1fr; } }
+    /* minmax(0,1fr) (not 1fr=minmax(auto,1fr)) so a card with a long account list or
+       post text can't blow its column past half the grid and push the right column
+       off-screen (this grid backs the Trade Alerts .cx-card view). */
+    .scr-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+    @media (max-width: 860px) { .scr-grid { grid-template-columns: minmax(0, 1fr); } }
     .scr-card {
       background: var(--card); border: 1px solid var(--border); border-radius: 12px;
       padding: 16px 18px; position: relative; overflow: hidden;
@@ -1534,11 +1537,12 @@
     .cx-tier-head.watch  .cx-tier-name { color: var(--text-dim); }
     .cx-tier-sub { font-size: 0.66rem; color: var(--text-dim); font-weight: 600; }
 
-    .cx-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 15px 16px 14px; position: relative; }
+    .cx-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 15px 16px 14px; position: relative; min-width: 0; overflow-wrap: anywhere; }
     .cx-card.apex   { border-color: #f0a83255; box-shadow: inset 0 0 0 1px #f0a83222; }
     .cx-card.loaded { border-color: #06c4d433; }
-    .cx-top { display: flex; align-items: flex-start; gap: 11px; }
-    .cx-tk-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .cx-top { display: flex; align-items: flex-start; gap: 11px; min-width: 0; }
+    .cx-top > div:first-child { min-width: 0; }
+    .cx-tk-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
     .cx-ticker { font-size: 1.08rem; font-weight: 800; letter-spacing: 0.02em; }
     .cx-tierbadge { font-size: 0.56rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 5px; padding: 2px 7px; }
     .cx-tierbadge.apex   { color: #f0a832; background: var(--amber-dim); border: 1px solid #f0a83244; }
