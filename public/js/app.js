@@ -2539,11 +2539,17 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const t = s.time63, st = s.structure;
     // Regime breakdown — the honest part (out-of-sample across a real bear market).
     const rg = ex.byRegime;
-    const rgRow = (R, lbl) => { const x = rg && rg[R]; if (!x) return ''; const pf = x.time63.pf; return `<tr><td>${lbl}</td><td class="${pf >= 1 ? 'cx-ex-pos' : 'cx-ex-neg'}">${pf}</td><td class="${x.structure.pf >= 1 ? 'cx-ex-pos' : 'cx-ex-neg'}">${x.structure.pf}</td><td>${x.time63.exp > 0 ? '+' : ''}${x.time63.exp}%</td><td>${x.time63.n}</td></tr>`; };
-    const rgTable = rg ? `<table class="cx-preset-table cx-ex-table"><thead><tr><th>Entry regime</th><th>time63 PF</th><th>struct PF</th><th>time63 exp</th><th>n</th></tr></thead><tbody>${rgRow('RISK_ON', 'Risk-On')}${rgRow('NEUTRAL', 'Neutral')}${rgRow('RISK_OFF', 'Risk-Off')}</tbody></table>` : '';
+    const rgRow = (R, lbl) => {
+      const x = rg && rg[R];
+      if (!x || !x.time63 || !x.structure) return ''; // some regimes lack a full exit breakdown — skip rather than throw
+      const pf = x.time63.pf;
+      return `<tr><td>${lbl}</td><td class="${pf >= 1 ? 'cx-ex-pos' : 'cx-ex-neg'}">${pf}</td><td class="${x.structure.pf >= 1 ? 'cx-ex-pos' : 'cx-ex-neg'}">${x.structure.pf}</td><td>${x.time63.exp > 0 ? '+' : ''}${x.time63.exp}%</td><td>${x.time63.n}</td></tr>`;
+    };
+    const rgRows = rg ? rgRow('RISK_ON', 'Risk-On') + rgRow('NEUTRAL', 'Neutral') + rgRow('RISK_OFF', 'Risk-Off') : '';
+    const rgTable = rgRows ? `<table class="cx-preset-table cx-ex-table"><thead><tr><th>Entry regime</th><th>time63 PF</th><th>struct PF</th><th>time63 exp</th><th>n</th></tr></thead><tbody>${rgRows}</tbody></table>` : '';
     const qP = ex.quartersProfitable, qT = ex.quartersTotal;
     const rec = (t && st) ? `<p class="cx-mp-p"><b style="color:var(--amber)">Honest finding (out-of-sample, 5y incl. the 2022 bear):</b> the structure stops <b>are</b> a leak — a time-based hold beats them almost everywhere (PF ${t.profitFactor} vs ${st.profitFactor}) — but fixing the exit does <b>not</b> create edge. Held over the full cycle, even the best exit is below breakeven (time63 PF <b>${t.profitFactor}</b>)${qP != null ? `, profitable in only <b>${qP} of ${qT}</b> quarters` : ''}. It wins in sustained uptrends and is destroyed in corrections — i.e. it's largely <b>regime timing, not a standalone edge</b>.</p>` : '';
-    const verdict = rg ? `<p class="cx-mp-p"><b>What to actually do:</b> only take these long momentum setups in <b style="color:var(--green)">Risk-On</b> (Risk-Off entries are a disaster — time63 PF ${rg.RISK_OFF ? rg.RISK_OFF.time63.pf : '~0.5'}); hold ~63 sessions (stops make it worse); and accept the edge is thin and disappears in choppy/correcting periods. The model's regime gate is doing the real work, not the exit.</p>` : '';
+    const verdict = rg ? `<p class="cx-mp-p"><b>What to actually do:</b> only take these long momentum setups in <b style="color:var(--green)">Risk-On</b> (Risk-Off entries are a disaster — time63 PF ${rg.RISK_OFF && rg.RISK_OFF.time63 ? rg.RISK_OFF.time63.pf : '~0.5'}); hold ~63 sessions (stops make it worse); and accept the edge is thin and disappears in choppy/correcting periods. The model's regime gate is doing the real work, not the exit.</p>` : '';
     // Market-neutral (long top decile / short bottom) — is there any selection edge?
     const ls = apexModel && apexModel.longshort && apexModel.longshort.decile;
     const lsLine = ls ? `<p class="cx-mp-p"><b>Market-neutral test</b> (long top decile / short bottom, beta removed): spread <b>${ls.overall.meanPct > 0 ? '+' : ''}${ls.overall.meanPct}%</b>/63d but <b>t-stat ${ls.overall.tStat}</b> — ${Math.abs(ls.overall.tStat) >= 2 ? 'significant' : 'not statistically significant (need t≥2)'}. Still regime-split: Risk-On ${ls.byRegime && ls.byRegime.RISK_ON ? ls.byRegime.RISK_ON.meanPct + '%' : '—'} vs Risk-Off <b style="color:var(--red)">${ls.byRegime && ls.byRegime.RISK_OFF ? ls.byRegime.RISK_OFF.meanPct + '%' : '—'}</b> (momentum crash). <b>No durable security-selection edge</b> once the market is removed — what's here is a momentum tilt, not stock-picking skill.</p>` : `<p class="cx-mp-p" style="font-size:0.62rem"><button class="refresh-btn" onclick="fetch('/api/tracker?op=longshort').then(()=>fetchApexModel()).then(()=>{if(apexLast)renderApexModelPanel(apexLast.regime,apexLast.preset,apexLast.large)})" style="color:#8a6dff">⚖ Run market-neutral (long/short) test</button></p>`;
@@ -2795,8 +2801,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const gt = document.getElementById('custom-gen-time');
       if (large.generatedAt) gt.textContent = `Updated ${new Date(large.generatedAt).toLocaleTimeString()}`;
       document.getElementById('custom-meta').textContent = `· ${deduped.length} names scored · ${APEX_RG_LABEL[regime]} preset · 4-pillar regime-adaptive`;
-    } catch {
-      container.innerHTML = `<div class="mom-status error"><p>Could not run the Apex model. Please try again.</p></div>`;
+    } catch (err) {
+      // Surface the real failure instead of swallowing it — a blank "try again"
+      // told us nothing across several debugging rounds.
+      console.error('[Apex] runApex failed:', err);
+      const detail = (err && (err.message || err.name)) ? esc(String(err.message || err.name)) : 'unknown error';
+      container.innerHTML = `<div class="mom-status error"><p>Could not run the Apex model — <b>${detail}</b>. Please screenshot this and reload.</p></div>`;
     } finally { btn.disabled = false; }
   }
 
