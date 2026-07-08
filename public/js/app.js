@@ -5582,7 +5582,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const gradeClass = g => g === 'A+' || g === 'A' ? 'g-a' : g === 'B' ? 'g-b' : g === 'C' ? 'g-c' : 'g-d';
     const card = p => {
       const tier = PS_TIER[p.tier] || PS_TIER.WATCH;
-      const ivChip = p.ivLevel ? `<span class="ps-iv ${PS_IV[p.ivLevel]}">${esc(p.ivNote || '')}${p.atmIV != null ? ` · IV ${(p.atmIV * 100).toFixed(0)}%` : ''}</span>` : '';
+      const ivChip = p.ivLevel ? `<span class="ps-iv ${PS_IV[p.ivLevel]}">${esc(p.ivNote || '')}${p.atmIV != null ? ` · IV ${(p.atmIV * 100).toFixed(0)}%` : ''}</span>`
+        : p.ivUnreliable ? `<span class="ps-iv iv-lo" title="Option-chain IV reading looked broken — graded on price action alone">IV n/a</span>` : '';
       const earn = p.earningsSoon ? `<span class="ps-earn">📅 Earnings ${p.earningsInDays}d</span>` : '';
       const cautions = (p.cautions || []).length ? `<div class="ps-caution">${p.cautions.map(c => `⚠ ${esc(c)}`).join('<br>')}</div>` : '';
       return `

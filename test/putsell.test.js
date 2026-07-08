@@ -17,6 +17,23 @@ test('gradePutSell: no IV falls back to the setup score', () => {
   assert.ok(['A', 'B'].includes(g.grade));
 });
 
+test('gradePutSell: implausible IV (2%) is ignored — grades on the setup', () => {
+  const broken = gradePutSell({ score: 0.75, atmIV: 0.02 });   // 2% IV = broken feed
+  const nodata = gradePutSell({ score: 0.75 });
+  assert.equal(broken.rankScore, nodata.rankScore);            // sanity floor → same as no-IV
+  assert.ok(broken.rankScore >= 72);
+});
+
+test('finalizePutSell: drops a junk IV reading and flags it unreliable', () => {
+  const out = finalizePutSell({ price: 14, cautions: [] }, { atmIV: 0.02 });
+  assert.equal(out.atmIV, null);
+  assert.equal(out.ivUnreliable, true);
+  assert.equal(out.ivLevel, undefined);
+  const ok = finalizePutSell({ price: 14, cautions: [] }, { atmIV: 0.45 });
+  assert.equal(ok.atmIV, 0.45);
+  assert.equal(ok.ivLevel, 'moderate');
+});
+
 // Build ~240 daily candles: a long uptrend, then an optional recent pullback.
 function upThenPullback({ start = 50, peak = 100, pullbackPct = 8, n = 240, wobble = 0 }) {
   const candles = [];
