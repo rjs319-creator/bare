@@ -5278,6 +5278,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const betaNote = `<div class="dt-note"><b>β ≈ 2 — beta-neutral check:</b> these small caps swing ~2× the market. In 5y tests the edge is <b>real stock-picking alpha</b> (it barely changes when market beta is removed: +1.7% → +1.5%), but it's a <b>low-hit-rate, big-winner</b> profile (~48–49% win rate) — so <b>size small</b>. Advanced traders isolate the alpha by hedging ~2× the position in short SPY.</div>`;
     const esExclNote = `<div class="dt-note" style="border-left-color:var(--amber,#f59e0b)"><b>⚠️ Excluded from the experimental config.</b> In the intraday study this scan tested <b>negative out-of-sample</b>, so it's <b>not</b> part of the ORB-stacked plan above — shown for awareness only. Size very small if traded at all.</div>`;
     const es = list('💥 Explosive Small-Cap ($1–$20)', t.explosiveSmall, 'Small caps up &gt;8% on &gt;2× relative volume — higher reward, lower hit-rate.', esExclNote + betaNote);
+    const expNote = `<div class="dt-note"><b>🌐 Broader net — not forward-tracked.</b> The <b>same</b> momentum &amp; liquid gate, run over the free <b>full-market universe</b> (liquid names beyond the maintained S&amp;P / small / micro lists). Kept <b>out of the validated track record</b> above so those stats stay clean — treat this as a wider watchlist to confirm, not a measured edge.</div>`;
+    const expList = list('🌐 Expanded Universe ($5–$50)', t.momentumExpanded, 'Momentum &amp; liquid movers from the full liquid universe — names the cap-band scans don\'t cover.', expNote);
 
     // 🌊 Multi-day Momentum Run (FCEL archetype) — sustained movers, shown in ALL
     // regimes (identification, not a trade signal). Different fields than the single-
@@ -5320,7 +5322,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <div class="rot-sub">Ranked by <b>🔮 carry odds</b> (pcarry) across the whole pool. <b>The honest truth</b> (research/33, survivorship-corrected 26k candidate-days): <b>tradeable 3-session continuation is ~a coin-flip</b> — the strongly-predictable part lives in the <b>un-tradeable overnight leg</b> (you buy at the next open, after it's gone). So carry odds sit ~40–60% and mainly <b>flag fade risk</b> (⚠ overextended blow-offs, dilution/M&amp;A pops, risk-off tape) to help you <b>avoid traps</b> — they do <b>not</b> predict winners. Overextended/explosive names now flow through but the model <b>discounts</b> them, so they sort to the bottom.</div>
         <div class="dt-best-grid">${best.map(bestCard).join('')}</div>
       </div>`;
-    el.innerHTML = banner + tapeBadge + pacedBanner + bestSection + configBanner + howto + ml + es + runSection + track + timingScorecard(timingBook) +
+    el.innerHTML = banner + tapeBadge + pacedBanner + bestSection + configBanner + howto + ml + es + runSection + expList + track + timingScorecard(timingBook) +
       `<div class="fade-caveats"><b>How to use.</b> Today's relative-volume + momentum movers (the EOD version of the Finviz day-trade scans), regime-gated and self-learning. <b>Honest validation</b> (5y, forward 3-session excess vs SPY): large-cap momentum-chasing does <b>not</b> beat the market (it mean-reverts, −1.3% out-of-sample); explosive small-caps carry a <b>positive average excess</b> (~+1.7–2.3% in risk-on/neutral) but a <b>sub-50% hit-rate</b> — a few big runners carry it, and it dies in risk-off. So treat these as a <b>ranked movers watchlist</b>, not a win-rate edge; the per-stock learner tilts toward names whose momentum actually continues and drops the rest. <b>The 🧪 experimental config above</b> (opening-range-breakout entry + 2.5×ATR stop + top-half selection) is the one variant that tested out-of-sample positive on <b>real intraday execution</b> — but it <b>failed formal deflation</b> (deflated Sharpe 0.59), so it's a paper-trading lead to confirm forward, not a proven edge. Confirm entries in TradingView (MACD / RSI / Smart-Money). Research, not advice.</div>`;
     // Wire each card's chart toggle (reuses the shared /api/chart canvas renderer)
     // and start live-price polling for the recommended names.
@@ -5333,7 +5335,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     startDaytradePrices([...new Set(dtTickers)]);
     // ⏱️ Entry-timing lights — use each pick's ORB plan levels + avg volume when present.
     const seen = new Set();
-    const dtPicks = [...(t.bestOpportunities || []), ...(t.momentumLiquid || []), ...(t.explosiveSmall || []), ...(t.momentumRun || [])]
+    const dtPicks = [...(t.bestOpportunities || []), ...(t.momentumLiquid || []), ...(t.explosiveSmall || []), ...(t.momentumRun || []), ...(t.momentumExpanded || [])]
       .filter(p => p && p.ticker && !seen.has(p.ticker) && seen.add(p.ticker))
       .map(p => ({ ticker: p.ticker, stop: p.orb && p.orb.stop, target: p.orb && p.orb.target, trigger: p.orb && p.orb.trigger, avgVol: p.avgVol }));
     attachTimingLights(el, dtPicks, 'daytrade');
