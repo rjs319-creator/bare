@@ -50,6 +50,10 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'dualreadbackfill') return runDualReadBackfill(req, res);
   if (req.query.op === 'ltrecs') return runLtRecs(req, res);
   if (req.query.op === 'putsell') return require('../lib/putsell-routes').runPutSell(req, res);
+  if (req.query.op === 'universebuild') return require('../lib/universe-routes').runUniverseBuild(req, res);
+  if (req.query.op === 'universescan') return require('../lib/universe-routes').runUniverseScan(req, res);
+  if (req.query.op === 'universecompile') return require('../lib/universe-routes').runUniverseCompile(req, res);
+  if (req.query.op === 'universecurate') return require('../lib/universe-routes').runUniverseCurate(req, res);
   if (req.query.op === 'aligned') return require('../lib/aligned-routes').runAligned(req, res);
   if (req.query.op === 'alignedlog') return require('../lib/aligned-routes').runAlignedLog(req, res);
   if (req.query.op === 'alignedbook') return require('../lib/aligned-routes').runAlignedBook(req, res);

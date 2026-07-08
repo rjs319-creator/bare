@@ -190,6 +190,10 @@ module.exports = async function handler(req, res) {
   // 💰 Options Moves — put-selling setups (full-market price-action scan + IV/earnings).
   const putsellKick = warmOne('/api/tracker?op=putsell').catch(() => null);
 
+  // 🌐 Expanded universe — reassemble the free full-market candle cache from its
+  // shards (cheap merge; the heavy scan is run/paced separately).
+  const universeKick = warmOne('/api/tracker?op=universecompile').catch(() => null);
+
   // 📡 Market Pulse — pre-build a refined snapshot so users hit the cache instantly:
   // gather (Haiku search, forced) THEN refine (Fable) in its own chained invocation.
   // Fire-and-forget off warm's critical path — each stage is its own 60s budget.
@@ -289,6 +293,7 @@ module.exports = async function handler(req, res) {
   void optionsAssessKick; // fire-and-forget: Fable options-flow analysis in its own budget
   void alignedKick; // fire-and-forget: Dual-Confirmed scan over the warm screener pool
   void putsellKick; // fire-and-forget: put-selling setups scan
+  void universeKick; // fire-and-forget: reassemble the expanded candle cache
 
   const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, intracapture, cern, edgelog, alertsgrade, alertsassess, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, dualreadlog, dualreadtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, aiTicksKicked: 6, calibKicked: true, at: new Date().toISOString() };
 
