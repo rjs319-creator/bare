@@ -2604,13 +2604,25 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   // Hysteresis: a new regime must hold 3 consecutive refreshes before the
   // active preset switches (prevents weight-flapping on choppy weeks).
+  // Beyond this age the last read is stale — the tab was closed long enough that
+  // the market has moved on, so there's nothing live to debounce against and a
+  // persisted regime must NOT strand the tab (e.g. a day-old RISK_OFF latch).
+  const APEX_REGIME_STALE_MS = 12 * 60 * 60 * 1000; // 12h
   function apexLoadState() {
     try { const s = JSON.parse(localStorage.getItem('apexRegime')); if (s && s.active) return s; } catch {}
-    return { active: 'NEUTRAL', candidate: null, count: 0, log: [] };
+    return { active: 'NEUTRAL', candidate: null, count: 0, log: [], at: 0 };
   }
   function apexAdvanceState(raw) {
     const st = apexLoadState();
-    if (raw === st.active) { st.candidate = null; st.count = 0; }
+    // Self-heal a stale latch: if the last observation is old (or predates this
+    // field entirely), re-sync straight to the live read rather than debouncing
+    // against an obsolete regime. This is what stops a stale RISK_OFF from
+    // silently emptying the tab across sessions.
+    const age = st.at ? Date.now() - st.at : Infinity;
+    if (age > APEX_REGIME_STALE_MS && raw !== st.active) {
+      st.log = [{ from: st.active, to: raw, at: new Date().toISOString(), resync: true }, ...(st.log || [])].slice(0, 12);
+      st.active = raw; st.candidate = null; st.count = 0;
+    } else if (raw === st.active) { st.candidate = null; st.count = 0; }
     else if (raw === st.candidate) {
       st.count++;
       if (st.count >= 3) {
@@ -2618,6 +2630,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         st.active = raw; st.candidate = null; st.count = 0;
       }
     } else { st.candidate = raw; st.count = 1; }
+    st.at = Date.now();
     try { localStorage.setItem('apexRegime', JSON.stringify(st)); } catch {}
     return st;
   }
