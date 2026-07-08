@@ -746,6 +746,23 @@
     .dual-track { font-size: 0.62rem; color: var(--text-dim); margin-top: 6px; border-top: 1px dashed var(--border); padding-top: 6px; }
     .dual-track b { color: var(--text); }
 
+    /* Long-term second opinions panel */
+    .dual-recs { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .lr-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px; }
+    .lr-title { font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 700; }
+    .lr-consensus { font-size: 0.6rem; font-weight: 800; padding: 2px 7px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+    .lr-consensus.pos { background: var(--green-dim); color: var(--green); }
+    .lr-consensus.neg { background: var(--red-dim); color: var(--red); }
+    .lr-consensus.mix { background: rgba(240,168,50,0.14); color: var(--amber); }
+    .lr-row { display: grid; grid-template-columns: 96px 46px 1fr; align-items: center; gap: 8px; font-size: 0.68rem; }
+    .lr-name { color: var(--text-dim); font-weight: 600; }
+    .lr-chip { font-size: 0.58rem; font-weight: 800; text-align: center; padding: 2px 0; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.02em; }
+    .lr-chip.pos { background: var(--green-dim); color: var(--green); }
+    .lr-chip.neg { background: var(--red-dim); color: var(--red); }
+    .lr-chip.mix { background: rgba(240,168,50,0.14); color: var(--amber); }
+    .lr-chip.na { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+    .lr-detail { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
     .chart-levels {
       display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px;
     }

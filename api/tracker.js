@@ -40,7 +40,7 @@ const { runToneTick, runTone } = require('../lib/tone-routes');
 const { runAttention, runAttentionTick } = require('../lib/attention-routes');
 const { runOptionsFlow, runOptionsPerf, runOptionsAssess } = require('../lib/optionsflow-routes');
 const { runPulse, runPulseRefine } = require('../lib/pulse-routes');
-const { runDualRead, runDualReadLog, runDualReadBook, runDualReadTune, runDualReadBackfill } = require('../lib/dualread-routes');
+const { runDualRead, runDualReadLog, runDualReadBook, runDualReadTune, runDualReadBackfill, runLtRecs } = require('../lib/dualread-routes');
 
 module.exports = async function handler(req, res) {
   if (req.query.op === 'dualread') return runDualRead(req, res);
@@ -48,6 +48,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'dualreadbook') return runDualReadBook(req, res);
   if (req.query.op === 'dualreadtune') return runDualReadTune(req, res);
   if (req.query.op === 'dualreadbackfill') return runDualReadBackfill(req, res);
+  if (req.query.op === 'ltrecs') return runLtRecs(req, res);
   if (req.query.op === 'track') return runTrack(req, res);
   if (req.query.op === 'apexlog') return runApexLog(req, res);
   if (req.query.op === 'ghostlog') return runGhostLog(req, res);

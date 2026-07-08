@@ -6583,8 +6583,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     handleSignalUpdate(data.ticker, live.action);
 
     // Enrich the mechanical dual-read with the Fable narrative + quadrant track
-    // record (async — the banner already shows the instant mechanical verdict).
-    if (data.dual) enrichDualRead(panel, data);
+    // record, and the long-term second-opinions panel (all async — the banner
+    // already shows the instant mechanical verdict).
+    if (data.dual) { enrichDualRead(panel, data); fetchLtRecs(panel.querySelector('[data-dual]') || panel, data); }
   }
 
   // ── Dual-horizon read (short-term × long-term) ──────────────────────────────
@@ -6630,8 +6631,39 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           <span class="dv-text" data-verdict>${esc(dual.verdict)}</span>
         </div>
         <div class="dual-note" data-note hidden></div>
+        <div class="dual-recs" data-ltrecs hidden></div>
         <div class="dual-track" data-track hidden></div>
       </div>`;
+  }
+
+  // Long-term "second opinions" — the custom model plus four independent lenses.
+  const REC_TONE = { Buy: 'pos', Hold: 'mix', Sell: 'neg' };
+  const LT_TREND_TO_REC = { bullish: 'Buy', bearish: 'Sell', neutral: 'Hold' };
+  function recRow(label, r) {
+    if (!r || !r.rec) return `<div class="lr-row"><span class="lr-name">${esc(label)}</span><span class="lr-chip na">n/a</span><span class="lr-detail">${esc((r && r.detail) || 'No data')}</span></div>`;
+    return `<div class="lr-row"><span class="lr-name">${esc(label)}</span><span class="lr-chip ${REC_TONE[r.rec] || 'mix'}">${esc(r.rec)}</span><span class="lr-detail">${esc(r.detail || '')}</span></div>`;
+  }
+  async function fetchLtRecs(root, data) {
+    const host = root.querySelector('[data-ltrecs]');
+    if (!host) return;
+    try {
+      const res = await fetch('/api/tracker?op=ltrecs&ticker=' + encodeURIComponent(data.ticker));
+      const j = await res.json();
+      if (!j || !j.recs) return;
+      const R = j.recs;
+      const custom = { rec: LT_TREND_TO_REC[data.longTerm && data.longTerm.trend] || 'Hold', detail: `Trend + relative-strength model · score ${data.longTerm ? data.longTerm.score : '—'}` };
+      const all = [custom.rec, R.expert && R.expert.rec, R.fundamental && R.fundamental.rec, R.technical && R.technical.rec, R.momentum && R.momentum.rec].filter(Boolean);
+      const buy = all.filter(x => x === 'Buy').length, sell = all.filter(x => x === 'Sell').length, hold = all.filter(x => x === 'Hold').length;
+      const lean = buy > hold && buy > sell ? 'Buy' : sell > hold && sell > buy ? 'Sell' : 'Hold';
+      host.innerHTML = `
+        <div class="lr-head"><span class="lr-title">Long-term second opinions</span><span class="lr-consensus ${REC_TONE[lean]}">${buy}·${hold}·${sell} → ${lean}</span></div>
+        ${recRow('Custom model', custom)}
+        ${recRow('Expert consensus', R.expert)}
+        ${recRow('Fundamental', R.fundamental)}
+        ${recRow('Technical', R.technical)}
+        ${recRow('Momentum', R.momentum)}`;
+      host.hidden = false;
+    } catch { /* leave hidden — the custom read still stands */ }
   }
 
   async function enrichDualRead(panel, data) {
