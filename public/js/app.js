@@ -39,7 +39,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     quickhit: 'The Top 5 plays across large, small AND micro caps — one fast shortlist with links to where each lives.',
     opportunities: 'The best setups across all the screeners, gathered in one ranked list.',
     aligned: 'Stocks that are a BUY on both horizons at once — the short-term signal AND the ~1-year trend both point up. The strongest agreement of the dual read.',
-    putsell: 'Options Moves — stocks set up for SELLING cash-secured puts: quality uptrends that pulled back to support, with a suggested strike below support and premium context. You get paid to wait, and buy the stock at a discount if assigned.',
+    putsell: 'Options Moves — AI-screened options-strategy setups from full-market price action. First strategy: cash-secured put selling (quality uptrends pulled back to support, with a suggested strike below support). More strategies coming.',
     screener: 'Stocks breaking out of chart patterns (classic breakout setups).',
     custom: 'A momentum model that adapts its scoring to the current market regime.',
     coremo: 'Steady, confirmed uptrends with the strongest 12-month momentum.',
@@ -5572,9 +5572,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Options Moves unavailable.</p></div>`; return; }
     const gt = document.getElementById('putsell-gen-time');
     if (gt) gt.textContent = t.generatedAt ? new Date(t.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    // Strategy module heading — one of (eventually several) options moves under this section.
+    const stratHead = `<div class="scr-subhead">🅿️ Cash-Secured Put Selling <span class="sub-meta">quality uptrend · pullback to support · strike below support with an OTM cushion · IV &amp; earnings context</span></div>`;
     const picks = t.picks || [];
     if (!picks.length) {
-      el.innerHTML = `<div class="dt-note">No clean put-selling setups right now — that's normal when strong stocks are extended (thin premium) or the tape is weak (better to wait). <span class="dt-dim">(${t.scanned || 0} scanned)</span></div>`;
+      el.innerHTML = stratHead + `<div class="dt-note">No clean put-selling setups right now — that's normal when strong stocks are extended (thin premium) or the tape is weak (better to wait). <span class="dt-dim">(${t.scanned || 0} scanned)</span></div>`;
       return;
     }
     const card = p => {
@@ -5598,7 +5600,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           ${cautions}
         </div>`;
     };
-    el.innerHTML = `<div class="dt-dim" style="font-size:0.68rem;margin-bottom:8px">Full-market scan · ${t.scanned || 0} names → ${t.qualified || 0} qualifying setups → top ${picks.length} shown (enriched with live IV &amp; earnings)</div>
+    el.innerHTML = stratHead + `<div class="dt-dim" style="font-size:0.68rem;margin:2px 0 10px">Full-market scan · ${t.scanned || 0} names → ${t.qualified || 0} qualifying setups → top ${picks.length} shown (enriched with live IV &amp; earnings)</div>
       <div class="ps-grid">${picks.map(card).join('')}</div>
       <div class="dt-note" style="margin-top:12px">Educational, not advice. Selling a cash-secured put obligates you to <b>buy 100 shares at the strike</b> if assigned — only sell puts on names you'd genuinely want to own at that price, and size to the cash you'd need.</div>`;
   }
