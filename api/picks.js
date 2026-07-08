@@ -89,18 +89,29 @@ async function enrichPicks(picks, spyByDate) {
 // (fundamentals-led) track. A pick can land in both, one, or neither.
 function classifyPicks(picks, sectorPEMap) {
   const benchOf = sec => (sectorPEMap && sectorPEMap[fmpSector(sec)]) || sectorPE(sec);
-  const shortTerm = [], longTerm = [];
+  const shortTerm = [], longTerm = [], watch = [];
   for (const p of picks) {
     const t = p._tech, f = p._fund;
+
+    // Two quality gates, computed up front so EVERY pick carries a badge and none
+    // is hidden — picks clearing neither gate still surface on the watch track.
+    const passTech = !!(t && t.status);
+    const bench = f ? benchOf(p.sector) : null;
+    const passFund = !!(f && f.revGrowth != null && f.revGrowth > 0
+      && f.opMarginTTM != null && f.opMarginTTM > 0 && f.marginExpanding === true
+      && f.pe != null && f.pe > 0 && f.pe <= bench * 1.3);
+    const meme = memeSpike(p._ret);
+
     const base = {
       rank: p.rank, ticker: p.ticker, company: p.company, sector: p.sector,
       overallRating: p.overallRating, ratingLabel: p.ratingLabel, sourceCoverage: p.sourceCoverage,
       optionsSignal: p.optionsSignal, factors: p.factors, thesis: p.thesis, keyRisk: p.keyRisk,
       price: p.price, levels: p.levels,
+      quality: { tech: passTech ? t.status : null, fund: passFund, meme },
     };
 
-    // Short-term: passed the technical breakout + volume gate (status non-null).
-    if (t && t.status) {
+    // Short-term: passed the technical breakout + volume gate.
+    if (passTech) {
       shortTerm.push({
         ...base, track: 'short', techStatus: t.status,
         tech: { status: t.status, volSurge: t.metrics && t.metrics.volSurge, rsVsSpy63: t.metrics && t.metrics.rsVsSpy63, baseWeeks: t.metrics && t.metrics.consoWeeks, filters: t.filters },
@@ -108,38 +119,35 @@ function classifyPicks(picks, sectorPEMap) {
       });
     }
 
-    // Long-term: real fundamentals — positive revenue growth, positive AND
-    // expanding operating margin, reasonable valuation vs sector — and not a
-    // meme-stock momentum spike. Technicals are weighted low here.
-    if (f) {
-      const bench = benchOf(p.sector);
-      const valuationOK = f.pe != null && f.pe > 0 && f.pe <= bench * 1.3;
-      const fundOK = f.revGrowth != null && f.revGrowth > 0
-                  && f.opMarginTTM != null && f.opMarginTTM > 0
-                  && f.marginExpanding === true
-                  && valuationOK;
-      if (fundOK && !memeSpike(p._ret)) {
-        const valDiscount = Math.max(0, Math.min(15, (bench - f.pe) / bench * 30));
-        const score = Math.round(
-          25
-          + Math.min(40, f.revGrowth) * 0.5
-          + 15 // operating margin expanding (gated true above)
-          + Math.min(40, f.opMarginTTM) * 0.3
-          + valDiscount
-          + (p.factors && p.factors.fundamentals || 5) * 1.5
-          + (p.factors && p.factors.technicalMomentum || 5) * 0.3 // technicals weighted LOW
-        );
-        longTerm.push({
-          ...base, track: 'long',
-          fundamentals: { revGrowth: f.revGrowth, opMarginTTM: f.opMarginTTM, marginExpanding: f.marginExpanding, pe: f.pe, sectorPE: bench, netMargin: f.netMargin, epsGrowth: f.epsGrowth, earningsInDays: f.earningsInDays },
-          recentRun: p._ret, _score: score,
-        });
-      }
+    // Long-term: cleared the strict fundamental gate and not a meme spike.
+    if (passFund && !meme) {
+      const valDiscount = Math.max(0, Math.min(15, (bench - f.pe) / bench * 30));
+      const score = Math.round(
+        25
+        + Math.min(40, f.revGrowth) * 0.5
+        + 15 // operating margin expanding (gated true above)
+        + Math.min(40, f.opMarginTTM) * 0.3
+        + valDiscount
+        + (p.factors && p.factors.fundamentals || 5) * 1.5
+        + (p.factors && p.factors.technicalMomentum || 5) * 0.3 // technicals weighted LOW
+      );
+      longTerm.push({
+        ...base, track: 'long',
+        fundamentals: { revGrowth: f.revGrowth, opMarginTTM: f.opMarginTTM, marginExpanding: f.marginExpanding, pe: f.pe, sectorPE: bench, netMargin: f.netMargin, epsGrowth: f.epsGrowth, earningsInDays: f.earningsInDays },
+        recentRun: p._ret, _score: score,
+      });
+    }
+
+    // Watch: an AI news idea that hasn't cleared a technical OR fundamental gate
+    // yet — surfaced (not dropped) so all picks are visible, badged as unconfirmed.
+    if (!passTech && !(passFund && !meme)) {
+      watch.push({ ...base, track: 'watch', recentRun: p._ret, _score: p.overallRating || 0 });
     }
   }
   shortTerm.sort((a, b) => b._score - a._score);
   longTerm.sort((a, b) => b._score - a._score);
-  return { shortTerm, longTerm };
+  watch.sort((a, b) => b._score - a._score);
+  return { shortTerm, longTerm, watch };
 }
 
 // 30 of the most reliable financial news sources globally
@@ -307,7 +315,7 @@ module.exports = async function handler(req, res) {
 
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 3500,
+    max_tokens: 6000,   // 10 verbose picks (10-factor breakdown + thesis each) — headroom so none get truncated
     tools: [PICK_TOOL],
     tool_choice: { type: 'tool', name: 'submit_picks' },
     messages: [{
@@ -372,12 +380,13 @@ ${newsSummary}`,
   } catch {}
   await enrichPicks(all, spyByDate);
   const sectorPEMap = await fetchSectorPEs(); // live FMP sector P/Es (null → benchmark table)
-  const { shortTerm, longTerm } = classifyPicks(all, sectorPEMap);
+  const { shortTerm, longTerm, watch } = classifyPicks(all, sectorPEMap);
 
   res.setHeader('Cache-Control', 's-maxage=14400');
   return res.json({
     shortTerm,
     longTerm,
+    watch,
     fundamentalsEnabled: !!process.env.FINNHUB_API_KEY,
     sectorPESource: sectorPEMap ? 'fmp-live' : 'benchmark',
     generatedAt: new Date().toISOString(),

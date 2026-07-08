@@ -514,30 +514,34 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const res = await fetch('/api/picks');
       const data = await res.json();
       if (data.error) { showPicksError(data.error); return; }
-      await enrichWithPrices([...(data.shortTerm || []), ...(data.longTerm || [])]);
+      await enrichWithPrices([...(data.shortTerm || []), ...(data.longTerm || []), ...(data.watch || [])]);
       renderPicks(data);
     } catch { showPicksError('Could not load picks. Please try again.'); }
     finally { picksRefreshBtn.disabled = false; }
   }
 
   function renderPicks(data) {
-    const { shortTerm = [], longTerm = [], generatedAt, sourceCount, articleCount, fundamentalsEnabled } = data;
+    const { shortTerm = [], longTerm = [], watch = [], generatedAt, sourceCount, articleCount, fundamentalsEnabled } = data;
     if (generatedAt) picksGenTime.textContent = `Generated ${new Date(generatedAt).toLocaleTimeString()}`;
     if (sourceCount) picksSourceCount.textContent = `· ${articleCount ? articleCount + ' articles · ' : ''}${sourceCount} sources`;
 
     picksContainer.innerHTML = '';
     picksContainer.appendChild(buildPickTrack('short', shortTerm, fundamentalsEnabled));
     picksContainer.appendChild(buildPickTrack('long', longTerm, fundamentalsEnabled));
+    if (watch.length) picksContainer.appendChild(buildPickTrack('watch', watch, fundamentalsEnabled));
   }
 
+  const PICK_TRACK_META = {
+    short: { title: '⚡ Short-Term', sub: 'days–weeks · confirmed by a technical breakout + volume' },
+    long: { title: '🏛 Long-Term', sub: '6–12 months · confirmed by fundamentals (rev growth · expanding margin · valuation)' },
+    watch: { title: '👀 Watchlist', sub: 'AI news ideas not yet confirmed by a technical or fundamental screen — watch, don’t chase' },
+  };
   function buildPickTrack(track, list, fundamentalsEnabled) {
     const short = track === 'short';
     const wrap = document.createElement('div');
     wrap.className = 'pick-track';
-    const title = short ? '⚡ Short-Term' : '🏛 Long-Term';
-    const sub = short ? 'days–weeks · technical breakout + volume'
-                      : '6–12 months · fundamentals-led (rev growth · expanding margin · valuation)';
-    wrap.innerHTML = `<div class="pick-track-head"><span class="ptk-title ${track}">${title}</span><span class="ptk-sub">${sub}</span><span class="ptk-cnt">${list.length}</span></div>`;
+    const meta = PICK_TRACK_META[track] || PICK_TRACK_META.watch;
+    wrap.innerHTML = `<div class="pick-track-head"><span class="ptk-title ${track}">${meta.title}</span><span class="ptk-sub">${meta.sub}</span><span class="ptk-cnt">${list.length}</span></div>`;
 
     if (!list.length) {
       const empty = document.createElement('div');
@@ -588,6 +592,17 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     return `<div class="pc-fund"><div class="pc-fund-h">📊 Fundamentals — 6–12mo thesis</div>${rows.join('')}</div>`;
   }
 
+  // Quality badges shown on every pick so nothing is hidden — which real screens
+  // (if any) the AI idea has cleared.
+  function buildQualityBadges(p) {
+    const q = p.quality || {};
+    const b = [];
+    if (q.tech) b.push(`<span class="pc-qb tech">✓ ${q.tech === 'Breakout' ? 'Breakout' : q.tech === 'Early' ? 'Early trend' : 'Setup'}</span>`);
+    if (q.fund) b.push(`<span class="pc-qb fund">✓ Fundamentals</span>`);
+    if (q.meme) b.push(`<span class="pc-qb meme">⚠ Extended</span>`);
+    if (!q.tech && !q.fund) b.push(`<span class="pc-qb watch">👀 Unconfirmed</span>`);
+    return b.length ? `<div class="pc-qbadges">${b.join('')}</div>` : '';
+  }
   function buildPickCard(p, idx, track) {
     const short = track === 'short';
     const ratingClass = p.overallRating >= 8 ? 'strong-buy' : p.overallRating >= 6 ? 'buy' : 'moderate';
@@ -608,6 +623,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
             <span class="pc-sector">${esc(p.sector)}</span>
             ${p.sourceCoverage ? `<span class="pc-src">📡 ${p.sourceCoverage}</span>` : ''}
           </div>
+          ${buildQualityBadges(p)}
           ${short ? buildOptionsSignal(p.optionsSignal) : ''}
           ${buildPriceRow(p)}
           ${short ? buildTechBadge(p) : buildFundBlock(p)}
