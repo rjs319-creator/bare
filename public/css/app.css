@@ -746,6 +746,27 @@
     .dual-track { font-size: 0.62rem; color: var(--text-dim); margin-top: 6px; border-top: 1px dashed var(--border); padding-top: 6px; }
     .dual-track b { color: var(--text); }
 
+    /* 🎯 Dual Confirmed cards */
+    .al-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+    .al-card { padding: 12px 14px; }
+    .al-top { display: flex; align-items: center; gap: 8px; }
+    .al-tk { font-weight: 800; font-size: 1.02rem; letter-spacing: -0.01em; }
+    .al-co { font-size: 0.72rem; color: var(--text-dim); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .al-conv { font-weight: 900; font-size: 0.82rem; padding: 2px 8px; border-radius: 999px; font-variant-numeric: tabular-nums; cursor: help; }
+    .al-conv.hi { background: var(--green-dim); color: var(--green); }
+    .al-conv.mid { background: rgba(240,168,50,0.16); color: var(--amber); }
+    .al-conv.lo { background: var(--bg); color: var(--text-dim); border: 1px solid var(--border); }
+    .dt-chart-btn { background: none; border: 1px solid var(--border-hi); border-radius: 6px; cursor: pointer; font-size: 0.8rem; padding: 2px 6px; }
+    .dt-chart-btn.open { border-color: var(--cyan); }
+    .al-horizons { display: flex; flex-direction: column; gap: 4px; margin-top: 9px; }
+    .al-h { font-size: 0.72rem; color: var(--text-dim); background: var(--green-dim); border-radius: 6px; padding: 4px 8px; }
+    .al-h b { color: var(--green); }
+    .al-reasons { font-size: 0.68rem; color: var(--text-muted); margin-top: 8px; line-height: 1.4; }
+    .al-levels { display: flex; gap: 12px; margin-top: 9px; font-size: 0.72rem; }
+    .al-levels span { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .al-levels i { font-style: normal; color: var(--text-muted); font-weight: 400; margin-right: 4px; text-transform: uppercase; font-size: 0.58rem; letter-spacing: 0.04em; }
+    .dt-chart-panel { margin-top: 10px; }
+
     /* Long-term second opinions panel */
     .dual-recs { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; }
     .lr-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px; }

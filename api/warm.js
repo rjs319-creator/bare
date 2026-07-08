@@ -181,6 +181,10 @@ module.exports = async function handler(req, res) {
   // must NOT be awaited on warm's critical path.
   const optionsAssessKick = warmOne('/api/tracker?op=optionsassess').catch(() => null);
 
+  // 🎯 Dual Confirmed — scan the (now-warm) screener pool for names that are a buy on
+  // BOTH horizons. Fire-and-forget: it runs intraday reads over the shortlist.
+  const alignedKick = warmOne('/api/tracker?op=aligned').catch(() => null);
+
   // 📡 Market Pulse — pre-build a refined snapshot so users hit the cache instantly:
   // gather (Haiku search, forced) THEN refine (Fable) in its own chained invocation.
   // Fire-and-forget off warm's critical path — each stage is its own 60s budget.
@@ -278,6 +282,7 @@ module.exports = async function handler(req, res) {
   void calibKick; // fire-and-forget like the ticks — recomputes on its own invocation
   void pulseKick; // fire-and-forget: gather→refine chain builds the refined Pulse snapshot
   void optionsAssessKick; // fire-and-forget: Fable options-flow analysis in its own budget
+  void alignedKick; // fire-and-forget: Dual-Confirmed scan over the warm screener pool
 
   const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, intracapture, cern, edgelog, alertsgrade, alertsassess, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, dualreadlog, dualreadtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, aiTicksKicked: 6, calibKicked: true, at: new Date().toISOString() };
 

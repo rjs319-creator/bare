@@ -15,7 +15,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const TAB_GROUPS = {
     start:     ['today', 'start'],
     quickhit:  ['quickhit'],
-    screeners: ['opportunities', 'screener', 'custom', 'coremo', 'daytrade', 'gapgo', 'coil', 'confluence', 'ghost', 'trendrider', 'fade'],
+    screeners: ['opportunities', 'aligned', 'screener', 'custom', 'coremo', 'daytrade', 'gapgo', 'coil', 'confluence', 'ghost', 'trendrider', 'fade'],
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
     predict:   ['pulse', 'readthrough', 'anomaly', 'biotech', 'secondwave', 'crossasset', 'toneshift', 'gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     research:  ['backtest', 'events', 'edge'],
@@ -25,7 +25,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
     today: '🏠 Today', start: '📘 Guide',
-    quickhit: '⚡ Quick Hit', opportunities: '⭐ Opportunities', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
+    quickhit: '⚡ Quick Hit', opportunities: '⭐ Opportunities', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
@@ -38,6 +38,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     start: 'A beginner’s guide to what everything in this app means.',
     quickhit: 'The Top 5 plays across large, small AND micro caps — one fast shortlist with links to where each lives.',
     opportunities: 'The best setups across all the screeners, gathered in one ranked list.',
+    aligned: 'Stocks that are a BUY on both horizons at once — the short-term signal AND the ~1-year trend both point up. The strongest agreement of the dual read.',
     screener: 'Stocks breaking out of chart patterns (classic breakout setups).',
     custom: 'A momentum model that adapts its scoring to the current market regime.',
     coremo: 'Steady, confirmed uptrends with the strongest 12-month momentum.',
@@ -139,6 +140,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'trendrider' && typeof ensureTrendRider === 'function') ensureTrendRider();
     if (sub === 'daytrade' && typeof ensureDaytrade === 'function') ensureDaytrade();
     if (sub === 'gapgo' && typeof ensureGapGo === 'function') ensureGapGo();
+    if (sub === 'aligned' && typeof ensureAligned === 'function') ensureAligned();
     if (sub === 'coil' && typeof ensureCoil === 'function') ensureCoil();
     if (sub === 'confluence' && typeof ensureConfluence === 'function') ensureConfluence();
     if (sub === 'xalerts' && typeof ensureXalerts === 'function') ensureXalerts();
@@ -5434,6 +5436,61 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const color = c[1] === 'fade' ? '#ef4444' : c[1] === 'cont' ? '#22c55e' : 'var(--text-dim)';
     return ` <span class="gg-cause" style="color:${color};border:1px solid ${color}44;border-radius:4px;padding:1px 5px;font-size:0.6rem;font-weight:800">${c[0]}</span>`;
   }
+  // ── 🎯 Dual Confirmed — buy on BOTH horizons (trend-continuation) ────────────
+  let alignedLoaded = false;
+  function ensureAligned() { if (!alignedLoaded) { alignedLoaded = true; runAlignedUI(); } }
+  async function runAlignedUI() {
+    const el = document.getElementById('aligned-container');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning for names that are a buy on both horizons…</p></div>`;
+    try {
+      const t = await fetch('/api/tracker?op=aligned').then(r => r.json());
+      renderAligned(t);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Dual Confirmed.</p></div>`; }
+  }
+  function renderAligned(t) {
+    const el = document.getElementById('aligned-container');
+    if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Dual Confirmed unavailable.</p></div>`; return; }
+    const gt = document.getElementById('aligned-gen-time');
+    if (gt) gt.textContent = t.generatedAt ? new Date(t.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    const picks = t.picks || [];
+    if (!picks.length) {
+      el.innerHTML = `<div class="dt-note">No names are aligned on both horizons right now — that's normal in a mixed or choppy tape, where short-term and long-term signals disagree. This list fills when strong long-term trends also flash a fresh short-term buy. <span class="dt-dim">(${t.scanned || 0} scanned)</span></div>`;
+      return;
+    }
+    const convClass = c => c >= 80 ? 'hi' : c >= 60 ? 'mid' : 'lo';
+    const lvHtml = lv => (lv && (lv.entry || lv.stop || lv.target)) ? `
+      <div class="al-levels">
+        ${lv.entry != null ? `<span><i>Entry</i>$${lv.entry}</span>` : ''}
+        ${lv.stop != null ? `<span><i>Stop</i>$${lv.stop}</span>` : ''}
+        ${(lv.target ?? lv.resistance) != null ? `<span><i>Target</i>$${lv.target ?? lv.resistance}</span>` : ''}
+      </div>` : '';
+    const card = p => `
+      <div class="dt-card al-card" data-ticker="${esc(p.ticker)}">
+        <div class="al-top">
+          <span class="al-tk">${esc(p.ticker)}</span>
+          <span class="al-co">${esc(p.company || '')}</span>
+          <span class="al-conv ${convClass(p.conviction)}" title="Conviction — 50% long-term trend strength + 50% short-term signal">${p.conviction}</span>
+          <button class="dt-chart-btn" data-chart-toggle title="Show live chart &amp; dual read">📈</button>
+        </div>
+        <div class="al-horizons">
+          <span class="al-h up">⏱ Short-term <b>Bullish</b> · ${esc(p.stAction.replace('_', ' '))} ${p.stConf}/10</span>
+          <span class="al-h up">📈 Long-term <b>Bullish</b> · score +${p.ltScore}${p.group ? ` · ${esc(p.group)}` : ''}</span>
+        </div>
+        <div class="al-reasons">${[...(p.stReasons || []), ...(p.ltReasons || [])].slice(0, 3).map(esc).join(' · ')}</div>
+        ${lvHtml(p.levels)}
+        <div class="dt-chart-panel" data-chart-panel style="display:none"></div>
+      </div>`;
+    el.innerHTML = `<div class="al-grid">${picks.map(card).join('')}</div>`;
+    el.querySelectorAll('.dt-card[data-ticker]').forEach(cardEl => {
+      const tk = cardEl.dataset.ticker;
+      const btn = cardEl.querySelector('[data-chart-toggle]');
+      if (btn) btn.addEventListener('click', () => toggleChart(cardEl, tk));
+    });
+    attachTimingLights(el, picks.map(p => ({ ticker: p.ticker, stop: p.levels && p.levels.stop, target: p.levels && (p.levels.target ?? p.levels.resistance), trigger: p.levels && p.levels.entry })), 'aligned');
+  }
+  document.getElementById('aligned-refresh-btn')?.addEventListener('click', runAlignedUI);
+
   async function runGapGoUI() {
     const el = document.getElementById('gg-container');
     if (!el) return;

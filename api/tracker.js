@@ -49,6 +49,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'dualreadtune') return runDualReadTune(req, res);
   if (req.query.op === 'dualreadbackfill') return runDualReadBackfill(req, res);
   if (req.query.op === 'ltrecs') return runLtRecs(req, res);
+  if (req.query.op === 'aligned') return require('../lib/aligned-routes').runAligned(req, res);
   if (req.query.op === 'track') return runTrack(req, res);
   if (req.query.op === 'apexlog') return runApexLog(req, res);
   if (req.query.op === 'ghostlog') return runGhostLog(req, res);
