@@ -16,7 +16,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     start:     ['today', 'start'],
     quickhit:  ['quickhit'],
     screeners: ['opportunities', 'aligned', 'screener', 'custom', 'coremo', 'daytrade', 'gapgo', 'coil', 'confluence', 'ghost', 'trendrider', 'fade'],
-    markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'picks'],
+    markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'putsell', 'picks'],
     predict:   ['pulse', 'readthrough', 'anomaly', 'biotech', 'secondwave', 'crossasset', 'toneshift', 'gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     research:  ['backtest', 'events', 'edge'],
     track:     ['leaderboard', 'scoreboard', 'coreperf', 'xalerts'],
@@ -26,7 +26,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const SUB_LABEL = {
     today: '🏠 Today', start: '📘 Guide',
     quickhit: '⚡ Quick Hit', opportunities: '⭐ Opportunities', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
-    rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', picks: '⭐ Picks',
+    rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
     leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
@@ -39,6 +39,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     quickhit: 'The Top 5 plays across large, small AND micro caps — one fast shortlist with links to where each lives.',
     opportunities: 'The best setups across all the screeners, gathered in one ranked list.',
     aligned: 'Stocks that are a BUY on both horizons at once — the short-term signal AND the ~1-year trend both point up. The strongest agreement of the dual read.',
+    putsell: 'Options Moves — stocks set up for SELLING cash-secured puts: quality uptrends that pulled back to support, with a suggested strike below support and premium context. You get paid to wait, and buy the stock at a discount if assigned.',
     screener: 'Stocks breaking out of chart patterns (classic breakout setups).',
     custom: 'A momentum model that adapts its scoring to the current market regime.',
     coremo: 'Steady, confirmed uptrends with the strongest 12-month momentum.',
@@ -141,6 +142,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'daytrade' && typeof ensureDaytrade === 'function') ensureDaytrade();
     if (sub === 'gapgo' && typeof ensureGapGo === 'function') ensureGapGo();
     if (sub === 'aligned' && typeof ensureAligned === 'function') ensureAligned();
+    if (sub === 'putsell' && typeof ensurePutSell === 'function') ensurePutSell();
     if (sub === 'coil' && typeof ensureCoil === 'function') ensureCoil();
     if (sub === 'confluence' && typeof ensureConfluence === 'function') ensureConfluence();
     if (sub === 'xalerts' && typeof ensureXalerts === 'function') ensureXalerts();
@@ -5538,6 +5540,57 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     attachTimingLights(el, picks.map(p => ({ ticker: p.ticker, stop: p.levels && p.levels.stop, target: p.levels && (p.levels.target ?? p.levels.resistance), trigger: p.levels && p.levels.entry })), 'aligned');
   }
   document.getElementById('aligned-refresh-btn')?.addEventListener('click', runAlignedUI);
+
+  // ── 💰 Options Moves — put-selling setups ───────────────────────────────────
+  let putsellLoaded = false;
+  function ensurePutSell() { if (!putsellLoaded) { putsellLoaded = true; runPutSellUI(); } }
+  async function runPutSellUI() {
+    const el = document.getElementById('putsell-container');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning for put-selling setups…</p></div>`;
+    try {
+      const t = await fetch('/api/tracker?op=putsell').then(r => r.json());
+      renderPutSell(t);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Options Moves.</p></div>`; }
+  }
+  const PS_TIER = { PRIME: ['🟢 Prime', 'hi'], SOLID: ['🔵 Solid', 'mid'], WATCH: ['⚪ Watch', 'lo'] };
+  const PS_IV = { high: 'iv-hi', moderate: 'iv-mid', low: 'iv-lo' };
+  function renderPutSell(t) {
+    const el = document.getElementById('putsell-container');
+    if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Options Moves unavailable.</p></div>`; return; }
+    const gt = document.getElementById('putsell-gen-time');
+    if (gt) gt.textContent = t.generatedAt ? new Date(t.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    const picks = t.picks || [];
+    if (!picks.length) {
+      el.innerHTML = `<div class="dt-note">No clean put-selling setups right now — that's normal when strong stocks are extended (thin premium) or the tape is weak (better to wait). <span class="dt-dim">(${t.scanned || 0} scanned)</span></div>`;
+      return;
+    }
+    const card = p => {
+      const tier = PS_TIER[p.tier] || PS_TIER.WATCH;
+      const ivChip = p.ivLevel ? `<span class="ps-iv ${PS_IV[p.ivLevel]}">${esc(p.ivNote || '')}${p.atmIV != null ? ` · IV ${(p.atmIV * 100).toFixed(0)}%` : ''}</span>` : '';
+      const earn = p.earningsSoon ? `<span class="ps-earn">📅 Earnings ${p.earningsInDays}d</span>` : '';
+      const cautions = (p.cautions || []).length ? `<div class="ps-caution">${p.cautions.map(c => `⚠ ${esc(c)}`).join('<br>')}</div>` : '';
+      return `
+        <div class="dt-card ps-card" data-ticker="${esc(p.ticker)}">
+          <div class="ps-top">
+            <span class="ps-tk">${esc(p.ticker)}</span>
+            <span class="ps-co">${esc(p.company || '')}</span>
+            <span class="ps-tier ${tier[1]}">${tier[0]}</span>
+          </div>
+          <div class="ps-trade">
+            <div class="ps-trade-main">Sell the <b>$${p.strike}</b> put</div>
+            <div class="ps-trade-sub">${p.bufferPct}% below $${p.price} · ${p.atrCushion} ATR cushion · ${esc(p.supportBasis)} support</div>
+          </div>
+          <div class="ps-chips">${ivChip}${earn}${p.rsi != null ? `<span class="ps-meta">RSI ${p.rsi}</span>` : ''}</div>
+          <div class="ps-reasons">${(p.reasons || []).map(esc).join(' · ')}</div>
+          ${cautions}
+        </div>`;
+    };
+    el.innerHTML = `<div class="dt-dim" style="font-size:0.68rem;margin-bottom:8px">Full-market scan · ${t.scanned || 0} names → ${t.qualified || 0} qualifying setups → top ${picks.length} shown (enriched with live IV &amp; earnings)</div>
+      <div class="ps-grid">${picks.map(card).join('')}</div>
+      <div class="dt-note" style="margin-top:12px">Educational, not advice. Selling a cash-secured put obligates you to <b>buy 100 shares at the strike</b> if assigned — only sell puts on names you'd genuinely want to own at that price, and size to the cash you'd need.</div>`;
+  }
+  document.getElementById('putsell-refresh-btn')?.addEventListener('click', runPutSellUI);
 
   async function runGapGoUI() {
     const el = document.getElementById('gg-container');
