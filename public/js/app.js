@@ -5579,6 +5579,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       el.innerHTML = stratHead + `<div class="dt-note">No clean put-selling setups right now — that's normal when strong stocks are extended (thin premium) or the tape is weak (better to wait). <span class="dt-dim">(${t.scanned || 0} scanned)</span></div>`;
       return;
     }
+    const gradeClass = g => g === 'A+' || g === 'A' ? 'g-a' : g === 'B' ? 'g-b' : g === 'C' ? 'g-c' : 'g-d';
     const card = p => {
       const tier = PS_TIER[p.tier] || PS_TIER.WATCH;
       const ivChip = p.ivLevel ? `<span class="ps-iv ${PS_IV[p.ivLevel]}">${esc(p.ivNote || '')}${p.atmIV != null ? ` · IV ${(p.atmIV * 100).toFixed(0)}%` : ''}</span>` : '';
@@ -5587,13 +5588,16 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       return `
         <div class="dt-card ps-card" data-ticker="${esc(p.ticker)}">
           <div class="ps-top">
+            <span class="ps-rank">#${p.rank}</span>
             <span class="ps-tk">${esc(p.ticker)}</span>
+            <span class="ps-now">$${p.price}</span>
             <span class="ps-co">${esc(p.company || '')}</span>
+            <span class="ps-grade ${gradeClass(p.grade)}" title="Grade — setup quality × premium (IV) · rank score ${p.rankScore}/100">${esc(p.grade)}</span>
             <span class="ps-tier ${tier[1]}">${tier[0]}</span>
           </div>
           <div class="ps-trade">
             <div class="ps-trade-main">Sell the <b>$${p.strike}</b> put</div>
-            <div class="ps-trade-sub">${p.bufferPct}% below $${p.price} · ${p.atrCushion} ATR cushion · ${esc(p.supportBasis)} support</div>
+            <div class="ps-trade-sub">${p.bufferPct}% below the current <b>$${p.price}</b> · ${p.atrCushion} ATR cushion · ${esc(p.supportBasis)} support</div>
           </div>
           <div class="ps-chips">${ivChip}${earn}${p.rsi != null ? `<span class="ps-meta">RSI ${p.rsi}</span>` : ''}</div>
           <div class="ps-reasons">${(p.reasons || []).map(esc).join(' · ')}</div>
