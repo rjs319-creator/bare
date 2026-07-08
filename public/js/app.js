@@ -5522,6 +5522,20 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       return;
     }
     const convClass = c => c >= 80 ? 'hi' : c >= 60 ? 'mid' : 'lo';
+    const priceHtml = p => {
+      const shown = p.regularPrice ?? p.price;
+      if (shown == null) return '';
+      const hasPct = p.changePct != null && !Number.isNaN(parseFloat(p.changePct));
+      const up = hasPct ? parseFloat(p.changePct) >= 0 : true;
+      const chg = hasPct ? `<span class="al-chg ${up ? 'up' : 'down'}">${up ? '▲ +' : '▼ '}${p.changePct}% today</span>` : '';
+      let ah = '';
+      if (p.afterHours) {
+        const ahUp = parseFloat(p.afterHours.changePct) >= 0;
+        const tag = p.afterHours.session === 'pre' ? 'PRE' : 'AH';
+        ah = `<span class="al-ah ${ahUp ? 'up' : 'down'}">${tag} $${p.afterHours.price} ${ahUp ? '+' : ''}${p.afterHours.changePct}%</span>`;
+      }
+      return `<div class="al-price"><span class="al-px">$${shown}</span>${chg}${ah}</div>`;
+    };
     const lvHtml = lv => (lv && (lv.entry || lv.stop || lv.target)) ? `
       <div class="al-levels">
         ${lv.entry != null ? `<span><i>Entry</i>$${lv.entry}</span>` : ''}
@@ -5536,6 +5550,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           <span class="al-conv ${convClass(p.conviction)}" title="Conviction — 50% long-term trend strength + 50% short-term signal">${p.conviction}</span>
           <button class="dt-chart-btn" data-chart-toggle title="Show live chart &amp; dual read">📈</button>
         </div>
+        ${priceHtml(p)}
         <div class="al-horizons">
           <span class="al-h up">⏱ Short-term <b>Bullish</b> · ${esc(p.stAction.replace('_', ' '))} ${p.stConf}/10</span>
           <span class="al-h up">📈 Long-term <b>Bullish</b> · score +${p.ltScore}${p.group ? ` · ${esc(p.group)}` : ''}</span>

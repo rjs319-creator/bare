@@ -771,6 +771,12 @@
     .al-conv.lo { background: var(--bg); color: var(--text-dim); border: 1px solid var(--border); }
     .dt-chart-btn { background: none; border: 1px solid var(--border-hi); border-radius: 6px; cursor: pointer; font-size: 0.8rem; padding: 2px 6px; }
     .dt-chart-btn.open { border-color: var(--cyan); }
+    .al-price { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 7px; font-variant-numeric: tabular-nums; }
+    .al-px { font-weight: 800; font-size: 0.95rem; }
+    .al-chg { font-size: 0.72rem; font-weight: 700; }
+    .al-chg.up, .al-ah.up { color: var(--green); }
+    .al-chg.down, .al-ah.down { color: var(--red); }
+    .al-ah { font-size: 0.64rem; font-weight: 600; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; }
     .al-horizons { display: flex; flex-direction: column; gap: 4px; margin-top: 9px; }
     .al-h { font-size: 0.72rem; color: var(--text-dim); background: var(--green-dim); border-radius: 6px; padding: 4px 8px; }
     .al-h b { color: var(--green); }
