@@ -1280,11 +1280,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const screenerContainer      = document.getElementById('screener-container');
   const screenerSmallContainer = document.getElementById('screener-small-container');
   const screenerMicroContainer = document.getElementById('screener-micro-container');
+  const screenerExpandedContainer = document.getElementById('screener-expanded-container');
   const screenerRefreshBtn     = document.getElementById('screener-refresh-btn');
   const screenerGenTime        = document.getElementById('screener-gen-time');
   const screenerMeta           = document.getElementById('screener-meta');
   const screenerSmallMeta      = document.getElementById('screener-small-meta');
   const screenerMicroMeta      = document.getElementById('screener-micro-meta');
+  const screenerExpandedMeta   = document.getElementById('screener-expanded-meta');
 
   const SCR_CRITERIA = [
     ['accumulation', 'Accum'],
@@ -1352,9 +1354,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   let SCR_PRESETS = loadPresets();
   let scrEditTier = 'large';
 
-  const scrRaw   = { large: null, small: null, micro: null }; // buffered results from API
-  const scrCaps  = { large: 20, small: 10, micro: 10 };
-  const scrConts = { large: screenerContainer, small: screenerSmallContainer, micro: screenerMicroContainer };
+  const scrRaw   = { large: null, small: null, micro: null, expanded: null }; // buffered results from API
+  const scrCaps  = { large: 20, small: 10, micro: 10, expanded: 10 };
+  const scrConts = { large: screenerContainer, small: screenerSmallContainer, micro: screenerMicroContainer, expanded: screenerExpandedContainer };
 
   const scrComposite = (pct, w) => {
     const sum = Object.values(w).reduce((a, b) => a + b, 0) || 1;
@@ -1985,6 +1987,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     fetchScreenerScope('large', screenerContainer, screenerMeta, true);
     fetchScreenerScope('small', screenerSmallContainer, screenerSmallMeta, false);
     fetchScreenerScope('micro', screenerMicroContainer, screenerMicroMeta, false);
+    fetchScreenerScope('expanded', screenerExpandedContainer, screenerExpandedMeta, false);
   }
 
   async function fetchScreenerScope(scope, container, metaEl, isMain) {
@@ -2747,7 +2750,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     btn.disabled = true;
     try {
       // Large is always fetched — it carries the market-regime read.
-      const fetchScopes = scopeSel === 'all' ? ['large', 'small', 'micro']
+      // 'all' now includes the free full-market 'expanded' scope.
+      const fetchScopes = scopeSel === 'all' ? ['large', 'small', 'micro', 'expanded']
         : scopeSel === 'large' ? ['large'] : ['large', scopeSel];
       const datas = await Promise.all(fetchScopes.map(fetchApexScope));
       const byScope = {}; fetchScopes.forEach((s, i) => byScope[s] = datas[i]);
@@ -2760,7 +2764,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       apexState = apexAdvanceState(apexRawRegime(large.regime));
       const regime = apexState.active, preset = activeWeightsFor(regime);
 
-      const wanted = scopeSel === 'all' ? ['large', 'small', 'micro'] : [scopeSel];
+      const wanted = scopeSel === 'all' ? ['large', 'small', 'micro', 'expanded'] : [scopeSel];
       let cands = [];
       wanted.forEach(s => { const d = byScope[s]; if (d && Array.isArray(d.results)) cands.push(...d.results.map(c => ({ ...c, _scope: s }))); });
       cands = apexRegimeFilter(cands, regime);
@@ -4320,7 +4324,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     btn.disabled = true;
     try {
       // Large is always fetched — it carries the regime read used for the strip.
-      const fetchScopes = scopeSel === 'all' ? ['large', 'small', 'micro']
+      // 'all' now includes the free full-market 'expanded' scope.
+      const fetchScopes = scopeSel === 'all' ? ['large', 'small', 'micro', 'expanded']
         : scopeSel === 'large' ? ['large'] : ['large', scopeSel];
       const datas = await Promise.all(fetchScopes.map(fetchGhostScope));
       const byScope = {}; fetchScopes.forEach((s, i) => byScope[s] = datas[i]);
@@ -4330,7 +4335,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         return;
       }
 
-      const wanted = scopeSel === 'all' ? ['large', 'small', 'micro'] : [scopeSel];
+      const wanted = scopeSel === 'all' ? ['large', 'small', 'micro', 'expanded'] : [scopeSel];
       let cands = [];
       // Prefer ghostTop — the FULL scanned cross-section's accumulation names (not
       // just the breakout candidates). Falls back to results for older responses.
