@@ -49,6 +49,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'dualreadtune') return runDualReadTune(req, res);
   if (req.query.op === 'dualreadbackfill') return runDualReadBackfill(req, res);
   if (req.query.op === 'ltrecs') return runLtRecs(req, res);
+  if (req.query.op === 'putsell') return require('../lib/putsell-routes').runPutSell(req, res);
   if (req.query.op === 'aligned') return require('../lib/aligned-routes').runAligned(req, res);
   if (req.query.op === 'alignedlog') return require('../lib/aligned-routes').runAlignedLog(req, res);
   if (req.query.op === 'alignedbook') return require('../lib/aligned-routes').runAlignedBook(req, res);

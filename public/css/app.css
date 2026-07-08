@@ -780,6 +780,31 @@
     .al-levels i { font-style: normal; color: var(--text-muted); font-weight: 400; margin-right: 4px; text-transform: uppercase; font-size: 0.58rem; letter-spacing: 0.04em; }
     .dt-chart-panel { margin-top: 10px; }
 
+    /* 💰 Options Moves — put-selling setups */
+    .ps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+    .ps-card { padding: 12px 14px; }
+    .ps-top { display: flex; align-items: center; gap: 8px; }
+    .ps-tk { font-weight: 800; font-size: 1.02rem; cursor: pointer; }
+    .ps-tk:hover { text-decoration: underline; text-underline-offset: 2px; }
+    .ps-co { font-size: 0.72rem; color: var(--text-dim); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ps-tier { font-size: 0.6rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+    .ps-tier.hi { background: var(--green-dim); color: var(--green); }
+    .ps-tier.mid { background: rgba(34,211,238,0.14); color: var(--cyan); }
+    .ps-tier.lo { background: var(--bg); color: var(--text-dim); border: 1px solid var(--border); }
+    .ps-trade { margin-top: 10px; background: var(--green-dim); border: 1px solid #16a34a44; border-radius: 8px; padding: 9px 11px; }
+    .ps-trade-main { font-size: 0.92rem; font-weight: 700; }
+    .ps-trade-main b { color: var(--green); }
+    .ps-trade-sub { font-size: 0.7rem; color: var(--text-dim); margin-top: 2px; font-variant-numeric: tabular-nums; }
+    .ps-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+    .ps-iv, .ps-earn, .ps-meta { font-size: 0.62rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+    .ps-iv.iv-hi { background: rgba(16,217,138,0.16); color: var(--green); }
+    .ps-iv.iv-mid { background: rgba(240,168,50,0.16); color: var(--amber); }
+    .ps-iv.iv-lo { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+    .ps-earn { background: rgba(240,168,50,0.16); color: var(--amber); }
+    .ps-meta { background: var(--bg); color: var(--text-dim); border: 1px solid var(--border); }
+    .ps-reasons { font-size: 0.68rem; color: var(--text-muted); margin-top: 9px; line-height: 1.4; }
+    .ps-caution { font-size: 0.66rem; color: var(--amber); margin-top: 8px; line-height: 1.4; }
+
     /* Long-term second opinions panel */
     .dual-recs { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; }
     .lr-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px; }
