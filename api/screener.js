@@ -181,11 +181,19 @@ module.exports = async function handler(req, res) {
   const isMicro = scope === 'micro';
   const isBiotech = scope === 'biotech';
   // Biotech is a cross-cap but high-volatility set → use the looser small-scope thresholds.
-  const isSmallScope = scope === 'small' || isMicro || isBiotech;
+  const isExpanded = scope === 'expanded';
+  const isSmallScope = scope === 'small' || isMicro || isBiotech || isExpanded;
+
+  // The 'expanded' scope (free full-market universe, Phase 2) has no hard-coded
+  // list — its tickers ARE the keys of its pre-built candle cache (read-only here;
+  // op=universescan/compile own that doc).
+  let expandedDoc = null;
+  if (isExpanded) expandedDoc = await loadCandleCache('expanded').catch(() => null);
 
   // Build the universe for this scope (dedupe; tag cap tier)
   let list, tier, cap;
-  if (isMicro)            { list = MICRO_CAPS; tier = 'Micro'; cap = 10; }
+  if (isExpanded)         { list = expandedDoc && expandedDoc.data ? Object.keys(expandedDoc.data) : []; tier = 'Expanded'; cap = 10; }
+  else if (isMicro)       { list = MICRO_CAPS; tier = 'Micro'; cap = 10; }
   else if (scope === 'small') { list = SMALL_CAPS; tier = 'Small'; cap = 10; }
   else if (isBiotech)     { list = require('../lib/universe').BIOTECH; tier = 'Biotech'; cap = 12; }
   else                    { list = LARGE; tier = 'Large'; cap = 20; }
@@ -203,7 +211,7 @@ module.exports = async function handler(req, res) {
   // Looser, volatility-appropriate thresholds for smaller, choppier names
   const screenOpts = isMicro
     ? { gate, baseMax: 0.60, setupBelow: 0.18, earlyAbove: 0.15, moveMax: 0.70, setupHighGate: 0.55, setupMaGate: 0.88 }
-    : scope === 'small'
+    : (scope === 'small' || isExpanded)
     ? { gate, baseMax: 0.45, setupBelow: 0.10, earlyAbove: 0.12, moveMax: 0.60, setupHighGate: 0.35, setupMaGate: 0.93 }
     : { gate };
 
@@ -230,7 +238,7 @@ module.exports = async function handler(req, res) {
     // Kick off the macro (VIX + credit) read immediately so it overlaps the scan
     // instead of adding latency at the end.
     const macroPromise = fetchMacro().catch(() => null);
-    const cacheDoc = await loadCandleCache(scope);
+    const cacheDoc = isExpanded ? expandedDoc : await loadCandleCache(scope);
     mark.cacheLoad = Date.now() - reqT0;
     const { use: useCache } = cacheState(cacheDoc, isWarm);
     const freshFetched = new Map();   // tickers we hit Yahoo for this request
@@ -261,7 +269,7 @@ module.exports = async function handler(req, res) {
     // Persist the (re)built candle cache on warm cron requests so every later
     // request — and the other cron lookback variants — reads it instead of
     // re-scanning Yahoo. Only the full unfiltered universe writes.
-    if (isWarm && isFullUniverse && freshFetched.size) {
+    if (isWarm && isFullUniverse && freshFetched.size && !isExpanded) {   // never overwrite the compiled expanded cache
       const fullMap = new Map();
       for (const { t } of universe) {
         const d = freshFetched.get(t) || (useCache ? cacheGet(cacheDoc, t) : null);
