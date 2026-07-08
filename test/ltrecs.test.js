@@ -62,6 +62,26 @@ test('expertRec: no coverage → null', () => {
   assert.equal(expertRec(null).rec, null);
 });
 
+test('expertRec: recent upgrades → momentum improving', () => {
+  const r = expertRec({ strongBuy: 12, buy: 8, hold: 3, sell: 1, strongSell: 0, prev: { strongBuy: 4, buy: 8, hold: 8, sell: 3, strongSell: 1 } });
+  assert.equal(r.momentum, 'improving');
+  assert.match(r.momentumLabel, /upgrading/);
+});
+
+test('expertRec: recent downgrades → momentum deteriorating', () => {
+  const r = expertRec({ strongBuy: 2, buy: 5, hold: 8, sell: 6, strongSell: 3, prev: { strongBuy: 10, buy: 8, hold: 3, sell: 1, strongSell: 0 } });
+  assert.equal(r.momentum, 'deteriorating');
+});
+
+test('expertRec: unchanged mix → momentum stable', () => {
+  const c = { strongBuy: 8, buy: 6, hold: 4, sell: 1, strongSell: 0 };
+  assert.equal(expertRec({ ...c, prev: { ...c } }).momentum, 'stable');
+});
+
+test('expertRec: no prior month → momentum null (no false signal)', () => {
+  assert.equal(expertRec({ strongBuy: 8, buy: 6, hold: 4, sell: 1, strongSell: 0 }).momentum, null);
+});
+
 test('consensusOf: tallies and leans, ignoring nulls', () => {
   const c = consensusOf(['Buy', 'Buy', 'Buy', 'Hold', null, 'Sell']);
   assert.equal(c.lean, 'Buy');

@@ -6639,9 +6639,15 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // Long-term "second opinions" — the custom model plus four independent lenses.
   const REC_TONE = { Buy: 'pos', Hold: 'mix', Sell: 'neg' };
   const LT_TREND_TO_REC = { bullish: 'Buy', bearish: 'Sell', neutral: 'Hold' };
+  const MOM_MARK = {
+    improving: '<span class="lr-mom up" title="Analysts upgrading recently">▲</span>',
+    deteriorating: '<span class="lr-mom down" title="Analysts downgrading recently">▼</span>',
+    stable: '<span class="lr-mom flat" title="Ratings steady this month">→</span>',
+  };
   function recRow(label, r) {
     if (!r || !r.rec) return `<div class="lr-row"><span class="lr-name">${esc(label)}</span><span class="lr-chip na">n/a</span><span class="lr-detail">${esc((r && r.detail) || 'No data')}</span></div>`;
-    return `<div class="lr-row"><span class="lr-name">${esc(label)}</span><span class="lr-chip ${REC_TONE[r.rec] || 'mix'}">${esc(r.rec)}</span><span class="lr-detail">${esc(r.detail || '')}</span></div>`;
+    const mom = r.momentum ? MOM_MARK[r.momentum] || '' : '';
+    return `<div class="lr-row"><span class="lr-name">${esc(label)}</span><span class="lr-chip ${REC_TONE[r.rec] || 'mix'}">${esc(r.rec)}</span><span class="lr-detail">${mom}${esc(r.detail || '')}</span></div>`;
   }
   async function fetchLtRecs(root, data) {
     const host = root.querySelector('[data-ltrecs]');
