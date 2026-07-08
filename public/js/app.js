@@ -5731,15 +5731,28 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // Live current price + how it's trading today (cards ship with the EOD scan value).
     startGapGoPrices([...new Set(ggPicks.map(p => p.ticker))]);
   }
+  // /api/price caps at 12 tickers/call — chunk so EVERY card gets a live quote,
+  // not just the first 12 (these lists routinely run longer).
+  async function fetchLivePrices(tickers) {
+    const data = {};
+    for (let i = 0; i < tickers.length; i += 12) {
+      try {
+        const res = await fetch('/api/price?tickers=' + encodeURIComponent(tickers.slice(i, i + 12).join(',')));
+        if (!res.ok) continue;
+        const d = await res.json();
+        if (d && !d.error) Object.assign(data, d);
+      } catch { /* skip this chunk, keep the rest */ }
+    }
+    return data;
+  }
   let ggPriceTimer = null;
   function startGapGoPrices(tickers) {
     if (ggPriceTimer) { clearInterval(ggPriceTimer); ggPriceTimer = null; }
     if (!tickers.length) return;
     const upd = async () => {
       try {
-        const res = await fetch('/api/price?tickers=' + encodeURIComponent(tickers.join(',')));
-        if (!res.ok) return;
-        const data = await res.json();
+        const data = await fetchLivePrices(tickers);
+        if (!Object.keys(data).length) return;
         document.querySelectorAll('#gapgo .dt-card[data-ticker]').forEach(cardEl => {
           const q = data[cardEl.dataset.ticker]; if (!q) return;
           const shown = q.afterHours ? q.afterHours.price : q.regularPrice;
@@ -5846,9 +5859,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!tickers.length) return;
     const upd = async () => {
       try {
-        const res = await fetch('/api/price?tickers=' + encodeURIComponent(tickers.join(',')));
-        if (!res.ok) return;
-        const data = await res.json();
+        const data = await fetchLivePrices(tickers);
+        if (!Object.keys(data).length) return;
         document.querySelectorAll('#coil .dt-card[data-ticker]').forEach(cardEl => {
           const q = data[cardEl.dataset.ticker]; if (!q) return;
           const shown = q.afterHours ? q.afterHours.price : q.regularPrice;
@@ -5954,9 +5966,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!tickers.length) return;
     const upd = async () => {
       try {
-        const res = await fetch('/api/price?tickers=' + encodeURIComponent(tickers.join(',')));
-        if (!res.ok) return;
-        const data = await res.json();
+        const data = await fetchLivePrices(tickers);
+        if (!Object.keys(data).length) return;
         document.querySelectorAll('#confluence .dt-card[data-ticker]').forEach(cardEl => {
           const q = data[cardEl.dataset.ticker]; if (!q) return;
           const shown = q.afterHours ? q.afterHours.price : q.regularPrice;
