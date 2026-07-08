@@ -2670,14 +2670,17 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (regime === 'RISK_OFF' && (tier === 'apex' || tier === 'loaded')) tier = 'watch';
     return tier;
   }
-  // Risk-Off threshold tightening: stronger volume confirmation + 2× liquidity.
+  // Risk-Off threshold tightening: raise the liquidity floor to 2× the base $2M
+  // so only genuinely tradeable names survive. The old volSurge≥2.0 gate was
+  // REMOVED — volume-surge is a confirmed-dead factor here (this app's own
+  // research found rank-IC ≈ −0.004), and in a calm low-vol tape it stripped
+  // EVERY candidate (max volSurge ~1.5), silently emptying the tab.
+  const APEX_RISKOFF_MIN_DOLLARVOL = 4000000;
   function apexRegimeFilter(list, regime) {
     if (regime !== 'RISK_OFF') return list;
     return list.filter(c => {
-      const vol = c.metrics && c.metrics.volSurge;
-      if (vol != null && vol < 2.0) return false;
       const dv = c.factors && c.factors.dollarVol;
-      if (dv != null && dv < 4000000) return false;
+      if (dv != null && dv < APEX_RISKOFF_MIN_DOLLARVOL) return false;
       return true;
     });
   }
@@ -2797,9 +2800,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
     if (!show.length) {
       const why = regime === 'RISK_OFF'
-        ? ' — the breakout edge inverts in risk-off, so no new Apex/Loaded longs are surfaced (tiers are capped at Watch) and volume/liquidity gates tighten, by design'
+        ? ' — the breakout edge inverts in risk-off, so no new Apex/Loaded longs are surfaced (tiers are capped at Watch) and the liquidity floor tightens, by design'
         : '';
-      container.innerHTML = `<div class="mom-status"><p>No names cleared the Apex model in the <b>${APEX_RG_LABEL[regime]}</b> regime${why}. Try a broader scope or a looser tier filter.</p></div>`;
+      // Don't strand the user on a stale latched regime: if the live market has
+      // already flipped, say so and point at the refresh that advances hysteresis.
+      const flipping = raw !== regime
+        ? ` The market is now reading <b>${APEX_RG_LABEL[raw]}</b> — the regime is confirming (${apexState.count}/3 refreshes); hit ↻ Refresh a couple more times and picks return.`
+        : '';
+      container.innerHTML = `<div class="mom-status"><p>No names cleared the Apex model in the <b>${APEX_RG_LABEL[regime]}</b> regime${why}.${flipping} Try a broader scope or a looser tier filter.</p></div>`;
       return;
     }
     const groups = [
