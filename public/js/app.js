@@ -4332,7 +4332,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
       const wanted = scopeSel === 'all' ? ['large', 'small', 'micro'] : [scopeSel];
       let cands = [];
-      wanted.forEach(s => { const d = byScope[s]; if (d && Array.isArray(d.results)) cands.push(...d.results.filter(c => c.ghost).map(c => ({ ...c, _scope: s }))); });
+      // Prefer ghostTop — the FULL scanned cross-section's accumulation names (not
+      // just the breakout candidates). Falls back to results for older responses.
+      wanted.forEach(s => {
+        const d = byScope[s]; if (!d) return;
+        const src = Array.isArray(d.ghostTop) && d.ghostTop.length ? d.ghostTop
+          : (Array.isArray(d.results) ? d.results.filter(c => c.ghost) : []);
+        cands.push(...src.map(c => ({ ...c, _scope: s })));
+      });
 
       const seen = {}, deduped = [];
       cands.filter(c => c.ghost && c.ghost.tier !== 'PASS')
@@ -5709,7 +5716,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // ── 🧬 Coil Radar (pre-explosion: quiet, coiled names BEFORE the move) ──────
   // Flags volatility-contracted, volume-dried-up, NOT-already-run-up names and
   // attaches an EMPIRICALLY-CALIBRATED probability of an abnormal upside break.
-  let coilLoaded = false, coilScope = 'small';
+  let coilLoaded = false, coilScope = 'all';
   function ensureCoil() { if (!coilLoaded) { coilLoaded = true; runCoilUI(); } }
   async function runCoilUI() {
     const el = document.getElementById('coil-container');
@@ -5741,8 +5748,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const el = document.getElementById('coil-container');
     if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Coil Radar unavailable.</p></div>`; return; }
     const gen = document.getElementById('coil-gen-time'); if (gen && t.generatedAt) gen.textContent = '· ' + new Date(t.generatedAt).toLocaleString();
-    const scopeBtns = ['small', 'large', 'micro'].map(s =>
-      `<button class="hub-sub-btn ${s === t.scope ? 'active' : ''}" data-coil-scope="${s}" style="margin-right:6px">${s === 'small' ? 'Small-cap' : s === 'large' ? 'Large-cap' : 'Micro-cap'}</button>`).join('');
+    const scopeBtns = ['all', 'small', 'large', 'micro'].map(s =>
+      `<button class="hub-sub-btn ${s === t.scope ? 'active' : ''}" data-coil-scope="${s}" style="margin-right:6px">${s === 'all' ? 'All caps' : s === 'small' ? 'Small-cap' : s === 'large' ? 'Large-cap' : 'Micro-cap'}</button>`).join('');
     const howto = `<div class="tr-howto">
       <div class="tr-howto-head">📖 What this is — in plain English</div>
       <ol>

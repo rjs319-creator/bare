@@ -437,6 +437,22 @@ module.exports = async function handler(req, res) {
     }
     candidates.forEach(c => { c.ghost = ghostByTicker[c.ticker] || null; });
 
+    // Ghost is scored over the FULL scanned cross-section (`valid`), not just the
+    // breakout candidates — so surface the top accumulation names regardless of
+    // whether they're breaking out. This is what makes the 👻 Ghost tab a real
+    // full-universe accumulation scan instead of a re-rank of the breakout pool.
+    const ghostTop = valid
+      .map(c => ({ c, g: ghostByTicker[c.ticker] }))
+      .filter(x => x.g && x.g.tier !== 'PASS')
+      .sort((a, b) => b.g.score - a.g.score)
+      .slice(0, 40)
+      .map(({ c, g }) => ({
+        ticker: c.ticker, company: c.company, sector: c.sector, exchange: c.exchange,
+        price: c.price, changePct: c.changePct, aboveSma200: c.aboveSma200,
+        levels: c.levels || null, ghost: g,
+        insider: c.insider || null, fundamentals: c.fundamentals || null,
+      }));
+
     // ── Conviction score (Edge Book · Sleeve A) — the regime-gated ranker the
     //    walk-forward harness validated (momentum core + BONUS, IN dropped).
     //    Sleeve A = top-quintile conviction across the FULL cross-section (the same
@@ -480,6 +496,7 @@ module.exports = async function handler(req, res) {
       candlesFetched: freshFetched.size,
       timings: { cacheLoadMs: mark.cacheLoad, scanMs: mark.scan, enrichMs: (mark.enrich || 0) - (mark.scan || 0), totalMs: Date.now() - reqT0 },
       results: candidates,
+      ghostTop,
       defaultWeights: DEFAULT_WEIGHTS,
       shortInterestAsOf,
       scannedCount: valid.length,
