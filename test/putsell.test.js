@@ -11,17 +11,18 @@ test('gradePutSell: strong setup + high IV grades A/A+; weak setup grades low', 
   assert.ok(['C', 'D'].includes(lo.grade));
 });
 
-test('gradePutSell: no IV falls back to the setup score', () => {
-  const g = gradePutSell({ score: 0.75 });
-  assert.equal(g.rankScore, 75);
-  assert.ok(['A', 'B'].includes(g.grade));
+test('gradePutSell: missing IV grades neutral (below confirmed-good-premium)', () => {
+  const noIv = gradePutSell({ score: 0.85 });            // 0.85*0.7 + 0.5*0.3
+  const goodIv = gradePutSell({ score: 0.85, atmIV: 0.55 });
+  const lowIv = gradePutSell({ score: 0.85, atmIV: 0.15 });
+  assert.ok(goodIv.rankScore > noIv.rankScore, 'confirmed good premium outranks unknown');
+  assert.ok(noIv.rankScore > lowIv.rankScore, 'unknown outranks confirmed low premium');
 });
 
-test('gradePutSell: implausible IV (2%) is ignored — grades on the setup', () => {
+test('gradePutSell: implausible IV (2%) is ignored — same as missing (neutral)', () => {
   const broken = gradePutSell({ score: 0.75, atmIV: 0.02 });   // 2% IV = broken feed
   const nodata = gradePutSell({ score: 0.75 });
-  assert.equal(broken.rankScore, nodata.rankScore);            // sanity floor → same as no-IV
-  assert.ok(broken.rankScore >= 72);
+  assert.equal(broken.rankScore, nodata.rankScore);            // sanity floor → treated as missing
 });
 
 test('finalizePutSell: drops a junk IV reading and flags it unreliable', () => {
