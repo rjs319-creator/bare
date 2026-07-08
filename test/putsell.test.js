@@ -1,7 +1,21 @@
 // Tests for the put-selling setup logic (lib/putsell.js).
 const test = require('node:test');
 const assert = require('node:assert');
-const { analyzePutSetup, finalizePutSell, niceStrike } = require('../lib/putsell');
+const { analyzePutSetup, finalizePutSell, gradePutSell, niceStrike } = require('../lib/putsell');
+
+test('gradePutSell: strong setup + high IV grades A/A+; weak setup grades low', () => {
+  const hi = gradePutSell({ score: 0.85, atmIV: 0.55 });
+  const lo = gradePutSell({ score: 0.5, atmIV: 0.2 });
+  assert.ok(['A', 'A+'].includes(hi.grade), `got ${hi.grade} (${hi.rankScore})`);
+  assert.ok(hi.rankScore > lo.rankScore);
+  assert.ok(['C', 'D'].includes(lo.grade));
+});
+
+test('gradePutSell: no IV falls back to the setup score', () => {
+  const g = gradePutSell({ score: 0.75 });
+  assert.equal(g.rankScore, 75);
+  assert.ok(['A', 'B'].includes(g.grade));
+});
 
 // Build ~240 daily candles: a long uptrend, then an optional recent pullback.
 function upThenPullback({ start = 50, peak = 100, pullbackPct = 8, n = 240, wobble = 0 }) {

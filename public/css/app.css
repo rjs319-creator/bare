@@ -784,9 +784,16 @@
     .ps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
     .ps-card { padding: 12px 14px; }
     .ps-top { display: flex; align-items: center; gap: 8px; }
+    .ps-rank { font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.72rem; font-weight: 800; color: var(--text-muted); min-width: 22px; }
     .ps-tk { font-weight: 800; font-size: 1.02rem; cursor: pointer; }
     .ps-tk:hover { text-decoration: underline; text-underline-offset: 2px; }
-    .ps-co { font-size: 0.72rem; color: var(--text-dim); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ps-now { font-size: 0.82rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+    .ps-co { font-size: 0.7rem; color: var(--text-dim); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ps-grade { font-size: 0.78rem; font-weight: 900; padding: 1px 8px; border-radius: 6px; cursor: help; }
+    .ps-grade.g-a { background: var(--green-dim); color: var(--green); }
+    .ps-grade.g-b { background: rgba(34,211,238,0.16); color: var(--cyan); }
+    .ps-grade.g-c { background: rgba(240,168,50,0.16); color: var(--amber); }
+    .ps-grade.g-d { background: var(--bg); color: var(--text-dim); border: 1px solid var(--border); }
     .ps-tier { font-size: 0.6rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
     .ps-tier.hi { background: var(--green-dim); color: var(--green); }
     .ps-tier.mid { background: rgba(34,211,238,0.14); color: var(--cyan); }
