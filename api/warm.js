@@ -181,9 +181,11 @@ module.exports = async function handler(req, res) {
   // must NOT be awaited on warm's critical path.
   const optionsAssessKick = warmOne('/api/tracker?op=optionsassess').catch(() => null);
 
-  // 🎯 Dual Confirmed — scan the (now-warm) screener pool for names that are a buy on
-  // BOTH horizons. Fire-and-forget: it runs intraday reads over the shortlist.
-  const alignedKick = warmOne('/api/tracker?op=aligned').catch(() => null);
+  // 🎯 Dual Confirmed — scan for names that are a buy on BOTH horizons, THEN log
+  // today's picks to the ledger (accountability). Fire-and-forget: intraday reads.
+  const alignedKick = warmOne('/api/tracker?op=aligned')
+    .then(() => warmOne('/api/tracker?op=alignedlog'))
+    .catch(() => null);
 
   // 📡 Market Pulse — pre-build a refined snapshot so users hit the cache instantly:
   // gather (Haiku search, forced) THEN refine (Fable) in its own chained invocation.

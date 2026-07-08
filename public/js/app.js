@@ -5444,18 +5444,29 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning for names that are a buy on both horizons…</p></div>`;
     try {
-      const t = await fetch('/api/tracker?op=aligned').then(r => r.json());
-      renderAligned(t);
+      const [t, book] = await Promise.all([
+        fetch('/api/tracker?op=aligned').then(r => r.json()),
+        fetch('/api/tracker?op=alignedbook').then(r => r.json()).catch(() => null),
+      ]);
+      renderAligned(t, book);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Dual Confirmed.</p></div>`; }
   }
-  function renderAligned(t) {
+  function alignedBookPanel(book) {
+    if (!book || !book.ok) return '';
+    const row = (lbl, s) => !s || !s.n ? '' : `<div class="bt-ic-row"><span>${lbl}</span><span><b>${s.avgExc >= 0 ? '+' : ''}${s.avgExc}%</b> avg excess · ${s.beatRate}% beat (Wilson ${s.wilsonLo}%) · n=${s.n}</span></div>`;
+    const rows = row('Overall', book.overall) + row('STRONG (conv ≥80)', book.byTier && book.byTier.STRONG) + row('GOOD (conv 60–79)', book.byTier && book.byTier.GOOD);
+    return `<div class="rot-panel" style="margin-top:14px"><div class="rot-head">📋 Live forward track record <span class="dt-dim">(self-validation)</span></div>
+      <div class="rot-sub">${esc(book.note || '')}</div>
+      ${rows || `<div class="bt-ic-row"><span style="color:var(--text-dim)">${book.resolved || 0} resolved · ${book.open || 0} open — accrues as picks mature (~${book.horizon} sessions after each is logged).</span></div>`}</div>`;
+  }
+  function renderAligned(t, book) {
     const el = document.getElementById('aligned-container');
     if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Dual Confirmed unavailable.</p></div>`; return; }
     const gt = document.getElementById('aligned-gen-time');
     if (gt) gt.textContent = t.generatedAt ? new Date(t.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
     const picks = t.picks || [];
     if (!picks.length) {
-      el.innerHTML = `<div class="dt-note">No names are aligned on both horizons right now — that's normal in a mixed or choppy tape, where short-term and long-term signals disagree. This list fills when strong long-term trends also flash a fresh short-term buy. <span class="dt-dim">(${t.scanned || 0} scanned)</span></div>`;
+      el.innerHTML = `<div class="dt-note">No names are aligned on both horizons right now — that's normal in a mixed or choppy tape, where short-term and long-term signals disagree. This list fills when strong long-term trends also flash a fresh short-term buy. <span class="dt-dim">(${t.scanned || 0} scanned)</span></div>` + alignedBookPanel(book);
       return;
     }
     const convClass = c => c >= 80 ? 'hi' : c >= 60 ? 'mid' : 'lo';
@@ -5481,7 +5492,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         ${lvHtml(p.levels)}
         <div class="dt-chart-panel" data-chart-panel style="display:none"></div>
       </div>`;
-    el.innerHTML = `<div class="al-grid">${picks.map(card).join('')}</div>`;
+    const scanNote = t.stage === 'full-market' ? `<div class="dt-dim" style="font-size:0.68rem;margin-bottom:8px">Full-market scan · ${t.scanned || 0} names → ${t.longTermBullish || 0} long-term bullish → ${t.qualified || 0} confirmed on both horizons</div>` : '';
+    el.innerHTML = scanNote + `<div class="al-grid">${picks.map(card).join('')}</div>` + alignedBookPanel(book);
     el.querySelectorAll('.dt-card[data-ticker]').forEach(cardEl => {
       const tk = cardEl.dataset.ticker;
       const btn = cardEl.querySelector('[data-chart-toggle]');
