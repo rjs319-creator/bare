@@ -190,9 +190,13 @@ module.exports = async function handler(req, res) {
   // 💰 Options Moves — put-selling setups (full-market price-action scan + IV/earnings).
   const putsellKick = warmOne('/api/tracker?op=putsell').catch(() => null);
 
-  // 🌐 Expanded universe — reassemble the free full-market candle cache from its
-  // shards (cheap merge; the heavy scan is run/paced separately).
-  const universeKick = warmOne('/api/tracker?op=universecompile').catch(() => null);
+  // 🌐 Expanded universe — self-completing: scan 2 cursor-paced batches/day (fills
+  // the free full-market candle cache over ~2 weeks, then refreshes continuously),
+  // then reassemble the cache from its shards.
+  const universeKick = warmOne('/api/tracker?op=universescan&cursor=1&limit=150')
+    .then(() => warmOne('/api/tracker?op=universescan&cursor=1&limit=150'))
+    .then(() => warmOne('/api/tracker?op=universecompile'))
+    .catch(() => null);
 
   // 📡 Market Pulse — pre-build a refined snapshot so users hit the cache instantly:
   // gather (Haiku search, forced) THEN refine (Fable) in its own chained invocation.
