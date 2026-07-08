@@ -3123,6 +3123,26 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // The lookup modal delegates the grade banner + chart to the app's shared
   // renderChart (defined later, hoisted), and reuses the palette's jump-and-flash.
   initTickerLookup({ renderChart, findMentions: findTickerMentions, onReveal: revealTicker });
+
+  // Make every stock ticker across the app clickable → opens the same lookup
+  // screen as the search bar. One delegated handler: prefer the exact symbol on a
+  // [data-ticker] card, else parse a known ticker-text element. Interactive
+  // controls (buttons, toggles, chips, links, inputs) are left alone.
+  const TK_TEXT_SELECTORS = '.pc-ticker,.al-tk,.cx-ticker,.scr-ticker,.fade-tk,.opt-ticker,.alert-ticker,.pulse-tk';
+  document.addEventListener('click', e => {
+    if (e.target.closest('button, a, input, select, textarea, label, [data-chart-toggle], [data-reveal], [data-sub], .tkl-chip, #tkl-modal, .cmdk-modal, .hub-sub-btn, .refresh-btn, .scr-hc')) return;
+    if (window.getSelection && String(window.getSelection()).length > 3) return;   // don't hijack text selection
+    let sym = null;
+    const card = e.target.closest('[data-ticker]');
+    if (card && card.dataset.ticker) sym = card.dataset.ticker;
+    if (!sym) { const el = e.target.closest(TK_TEXT_SELECTORS); if (el) sym = el.dataset.ticker || el.textContent; }
+    if (!sym) return;
+    sym = String(sym).toUpperCase().replace(/[^A-Z.]/g, '').slice(0, 8);
+    if (!sym) return;
+    e.preventDefault();
+    openTickerLookup(sym);
+  });
+
   // Header search affordance (desktop): a button that opens the palette.
   (() => {
     const right = document.querySelector('.header-right');

@@ -328,6 +328,10 @@
     .ptk-title.long  { color: var(--cyan); }
     .ptk-title.watch { color: var(--text-dim); }
 
+    /* Every ticker is clickable → opens the search-bar lookup screen */
+    .pc-ticker, .al-tk, .cx-ticker, .scr-ticker, .fade-tk, .opt-ticker, .alert-ticker, .pulse-tk { cursor: pointer; }
+    .pc-ticker:hover, .al-tk:hover, .cx-ticker:hover, .scr-ticker:hover, .fade-tk:hover, .opt-ticker:hover, .alert-ticker:hover, .pulse-tk:hover { text-decoration: underline; text-underline-offset: 2px; }
+
     /* Quality badges shown on every pick card */
     .pc-qbadges { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 2px; }
     .pc-qb { font-size: 0.58rem; font-weight: 800; letter-spacing: 0.02em; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
