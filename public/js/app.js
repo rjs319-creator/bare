@@ -5728,6 +5728,28 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       trigger: p.plan && p.plan.trigger, avgVol: p.avgVol,
     }));
     attachTimingLights(el, ggPicks, 'gapgo');
+    // Live current price + how it's trading today (cards ship with the EOD scan value).
+    startGapGoPrices([...new Set(ggPicks.map(p => p.ticker))]);
+  }
+  let ggPriceTimer = null;
+  function startGapGoPrices(tickers) {
+    if (ggPriceTimer) { clearInterval(ggPriceTimer); ggPriceTimer = null; }
+    if (!tickers.length) return;
+    const upd = async () => {
+      try {
+        const res = await fetch('/api/price?tickers=' + encodeURIComponent(tickers.join(',')));
+        if (!res.ok) return;
+        const data = await res.json();
+        document.querySelectorAll('#gapgo .dt-card[data-ticker]').forEach(cardEl => {
+          const q = data[cardEl.dataset.ticker]; if (!q) return;
+          const shown = q.afterHours ? q.afterHours.price : q.regularPrice;
+          const pe = cardEl.querySelector('[data-dt-price]'), ce = cardEl.querySelector('[data-dt-change]');
+          if (pe && shown != null && pe.textContent !== '$' + shown) { pe.textContent = '$' + shown; pe.classList.remove('price-flash'); void pe.offsetWidth; pe.classList.add('price-flash'); }
+          if (ce) { const pct = q.afterHours ? q.afterHours.changePct : q.changePct; const up = parseFloat(pct) >= 0; ce.textContent = `${q.afterHours ? (q.afterHours.session === 'pre' ? 'PRE ' : 'AH ') : ''}${up ? '▲ +' : '▼ '}${pct}%`; ce.style.color = up ? 'var(--green)' : 'var(--red)'; }
+        });
+      } catch {}
+    };
+    upd(); ggPriceTimer = setInterval(upd, 30 * 1000);
   }
   document.getElementById('gg-refresh-btn')?.addEventListener('click', runGapGoUI);
   (() => {
