@@ -326,6 +326,15 @@
     .ptk-title { font-size: 1rem; font-weight: 800; }
     .ptk-title.short { color: #ff9f1c; }
     .ptk-title.long  { color: var(--cyan); }
+    .ptk-title.watch { color: var(--text-dim); }
+
+    /* Quality badges shown on every pick card */
+    .pc-qbadges { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 2px; }
+    .pc-qb { font-size: 0.58rem; font-weight: 800; letter-spacing: 0.02em; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+    .pc-qb.tech { background: rgba(16,217,138,0.14); color: var(--green); }
+    .pc-qb.fund { background: rgba(34,211,238,0.14); color: var(--cyan); }
+    .pc-qb.meme { background: rgba(240,168,50,0.16); color: var(--amber); }
+    .pc-qb.watch { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
     .ptk-sub { font-size: 0.72rem; color: var(--text-dim); flex: 1; min-width: 0; }
     .ptk-cnt { font-size: 0.72rem; font-weight: 800; color: var(--text-dim); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 1px 9px; }
     /* short-term technical badge */
