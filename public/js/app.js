@@ -5795,7 +5795,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           <span style="font-size:1.4em;font-weight:800;color:${coilBandColor(r.band)}">${r.explodeProbPct}%</span>
           <span class="dt-dim">chance to break out (~${t.horizonDays}d) · ${r.lift}× base · <b style="color:${coilBandColor(r.band)}">${esc((r.band || '').toUpperCase())} coil</b> (D${r.decile || ''}/10)</span>
         </div>
-        <div class="dt-card-plan">📈 <b>Breakout plan</b> <span class="dt-dim">(buy the break, not the quiet)</span> — now <b>$${r.price}</b> · enter above <b>$${r.entry}</b> &nbsp;·&nbsp; 🛑 stop <b>$${r.stop}</b> <span class="dt-dim">(−${r.riskPct}%)</span> &nbsp;·&nbsp; 🎯 target <b>$${r.target}</b> <span class="dt-dim">(+${r.rewardPct}%, R:R 1:${r.rr})</span></div>
+        <div class="dt-card-plan">📈 <b>Breakout plan</b> <span class="dt-dim">(buy the break, not the quiet)</span> — now <b data-dt-price>$${r.price}</b> <span data-dt-change class="dt-dim">live</span> &nbsp;·&nbsp; enter above <b>$${r.entry}</b> &nbsp;·&nbsp; 🛑 stop <b>$${r.stop}</b> <span class="dt-dim">(−${r.riskPct}%)</span> &nbsp;·&nbsp; 🎯 target <b>$${r.target}</b> <span class="dt-dim">(+${r.rewardPct}%, R:R 1:${r.rr})</span></div>
         <div class="dt-card-sub"><span class="dt-dim">squeeze ${r.metrics.squeezePctile}th pctile · vol ${r.metrics.hvPctile}th pctile · base ${r.metrics.rangeTightPct}% · ATR ${r.metrics.atrRatio}× · 20d ${r.metrics.ret20Pct >= 0 ? '+' : ''}${r.metrics.ret20Pct}%</span></div>
         ${(r.reasons || []).length ? `<ul class="coil-reasons" style="margin:6px 0 0 16px;padding:0;font-size:.86em;color:var(--text-dim,#9ca3af)">${r.reasons.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
       </div>`;
@@ -5815,6 +5815,28 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.querySelectorAll('[data-coil-scope]').forEach(b => b.addEventListener('click', () => { coilScope = b.getAttribute('data-coil-scope'); runCoilUI(); }));
     // Pre-breakout names → time the ENTRY relative to the breakout trigger (+ VWAP/trend).
     attachTimingLights(el, (t.picks || []).map(r => ({ ticker: r.ticker, trigger: r.entry })), 'coil');
+    // Live current price + how it's trading today (cards ship with the EOD daily close).
+    startCoilPrices([...new Set((t.picks || []).map(r => r.ticker))]);
+  }
+  let coilPriceTimer = null;
+  function startCoilPrices(tickers) {
+    if (coilPriceTimer) { clearInterval(coilPriceTimer); coilPriceTimer = null; }
+    if (!tickers.length) return;
+    const upd = async () => {
+      try {
+        const res = await fetch('/api/price?tickers=' + encodeURIComponent(tickers.join(',')));
+        if (!res.ok) return;
+        const data = await res.json();
+        document.querySelectorAll('#coil .dt-card[data-ticker]').forEach(cardEl => {
+          const q = data[cardEl.dataset.ticker]; if (!q) return;
+          const shown = q.afterHours ? q.afterHours.price : q.regularPrice;
+          const pe = cardEl.querySelector('[data-dt-price]'), ce = cardEl.querySelector('[data-dt-change]');
+          if (pe && shown != null && pe.textContent !== '$' + shown) { pe.textContent = '$' + shown; pe.classList.remove('price-flash'); void pe.offsetWidth; pe.classList.add('price-flash'); }
+          if (ce) { const pct = q.afterHours ? q.afterHours.changePct : q.changePct; const up = parseFloat(pct) >= 0; ce.textContent = `${q.afterHours ? (q.afterHours.session === 'pre' ? 'PRE ' : 'AH ') : ''}${up ? '▲ +' : '▼ '}${pct}%`; ce.style.color = up ? 'var(--green)' : 'var(--red)'; }
+        });
+      } catch {}
+    };
+    upd(); coilPriceTimer = setInterval(upd, 30 * 1000);
   }
   document.getElementById('coil-refresh-btn')?.addEventListener('click', runCoilUI);
 
