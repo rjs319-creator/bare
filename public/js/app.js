@@ -5966,7 +5966,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     };
     let picksPanel;
     if (t.riskOff) picksPanel = `<div class="rot-panel"><div class="rot-head">🛑 Risk-off — list suppressed</div><div class="rot-sub">Trend/confluence signals underperform in risk-off (validated). Stand down on new longs.</div></div>`;
-    else picksPanel = `<div class="rot-panel"><div class="rot-head">⚙️ Confluence longs (${t.count})</div><div class="rot-sub">Ranked by agreement strength + the per-stock learner. Chips = strategies that agree.</div>${(t.picks || []).map(card).join('') || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No confluence right now.</span></div>'}</div>`;
+    else {
+      const relaxNote = t.relaxed && t.count ? `<div class="rot-sub" style="color:var(--amber)">No strong 4/5 confluence today — showing moderate <b>3/5</b> agreement (the ledger's bar). Weaker signal; confirm on the chart.</div>` : '';
+      picksPanel = `<div class="rot-panel"><div class="rot-head">⚙️ Confluence longs (${t.count})</div><div class="rot-sub">Ranked by agreement strength + the per-stock learner. Chips = strategies that agree.</div>${relaxNote}${(t.picks || []).map(card).join('') || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No names at ≥3/5 agreement right now.</span></div>'}</div>`;
+    }
 
     let track;
     if (book && book.resolved >= 10) {
