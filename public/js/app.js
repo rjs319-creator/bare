@@ -3219,8 +3219,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function ensureQuickHit() {
     const el = document.getElementById('quickhit-container'); if (!el || quickHitLoaded) return;
     quickHitLoaded = true;
-    loadQuickHit(el).then(() => {
-      el.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.go)));
+    const bindNav = root => root.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.go)));
+    loadQuickHit(el, bindNav).then(() => {
+      bindNav(el);
       const sec = document.getElementById('quickhit'); if (sec) startScreenerLive(sec);   // live prices on the tickers
     });
   }

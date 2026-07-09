@@ -1951,6 +1951,8 @@
     .qh-ref-ai { color: var(--cyan); border-color: #06c4d444; }
     /* ⚡ Quick Hit mover leaderboards (day movers + week/month momentum) */
     .qh-mv-wrap { margin-top: 4px; }
+    .qh-mv-live { font-size: 0.68rem; font-weight: 700; color: var(--text-dim); white-space: nowrap; }
+    .qh-mv-live .live-dot { margin-right: 3px; }
     .qh-mv-list { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
     .qh-mv-cols { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; }
     .qh-mv-col { flex: 1 1 260px; min-width: 0; }

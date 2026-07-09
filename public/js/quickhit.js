@@ -142,14 +142,55 @@ function moversSection(perf, mentions, company) {
     + (arr.length ? arr.map((r, i) => moverRow(r, r[key], company, i + 1)).join('') : `<div class="dt-note">No data.</div>`)
     + `</div>`;
 
+  const asOf = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   return `<div class="qh-mv-wrap">`
-    + `<div class="rot-head" style="margin-top:18px">🔥 Today's Top Movers <span class="dt-dim">· best <b>live</b> intraday performers across every name the app is surfacing — screeners, options flow &amp; forecasts</span></div>`
+    + `<div class="rot-head" style="margin-top:18px">🔥 Today's Top Movers <span class="qh-mv-live" title="Live day-change, auto-refreshes every 30s"><span class="live-dot live-regular"></span>live · ${asOf}</span> <span class="dt-dim">· best intraday performers across every name the app is surfacing — screeners, options flow &amp; forecasts</span></div>`
     + `<div class="qh-mv-list">`
     + (byDay.length ? byDay.map((r, i) => moverRow(r, r.day, company, i + 1)).join('') : `<div class="dt-note">No day-change data yet.</div>`)
     + `</div>`
     + `<div class="rot-head" style="margin-top:18px">📈 Momentum Leaders <span class="dt-dim">· biggest gainers over the past week &amp; month</span></div>`
     + `<div class="qh-mv-cols">${col('Past 5 sessions', top('d5', 5), 'd5')}${col('Past month', top('m1', 5), 'm1')}</div>`
     + `</div>`;
+}
+
+const MOVERS_REFRESH_MS = 30000;
+let moversTimer = null;
+
+// Paint the two mover lists into #qh-movers and (re)bind their nav chips via the
+// caller-supplied binder (app.js owns showTab, so it hands us a binder).
+function paintMovers(container, perf, mentions, company, bindNav) {
+  const host = container.querySelector('#qh-movers');
+  if (!host) return null;
+  host.innerHTML = moversSection(perf, mentions, company);
+  if (typeof bindNav === 'function') bindNav(host);
+  return host;
+}
+
+// First paint + a 30s live refresh of the mover leaderboards. Only the intraday
+// day-change is re-fetched (/api/price, ~30s cache); the candle-based week/month
+// figures stay put. The timer stops itself when the movers container leaves the DOM
+// (a Quick Hit reload) and idles while the tab is hidden or off-screen.
+function startMoverRefresh(container, union, perf, mentions, company, bindNav) {
+  if (moversTimer) { clearInterval(moversTimer); moversTimer = null; }
+  // Initial paint: no bindNav — the caller's .then binds data-go across the whole
+  // container once this resolves. Only the 30s repaints (fresh nodes) rebind below.
+  const host = paintMovers(container, perf, mentions, company);
+  if (!host || !union.length) return;
+
+  moversTimer = setInterval(async () => {
+    const live = container.querySelector('#qh-movers');
+    if (!live || !live.isConnected) { clearInterval(moversTimer); moversTimer = null; return; }
+    const sec = document.getElementById('quickhit');
+    if (document.hidden || (sec && !sec.classList.contains('tab-active'))) return;   // idle off-screen
+    let quotes;
+    try { quotes = await fetchPrices(union); } catch { return; }
+    if (!quotes || !container.querySelector('#qh-movers')) return;
+    Object.keys(perf).forEach(tk => {
+      const lp = quotes[tk] ? parseFloat(quotes[tk].changePct) : NaN;
+      if (Number.isFinite(lp)) perf[tk].day = lp;
+    });
+    paintMovers(container, perf, mentions, company, bindNav);
+  }, MOVERS_REFRESH_MS);
 }
 
 // One Quick Hit card: rank + cap badge on top of the shared opportunity body, then a
@@ -172,8 +213,9 @@ function qhCard(c, rank) {
     + `</div>`;
 }
 
-export async function loadQuickHit(container) {
+export async function loadQuickHit(container, bindNav) {
   if (!container) return;
+  if (moversTimer) { clearInterval(moversTimer); moversTimer = null; }   // drop any prior tab's timer
   container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning large, small &amp; micro caps for today's best plays…</p></div>`;
   const j = op => fetch('/api/tracker?op=' + op).then(r => r.json()).catch(() => null);
   const scr = scope => fetch('/api/screener?scope=' + scope).then(r => r.json()).catch(() => null);
@@ -252,7 +294,8 @@ export async function loadQuickHit(container) {
     : `<div class="dt-note">No clean setups cleared the screen across any cap size today — that happens on quiet days. Check the individual screeners, or come back after the next refresh.</div>`;
 
   // Two performance leaderboards (day movers + week/month momentum) under the shortlist.
-  html += moversSection(perf, mentions, moverCo);
+  // Rendered into a placeholder so the 30s live refresh can repaint just this block.
+  html += `<div id="qh-movers"></div>`;
 
   html += `<div class="dt-dim opp-foot">Ranked purely by conviction — accumulation, setup stage, momentum &amp; the model's results-trained score — then tilted by how its own recent picks are resolving and boosted when an AI screener independently agrees. A cap tier only takes a Top-${TOP_N} slot when its best name is genuinely solid (no forced quotas); the 🏆 row above always shows each tier's best regardless. Research, not advice — confirm on a chart and use a stop.</div>`;
 
@@ -261,4 +304,7 @@ export async function loadQuickHit(container) {
   // (app.js wires the generic [data-go] → showTab handler after this resolves.)
   container.querySelectorAll('[data-scope]').forEach(el =>
     el.addEventListener('click', () => { try { localStorage.setItem('oppScope', el.dataset.scope); } catch {} }));
+
+  // Paint the mover leaderboards + arm the 30s live day-change refresh.
+  startMoverRefresh(container, union, perf, mentions, moverCo, bindNav);
 }
