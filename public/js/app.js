@@ -5187,7 +5187,25 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         ${rows || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No qualifying uptrends right now.</span></div>'}</div>`;
     }
 
-    el.innerHTML = `${lightHtml}${howToHtml}${basketHtml}${trackHtml}
+    // 🚀 Fresh momentum movers — the recent-thrust lane (validated large-cap momentum signal).
+    const movers = t.movers || [];
+    const mb = book && book.movers;
+    let moversTrack = '';
+    if (mb && mb.n >= 8) {
+      const good = mb.avgExc >= 0;
+      moversTrack = ` <span style="color:${good ? 'var(--green)' : 'var(--amber,#f59e0b)'}">Live: ${mb.n} resolved · avg exc ${mb.avgExc > 0 ? '+' : ''}${mb.avgExc}% · ${mb.beatRate}% beat SPY.</span>`;
+    } else {
+      moversTrack = ` <span style="color:var(--text-dim)">Live tracking (excess vs SPY) accrues via the cron${mb && mb.stillOpen ? ` — ${mb.stillOpen} open` : ''}.</span>`;
+    }
+    const moverRows = movers.slice(0, 12).map(m => `<div class="bt-ic-row">
+        <span><b data-live="${esc(m.ticker)}">${esc(m.ticker)}</b> <span style="color:var(--text-dim)">${esc(m.sector || '')}</span></span>
+        <span>5d ${m.ret5 > 0 ? '+' : ''}${m.ret5}% · RS +${m.rs}</span>
+        <span>$${m.price} <span style="color:var(--text-dim)">score ${m.score}</span></span></div>`).join('');
+    const moversHtml = `<div class="rot-panel"><div class="rot-head">🚀 Fresh momentum movers <span class="dt-dim">(new)</span></div>
+      <div class="rot-sub">Large/mid-cap names ($150M+ daily $-vol) in an established uptrend (above the 50 &amp; 200-DMA) making a <b>fresh 5-day thrust</b> (8–30%) while leading SPY — the recent-mover complement to the 12-month ride list above. Backtested <b>+4.96%/21d excess vs SPY</b> (54% win, $150M+ tier).${moversTrack}</div>
+      ${moverRows || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No fresh large-cap momentum movers right now.</span></div>'}</div>`;
+
+    el.innerHTML = `${lightHtml}${howToHtml}${basketHtml}${moversHtml}${trackHtml}
       <div class="fade-caveats"><b>How to use.</b> Trend-following works when markets trend and fails when they chop or fall. The light blends SPY's trend, how <i>clean</i> the trend is (efficiency), market breadth, and the risk regime. <b>Green/Yellow</b> = the climate that historically rewarded riding trends; <b>Red</b> = stand down.
       <br><b>Honest caveat.</b> This is a market-timing + trend-capture system, not a stock-alpha engine — the proven edge is the <b>timing light</b> (when to be on vs off), not beating the market on selection. The basket largely captures the uptrend (beta) when it's safe to. Research, not financial advice.</div>`;
 
