@@ -64,6 +64,93 @@ export function pickTop5(pool) {
   return chosen.sort((a, b) => b.opp - a.opp).slice(0, TOP_N);
 }
 
+// ── Mover leaderboards ───────────────────────────────────────────────────────
+// A second lens on Quick Hit: instead of ranking SETUP quality, these two lists
+// rank actual price PERFORMANCE across every name the app is surfacing right now
+// (screeners, options flow, forecasts, AI screeners) — best day movers, plus the
+// biggest gainers over the past week and month. Each row cites where it was found.
+
+// Where a name can be mentioned → chip emoji, label, and the tab to open.
+const SRC_META = {
+  screener: ['🔎', 'Screener',     'screener'],
+  options:  ['🛠️', 'Options flow', 'options'],
+  forecast: ['🔮', 'Forecast',     'forecast'],
+};
+const srcMeta = key => SRC_META[key] || AI_SRC[key];   // AI_SRC = [emoji, label, tab]
+
+// Market/sector ETFs & indices — excluded (we want individual stocks).
+const INDEX_ETF = new Set([
+  'SPY','QQQ','DIA','IWM','MDY','VTI','VOO','^VIX','VIX',
+  'XLK','XLF','XLE','XLV','XLY','XLP','XLI','XLU','XLRE','XLB','XLC',
+  'SMH','SOXX','XBI','IBB','ARKK','KRE','XRT','ITB','XHB',
+  'TLT','HYG','LQD','GLD','SLV','USO','UNG','BITO',
+]);
+const TICKER_OK = t => /^[A-Z][A-Z.\-]{0,5}$/.test(t) && !INDEX_ETF.has(t);
+
+// Collect every surfaced ticker + the set of sources that mention it, plus a best
+// display name. Returns { mentions: Map<T,Set>, company: Map<T,name> }.
+function collectMentions({ large, small, micro, of, pr, aiMap }) {
+  const mentions = new Map(), company = new Map();
+  const add = (raw, key, co) => {
+    const tk = String(raw || '').toUpperCase();
+    if (!TICKER_OK(tk)) return;
+    let set = mentions.get(tk); if (!set) mentions.set(tk, set = new Set());
+    set.add(key);
+    if (co && !company.has(tk)) company.set(tk, co);
+  };
+  [large, small, micro].forEach(d => (d && d.results || []).forEach(r => add(r.ticker, 'screener', r.company)));
+  (of && of.byTicker || []).forEach(r => { if (!r.isIndex) add(r.ticker, 'options'); });
+  (pr && pr.open || []).forEach(p => add(p.subject, 'forecast'));
+  if (aiMap) aiMap.forEach((srcs, tk) => srcs.forEach(s => add(tk, s)));
+  return { mentions, company };
+}
+
+// Clickable provenance chips for one mover row.
+function srcChips(keys) {
+  return [...keys].map(k => {
+    const m = srcMeta(k); if (!m) return '';
+    const [e, lbl, tab] = m;
+    return `<span class="qh-mv-src" data-go="${tab}" title="Also surfaced in ${esc(lbl)} — open">${e} ${esc(lbl)}</span>`;
+  }).join('');
+}
+
+// One leaderboard row: rank · ticker · company · return · provenance chips.
+function moverRow(r, val, company, rank) {
+  const up = val >= 0, sign = val > 0 ? '+' : '';
+  return `<div class="qh-mv-row">`
+    + `<span class="qh-mv-rank">${rank}</span>`
+    + `<span class="qh-mv-tk opp-tk" data-live="${esc(r.tk)}">${esc(r.tk)}</span>`
+    + `<span class="qh-mv-co">${esc(company.get(r.tk) || '')}</span>`
+    + `<span class="qh-mv-ret ${up ? 'up' : 'down'}">${sign}${val.toFixed(1)}%</span>`
+    + `<span class="qh-mv-srcs">${srcChips(r.keys)}</span>`
+    + `</div>`;
+}
+
+// The two mover lists: Top-10 by day, then momentum leaders over 5 sessions + 1 month.
+function moversSection(perf, mentions, company) {
+  const rows = Object.entries(perf || {})
+    .map(([tk, p]) => ({ tk, ...p, keys: mentions.get(tk) || new Set() }))
+    .filter(r => r.keys.size);
+  if (!rows.length) {
+    return `<div class="qh-mv-wrap"><div class="rot-head" style="margin-top:18px">🔥 Movers</div>`
+      + `<div class="dt-note">Live performance data isn't available right now — try Refresh in a moment.</div></div>`;
+  }
+  const top = (key, n) => rows.filter(r => r[key] != null).sort((a, b) => b[key] - a[key]).slice(0, n);
+  const byDay = top('day', 10);
+  const col = (title, arr, key) => `<div class="qh-mv-col"><div class="qh-mv-colh">${title}</div>`
+    + (arr.length ? arr.map((r, i) => moverRow(r, r[key], company, i + 1)).join('') : `<div class="dt-note">No data.</div>`)
+    + `</div>`;
+
+  return `<div class="qh-mv-wrap">`
+    + `<div class="rot-head" style="margin-top:18px">🔥 Today's Top Movers <span class="dt-dim">· best day performers across every name the app is surfacing — screeners, options flow &amp; forecasts</span></div>`
+    + `<div class="qh-mv-list">`
+    + (byDay.length ? byDay.map((r, i) => moverRow(r, r.day, company, i + 1)).join('') : `<div class="dt-note">No day-change data yet.</div>`)
+    + `</div>`
+    + `<div class="rot-head" style="margin-top:18px">📈 Momentum Leaders <span class="dt-dim">· biggest gainers over the past week &amp; month</span></div>`
+    + `<div class="qh-mv-cols">${col('Past 5 sessions', top('d5', 5), 'd5')}${col('Past month', top('m1', 5), 'm1')}</div>`
+    + `</div>`;
+}
+
 // One Quick Hit card: rank + cap badge on top of the shared opportunity body, then a
 // "Found in" row of clickable references to every place this name surfaces.
 function qhCard(c, rank) {
@@ -89,12 +176,13 @@ export async function loadQuickHit(container) {
   container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning large, small &amp; micro caps for today's best plays…</p></div>`;
   const j = op => fetch('/api/tracker?op=' + op).then(r => r.json()).catch(() => null);
   const scr = scope => fetch('/api/screener?scope=' + scope).then(r => r.json()).catch(() => null);
-  let large, small, micro, sb, drift, rt, an, sw, ca, ts;
+  let large, small, micro, sb, drift, rt, an, sw, ca, ts, of, pr;
   try {
-    [large, small, micro, sb, drift, rt, an, sw, ca, ts] = await Promise.all([
+    [large, small, micro, sb, drift, rt, an, sw, ca, ts, of, pr] = await Promise.all([
       scr('large'), scr('small'), scr('micro'),
       j('scoreboard'), j('drift'),
       j('readthrough'), j('anomaly'), j('secondwave'), j('crossasset'), j('toneshift'),
+      j('optionsflow'), j('predict'),
     ]);
   } catch { /* handled below */ }
   if (!large && !small && !micro) { container.innerHTML = `<div class="dt-note">Couldn't load Quick Hit right now — try Refresh in a moment.</div>`; return; }
@@ -118,6 +206,17 @@ export async function loadQuickHit(container) {
     if (srcs && srcs.size) { p.aiSrcs = [...srcs]; p.opp += 3; }
   });
 
+  // Mover leaderboards: union of every surfaced name → real day/5-session/month
+  // performance (candle-based, via op=perf) ranked into two lists below the shortlist.
+  const { mentions, company: moverCo } = collectMentions({ large, small, micro, of, pr, aiMap });
+  let perf = {};
+  const union = [...mentions.keys()];
+  if (union.length) {
+    const pj = await fetch('/api/tracker?op=perf&tickers=' + encodeURIComponent(union.join(',')))
+      .then(r => r.json()).catch(() => null);
+    if (pj && pj.perf) perf = pj.perf;
+  }
+
   const top = pickTop5(pool);
   const best = bestPerCap(pool);
   const regime = (large && large.regime) || (small && small.regime) || (micro && micro.regime) || {};
@@ -140,6 +239,9 @@ export async function loadQuickHit(container) {
   html += top.length
     ? top.map((c, i) => qhCard(c, i + 1)).join('')
     : `<div class="dt-note">No clean setups cleared the screen across any cap size today — that happens on quiet days. Check the individual screeners, or come back after the next refresh.</div>`;
+
+  // Two performance leaderboards (day movers + week/month momentum) under the shortlist.
+  html += moversSection(perf, mentions, moverCo);
 
   html += `<div class="dt-dim opp-foot">Ranked purely by conviction — accumulation, setup stage, momentum &amp; the model's results-trained score — then tilted by how its own recent picks are resolving and boosted when an AI screener independently agrees. A cap tier only takes a Top-${TOP_N} slot when its best name is genuinely solid (no forced quotas); the 🏆 row above always shows each tier's best regardless. Research, not advice — confirm on a chart and use a stop.</div>`;
 

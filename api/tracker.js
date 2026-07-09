@@ -107,6 +107,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'optionsflow') return runOptionsFlow(req, res);
   if (req.query.op === 'optionsperf') return runOptionsPerf(req, res);
   if (req.query.op === 'optionsassess') return runOptionsAssess(req, res);
+  if (req.query.op === 'perf') return require('../lib/perf-routes').runPerf(req, res);
   if (req.query.op === 'brief') return runBrief(req, res);
   if (req.query.op === 'brieftick') return runBriefTick(req, res);
   if (req.query.op === 'alertfeed') return runAlertFeed(req, res);
