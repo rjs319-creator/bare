@@ -4,6 +4,7 @@
 // represented, cross-confirms with the 5 AI screeners, and hands back a Top 5 — each
 // card labeled with its cap size and a 📍 reference to where it lives in the app.
 import { esc } from './format.js';
+import { fetchPrices } from './live-price.js';
 import { rankThemes, leadingThemeSet } from './themes.js';
 import {
   rankOpportunities, modelHealth, buildReliability, conviction,
@@ -119,7 +120,7 @@ function moverRow(r, val, company, rank) {
   const up = val >= 0, sign = val > 0 ? '+' : '';
   return `<div class="qh-mv-row">`
     + `<span class="qh-mv-rank">${rank}</span>`
-    + `<span class="qh-mv-tk opp-tk" data-live="${esc(r.tk)}">${esc(r.tk)}</span>`
+    + `<span class="qh-mv-tk">${esc(r.tk)}</span>`
     + `<span class="qh-mv-co">${esc(company.get(r.tk) || '')}</span>`
     + `<span class="qh-mv-ret ${up ? 'up' : 'down'}">${sign}${val.toFixed(1)}%</span>`
     + `<span class="qh-mv-srcs">${srcChips(r.keys)}</span>`
@@ -142,7 +143,7 @@ function moversSection(perf, mentions, company) {
     + `</div>`;
 
   return `<div class="qh-mv-wrap">`
-    + `<div class="rot-head" style="margin-top:18px">🔥 Today's Top Movers <span class="dt-dim">· best day performers across every name the app is surfacing — screeners, options flow &amp; forecasts</span></div>`
+    + `<div class="rot-head" style="margin-top:18px">🔥 Today's Top Movers <span class="dt-dim">· best <b>live</b> intraday performers across every name the app is surfacing — screeners, options flow &amp; forecasts</span></div>`
     + `<div class="qh-mv-list">`
     + (byDay.length ? byDay.map((r, i) => moverRow(r, r.day, company, i + 1)).join('') : `<div class="dt-note">No day-change data yet.</div>`)
     + `</div>`
@@ -212,9 +213,19 @@ export async function loadQuickHit(container) {
   let perf = {};
   const union = [...mentions.keys()];
   if (union.length) {
-    const pj = await fetch('/api/tracker?op=perf&tickers=' + encodeURIComponent(union.join(',')))
-      .then(r => r.json()).catch(() => null);
+    // Week/month returns come from daily candles (op=perf); the DAY move comes from
+    // /api/price (5-min bars + pre/post, ~30s cache). Fetch both together, then let
+    // the live regular-session change overwrite the candle day-change so "Today's Top
+    // Movers" ranks and shows the live intraday tape, not yesterday's close-to-close.
+    const [pj, live] = await Promise.all([
+      fetch('/api/tracker?op=perf&tickers=' + encodeURIComponent(union.join(','))).then(r => r.json()).catch(() => null),
+      fetchPrices(union).catch(() => ({})),
+    ]);
     if (pj && pj.perf) perf = pj.perf;
+    Object.keys(perf).forEach(tk => {
+      const lp = live && live[tk] ? parseFloat(live[tk].changePct) : NaN;
+      if (Number.isFinite(lp)) perf[tk].day = lp;
+    });
   }
 
   const top = pickTop5(pool);
