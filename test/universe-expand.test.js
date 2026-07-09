@@ -1,7 +1,7 @@
 // Tests for the free universe ingestion + mechanical filter (lib/universe-expand.js).
 const test = require('node:test');
 const assert = require('node:assert');
-const { parseListed, classify, mechanicalFilter } = require('../lib/universe-expand');
+const { parseListed, classify, mechanicalFilter, isBiotechName } = require('../lib/universe-expand');
 
 const NASDAQ = [
   'Symbol|Security Name|Market Category|Test Issue|Financial Status|Round Lot Size|ETF|NextShares',
@@ -56,4 +56,32 @@ test('mechanicalFilter: dedupes repeated symbols', () => {
   ]);
   assert.equal(total, 1);
   assert.equal(kept.length, 1);
+});
+
+test('isBiotechName: classifies drug-development names (stem matches with suffixes)', () => {
+  // Real names of top biotech movers — stems must match despite plural/suffix.
+  for (const n of [
+    'Crinetics Pharmaceuticals, Inc. - Common Stock',
+    'Edgewise Therapeutics, Inc. - Common Stock',
+    'BridgeBio Pharma, Inc. - Common Stock',
+    'Syndax Pharmaceuticals, Inc. - Common Stock',
+    'MBX Biosciences, Inc. - Common Stock',
+    'REGENXBIO Inc. - Common Stock',            // "bio" embedded in a single token
+    'Agios Pharmaceuticals, Inc. - Common Stock',
+  ]) assert.equal(isBiotechName(n), true, n);
+});
+
+test('isBiotechName: rejects non-biotech names', () => {
+  for (const n of [
+    'Apple Inc. - Common Stock',
+    'JPMorgan Chase & Co. - Common Stock',
+    'Bandwidth Inc. - Class A Common Stock',
+    'Akamai Technologies, Inc. - Common Stock',
+  ]) assert.equal(isBiotechName(n), false, n);
+});
+
+test('isBiotechName: safe on empty/nullish', () => {
+  assert.equal(isBiotechName(''), false);
+  assert.equal(isBiotechName(null), false);
+  assert.equal(isBiotechName(undefined), false);
 });
