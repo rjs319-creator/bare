@@ -164,6 +164,13 @@ module.exports = async function handler(req, res) {
     gapgotick = await r.json();
   } catch (e) { gapgotick = { error: String(e && e.message || e) }; }
 
+  // 🪁 Down-Day Mode — resolve matured oversold-bounce longs + log today's IF the tape is red.
+  let downdaytick = null;
+  try {
+    const r = await fetch('https://' + HOST + '/api/tracker?op=downdaytick', { headers: { 'x-warm': '1' } });
+    downdaytick = await r.json();
+  } catch (e) { downdaytick = { error: String(e && e.message || e) }; }
+
   // ── 5 AI-reasoning screeners (Read-Through / Stealth / Second Wave / Cross-Asset / Tone
   // Shift) — each tick is SELF-CONTAINED (detect + AI + forward-log + cache) in its own 60s
   // invocation. FIRE-AND-FORGET: we kick them and do NOT await (awaiting the slow AI calls
@@ -299,7 +306,7 @@ module.exports = async function handler(req, res) {
   void putsellKick; // fire-and-forget: put-selling setups scan
   void universeKick; // fire-and-forget: reassemble the expanded candle cache
 
-  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, intracapture, cern, edgelog, alertsgrade, alertsassess, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, timinglog, timingtune, dualreadlog, dualreadtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, aiTicksKicked: 6, calibKicked: true, at: new Date().toISOString() };
+  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, intracapture, cern, edgelog, alertsgrade, alertsassess, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, downdaytick, timinglog, timingtune, dualreadlog, dualreadtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, aiTicksKicked: 6, calibKicked: true, at: new Date().toISOString() };
 
   // Observability: persist a compact health record so failed ticks / stale data are visible (op=health).
   try { const { summarizeRun, writeHealthRun } = require('../lib/health'); await writeHealthRun(summarizeRun(result)); }
