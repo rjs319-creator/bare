@@ -5899,7 +5899,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> ${tierBadge(r.tier)}</span>
           <span class="dt-now"><b data-dd-price>$${r.price}</b> <span data-dd-change class="dt-dim">live</span></span>
         </div>
-        <div class="dt-card-sub"><b style="color:#ef4444">📉 Overheated / rollover</b> <span class="dt-dim">· ran ${r.geometry.risePct}% into RSI ${r.geometry.rsiAtPivot} · off the high ${r.geometry.dropOffHighPct}% · score ${r.score}/100</span></div>
+        <div class="dt-card-sub"><b style="color:#ef4444">📉 Overheated / rollover</b> <span class="dt-dim">· ran ${r.geometry.risePct}% into RSI ${r.geometry.rsiAtPivot} · off the high ${r.geometry.dropOffHighPct}% · score ${r.score}/100</span>${r.learnedExcess != null ? ` <span class="dt-tier-b" title="Fade-engine per-stock learned edge (${r.nPriors || 0} priors). Positive = this name has historically reverted after such tops.${r.drifted ? ' ⚠ DRIFTED — the edge stopped working; deprioritized.' : ''}" style="background:${r.drifted ? '#94a3b822;color:#94a3b8' : (r.learnedExcess > 0 ? '#22c55e22;color:#22c55e' : '#ef444422;color:#ef4444')}">🧠 ${r.learnedExcess > 0 ? '+' : ''}${r.learnedExcess}%${r.drifted ? ' drift' : ''}</span>` : ''}</div>
         <div class="dt-card-plan">📉 <b>Short</b> near <b>$${r.signals.entry}</b> &nbsp;·&nbsp; 🛑 Stop <b>$${r.signals.stop}</b> <span class="dt-dim">(+${r.signals.riskPct}%, above the peak)</span> &nbsp;·&nbsp; 🏁 Target <b>$${r.signals.target}</b> <span class="dt-dim">R:R 1:${r.signals.rr}</span></div>
         <div class="dt-note">${esc(r.signals.note || '')}</div>
         <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
@@ -5910,13 +5910,29 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const bounces = panel('🔄 Oversold Bounce <span class="dt-dim">(long — reversion)</span>',
       'Capitulation → turn. Validated red-day edge; earlier (WATCH/EMERGING) turns bounce more. Small edge, ~52–56% win — size accordingly and honor the stop.',
       t.bounces, longCard, 'No clean oversold-bounce setups right now.');
+
+    // 🎁 Forced-Selling Reversion (CERN long reversions) — a different, event-driven long.
+    const CERN_LBL = { FIRE_SALE: '🔥 ETF fire-sale', FORCED_DOWNGRADE: '📉 Forced downgrade', INDEX_DELETE: '🗑 Index deletion', LOCKUP_EXPIRY: '🔓 Lockup expiry', TAX_LOSS: '🧾 Tax-loss selling', MARGIN_SPIRAL: '⚠ Margin spiral' };
+    const revCard = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
+        <div class="dt-card-top">
+          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> <span class="dt-tier-b" style="background:#a78bfa22;color:#a78bfa;border-color:#a78bfa55">${esc(CERN_LBL[r.type] || r.type)}</span></span>
+          <span class="dt-now"><b data-dd-price>$${r.entry != null ? (+r.entry).toFixed(2) : '—'}</b> <span data-dd-change class="dt-dim">live</span></span>
+        </div>
+        <div class="dt-card-sub"><b style="color:#22c55e">🎁 Forced-selling reversion</b> <span class="dt-dim">· mechanical selling overshot → tends to revert${r.pProfit != null ? ` · ${Math.round(r.pProfit * 100)}% model win-prob` : ''}${r.horizon ? ` · ~${r.horizon}d hold` : ''}</span></div>
+        ${r.stop != null && r.target != null ? `<div class="dt-card-plan">📈 <b>Long</b> near <b>$${(+r.entry).toFixed(2)}</b> &nbsp;·&nbsp; 🛑 Stop <b>$${(+r.stop).toFixed(2)}</b> &nbsp;·&nbsp; 🏁 Target <b>$${(+r.target).toFixed(2)}</b></div>` : ''}
+        <div class="dt-note">CERN forced-flow signal — see the ⚡ Events (CERN) tab for the full model, posteriors, and track record.</div>
+      </div>`;
+    const reversion = panel('🎁 Forced-Selling Reversion <span class="dt-dim">(long — CERN forced-flow)</span>',
+      'When an ETF fire-sale or an analyst downgrade forces mechanical selling, the name overshoots below its peers and tends to revert. Live CERN signals — a different, event-driven long that fits a red tape.',
+      t.reversion, revCard, 'No active forced-selling reversion signals right now.');
+
     const fades = panel('📉 Overheated / Short <span class="dt-dim">(the mirror — fade a blow-off top)</span>',
-      'Blow-off top rolling over — mechanical short levels. Shorting is harder; see the 🔥 Overheated tab for the learned ranking. CONFIRMED rollovers are the more reliable ones.',
+      'Blow-off top rolling over. Ranked by the 🔥 Overheated tab’s per-stock LEARNED edge (🧠 chip) — drifted names sink. Shorting is harder; CONFIRMED rollovers are the more reliable ones.',
       t.fades, shortCard, 'No overheated rollovers right now.');
 
     // Sit-out honesty when nothing qualifies.
-    const nBounce = (t.counts && t.counts.bounces) || 0, nFade = (t.counts && t.counts.fades) || 0;
-    const sitOut = (nBounce + nFade === 0)
+    const nBounce = (t.counts && t.counts.bounces) || 0, nFade = (t.counts && t.counts.fades) || 0, nRev = (t.counts && t.counts.reversion) || 0;
+    const sitOut = (nBounce + nFade + nRev === 0)
       ? `<div class="dt-note" style="border-left-color:#94a3b8"><b>🪑 Sit out is a position.</b> No reversion or fade setup fits right now, and momentum longs don't work on a red tape. Preserving capital on a hostile day IS the winning move — wait for a clean bounce or for the tape to turn.</div>`
       : `<div class="dt-note" style="border-left-color:#94a3b8"><b>🪑 Sit out is always on the menu.</b> These are modest, selective edges. If nothing looks clean, standing aside on a red day beats forcing a trade.</div>`;
 
@@ -5933,12 +5949,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         ${rows || `<div class="bt-ic-row"><span style="color:var(--text-dim)">${book.resolved || 0} resolved · ${book.stillOpen || 0} open — accrues on red days (~${t.horizon} sessions to mature).</span></div>`}</div>`;
     }
 
-    el.innerHTML = tapeBanner + reality + bounces + fades + sitOut + bookPanel;
+    el.innerHTML = tapeBanner + reality + bounces + reversion + fades + sitOut + bookPanel;
     el.querySelectorAll('.dt-card[data-ticker]').forEach(cardEl => {
       const btn = cardEl.querySelector('[data-chart-toggle]');
       if (btn) btn.addEventListener('click', () => toggleChart(cardEl, cardEl.dataset.ticker));
     });
-    startDownDayPrices([...new Set([...(t.bounces || []), ...(t.fades || [])].map(p => p.ticker))]);
+    startDownDayPrices([...new Set([...(t.bounces || []), ...(t.reversion || []), ...(t.fades || [])].map(p => p.ticker))]);
   }
   let ddPriceTimer = null;
   function startDownDayPrices(tickers) {
@@ -6368,8 +6384,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const scoreboardMeta       = document.getElementById('scoreboard-meta');
   let   lastScoreboard       = null;
 
-  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', Biotech: '🧬 Biotech Radar (Hot vs Watch)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)' };
+  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', Biotech: '🧬 Biotech Radar (Hot vs Watch)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)', DownDay: '🪁 Down-Day Bounce (Longs)' };
   const SB_TIER_LABEL = { Breakout: 'Breakout', Setup: 'Setup', Early: 'Early', StrongBuy: 'Strong Buy', StrongSell: 'Strong Sell', GHOST: '👻 Ghost', STALKING: '🥷 Stalking', SHORT: 'Short', SHORT_LIGHT: 'Short (light)',
+    WATCH: '👀 Watch (fresh turn)', EMERGING: '🌗 Emerging (turning)', CONFIRMED: '✅ Confirmed (late)',
     INDEX_DELETE: 'Index Delete', INDEX_ADD_FADE: 'Index Add (fade)', LOCKUP_EXPIRY: 'Lockup Expiry', TAX_LOSS: 'Tax-Loss Selling', FIRE_SALE: 'Fire Sale', MARGIN_SPIRAL: 'Margin Spiral', FORCED_DOWNGRADE: 'Forced Downgrade',
     Bullish: '📈 Bullish tone', Neutral: '➖ Neutral tone', Bearish: '📉 Bearish tone',
     Sticky: '📈 Sticky attention', Fast: '⚡ Fast hype',
@@ -6396,6 +6413,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     SecondWave: 'Stocks that had a first leg up but the crowd hasn’t piled into yet, then judged by AI. PRIMED = fresh story with room to spread (possible reflexive second wave); EARLY = needs a trigger; FADED = already crowded/late. The test: do PRIMED names actually get the second leg — beating their sector and the Faded ones? Excess is vs each name’s own SECTOR ETF.',
     CrossAsset: 'US stocks levered to a move in ANOTHER asset (a commodity, an overnight foreign market/ADR, crypto, or rates) that they may not have caught up to yet. LEAD = still lagging the tell (actionable); INLINE = already tracking; WEAK = loose link. The test: do the LEAD names actually catch up — beating the market and the Inline ones?',
     ToneShift: 'How a company’s latest earnings call sounded vs LAST quarter’s. BRIGHTENING = management got more confident/specific (dropped hedges, added guidance-raise language); DARKENING = more cautious. The test: do BRIGHTENING names beat their sector — and beat the Darkening ones? A slower swing-horizon signal.',
+    DownDay: 'Oversold-bounce LONGS surfaced by Down-Day Mode and logged only on RED tapes (a capitulation → turn). Backtest says the edge is red-tape-specific and the EARLIER turns (WATCH/EMERGING) bounce more than CONFIRMED — this is the live test of that.',
   };
   const SB_HZ_HELP = 'Average return this many trading days after the pick. The green/red “vs S&P” line under it is the market-beating number: the pick’s return minus what the S&P 500 did over the same days.';
 
