@@ -15,7 +15,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const TAB_GROUPS = {
     start:     ['today', 'start'],
     quickhit:  ['quickhit'],
-    screeners: ['opportunities', 'aligned', 'screener', 'custom', 'coremo', 'daytrade', 'gapgo', 'downday', 'coil', 'confluence', 'ghost', 'trendrider', 'fade'],
+    screeners: ['opportunities', 'aligned', 'screener', 'custom', 'coremo', 'daytrade', 'gapgo', 'downday', 'coil', 'confluence', 'ghost', 'trendrider', 'fade', 'gapdown'],
     markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'putsell', 'picks'],
     predict:   ['pulse', 'readthrough', 'anomaly', 'biotech', 'secondwave', 'crossasset', 'toneshift', 'gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     research:  ['backtest', 'events', 'edge'],
@@ -25,7 +25,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
     today: '🏠 Today', start: '📘 Guide',
-    quickhit: '⚡ Quick Hit', opportunities: '⭐ Opportunities', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated',
+    quickhit: '⚡ Quick Hit', opportunities: '⭐ Opportunities', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
@@ -51,6 +51,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     ghost: 'Quiet accumulation — big money building a position before the breakout.',
     trendrider: 'Ride established uptrends; the model drops names once they stop trending.',
     fade: 'Overheated names that may be due to pull back (short/caution ideas).',
+    gapdown: 'Stocks gapping DOWN hard on news and continuing lower — short setups (the mirror of Gap & Go). Best off red days; mind borrow costs.',
     rotation: 'Which sectors money is rotating into and out of, week over week.',
     sectors: 'Sector performance heatmap — what’s leading and lagging.',
     momentum: 'Strong-buy and strong-sell momentum calls right now.',
@@ -143,6 +144,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'daytrade' && typeof ensureDaytrade === 'function') ensureDaytrade();
     if (sub === 'gapgo' && typeof ensureGapGo === 'function') ensureGapGo();
     if (sub === 'downday' && typeof ensureDownDay === 'function') ensureDownDay();
+    if (sub === 'gapdown' && typeof ensureGapDown === 'function') ensureGapDown();
     if (sub === 'aligned' && typeof ensureAligned === 'function') ensureAligned();
     if (sub === 'putsell' && typeof ensurePutSell === 'function') ensurePutSell();
     if (sub === 'coil' && typeof ensureCoil === 'function') ensureCoil();
@@ -5535,6 +5537,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function ensureGapGo() { if (!gapgoLoaded) { gapgoLoaded = true; runGapGoUI(); } }
   let downdayLoaded = false;
   function ensureDownDay() { if (!downdayLoaded) { downdayLoaded = true; runDownDayUI(); } }
+  let gapdownLoaded = false;
+  function ensureGapDown() { if (!gapdownLoaded) { gapdownLoaded = true; runGapDownUI(); } }
   let ggSkipFade = false; try { ggSkipFade = localStorage.getItem('ggSkipFade') === '1'; } catch {}
   // Gap-cause badge (research/27 pilot): offering/M&A FADE (red), FDA/guidance/contract
   // CONTINUE (green), else neutral. No badge for newsless gaps (the common case).
@@ -5977,6 +5981,85 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
   document.getElementById('dd-refresh-btn')?.addEventListener('click', runDownDayUI);
 
+  // ── 🐻 Gap-Down Continuation (short — the mirror of Gap & Go) ────────────────
+  async function runGapDownUI() {
+    const el = document.getElementById('gapdown-container');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning today's gap-downs…</p></div>`;
+    try {
+      const [t, book] = await Promise.all([
+        fetch('/api/tracker?op=gapdown').then(r => r.json()),
+        fetch('/api/tracker?op=gapdownbook').then(r => r.json()).catch(() => null),
+      ]);
+      renderGapDown(t, book);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Gap-Down.</p></div>`; }
+  }
+  function renderGapDown(t, book) {
+    const el = document.getElementById('gapdown-container');
+    if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Gap-Down unavailable.</p></div>`; return; }
+    document.getElementById('gd-gen-time') && (document.getElementById('gd-gen-time').textContent = t.generatedAt ? new Date(t.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+    const cfg = t.config || {};
+    const evidence = `<div class="rot-panel" style="border-color:#ef444455;background:#ef44440d">
+      <div class="rot-head" style="color:#ef4444">🐻 ${esc(cfg.name || 'Gap-Down Continuation')} — validated short edge (mirror of Gap & Go)</div>
+      <div class="rot-sub">
+        <ul style="margin:6px 0 6px 18px;padding:0">${(cfg.rules || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+        <b style="color:#22c55e">✓ Evidence.</b> ${esc(cfg.evidence || '')}<br>
+        <b style="color:#f59e0b">⚠️ Caveat.</b> ${esc(cfg.caveat || '')}
+      </div>
+    </div>`;
+    const frictions = `<div class="dt-note" style="border-left-color:#f59e0b"><b>⚠ Shorting is harder than buying.</b> The net edge after borrow + slippage is thin (~+0.2–0.6%), and the biggest gross edge is in small names that are the hardest/priciest to borrow. Prefer liquid names you can actually short, size small, and confirm the intraday break of the opening-range low — don't chase the gap-down open.</div>`;
+    const filtered = t.counts && t.counts.earningsExcluded
+      ? `<div class="dt-note"><b>⏭️ ${t.counts.earningsExcluded} earnings gap-down${t.counts.earningsExcluded === 1 ? '' : 's'} filtered out.</b> Earnings gaps may be a one-time repricing that doesn't continue — this trades the unscheduled catalyst gap-down only.</div>`
+      : `<div class="dt-note"><b>⏭️ Earnings gap-downs are filtered out</b> — unscheduled catalyst gap-downs only.</div>`;
+    const card = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
+        <div class="dt-card-top">
+          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span>${r.earningsCheck === 'unknown' ? ' <span class="dt-tier-b" title="Earnings adjacency unverified — check for a scheduled report">? ER</span>' : ''}</span>
+          <span class="dt-now"><b data-gd-price>$${r.last}</b> <span data-gd-change class="dt-dim">live</span></span>
+        </div>
+        <div class="dt-card-sub"><b style="color:#ef4444">▼ gap ${r.gapPct}%</b> <span class="dt-dim">· RVOL ${r.relVol}×${r.excessPct != null ? ' · vs SPY ' + (r.excessPct >= 0 ? '+' : '') + r.excessPct + '%' : ''} · continuation ${r.continuationScore}/100</span></div>
+        <div class="dt-card-plan">📉 <b>Short the break below</b> <b>$${r.plan.trigger}</b> <span class="dt-dim">(OR low)</span> &nbsp;·&nbsp; 🛑 Stop <b>$${r.plan.stop}</b> <span class="dt-dim">(+${r.plan.riskPct}%, 2.5×ATR above)</span> &nbsp;·&nbsp; 🏁 Target <b>$${r.plan.target}</b> <span class="dt-dim">1:${r.plan.rr}</span></div>
+        <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
+        <div class="chart-panel" data-chart-panel style="display:none"></div>
+      </div>`;
+    const list = (title, rows, sub) => `<div class="rot-panel"><div class="rot-head">${title}</div><div class="rot-sub">${sub}</div>${(rows || []).map(card).join('') || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No qualifying gap-downs right now — selective, event-driven; empty on quiet days.</span></div>'}</div>`;
+    const strong = list('🔴 STRONG — gap ≤ −5% <span class="dt-dim">(the validated primary)</span>', t.strong, 'Big unscheduled gap-downs. Backtest: short excess +1.0%/3d, win 55%, positive all 3 years. Ranked by gap size (bigger = more continuation).');
+    const moderate = list('🟠 MODERATE — gap −3 to −5%', t.moderate, 'Smaller gap-downs — positive but weaker than the ≤−5% tier.');
+    let bookPanel = '';
+    if (book && book.ok) {
+      const row = (lbl, s) => !s || !s.n ? '' : `<div class="bt-ic-row"><span>${lbl}</span><span><b>${s.avgExc >= 0 ? '+' : ''}${s.avgExc}%</b> avg short excess · ${s.beatRate}% paid (Wilson ${s.wilsonLo}%) · n=${s.n}</span></div>`;
+      const rows = row('Overall', book.overall) + row('STRONG (≤−5%)', book.byTier && book.byTier.STRONG) + row('MODERATE (−3 to −5%)', book.byTier && book.byTier.MODERATE);
+      bookPanel = `<div class="rot-panel"><div class="rot-head">📋 Live forward track record <span class="dt-dim">(short, self-validation)</span></div>
+        <div class="rot-sub">${esc(book.note || '')}</div>
+        ${rows || `<div class="bt-ic-row"><span style="color:var(--text-dim)">${book.resolved || 0} resolved · ${book.stillOpen || 0} open — accrues ~${t.horizon} sessions after each tick.</span></div>`}</div>`;
+    }
+    el.innerHTML = evidence + frictions + filtered + strong + moderate + bookPanel;
+    el.querySelectorAll('.dt-card[data-ticker]').forEach(cardEl => {
+      const btn = cardEl.querySelector('[data-chart-toggle]');
+      if (btn) btn.addEventListener('click', () => toggleChart(cardEl, cardEl.dataset.ticker));
+    });
+    startGapDownPrices([...new Set([...(t.strong || []), ...(t.moderate || [])].map(p => p.ticker))]);
+  }
+  let gdPriceTimer = null;
+  function startGapDownPrices(tickers) {
+    if (gdPriceTimer) { clearInterval(gdPriceTimer); gdPriceTimer = null; }
+    if (!tickers.length) return;
+    const upd = async () => {
+      try {
+        const data = await fetchLivePrices(tickers);
+        if (!Object.keys(data).length) return;
+        document.querySelectorAll('#gapdown .dt-card[data-ticker]').forEach(cardEl => {
+          const q = data[cardEl.dataset.ticker]; if (!q) return;
+          const shown = q.afterHours ? q.afterHours.price : q.regularPrice;
+          const pe = cardEl.querySelector('[data-gd-price]'), ce = cardEl.querySelector('[data-gd-change]');
+          if (pe && shown != null && pe.textContent !== '$' + shown) { pe.textContent = '$' + shown; pe.classList.remove('price-flash'); void pe.offsetWidth; pe.classList.add('price-flash'); }
+          if (ce) { const pct = q.afterHours ? q.afterHours.changePct : q.changePct; const up = parseFloat(pct) >= 0; ce.textContent = `${up ? '▲ +' : '▼ '}${pct}%`; ce.style.color = up ? 'var(--green)' : 'var(--red)'; }
+        });
+      } catch {}
+    };
+    upd(); gdPriceTimer = setInterval(upd, 30 * 1000);
+  }
+  document.getElementById('gd-refresh-btn')?.addEventListener('click', runGapDownUI);
+
   // ── 🧬 Coil Radar (pre-explosion: quiet, coiled names BEFORE the move) ──────
   // Flags volatility-contracted, volume-dried-up, NOT-already-run-up names and
   // attaches an EMPIRICALLY-CALIBRATED probability of an abnormal upside break.
@@ -6384,9 +6467,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const scoreboardMeta       = document.getElementById('scoreboard-meta');
   let   lastScoreboard       = null;
 
-  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', Biotech: '🧬 Biotech Radar (Hot vs Watch)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)', DownDay: '🪁 Down-Day Bounce (Longs)' };
+  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', Biotech: '🧬 Biotech Radar (Hot vs Watch)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)', DownDay: '🪁 Down-Day Bounce (Longs)', GapDown: '🐻 Gap-Down Continuation (Shorts)' };
   const SB_TIER_LABEL = { Breakout: 'Breakout', Setup: 'Setup', Early: 'Early', StrongBuy: 'Strong Buy', StrongSell: 'Strong Sell', GHOST: '👻 Ghost', STALKING: '🥷 Stalking', SHORT: 'Short', SHORT_LIGHT: 'Short (light)',
     WATCH: '👀 Watch (fresh turn)', EMERGING: '🌗 Emerging (turning)', CONFIRMED: '✅ Confirmed (late)',
+    STRONG: '🔴 Strong (≥5% gap)', MODERATE: '🟠 Moderate (3–5% gap)',
     INDEX_DELETE: 'Index Delete', INDEX_ADD_FADE: 'Index Add (fade)', LOCKUP_EXPIRY: 'Lockup Expiry', TAX_LOSS: 'Tax-Loss Selling', FIRE_SALE: 'Fire Sale', MARGIN_SPIRAL: 'Margin Spiral', FORCED_DOWNGRADE: 'Forced Downgrade',
     Bullish: '📈 Bullish tone', Neutral: '➖ Neutral tone', Bearish: '📉 Bearish tone',
     Sticky: '📈 Sticky attention', Fast: '⚡ Fast hype',
@@ -6414,6 +6498,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     CrossAsset: 'US stocks levered to a move in ANOTHER asset (a commodity, an overnight foreign market/ADR, crypto, or rates) that they may not have caught up to yet. LEAD = still lagging the tell (actionable); INLINE = already tracking; WEAK = loose link. The test: do the LEAD names actually catch up — beating the market and the Inline ones?',
     ToneShift: 'How a company’s latest earnings call sounded vs LAST quarter’s. BRIGHTENING = management got more confident/specific (dropped hedges, added guidance-raise language); DARKENING = more cautious. The test: do BRIGHTENING names beat their sector — and beat the Darkening ones? A slower swing-horizon signal.',
     DownDay: 'Oversold-bounce LONGS surfaced by Down-Day Mode and logged only on RED tapes (a capitulation → turn). Backtest says the edge is red-tape-specific and the EARLIER turns (WATCH/EMERGING) bounce more than CONFIRMED — this is the live test of that.',
+    GapDown: 'Gap-down continuation SHORTS (the mirror of Gap & Go): a name that gapped down hard on non-earnings news and kept falling. A win here means the stock dropped. The test: do bigger gap-downs (STRONG ≥5%) continue lower more than MODERATE? Costs not deducted — subtract borrow/slippage.',
   };
   const SB_HZ_HELP = 'Average return this many trading days after the pick. The green/red “vs S&P” line under it is the market-beating number: the pick’s return minus what the S&P 500 did over the same days.';
 
