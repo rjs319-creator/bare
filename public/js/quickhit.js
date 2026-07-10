@@ -125,7 +125,7 @@ function moverRow(r, val, company, rank) {
   return `<div class="qh-mv-row">`
     + `<span class="qh-mv-rank">${rank}</span>`
     + `<span class="qh-mv-tk">${esc(r.tk)}</span>`
-    + `<span class="qh-mv-co">${esc(company.get(r.tk) || '')}</span>`
+    + `<span class="qh-mv-co">${esc(company.get(r.tk) || r.company || '')}</span>`
     + pxHtml
     + `<span class="qh-mv-ret ${up ? 'up' : 'down'}">${sign}${val.toFixed(1)}%</span>`
     + `<span class="qh-mv-srcs">${srcChips(r.keys)}</span>`
