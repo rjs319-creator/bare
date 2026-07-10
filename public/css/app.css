@@ -1970,6 +1970,9 @@
     .qh-mv-tk { font-weight: 800; font-size: 0.82rem; }
     .qh-mv-co { flex: 1 1 auto; font-size: 0.72rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     .qh-mv-px { font-weight: 700; font-size: 0.8rem; color: var(--text); white-space: nowrap; }
+    .qh-mv-day { font-size: 0.68rem; font-weight: 700; white-space: nowrap; opacity: 0.9; }
+    .qh-mv-day.up { color: var(--green); }
+    .qh-mv-day.down { color: var(--red); }
     .qh-mv-ret { font-weight: 800; font-size: 0.82rem; white-space: nowrap; }
     .qh-mv-ret.up { color: var(--green); }
     .qh-mv-ret.down { color: var(--red); }

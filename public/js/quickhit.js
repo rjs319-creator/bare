@@ -115,18 +115,27 @@ function srcChips(keys) {
   }).join('');
 }
 
-// One leaderboard row: rank · ticker · company · live price · return · provenance chips.
-function moverRow(r, val, company, rank) {
+// One leaderboard row: rank · ticker · company · live price · today's change ·
+// window return · provenance chips. `showDay` adds the live today-change chip next to
+// the price — used in the week/month Momentum Leaders columns where the bold return is
+// the multi-session gain, so today's move would otherwise be invisible. It's omitted in
+// the day-movers list, where the bold return already IS today's change.
+function moverRow(r, val, company, rank, showDay = false) {
   const up = val >= 0, sign = val > 0 ? '+' : '';
   // Prefer the live intraday price (r.px, refreshed every 30s); fall back to the EOD
   // close (r.price) only until the first live quote lands.
   const px = r.px != null ? r.px : r.price;
   const pxHtml = (px != null) ? `<span class="qh-mv-px">$${(+px).toFixed(2)}</span>` : '';
+  // Live today-change (r.day, refreshed every 30s) shown as a compact ± chip.
+  const dayHtml = (showDay && r.day != null)
+    ? `<span class="qh-mv-day ${r.day >= 0 ? 'up' : 'down'}" title="Change today">${r.day > 0 ? '+' : ''}${r.day.toFixed(1)}% today</span>`
+    : '';
   return `<div class="qh-mv-row">`
     + `<span class="qh-mv-rank">${rank}</span>`
     + `<span class="qh-mv-tk">${esc(r.tk)}</span>`
     + `<span class="qh-mv-co">${esc(company.get(r.tk) || r.company || '')}</span>`
     + pxHtml
+    + dayHtml
     + `<span class="qh-mv-ret ${up ? 'up' : 'down'}">${sign}${val.toFixed(1)}%</span>`
     + `<span class="qh-mv-srcs">${srcChips(r.keys)}</span>`
     + `</div>`;
@@ -144,7 +153,7 @@ function moversSection(perf, mentions, company) {
   const top = (key, n) => rows.filter(r => r[key] != null).sort((a, b) => b[key] - a[key]).slice(0, n);
   const byDay = top('day', 10);
   const col = (title, arr, key) => `<div class="qh-mv-col"><div class="qh-mv-colh">${title}</div>`
-    + (arr.length ? arr.map((r, i) => moverRow(r, r[key], company, i + 1)).join('') : `<div class="dt-note">No data.</div>`)
+    + (arr.length ? arr.map((r, i) => moverRow(r, r[key], company, i + 1, true)).join('') : `<div class="dt-note">No data.</div>`)
     + `</div>`;
 
   const asOf = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
