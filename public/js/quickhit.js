@@ -115,13 +115,18 @@ function srcChips(keys) {
   }).join('');
 }
 
-// One leaderboard row: rank · ticker · company · return · provenance chips.
+// One leaderboard row: rank · ticker · company · live price · return · provenance chips.
 function moverRow(r, val, company, rank) {
   const up = val >= 0, sign = val > 0 ? '+' : '';
+  // Prefer the live intraday price (r.px, refreshed every 30s); fall back to the EOD
+  // close (r.price) only until the first live quote lands.
+  const px = r.px != null ? r.px : r.price;
+  const pxHtml = (px != null) ? `<span class="qh-mv-px">$${(+px).toFixed(2)}</span>` : '';
   return `<div class="qh-mv-row">`
     + `<span class="qh-mv-rank">${rank}</span>`
     + `<span class="qh-mv-tk">${esc(r.tk)}</span>`
     + `<span class="qh-mv-co">${esc(company.get(r.tk) || '')}</span>`
+    + pxHtml
     + `<span class="qh-mv-ret ${up ? 'up' : 'down'}">${sign}${val.toFixed(1)}%</span>`
     + `<span class="qh-mv-srcs">${srcChips(r.keys)}</span>`
     + `</div>`;
@@ -186,8 +191,10 @@ function startMoverRefresh(container, union, perf, mentions, company, bindNav) {
     try { quotes = await fetchPrices(union); } catch { return; }
     if (!quotes || !container.querySelector('#qh-movers')) return;
     Object.keys(perf).forEach(tk => {
-      const lp = quotes[tk] ? parseFloat(quotes[tk].changePct) : NaN;
-      if (Number.isFinite(lp)) perf[tk].day = lp;
+      const q = quotes[tk];
+      if (!q) return;
+      const lp = parseFloat(q.changePct); if (Number.isFinite(lp)) perf[tk].day = lp;
+      const px = parseFloat(q.price); if (Number.isFinite(px)) perf[tk].px = px;   // live price
     });
     paintMovers(container, perf, mentions, company, bindNav);
   }, MOVERS_REFRESH_MS);
@@ -265,8 +272,10 @@ export async function loadQuickHit(container, bindNav) {
     ]);
     if (pj && pj.perf) perf = pj.perf;
     Object.keys(perf).forEach(tk => {
-      const lp = live && live[tk] ? parseFloat(live[tk].changePct) : NaN;
-      if (Number.isFinite(lp)) perf[tk].day = lp;
+      const q = live && live[tk];
+      if (!q) return;
+      const lp = parseFloat(q.changePct); if (Number.isFinite(lp)) perf[tk].day = lp;
+      const px = parseFloat(q.price); if (Number.isFinite(px)) perf[tk].px = px;   // live price
     });
   }
 
