@@ -163,7 +163,7 @@ function moversSection(perf, mentions, company) {
     + (byDay.length ? byDay.map((r, i) => moverRow(r, r.day, company, i + 1)).join('') : `<div class="dt-note">No day-change data yet.</div>`)
     + `</div>`
     + `<div class="rot-head" style="margin-top:18px">📈 Momentum Leaders <span class="dt-dim">· biggest gainers over the past week &amp; month</span></div>`
-    + `<div class="qh-mv-cols">${col('Past 5 sessions', top('d5', 5), 'd5')}${col('Past month', top('m1', 5), 'm1')}</div>`
+    + `<div class="qh-mv-cols">${col('Past 5 sessions', top('d5', 15), 'd5')}${col('Past month', top('m1', 15), 'm1')}</div>`
     + `</div>`;
 }
 
