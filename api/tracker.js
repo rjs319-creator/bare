@@ -43,6 +43,12 @@ const { runPulse, runPulseRefine } = require('../lib/pulse-routes');
 const { runDualRead, runDualReadLog, runDualReadBook, runDualReadTune, runDualReadBackfill, runLtRecs } = require('../lib/dualread-routes');
 
 module.exports = async function handler(req, res) {
+  // Deploy version — the client compares this against the value it booted with and
+  // prompts a refresh when a new deploy lands. Cheap (env read), never cached.
+  if (req.query.op === 'version') {
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    return res.json({ version: process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_DEPLOYMENT_ID || 'dev' });
+  }
   if (req.query.op === 'dualread') return runDualRead(req, res);
   if (req.query.op === 'dualreadlog') return runDualReadLog(req, res);
   if (req.query.op === 'dualreadbook') return runDualReadBook(req, res);

@@ -6624,6 +6624,37 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     navigator.serviceWorker.register('/sw.js').then(r => { swReg = r; }).catch(() => {});
   }
 
+  // ── Auto-update: prompt a reload when a new deploy lands ──────────────────
+  // The app is a long-lived SPA — switching its in-page tabs reuses code already in
+  // memory, so a new deploy isn't seen until a full page reload. Poll the deploy's
+  // commit SHA (/api/tracker?op=version); when it changes from the one we booted with,
+  // show a one-tap refresh bar. No build-time asset versioning required.
+  (function autoUpdate() {
+    let bootVersion = null, dismissedVersion = null;
+    const fetchVersion = () => fetch('/api/tracker?op=version', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null)).then(d => d && d.version).catch(() => null);
+    const showBar = (v) => {
+      if (document.getElementById('update-bar')) return;
+      const bar = document.createElement('div');
+      bar.id = 'update-bar';
+      bar.innerHTML = `<span class="ub-msg">🔄 A new version of the app is available.</span>`
+        + `<button class="ub-reload" type="button">Refresh</button>`
+        + `<button class="ub-x" type="button" aria-label="Dismiss">✕</button>`;
+      document.body.appendChild(bar);
+      bar.querySelector('.ub-reload').onclick = () => location.reload();
+      bar.querySelector('.ub-x').onclick = () => { bar.remove(); dismissedVersion = v; };
+    };
+    const check = async () => {
+      const v = await fetchVersion();
+      if (!v || v === 'dev') return;
+      if (bootVersion == null) { bootVersion = v; return; }   // first successful fetch = our version
+      if (v !== bootVersion && v !== dismissedVersion) showBar(v);
+    };
+    check();                                                   // capture bootVersion
+    setInterval(check, 5 * 60 * 1000);                         // re-check every 5 minutes
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });  // and when the tab regains focus
+  })();
+
   // Fire a desktop/phone notification on a Strong flip (works while the app is
   // open or installed as a PWA). Uses the service worker so it shows even when
   // the tab is backgrounded.
