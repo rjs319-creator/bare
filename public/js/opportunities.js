@@ -167,23 +167,22 @@ function expertDetail(c) {
 // The card BODY (badges → expert detail), shared by the Opportunities strip and the
 // ⚡ Quick Hit shortlist so both render an identical thesis/levels/sizing block.
 // WHY NOW verdict badge — the one-word, honest read composed server-side
-// (api/screener → lib/whynow, the SAME logic the lookup modal uses). Shown only
-// when it carries information: caution (a risk-off/against read) and watch (a
-// single-signal caveat) ALWAYS show; a plain "constructive" is the norm for a
-// curated card, so it badges only genuine standouts (confirmed breakout or
-// top-quintile conviction). Quiet / missing → nothing. Shared across all cards.
+// (api/screener → lib/whynow, the SAME logic the lookup modal uses). On curated
+// card lists the baseline read is homogeneous, so the badge shows ONLY the two
+// reads that carry information: a genuine standout (🔥 Prime — a confirmed
+// breakout or top-quintile conviction) and a warning (⚠️ Caution — a risk-off /
+// against read). Plain constructive, single-signal watch, and quiet all show
+// nothing. Shared across every screener-driven card.
 const WN_BADGE = {
   standout: { cls: 'wn-b-constructive', icon: '🔥', label: 'Prime' },
-  watch:    { cls: 'wn-b-watch',        icon: '👀', label: 'Watch' },
   caution:  { cls: 'wn-b-caution',      icon: '⚠️', label: 'Caution' },
 };
 export function whyNowBadge(c) {
   const w = c && c.whynow;
   if (!w) return '';
   const kind = w.level === 'caution' ? 'caution'
-    : w.level === 'watch' ? 'watch'
     : (w.level === 'constructive' && w.standout) ? 'standout'
-    : null;                                   // plain constructive / quiet → suppressed
+    : null;                                   // watch / plain constructive / quiet → suppressed
   const b = kind && WN_BADGE[kind];
   if (!b) return '';
   return `<span class="wn-badge ${b.cls}" title="WHY NOW — ${esc(w.headline || '')}">${b.icon} ${b.label}</span>`;

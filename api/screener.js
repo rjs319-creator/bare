@@ -453,9 +453,16 @@ module.exports = async function handler(req, res) {
     // Track records + read-through are omitted for the badge (they don't change the
     // LEVEL); the risk-off macro veto and the ghost/apex/conviction signals do.
     const rgStr = apex.rawRegime(regime);
+    // Apex counts toward the verdict ONLY for names in the breakout candidate set —
+    // the exact rule the lookup modal (op=whynow) uses, so a card and its modal never
+    // disagree. A quietly-accumulating Ghost name that isn't breaking out is not
+    // credited breakout momentum here.
+    const breakoutSet = new Set(candidates.map(c => c.ticker));
     const whyNowFor = (c, ghost, conviction) => {
       let apexHit = null;
-      try { const sc = apex.scoreCandidate(c, rgStr, null); if (sc.tier) apexHit = { tier: sc.tier, score: sc.score }; } catch { /* pillars missing → no apex */ }
+      if (breakoutSet.has(c.ticker)) {
+        try { const sc = apex.scoreCandidate(c, rgStr, null); if (sc.tier) apexHit = { tier: sc.tier, score: sc.score }; } catch { /* pillars missing → no apex */ }
+      }
       const ghostHit = ghost ? { tier: ghost.tier, score: ghost.score, strongPillars: ghost.strongPillars || [] } : null;
       const r = composeWhyNow({ ticker: c.ticker, apex: apexHit, ghost: ghostHit, conviction: conviction || null, macro });
       // `standout` = the strongest tier of confirmation (confirmed breakout OR
