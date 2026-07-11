@@ -1,3 +1,5 @@
+const { sanitizeTickers } = require('../lib/auth');
+
 // Determine which session the latest print belongs to (no marketState in meta).
 function deriveSession(meta, lastTs) {
   const tp = meta.currentTradingPeriod;
@@ -112,7 +114,9 @@ module.exports = async function handler(req, res) {
   const { tickers } = req.query;
   if (!tickers) return res.status(400).json({ error: 'Missing tickers' });
 
-  const tickerList = tickers.split(',').slice(0, 12);
+  // Validate before building provider URLs — reject path-injection / malformed symbols.
+  const tickerList = sanitizeTickers(tickers, 12);
+  if (!tickerList.length) return res.status(400).json({ error: 'No valid tickers' });
 
   try {
     const quotes = await Promise.all(tickerList.map(t => fetchQuote(t.trim())));

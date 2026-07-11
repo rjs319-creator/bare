@@ -1,6 +1,7 @@
 // Cron-invoked cache warmer — hits the heavy endpoints so their edge caches are
 // fresh (combined with stale-while-revalidate, the app stays instant for users).
 const HOST = process.env.WARM_HOST || 'market-news-app-chi.vercel.app';
+const { requireTrusted, internalHeaders } = require('../lib/auth');
 
 const PATHS = [
   '/api/backtest?scope=large&months=6',
@@ -18,7 +19,7 @@ const PATHS = [
 async function warmOne(p) {
   const t0 = Date.now();
   try {
-    const r = await fetch('https://' + HOST + p, { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + p, { headers: internalHeaders() });
     return { p, status: r.status, ms: Date.now() - t0 };
   } catch (e) {
     return { p, error: String(e && e.message || e), ms: Date.now() - t0 };
@@ -26,6 +27,10 @@ async function warmOne(p) {
 }
 
 module.exports = async function handler(req, res) {
+  // Gate the cron entrypoint: Vercel auto-sends the CRON_SECRET bearer on scheduled
+  // runs; when the secret is unset this fails open (deploy-safe). See lib/auth.js.
+  if (!requireTrusted(req, res)) return;
+
   const queue = [...PATHS], out = [];
   async function worker() { while (queue.length) out.push(await warmOne(queue.shift())); }
   await Promise.all([worker(), worker(), worker()]); // 3 at a time
@@ -43,7 +48,7 @@ module.exports = async function handler(req, res) {
   // does both — warm then log — so we stay within Vercel cron limits).
   let track = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=track', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=track', { headers: internalHeaders() });
     track = await r.json();
   } catch (e) { track = { error: String(e && e.message || e) }; }
 
@@ -51,20 +56,20 @@ module.exports = async function handler(req, res) {
   // THEN log today's Apex/Loaded signals so they're stamped with the current tag.
   let narrative = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=narrative', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=narrative', { headers: internalHeaders() });
     narrative = await r.json();
   } catch (e) { narrative = { error: String(e && e.message || e) }; }
 
   let apexlog = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=apexlog', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=apexlog', { headers: internalHeaders() });
     apexlog = await r.json();
   } catch (e) { apexlog = { error: String(e && e.message || e) }; }
 
   // Log today's Ghost/Stalking signals to their own ledger (Phase-2 adaptive engine).
   let ghostlog = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=ghostlog', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=ghostlog', { headers: internalHeaders() });
     ghostlog = await r.json();
   } catch (e) { ghostlog = { error: String(e && e.message || e) }; }
 
@@ -73,7 +78,7 @@ module.exports = async function handler(req, res) {
   // reconstructed historically). One Blob write per day.
   let archive = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=archive', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=archive', { headers: internalHeaders() });
     archive = await r.json();
   } catch (e) { archive = { error: String(e && e.message || e) }; }
 
@@ -82,7 +87,7 @@ module.exports = async function handler(req, res) {
   // once neutral/risk-off fader days accumulate. Own tracker call = own 60s budget.
   let intracapture = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=intracapture', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=intracapture', { headers: internalHeaders() });
     intracapture = await r.json();
   } catch (e) { intracapture = { error: String(e && e.message || e) }; }
 
@@ -90,7 +95,7 @@ module.exports = async function handler(req, res) {
   // ledger, update the Bayesian posteriors. The counterfactual archive is the moat.
   let cern = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=cerntick', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=cerntick', { headers: internalHeaders() });
     cern = await r.json();
   } catch (e) { cern = { error: String(e && e.message || e) }; }
 
@@ -99,14 +104,14 @@ module.exports = async function handler(req, res) {
   // book whose realized beat-SPY rate + cross-sleeve correlation we track.
   let edgelog = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=edgelog', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=edgelog', { headers: internalHeaders() });
     edgelog = await r.json();
   } catch (e) { edgelog = { error: String(e && e.message || e) }; }
 
   // Grade any matured trade-alerts on forward excess return (hands-off track record).
   let alertsgrade = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=alertsgrade', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=alertsgrade', { headers: internalHeaders() });
     alertsgrade = await r.json();
   } catch (e) { alertsgrade = { error: String(e && e.message || e) }; }
 
@@ -114,7 +119,7 @@ module.exports = async function handler(req, res) {
   // stamp the pending log entries with Fable's direction for the A/B edge test.
   let alertsassess = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=alertsassess', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=alertsassess', { headers: internalHeaders() });
     alertsassess = await r.json();
   } catch (e) { alertsassess = { error: String(e && e.message || e) }; }
 
@@ -123,7 +128,7 @@ module.exports = async function handler(req, res) {
   // skipped slow day self-heals next run (it re-resolves all still-open signals).
   let fadetick = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=fadetick', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=fadetick', { headers: internalHeaders() });
     fadetick = await r.json();
   } catch (e) { fadetick = { error: String(e && e.message || e) }; }
 
@@ -131,7 +136,7 @@ module.exports = async function handler(req, res) {
   // today's light + basket. Self-heals if a slow day skips it.
   let trendtick = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=trendtick', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=trendtick', { headers: internalHeaders() });
     trendtick = await r.json();
   } catch (e) { trendtick = { error: String(e && e.message || e) }; }
 
@@ -139,42 +144,42 @@ module.exports = async function handler(req, res) {
   // log today's picks. Reads the candle caches the screener warm just built.
   let daytradetick = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=daytradetick', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=daytradetick', { headers: internalHeaders() });
     daytradetick = await r.json();
   } catch (e) { daytradetick = { error: String(e && e.message || e) }; }
 
   // Confluence screener: resolve matured picks → learn (per-stock + per-strategy) → log.
   let confluencetick = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=confluencetick', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=confluencetick', { headers: internalHeaders() });
     confluencetick = await r.json();
   } catch (e) { confluencetick = { error: String(e && e.message || e) }; }
 
   // 🧬 Coil Radar — log today's top pre-explosion coil picks for the self-validating ledger.
   let coiltick = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=coiltick', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=coiltick', { headers: internalHeaders() });
     coiltick = await r.json();
   } catch (e) { coiltick = { error: String(e && e.message || e) }; }
 
   // ⚡ Gap-and-Go — resolve matured unscheduled gap-up picks + log today's for the ledger.
   let gapgotick = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=gapgotick', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=gapgotick', { headers: internalHeaders() });
     gapgotick = await r.json();
   } catch (e) { gapgotick = { error: String(e && e.message || e) }; }
 
   // 🪁 Down-Day Mode — resolve matured oversold-bounce longs + log today's IF the tape is red.
   let downdaytick = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=downdaytick', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=downdaytick', { headers: internalHeaders() });
     downdaytick = await r.json();
   } catch (e) { downdaytick = { error: String(e && e.message || e) }; }
 
   // 🐻 Gap-Down Continuation — resolve matured gap-down shorts + log today's for the ledger.
   let gapdowntick = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=gapdowntick', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=gapdowntick', { headers: internalHeaders() });
     gapdowntick = await r.json();
   } catch (e) { gapdowntick = { error: String(e && e.message || e) }; }
 
@@ -229,11 +234,11 @@ module.exports = async function handler(req, res) {
   //    weight tuner (self-improvement; dormant until the ledger matures).
   let timinglog = null, timingtune = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=timinglog', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=timinglog', { headers: internalHeaders() });
     timinglog = await r.json();
   } catch (e) { timinglog = { error: String(e && e.message || e) }; }
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=timingtune', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=timingtune', { headers: internalHeaders() });
     timingtune = await r.json();
   } catch (e) { timingtune = { error: String(e && e.message || e) }; }
 
@@ -241,62 +246,62 @@ module.exports = async function handler(req, res) {
   //    quadrant, so the pullback-buy vs bear-bounce read is falsifiable.
   let dualreadlog = null, dualreadtune = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=dualreadlog', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=dualreadlog', { headers: internalHeaders() });
     dualreadlog = await r.json();
   } catch (e) { dualreadlog = { error: String(e && e.message || e) }; }
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=dualreadtune', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=dualreadtune', { headers: internalHeaders() });
     dualreadtune = await r.json();
   } catch (e) { dualreadtune = { error: String(e && e.message || e) }; }
 
   // 🔮 Forecast — resolve matured predictions + (weekly) generate a fresh batch.
   let predicttick = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=predicttick', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=predicttick', { headers: internalHeaders() });
     predicttick = await r.json();
   } catch (e) { predicttick = { error: String(e && e.message || e) }; }
 
   // 🎲 Crowd — snapshot prediction-market 24h volume (builds the unusual-activity baseline).
   let crowdtick = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=crowdtick', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=crowdtick', { headers: internalHeaders() });
     crowdtick = await r.json();
   } catch (e) { crowdtick = { error: String(e && e.message || e) }; }
 
   // 🏆 Algo Leaderboard — snapshot the heavy confluence-strategy backtest into the cache.
   let leaderboardtick = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=leaderboardtick&src=confluence', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=leaderboardtick&src=confluence', { headers: internalHeaders() });
     leaderboardtick = await r.json();
   } catch (e) { leaderboardtick = { error: String(e && e.message || e) }; }
 
   // 🧭 Brief — log today's stance + resolve matured ones (runs after crowd/predict/tape are warm).
   let brieftick = null;
   try {
-    const r = await fetch('https://' + HOST + '/api/tracker?op=brieftick', { headers: { 'x-warm': '1' } });
+    const r = await fetch('https://' + HOST + '/api/tracker?op=brieftick', { headers: internalHeaders() });
     brieftick = await r.json();
   } catch (e) { brieftick = { error: String(e && e.message || e) }; }
 
   // Core Momentum sleeve: refresh the feature cache (resumable, ~5 daily runs to fully seed),
   // log the book on quarterly rebalance (self-gated), and resolve outcomes for live drift.
   let corebuild = null;
-  try { const r = await fetch('https://' + HOST + '/api/tracker?op=corebuild', { headers: { 'x-warm': '1' } }); corebuild = await r.json(); }
+  try { const r = await fetch('https://' + HOST + '/api/tracker?op=corebuild', { headers: internalHeaders() }); corebuild = await r.json(); }
   catch (e) { corebuild = { error: String(e && e.message || e) }; }
   let corelog = null;
-  try { const r = await fetch('https://' + HOST + '/api/tracker?op=corelog', { headers: { 'x-warm': '1' } }); corelog = await r.json(); }
+  try { const r = await fetch('https://' + HOST + '/api/tracker?op=corelog', { headers: internalHeaders() }); corelog = await r.json(); }
   catch (e) { corelog = { error: String(e && e.message || e) }; }
   let coredrift = null;
-  try { const r = await fetch('https://' + HOST + '/api/tracker?op=coredrift', { headers: { 'x-warm': '1' } }); coredrift = await r.json(); }
+  try { const r = await fetch('https://' + HOST + '/api/tracker?op=coredrift', { headers: internalHeaders() }); coredrift = await r.json(); }
   catch (e) { coredrift = { error: String(e && e.message || e) }; }
   // Fast-vs-sticky attention — cheap (no API): classify the day's archived mentions and
   // log Sticky/Fast names for the Scoreboard. Runs after op=archive wrote today's file.
   let attentiontick = null;
-  try { const r = await fetch('https://' + HOST + '/api/tracker?op=attentiontick', { headers: { 'x-warm': '1' } }); attentiontick = await r.json(); }
+  try { const r = await fetch('https://' + HOST + '/api/tracker?op=attentiontick', { headers: internalHeaders() }); attentiontick = await r.json(); }
   catch (e) { attentiontick = { error: String(e && e.message || e) }; }
   // Earnings-call tone — LAST on purpose: it makes bounded Claude calls, so if it's
   // slow it never blocks the critical logging ops above. Small per-run limit caps time.
   let tonetick = null;
-  try { const r = await fetch('https://' + HOST + '/api/tracker?op=tonetick&limit=6', { headers: { 'x-warm': '1' } }); tonetick = await r.json(); }
+  try { const r = await fetch('https://' + HOST + '/api/tracker?op=tonetick&limit=6', { headers: internalHeaders() }); tonetick = await r.json(); }
   catch (e) { tonetick = { error: String(e && e.message || e) }; }
 
   const warmedExtra = await extraWarm;   // already resolved — ran during the tail above

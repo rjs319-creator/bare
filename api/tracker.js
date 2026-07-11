@@ -43,6 +43,27 @@ const { runAttention, runAttentionTick } = require('../lib/attention-routes');
 const { runOptionsFlow, runOptionsPerf, runOptionsAssess } = require('../lib/optionsflow-routes');
 const { runPulse, runPulseRefine } = require('../lib/pulse-routes');
 const { runDualRead, runDualReadLog, runDualReadBook, runDualReadTune, runDualReadBackfill, runLtRecs } = require('../lib/dualread-routes');
+const { requireTrusted, requireMethod, stripForceParams } = require('../lib/auth');
+
+// Ops the DAILY CRON fans out to and the browser never fetches directly — safe to
+// require the CRON_SECRET bearer (enforced only once the secret is configured).
+const PRIVILEGED_OPS = new Set([
+  'alertsassess', 'alertsgrade', 'alignedlog', 'apexlog', 'archive', 'attentiontick',
+  'brieftick', 'cerntick', 'coiltick', 'confluencetick', 'corebuild', 'corelog',
+  'crowdtick', 'daytradetick', 'downdaytick', 'dualreadlog', 'dualreadtune', 'edgelog',
+  'fadetick', 'gapdowntick', 'gapgotick', 'ghostlog', 'intracapture', 'leaderboardtick',
+  'narrative', 'optionsassess', 'predicttick', 'timinglog', 'timingtune', 'tonetick',
+  'trendtick', 'universecompile', 'universescan',
+]);
+// Ops both the cron AND the browser call: leave the cached read public, but strip
+// the expensive force/refresh rebuild levers for untrusted callers.
+const SHARED_FORCE_OPS = new Set([
+  'aligned', 'anomalytick', 'biotechtick', 'calibration', 'coredrift', 'crossassettick',
+  'optionsflow', 'pulse', 'pulserefine', 'putsell', 'readthroughtick', 'secondwavetick',
+  'toneshifttick', 'track',
+]);
+// Ingest endpoints: POST-only + their own token/secret gate inside the route.
+const INGEST_OPS = new Set(['insideringest', 'alertsingest']);
 
 module.exports = async function handler(req, res) {
   // Deploy version — the client compares this against the value it booted with and
@@ -51,6 +72,15 @@ module.exports = async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store, max-age=0');
     return res.json({ version: process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_DEPLOYMENT_ID || 'dev' });
   }
+
+  // ── Authorization gate (see lib/auth.js). Ingest is POST-only; cron-exclusive
+  //    ops require the CRON_SECRET bearer; shared ops lose their force/refresh lever
+  //    for anonymous callers. All fail-open until CRON_SECRET is configured.
+  const op = req.query.op || 'scoreboard';
+  if (INGEST_OPS.has(op) && !requireMethod(req, res, ['POST'])) return;
+  if (PRIVILEGED_OPS.has(op)) { if (!requireTrusted(req, res)) return; }
+  else if (SHARED_FORCE_OPS.has(op)) { stripForceParams(req); }
+
   if (req.query.op === 'dualread') return runDualRead(req, res);
   if (req.query.op === 'dualreadlog') return runDualReadLog(req, res);
   if (req.query.op === 'dualreadbook') return runDualReadBook(req, res);

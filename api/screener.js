@@ -8,6 +8,7 @@ const apex = require('../lib/apex');
 const { composeWhyNow } = require('../lib/whynow');
 const { fetchMacro } = require('../lib/macro');
 const { loadCandleCache, cacheState, cacheGet, saveCandleCache } = require('../lib/candle-cache');
+const { isTrusted, cronSecret } = require('../lib/auth');
 const { readJSON, writeJSON, hasStore } = require('../lib/store');
 const { fetchShortInterest, siFlag } = require('../lib/shortinterest');
 
@@ -233,7 +234,12 @@ module.exports = async function handler(req, res) {
   // instead of ~515 latency-bound Yahoo calls. The daily warm cron (x-warm header)
   // rebuilds it; user requests only read. Sector-filtered requests still read the
   // full-scope cache and subset it — only the unfiltered universe may WRITE it.
-  const isWarm = !!(req.headers['x-warm'] || req.query.warm);
+  // The warm flag forces a full live scan + cache write, so it must be a trusted
+  // (cron) caller once CRON_SECRET is configured — otherwise anyone could append
+  // ?warm=1 to trigger the ~515-ticker scan on demand. Fail-open until the secret
+  // is set so the cron keeps rebuilding in the unconfigured deploy window.
+  const warmRequested = !!(req.headers['x-warm'] || req.query.warm);
+  const isWarm = warmRequested && (!cronSecret() || isTrusted(req));
   const isFullUniverse = sectorFilter === 'all';
 
   try {
