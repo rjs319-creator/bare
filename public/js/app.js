@@ -6579,7 +6579,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const netUp = s.avgNet != null && s.avgNet >= 0;
       const netLine = s.avgNet == null ? ''
         : `<div class="sb-h-net ${netUp ? 'up' : 'down'}" title="Return after a realistic round-trip cost (spread + slippage), tiered by liquidity: large ~0.16%, small ~0.60%, biotech ~1.0%, micro ~1.5%. 'vs S&P' is the cost-adjusted market-beat. Cost model ${esc((lastScoreboard && lastScoreboard.costModel && lastScoreboard.costModel.version) || 'cost-v1')}.">net ${netUp ? '+' : ''}${s.avgNet}%${s.avgNetExcess != null ? ` · vs S&amp;P ${s.avgNetExcess > 0 ? '+' : ''}${s.avgNetExcess}%` : ''}</div>`;
-      return `<div class="sb-h"><div class="sb-h-lb" title="${esc(SB_HZ_HELP)}">${lb}</div><div class="sb-h-ret ${up ? 'up' : 'down'}">${up ? '+' : ''}${s.avg}%</div><div class="sb-h-sub">${s.winRate}% win · n=${s.n}</div>${exLine}${netLine}</div>`;
+      // Sector-relative line: return minus the pick's SECTOR ETF — isolates real
+      // selection skill from sector beta (beating the market can just be owning the
+      // hot sector). null until the sector ETF resolves for enough picks.
+      const secUp = s.avgSecExcess != null && s.avgSecExcess >= 0;
+      const secLine = s.avgSecExcess == null ? ''
+        : `<div class="sb-h-sec ${secUp ? 'up' : 'down'}" title="Average return minus the pick's own SECTOR ETF (XLK, XLF, XBI…) over the same ${lb} window — 'did it beat its peers', not just the market. Strips out sector beta so a hot-sector tailwind isn't mistaken for stock-selection skill. Beat rate = share that outran their sector.">vs sector ${secUp ? '+' : ''}${s.avgSecExcess}% · beat ${s.beatSecRate}%</div>`;
+      return `<div class="sb-h"><div class="sb-h-lb" title="${esc(SB_HZ_HELP)}">${lb}</div><div class="sb-h-ret ${up ? 'up' : 'down'}">${up ? '+' : ''}${s.avg}%</div><div class="sb-h-sub">${s.winRate}% win · n=${s.n}</div>${exLine}${netLine}${secLine}</div>`;
     }).join('');
     const hl = h['20d'] || h['1m'] || h['10d'] || h['5d'] || h['1d'] || h['3m'];
     // In a regime view, show that regime's logged-pick count; flag thin samples so

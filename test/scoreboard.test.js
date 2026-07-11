@@ -217,6 +217,26 @@ test('summarizeReturns: net fields are null when no record carries a net', () =>
   assert.equal(s.avgNetExcess, null);
 });
 
+test('summarizeReturns: sector-relative excess aggregates the per-record secExc', () => {
+  const s = summarizeReturns([
+    { ret: 5, mfe: 6, exc: 3, secExc: 1.5 },   // beat its sector
+    { ret: 2, mfe: 3, exc: -1, secExc: -0.5 }, // lagged its sector
+    { ret: 4, mfe: 5, exc: 2, secExc: 2.5 },   // beat its sector
+    { ret: 1, mfe: 2, exc: 0 },                // sector unknown → excluded from sector stats
+  ]);
+  assert.equal(s.n, 4);
+  assert.equal(s.secExcN, 3);          // only 3 have a resolvable sector
+  assert.equal(s.avgSecExcess, 1.17);  // (1.5 − 0.5 + 2.5) / 3
+  assert.equal(s.beatSecRate, 67);     // 2 of 3 beat their sector
+});
+
+test('summarizeReturns: sector fields are null when no record carries a sector excess', () => {
+  const s = summarizeReturns([{ ret: 5, mfe: 6, exc: 2 }]);
+  assert.equal(s.secExcN, 0);
+  assert.equal(s.avgSecExcess, null);
+  assert.equal(s.beatSecRate, null);
+});
+
 // ── fadeRowsFrom: flatten the fade ledger into Scoreboard short rows ──────────
 const FADE_DAYS = [
   { date: '2026-06-20', signals: [
