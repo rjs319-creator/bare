@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { forwardReturn, forwardPath, nextOpenReturn, spyForwardReturn, summarizeReturns, cernPicksFrom, fadeRowsFrom, regimeBucketOf } = require('../lib/apex-routes');
+const { forwardReturn, forwardPath, nextOpenReturn, spyForwardReturn, summarizeReturns, summarizePlans, cernPicksFrom, fadeRowsFrom, regimeBucketOf } = require('../lib/apex-routes');
 
 // ── regimeBucketOf: map a macro state into a Scoreboard regime bucket ─────────
 test('regimeBucketOf: null / missing state yields no bucket', () => {
@@ -235,6 +235,30 @@ test('summarizeReturns: sector fields are null when no record carries a sector e
   assert.equal(s.secExcN, 0);
   assert.equal(s.avgSecExcess, null);
   assert.equal(s.beatSecRate, null);
+});
+
+// ── summarizePlans: STRATEGY efficacy (target-before-stop at published levels) ─
+test('summarizePlans: target-first / stop-first rates and profit factor at the levels', () => {
+  const s = summarizePlans([
+    { outcome: 'WIN', r: 0.10 },
+    { outcome: 'WIN', r: 0.10 },
+    { outcome: 'LOSS', r: -0.05 },
+    { outcome: 'EXPIRED', r: 0.02 },
+  ]);
+  assert.equal(s.n, 4);
+  assert.equal(s.targetFirstRate, 50);  // 2 of 4 hit target first
+  assert.equal(s.stopFirstRate, 25);    // 1 of 4 stopped out
+  assert.equal(s.expiredRate, 25);
+  assert.equal(s.avgRpct, 4.25);        // (0.10+0.10−0.05+0.02)/4 × 100
+  assert.equal(s.profitFactor, 4.4);    // grossWin 0.22 / grossLoss 0.05
+});
+
+test('summarizePlans: null on no resolvable plans; PF null when no losses', () => {
+  assert.equal(summarizePlans([]), null);
+  assert.equal(summarizePlans(null), null);
+  const allWin = summarizePlans([{ outcome: 'WIN', r: 0.1 }]);
+  assert.equal(allWin.profitFactor, null); // no stop-outs → undefined ratio, not Infinity
+  assert.equal(allWin.targetFirstRate, 100);
 });
 
 // ── nextOpenReturn: realistic-entry forward return (entry-v1) ────────────────

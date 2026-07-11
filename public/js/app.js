@@ -6611,6 +6611,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // catch large moves vs. those that only grind out a small average.
     const bw = (hl && hl.big10 != null) ? `<div class="sb-bw"><span title="Share of signals whose best run-up reached +10% before the horizon elapsed">🚀 &gt;10%: <b>${hl.big10}%</b></span><span title="Share that reached +20%">&gt;20%: <b>${hl.big20}%</b></span><span title="Average best run-up (Maximum Favorable Excursion) per signal">Avg peak <b>+${hl.avgMfe}%</b></span></div>` : '';
     const bwBadge = (hl && hl.big10 >= 30) ? `<span class="sb-bwbadge" title="${hl.big10}% of signals reached +10% — a big-winner model">🚀 Big-winner ${hl.big10}%</span>` : '';
+    // STRATEGY efficacy (distinct from the return horizons, which measure whether the
+    // stock MOVED): did the pick's published entry/stop/target actually capture it —
+    // target reached before the stop, at the levels shown on the card. Only shown for
+    // sleeves that logged levels (e.g. Ghost). PF>1 & target-first>50% = the plan works.
+    const st = g.strategy;
+    const strat = (st && st.n) ? `<div class="sb-strat" title="STRATEGY efficacy — resolving each pick at its OWN logged entry/stop/target (target-before-stop, hold ≤63 sessions). 'Target-first' is the plan's real win rate; PF = gross target-R ÷ gross stop-R. This is 'could the published trade capture it', separate from 'did the stock move' above.">🎯 Plan: <b class="${st.targetFirstRate >= 50 ? 'win' : 'loss'}">${st.targetFirstRate}%</b> hit target first · 🛑 ${st.stopFirstRate}% stopped · PF <b class="${st.profitFactor != null && st.profitFactor >= 1 ? 'win' : 'loss'}">${st.profitFactor != null ? st.profitFactor : '∞'}</b> <span class="sb-strat-n">n=${st.n}</span></div>` : '';
     return `<div class="sb-card ${v.cls === 'pos' ? 'pos' : v.cls === 'neg' ? 'neg' : ''} ${disabled ? 'disabled' : ''}">
         <div class="sb-head">
           <span class="sb-exp ${v.cls}">${v.label}${v.val != null ? ` ${v.val > 0 ? '+' : ''}${v.val}%` : ''}</span>
@@ -6621,6 +6627,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <div class="sb-horizons">${hz}</div>
         ${wl}
         ${bw}
+        ${strat}
       </div>`;
   }
 
