@@ -1,7 +1,35 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { efficiencyRatio, marketCondition, emaSeries, rsiSeries } = require('../lib/confluence');
+const { efficiencyRatio, marketCondition, emaSeries, rsiSeries, independentScore, STRATEGY_FAMILY, CORR_DISCOUNT, CONFLUENCE_FAMILY_VERSION } = require('../lib/confluence');
+
+// ── independent-evidence families (family-v1) ────────────────────────────────
+test('STRATEGY_FAMILY: 4 of 5 strategies are one trend family, rsi is the independent one', () => {
+  const fams = new Set(Object.values(STRATEGY_FAMILY));
+  assert.equal(fams.size, 2);
+  assert.equal(STRATEGY_FAMILY.ema, 'trend');
+  assert.equal(STRATEGY_FAMILY.macd, 'trend');
+  assert.equal(STRATEGY_FAMILY.rsi, 'meanReversion');
+  assert.equal(CONFLUENCE_FAMILY_VERSION, 'family-v1');
+});
+
+test('independentScore: within-family agreement is correlation-discounted', () => {
+  // first vote full, each extra in the same family × CORR_DISCOUNT (0.3)
+  assert.equal(independentScore({ trend: [1] }), 1);
+  assert.equal(independentScore({ trend: [1, 1] }), +(1 + CORR_DISCOUNT).toFixed(2)); // 1.3
+  assert.equal(independentScore({ trend: [1, 1, 1, 1] }), +(1 + 3 * CORR_DISCOUNT).toFixed(2)); // 1.9
+});
+
+test('independentScore: two INDEPENDENT families outrank more correlated votes', () => {
+  const allTrend = independentScore({ trend: [1, 1, 1, 1] });          // 1.9
+  const crossFamily = independentScore({ trend: [1], meanReversion: [1] }); // 2.0
+  assert.ok(crossFamily > allTrend, 'trend+meanReversion should beat 4 correlated trend votes');
+});
+
+test('independentScore: heavier weights sort to full-credit within a family', () => {
+  // the strongest vote in a family always gets full weight, weaker ones discounted
+  assert.equal(independentScore({ trend: [2, 1] }), +(2 + 1 * CORR_DISCOUNT).toFixed(2)); // 2.3
+});
 
 test('efficiencyRatio: a straight line is perfectly efficient (1.0)', () => {
   const closes = [1, 2, 3, 4, 5];

@@ -441,6 +441,8 @@
     .chip.purple { color: var(--purple); border-color: #8b6cf044; background: var(--purple-dim); }
     .chip.cyan   { color: var(--cyan);   border-color: #06c4d444;  background: var(--cyan-dim); }
     .chip.gray   { color: var(--text-dim); border-color: var(--border); background: var(--bg); }
+    .chip.green  { color: var(--green); border-color: #10d98a44; background: rgba(16,217,138,0.10); }
+    .chip.amber  { color: var(--amber); border-color: #f5a62344; background: rgba(245,166,35,0.10); }
 
     /* ── OPTIONS FLOW ── */
     .options-section { margin-bottom: 32px; }

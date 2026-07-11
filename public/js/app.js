@@ -6204,13 +6204,19 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
     const card = r => {
       const badges = (r.bull || []).map(s => { const m = (r.matched || []).includes(s); return `<span class="chip ${m ? 'cyan' : 'gray'}">${m ? '★ ' : ''}${esc(CFL_STRAT[s] || s)}</span>`; }).join(' ');
+      // Independent-evidence flag (family-v1): agreement across families beats piling
+      // votes on one factor. Single-family "confluence" is flagged as one dressed-up signal.
+      const famChip = r.familyBullCount == null ? ''
+        : (r.singleFamily
+          ? `<span class="chip amber" title="These strategies agree but they're all the SAME factor (${esc((r.familyBull || []).join(', '))}) — one confirmation dressed up as several. Ranked below genuinely independent agreement.">⚠ 1 family</span>`
+          : `<span class="chip green" title="Independent evidence families agreeing: ${esc((r.familyBull || []).join(', '))}. Cross-family confirmation (trend + mean-reversion) is stronger than more correlated trend votes.">✓ ${r.familyBullCount} indep. families</span>`);
       const pb = r.pullback;
       return `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
           <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> <span class="dt-dim">${L('confluence', r.score + '/' + r.maxScore)}</span></span>
           <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
         </div>
-        <div class="dt-card-sub">${badges} <span class="dt-dim">${r.excess21d != null ? '· ' + L('relStrength', '1mo vs SPY') + ' ' + (r.excess21d > 0 ? '+' : '') + r.excess21d + '%' : ''}${r.beta != null ? ' · ' + L('beta', 'β') + ' ' + r.beta : ''}</span></div>
+        <div class="dt-card-sub">${badges} ${famChip} <span class="dt-dim">${r.excess21d != null ? '· ' + L('relStrength', '1mo vs SPY') + ' ' + (r.excess21d > 0 ? '+' : '') + r.excess21d + '%' : ''}${r.beta != null ? ' · ' + L('beta', 'β') + ' ' + r.beta : ''}</span></div>
         ${pb ? `<div class="dt-card-plan">↩️ <b>${L('pullback', 'Pullback')}</b> <b>$${pb.entry}</b> · 🛑 ${L('stop', '<b>$' + pb.stop + '</b>')} <span class="dt-dim">(−${pb.riskPct}%)</span> · 🏁 ${L('target', '<b>$' + pb.target + '</b>')} <span class="dt-dim">${L('rr', 'R:R')} 1:${pb.rr}</span></div>` : ''}
         <div class="dt-card-plan">🎯 <b>${L('pullback', 'Breakout')}</b> <b>$${r.entry}</b> · 🛑 ${L('stop', '<b>$' + (r.stop != null ? r.stop : '—') + '</b>')}${r.riskPct != null ? ` <span class="dt-dim">(−${r.riskPct}%)</span>` : ''} · 🏁 ${L('target', '<b>$' + (r.target != null ? r.target : '—') + '</b>')}${r.rr ? ` <span class="dt-dim">${L('rr', 'R:R')} 1:${r.rr}</span>` : ''}</div>
         <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
@@ -6221,7 +6227,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (t.riskOff) picksPanel = `<div class="rot-panel"><div class="rot-head">🛑 Risk-off — list suppressed</div><div class="rot-sub">Trend/confluence signals underperform in risk-off (validated). Stand down on new longs.</div></div>`;
     else {
       const relaxNote = t.relaxed && t.count ? `<div class="rot-sub" style="color:var(--amber)">No strong 4/5 confluence today — showing moderate <b>3/5</b> agreement (the ledger's bar). Weaker signal; confirm on the chart.</div>` : '';
-      picksPanel = `<div class="rot-panel"><div class="rot-head">⚙️ Confluence longs (${t.count})</div><div class="rot-sub">Ranked by agreement strength + the per-stock learner. Chips = strategies that agree.</div>${relaxNote}${(t.picks || []).map(card).join('') || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No names at ≥3/5 agreement right now.</span></div>'}</div>`;
+      picksPanel = `<div class="rot-panel"><div class="rot-head">⚙️ Confluence longs (${t.count})</div><div class="rot-sub">Ranked by <b>independent-family</b> agreement (trend + mean-reversion count more than piling on correlated trend votes) + the per-stock learner. Chips = strategies that agree; the family chip flags single-factor "confluence."</div>${relaxNote}${(t.picks || []).map(card).join('') || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No names at ≥3/5 agreement right now.</span></div>'}</div>`;
     }
 
     let track;
