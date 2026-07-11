@@ -1,10 +1,28 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { wilson } = require('../lib/stats');
+const { wilson, isMarketHoliday, nowET } = require('../lib/stats');
 
 test('wilson: empty sample is [0,0]', () => {
   assert.deepEqual(wilson(0, 0), { lo: 0, hi: 0 });
+});
+
+test('isMarketHoliday: known NYSE full-day closures are flagged', () => {
+  assert.equal(isMarketHoliday('2026-01-01'), true);   // New Year's Day
+  assert.equal(isMarketHoliday('2026-07-03'), true);   // Independence Day (observed)
+  assert.equal(isMarketHoliday('2026-11-26'), true);   // Thanksgiving
+  assert.equal(isMarketHoliday('2026-12-25'), true);   // Christmas
+});
+
+test('isMarketHoliday: an ordinary trading day is not', () => {
+  assert.equal(isMarketHoliday('2026-07-06'), false);
+  assert.equal(isMarketHoliday('2026-06-24'), false);
+});
+
+test('nowET: exposes isMarketClosed = weekend OR holiday', () => {
+  const n = nowET();
+  assert.equal(typeof n.date, 'string');
+  assert.equal(n.isMarketClosed, n.isWeekend || n.isHoliday);
 });
 
 test('wilson: a small lucky sample has a low floor', () => {
