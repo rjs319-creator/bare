@@ -1,3 +1,4 @@
+const { fetchWithTimeout } = require('../lib/http');
 // Momentum scanner — pulls the trending universe, runs the real-time technical
 // signal on each, and splits the names into Strong Buy vs Strong Sell.
 //
@@ -16,7 +17,7 @@ const HOST = process.env.WARM_HOST || 'market-news-app-chi.vercel.app';
 // verdict the screener already composed (single source of truth). Best-effort.
 async function screenerJSON(scope) {
   try {
-    const r = await fetch('https://' + HOST + '/api/screener?scope=' + scope, { headers: { 'x-warm': '1' } });
+    const r = await fetchWithTimeout('https://' + HOST + '/api/screener?scope=' + scope, { headers: { 'x-warm': '1' } });
     return r.ok ? await r.json() : null;
   } catch { return null; }
 }
@@ -70,7 +71,7 @@ function isOverExtended(s) {
 
 async function fetchTrendingStockTwits() {
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       'https://api.stocktwits.com/api/2/trending/symbols/equities.json?limit=30',
       { headers: { 'User-Agent': 'Mozilla/5.0' } }
     );

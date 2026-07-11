@@ -1,4 +1,5 @@
 const { sanitizeTickers } = require('../lib/auth');
+const { fetchWithTimeout } = require('../lib/http');
 
 // Determine which session the latest print belongs to (no marketState in meta).
 function deriveSession(meta, lastTs) {
@@ -21,7 +22,7 @@ async function fetchYahoo(ticker) {
   const path = `/v8/finance/chart/${sym}?range=1d&interval=5m&includePrePost=true`;
   for (const host of ['query1.finance.yahoo.com', 'query2.finance.yahoo.com']) {
     try {
-      const r = await fetch(`https://${host}${path}`, {
+      const r = await fetchWithTimeout(`https://${host}${path}`, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36', 'Accept': 'application/json' },
       });
       if (!r.ok) continue;
@@ -67,7 +68,7 @@ async function fetchStooq(ticker) {
   try {
     const symbol = `${ticker.toUpperCase()}.US`;
     const url = `https://stooq.com/q/l/?s=${symbol}&f=sd2t2ohlcvn&h&e=csv`;
-    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    const res = await fetchWithTimeout(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
     const text = await res.text();
     const lines = text.trim().split('\n');
     if (lines.length < 2) return null;
@@ -96,7 +97,7 @@ async function fetchSpark(ticker) {
   const path = `/v8/finance/chart/${sym}?range=5d&interval=1d`;
   for (const host of ['query1.finance.yahoo.com', 'query2.finance.yahoo.com']) {
     try {
-      const r = await fetch(`https://${host}${path}`, {
+      const r = await fetchWithTimeout(`https://${host}${path}`, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36', 'Accept': 'application/json' },
       });
       if (!r.ok) continue;
