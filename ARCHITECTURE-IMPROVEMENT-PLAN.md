@@ -10,6 +10,23 @@
 
 ---
 
+## Implementation status (updated)
+
+Branch `harden/security-batch1` — 4 batches shipped, **561/561 `node --test` green**, nothing deployed.
+
+| Batch | Commit | Findings addressed |
+|-------|--------|--------------------|
+| 1 — Security | `fc9ab0e` | H2, H3, H4, H5, H8, M12, M15 (+ auth follow-through) |
+| 2 — Data integrity | `7abebd4` | H1, H14, M5 |
+| 3 — Cron resilience | `f32bfd3` | H9, H10, M1, M2 |
+| 4 — Feed reliability | `9d635c6` | H6, H7 (partial), M11 (+ retry capability for M7) |
+
+**Requires your action before Batch 1 is active:** set `CRON_SECRET` (+ optional `ALERTS_INGEST_TOKEN`, `INSIDER_INGEST_TOKEN`) in Vercel; update the two external collectors to send the token/bearer; deploy.
+
+**Not yet done (need your deploy + live verification, or are larger):** H11/H12/M14 (Batch 5 frontend slice), H13 (Apex scorer unification — touches live client scoring), H15 + M8/M10/M13 (Phase 3 cost/scaling), plus the browser-triggered admin-write residual (`recalibrate`/`backfill`/`exits`/`longshort`/`pead`/`gameplan`). M4/M6 (insider sharding / schema envelope) deferred from Batch 2 as lower-urgency.
+
+---
+
 ## 0. Repository assessment
 
 A single-user momentum/regime **dashboard** (explicitly not an alpha engine — see `APP-REVIEW-FOR-CHATGPT.md` §6). Vanilla-JS no-build frontend, Node ESM Vercel serverless backend, Vercel Blob JSON storage, one daily cron. Constraints are real and respected: 11 `api/*.js` files fit the Hobby 12-function cap by multiplexing ~130 logical ops through `?op=` into `lib/*-routes.js`; a single 13:00-UTC cron does ~48 jobs under a 60s budget.
