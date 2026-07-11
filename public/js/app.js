@@ -275,7 +275,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         // Wire the "Start Here" link to jump to the full beginner guide (keyboard-accessible).
         const link = node.querySelector('[data-howto-start]');
         if (link) {
-          const goStart = e => { e.preventDefault(); e.stopPropagation(); showTab('start'); };
+          // 'start' is both a group key (default sub 'today') and the beginner-guide
+          // section id — pin the sub so showTab lands on the guide, not on 'today'.
+          const goStart = e => { e.preventDefault(); e.stopPropagation(); hubSub.start = 'start'; showTab('start'); };
           link.addEventListener('click', goStart);
           link.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') goStart(e); });
         }
