@@ -939,6 +939,7 @@
       padding: 1px 6px; border-radius: 4px; white-space: nowrap; margin-left: auto;
     }
     .wn-track-pending { color: var(--amber); background: var(--amber-dim); border-color: #f0a83233; }
+    .wn-track-neg { color: var(--red); background: var(--red-dim); border-color: #ef505033; }
     .wn-track-note { color: var(--text-dim); background: transparent; border-color: var(--border); font-weight: 500; white-space: normal; }
     .wn-fine { font-size: 0.6rem; color: var(--text-muted); line-height: 1.4; margin-top: 9px; }
     /* Collapsible pillar-level breakdown */

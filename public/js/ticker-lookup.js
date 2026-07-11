@@ -181,7 +181,10 @@ function wnTrackChip(track, note) {
   const exc = track.avgExcess != null ? `${track.avgExcess >= 0 ? '+' : ''}${track.avgExcess}% vs bench` : '';
   const wr = track.winRate != null ? `${track.winRate}% win` : '';
   const bits = [wr, exc].filter(Boolean).join(' · ');
-  return `<span class="wn-track" title="${track.horizon || ''} forward record over ${track.resolved} resolved picks in this signal class">📊 ${esc(bits)} · n=${track.resolved}</span>`;
+  // A losing record must not look green — colour the chip by realised excess so the
+  // honest track record reads honestly at a glance.
+  const neg = track.avgExcess != null && track.avgExcess < 0;
+  return `<span class="wn-track${neg ? ' wn-track-neg' : ''}" title="${track.horizon || ''} forward record over ${track.resolved} resolved picks in this signal class">📊 ${esc(bits)} · n=${track.resolved}</span>`;
 }
 
 function wnSignalRow(s) {
