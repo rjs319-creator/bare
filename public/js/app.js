@@ -103,6 +103,177 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     return 'start';   // first-time visitors land on the beginner's guide
   })();
 
+  // ── NOVICE "how to use" guides ────────────────────────────────────────────
+  // One plain-English entry per screener/strategy tab that lacks an inline guide.
+  // Four beginner questions: what it finds · how to read a card · what to do now ·
+  // the honest catch. Injected once at the top of each section by injectHowto()
+  // (tabs that already have their own inline guide — trendrider/daytrade/coil/
+  // confluence/gapgo/gapdown/fade/aligned/putsell — are deliberately omitted).
+  const HOWTO = {
+    custom: {
+      what: `Stocks that just broke OUT to new highs, scored 0–100 by a four-part model (trend, momentum, volume, fundamentals) that re-weights itself for the current market mood.`,
+      read: `Higher score and higher tier (<b>Apex &gt; Loaded &gt; Watch</b>) mean more of the four parts agree. The strip up top shows the market "regime" the model is using right now.`,
+      act: `Treat it as a watchlist. Confirm the breakout on a chart, then buy near the shown <b>entry</b> with the shown <b>stop</b>; size so a stop-out costs only ~1% of your account.`,
+      catch: `Breakouts get chopped up in sideways or falling markets, so the model steps back in risk-off. The app's own tests rate this edge as <b>weak</b> — research, not advice.`,
+    },
+    ghost: {
+      what: `QUIET stocks that look like they're being <b>accumulated before</b> a breakout — the opposite of chasing a move that already happened. Scored /100 across six clues, including real insider buying.`,
+      read: `Tier <b>GHOST &gt; STALKING &gt; WATCH</b>. The pillar chips show which clues fired (relative strength, accumulation, smart-money flow, insider buys, catalyst).`,
+      act: `Use it as an <b>early</b> watchlist. These are "getting ready," not "going now" — set an alert and wait for the actual breakout to confirm before buying.`,
+      catch: `"Quiet accumulation" is a guess about intent, and many names never break out. Insider buying is rare in big caps. A lead to watch, not a buy signal.`,
+    },
+    downday: {
+      what: `A tool that only switches on when the market is <b>RED</b>. It hunts oversold stocks that tend to bounce, flags overheated ones to avoid — or honestly tells you to sit out.`,
+      read: `Tiers <b>WATCH → EMERGING → CONFIRMED</b> (earlier turns often beat late ones). Each shows a bounce entry with a stop.`,
+      act: `For quick <b>mean-reversion bounces</b>, not long holds. Only act if the setup and your own chart agree; on a truly ugly tape, the honest move is cash.`,
+      catch: `Catching a falling knife is risky — bounces fail when the market keeps dropping. Backtests only validated the sharp V-reversal type, not buying strong names on red days.`,
+    },
+    opportunities: {
+      what: `The app's <b>combined shortlist</b> — the strongest names it sees right now, pulled from across all the screeners into one ranked list.`,
+      read: `Sorted best-first. Each card shows why it made the list and its levels. Names that appear here <i>and</i> on other tabs are the highest-conviction.`,
+      act: `The easiest place to start. Work from the <b>top</b> down, confirm on a chart, size small, and prefer names backed by more than one signal.`,
+      catch: `A shortlist is only as good as its inputs — check the 🏆 Scoreboard to see which signals have actually been working before trusting them.`,
+    },
+    screener: {
+      what: `The classic scan — stocks <b>breaking above a base to new highs</b> while stronger than the overall market.`,
+      read: `Each card shows the criteria that passed (accumulation, volume, resistance break) plus an entry, stop, and target.`,
+      act: `Watchlist. Wait for the breakout to hold, confirm on a chart, then enter with the shown stop.`,
+      catch: `This app's own research found the volume-surge and tight-base filters are <b>dead</b> — only the relative-strength/trend part carries a weak edge. Don't over-trust the pattern.`,
+    },
+    coremo: {
+      what: `A cleaner momentum list — names ranked mainly by how <b>strong and steady</b> their uptrend is, filtered for quality.`,
+      read: `Higher rank = a stronger, steadier trend.`,
+      act: `A trend-following watchlist. Buy <b>pullbacks</b> within the uptrend rather than extended spikes, and keep a stop under the trend.`,
+      catch: `Momentum is the one factor with (weak) edge here, but it mean-reverts hard in risk-off — respect the regime light.`,
+    },
+    momentum: {
+      what: `Names flagged as momentum leaders today — stocks whose trend and strength stand out right now.`,
+      read: `The list itself is the signal; each name is a current leader.`,
+      act: `Watchlist. Strongest when it agrees with the Screener or Ghost; combine with the regime and a chart before acting.`,
+      catch: `"Strong today" often means "already extended." Don't chase — wait for a pullback and confirm.`,
+    },
+    rotation: {
+      what: `Which <b>sectors</b> money is flowing into and out of (tech, energy, financials…) — the market's leadership.`,
+      read: `Sectors near the top are leading; near the bottom are lagging.`,
+      act: `Use it as context: hunt for stocks in the <b>leading</b> sectors and avoid fighting a sector that's being sold.`,
+      catch: `This is a backdrop, not a buy list, and leadership can rotate quickly.`,
+    },
+    options: {
+      what: `Unusually large or aggressive <b>options bets</b> — sometimes a clue that big money is positioning for a move.`,
+      read: `Each row shows the ticker, the bullish/bearish lean, and how unusual the activity is.`,
+      act: `A lead to investigate, not a trade — see if the flow lines up with a price setup on another tab.`,
+      catch: `Options flow is noisy and often just hedging, not conviction. This uses free data with real gaps — treat it as a hint only.`,
+    },
+    pulse: {
+      what: `A plain-English distillation of what traders are <b>buzzing about</b> right now, gathered from social/video chatter and ranked by popularity and how fast it's spreading.`,
+      read: `Top items are the loudest and fastest-rising topics and tickers.`,
+      act: `Awareness — know what the crowd is watching. Cross-check any ticker against a real signal tab before acting.`,
+      catch: `Popular ≠ profitable. By the time something is loud the move may be done, and hype is often a <b>fade</b> signal.`,
+    },
+    readthrough: {
+      what: `The <b>second-order</b> play — when a stock makes a big move, this finds other companies with a direct business link that <b>haven't moved yet</b>.`,
+      read: `Each card shows the mover, the linked beneficiary, the named connection, and how <b>direct</b> the link is (higher = tighter).`,
+      act: `A watchlist for catch-up trades. Favor the most direct links and check the beneficiary hasn't already jumped.`,
+      catch: `The market often prices these in fast. On the Scoreboard it's measured vs the beneficiary's sector — check that "Fresh" names actually beat already-"Moved" ones first.`,
+    },
+    anomaly: {
+      what: `Stocks moving on unusual <b>volume with no obvious news</b> — then an AI investigates whether it looks like quiet accumulation, an explained move, or just noise.`,
+      read: `Each is labeled <b>Accumulation / Explained / Noise</b> with the AI's reasoning. Accumulation (no clear reason) is the interesting bucket.`,
+      act: `A lead to dig into — unexplained volume sometimes precedes news. Confirm on a chart; don't buy on the label alone.`,
+      catch: `"No news I could find" isn't "no news exists," and many anomalies are nothing. Benchmarked vs sector on the Scoreboard.`,
+    },
+    biotech: {
+      what: `Early-stage <b>biotech</b> names showing runner characteristics, scored /100 with awareness of catalysts (biotech moves on trial and FDA news).`,
+      read: `Tier <b>Hot &gt; Emerging &gt; Watch</b> with an AI reason. Measured against the biotech index (XBI), not just the S&P.`,
+      act: `A specialist watchlist. Biotech is binary and headline-driven — size <b>tiny</b> and know the catalyst dates.`,
+      catch: `A single trial result can gap a biotech 50% overnight — enormous risk. Only money you can fully lose; beginners should mostly just watch.`,
+    },
+    secondwave: {
+      what: `Stocks that had a first move and may get a reflexive <b>second leg</b> as attention builds — catching early movers before the crowd piles in.`,
+      read: `Tier <b>Primed &gt; Early &gt; Faded</b>. "Primed" means the setup for a second leg still looks intact.`,
+      act: `A continuation watchlist. Check the name hasn't already faded and use a tight stop — these are momentum bets.`,
+      catch: `Most first moves don't get a clean second leg. Sector-benchmarked on the Scoreboard — verify Primed actually beats Faded before leaning on it.`,
+    },
+    crossasset: {
+      what: `When commodities, crypto, or overnight futures make a big move, this maps it to US stocks that <b>should follow but haven't caught up yet</b>.`,
+      read: `Tier <b>Lead &gt; Inline &gt; Weak</b> — "Lead" means the stock is still lagging the cross-asset signal (the opportunity).`,
+      act: `A catch-up watchlist. Check the linkage makes sense and the stock hasn't already moved.`,
+      catch: `Cross-asset links are loose and can break. Sector-benchmarked on the Scoreboard — confirm it works before trusting it.`,
+    },
+    toneshift: {
+      what: `Compares a company's latest <b>earnings-call tone</b> to last quarter — is management sounding more upbeat (Brightening) or more cautious (Darkening)?`,
+      read: `Labeled <b>Brightening / Stable / Darkening</b> with the reasoning. The bet: a brightening tone should lead the price.`,
+      act: `A fundamental lead to pair with a price setup — brightening tone <i>plus</i> a technical breakout is stronger than either alone.`,
+      catch: `Tone is a soft, AI-read signal that can misfire and only fires around earnings. Sector-benchmarked — check Brightening actually beats Darkening.`,
+    },
+    gameplan: {
+      what: `A once-a-day, plain-English <b>game plan</b> — the day's setups, key levels, and what to watch, pulled together for you.`,
+      read: `Read it top-to-bottom like a morning briefing.`,
+      act: `Use it to orient before the session, then drill into the specific tabs for the actual picks and levels.`,
+      catch: `It's a summary, not a signal — the honest track records live on the 🏆 Scoreboard.`,
+    },
+    brief: {
+      what: `A short brief that combines the app's signals into one "here's the picture" read, showing where they <b>agree and disagree</b>.`,
+      read: `Look for <b>agreement</b> — views or names that several signals share are the highest quality.`,
+      act: `Orientation. Treat the agreement as your shortlist and skip the conflicted calls.`,
+      catch: `A synthesis is only as good as its parts — verify on the Scoreboard.`,
+    },
+    forecast: {
+      what: `The app's directional <b>forecast</b> for the market — a probabilistic view of the tape, not a promise.`,
+      read: `Shown as odds or a leaning with the reasoning, never a certainty.`,
+      act: `Use it as backdrop for sizing and risk — lean in when the forecast and the regime agree, ease off when they don't.`,
+      catch: `Short-term market forecasting is close to random. Treat any single call with heavy skepticism.`,
+    },
+    crowd: {
+      what: `What the betting/prediction markets and the broad crowd <b>expect</b> — a read on consensus.`,
+      read: `Higher numbers = the crowd is more confident in that outcome.`,
+      act: `Context. Knowing the consensus helps you notice when you're just agreeing with everyone (already priced in).`,
+      catch: `The crowd is often right but rarely gives an edge — the edge is spotting when it's wrong, which is hard.`,
+    },
+    sharp: {
+      what: `A read on where the "<b>sharp</b>" / informed money appears to be positioned, versus the general crowd.`,
+      read: `It highlights where smart money <b>diverges</b> from the crowd — the divergence is the interesting part.`,
+      act: `Context and confirmation — sharp-money agreement can add conviction to a setup you found elsewhere.`,
+      catch: `"Sharp money" is inferred, not certain, and is often already reflected in the price. A hint, not a trade.`,
+    },
+    alerts: {
+      what: `Notable market <b>alerts</b> the app surfaces so you don't miss unusual activity.`,
+      read: `Scan for anything relevant to names you're already watching.`,
+      act: `Awareness — follow up on a real signal tab before acting on any alert.`,
+      catch: `Alerts flag activity, not opportunity — always confirm before trading.`,
+    },
+  };
+
+  // Render one collapsed "how to use" panel from the config (author-trusted HTML,
+  // no user input → intentional <b>/<i> tags are kept, not escaped).
+  function howtoPanel(key) {
+    const h = HOWTO[key];
+    if (!h) return '';
+    return `<details class="tr-howto tr-howto-auto">
+      <summary class="tr-howto-head">📖 New here? How to use this tab — plain English</summary>
+      <ol>
+        <li><b>What it finds.</b> ${h.what}</li>
+        <li><b>How to read a card.</b> ${h.read}</li>
+        <li><b>What to do now.</b> ${h.act}</li>
+        <li><b>The catch.</b> ${h.catch}</li>
+      </ol>
+    </details>`;
+  }
+
+  // Inject the guide once as the section's first child — a SIBLING above the render
+  // container, so a tab re-rendering its own `${sub}-container` never wipes it.
+  function injectHowto(sub) {
+    try {
+      if (!HOWTO[sub]) return;
+      const sec = document.getElementById(sub);
+      if (!sec || sec.querySelector(':scope > .tr-howto-auto')) return;
+      const wrap = document.createElement('div');
+      wrap.innerHTML = howtoPanel(sub);
+      const node = wrap.firstElementChild;
+      if (node) sec.insertBefore(node, sec.firstChild);
+    } catch { /* non-fatal — guide is a nicety */ }
+  }
+
   function renderHubSubnav(top, sub) {
     const el = document.getElementById('hub-subnav');
     if (!el) return;
@@ -125,6 +296,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
     SECTION_IDS.forEach(s => document.getElementById(s)?.classList.toggle('tab-active', s === sub));
     document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('active', el.dataset.tab === top));
+    injectHowto(sub); // prepend the novice "how to use" guide once (no-op if already there / no config)
     renderHubSubnav(top, sub);
     if (typeof updateTapeBadge === 'function') updateTapeBadge(top === 'screeners' ? sub : null);
     if (sub === 'quickhit' && typeof ensureQuickHit === 'function') ensureQuickHit();
