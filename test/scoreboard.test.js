@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { forwardReturn, forwardPath, spyForwardReturn, summarizeReturns, cernPicksFrom, fadeRowsFrom, regimeBucketOf } = require('../lib/apex-routes');
+const { forwardReturn, forwardPath, nextOpenReturn, spyForwardReturn, summarizeReturns, cernPicksFrom, fadeRowsFrom, regimeBucketOf } = require('../lib/apex-routes');
 
 // ── regimeBucketOf: map a macro state into a Scoreboard regime bucket ─────────
 test('regimeBucketOf: null / missing state yields no bucket', () => {
@@ -235,6 +235,57 @@ test('summarizeReturns: sector fields are null when no record carries a sector e
   assert.equal(s.secExcN, 0);
   assert.equal(s.avgSecExcess, null);
   assert.equal(s.beatSecRate, null);
+});
+
+// ── nextOpenReturn: realistic-entry forward return (entry-v1) ────────────────
+const NO_CANDLES = [
+  { date: '2026-01-01', open: 100, high: 101, low: 99, close: 100 },
+  { date: '2026-01-02', open: 102, high: 105, low: 101, close: 104 },
+  { date: '2026-01-03', open: 104, high: 108, low: 103, close: 107 },
+];
+
+test('nextOpenReturn: enters at the NEXT session open, exits at close[idx+bars]', () => {
+  // signal 2026-01-01 (idx 0) → entry = open[1] = 102; bars 2 → exit close[2] = 107.
+  assert.equal(nextOpenReturn(NO_CANDLES, { date: '2026-01-01' }, 2), 4.9); // (107−102)/102
+});
+
+test('nextOpenReturn: shorts are sign-flipped', () => {
+  assert.equal(nextOpenReturn(NO_CANDLES, { date: '2026-01-01', short: true }, 2), -4.9);
+});
+
+test('nextOpenReturn: null when there is no next bar or the horizon has not elapsed', () => {
+  assert.equal(nextOpenReturn(NO_CANDLES, { date: '2026-01-03' }, 1), null); // no bar after idx
+  assert.equal(nextOpenReturn(NO_CANDLES, { date: '2026-01-01' }, 5), null); // horizon unfilled
+});
+
+test('nextOpenReturn: falls back to next close when the open is missing', () => {
+  const c = [
+    { date: '2026-01-01', close: 100 },
+    { date: '2026-01-02', close: 110 }, // no open → use close as entry
+    { date: '2026-01-03', close: 121 },
+  ];
+  assert.equal(nextOpenReturn(c, { date: '2026-01-01' }, 2), 10); // (121−110)/110
+});
+
+test('summarizeReturns: realistic-entry avg + entry drag aggregate real/gap records', () => {
+  const s = summarizeReturns([
+    { ret: 5, mfe: 6, real: 4.2, gap: -0.8 },  // next-open entry gave back 0.8%
+    { ret: 2, mfe: 3, real: 2.3, gap: 0.3 },   // gapped down overnight → entry helped
+    { ret: -1, mfe: 1, real: -1.6, gap: -0.6 },
+    { ret: 3, mfe: 4, entry: 50 },             // logged entry → no real/gap → excluded
+  ]);
+  assert.equal(s.realN, 3);
+  assert.equal(s.avgReal, 1.63);       // (4.2 + 2.3 − 1.6) / 3
+  assert.equal(s.realWinRate, 67);     // 2 of 3 positive
+  assert.equal(s.avgEntryDrag, -0.37); // (−0.8 + 0.3 − 0.6) / 3
+  assert.equal(s.entryModel, 'entry-v1');
+});
+
+test('summarizeReturns: realistic-entry fields null when no record carries them', () => {
+  const s = summarizeReturns([{ ret: 5, mfe: 6, exc: 2 }]);
+  assert.equal(s.realN, 0);
+  assert.equal(s.avgReal, null);
+  assert.equal(s.avgEntryDrag, null);
 });
 
 // ── fadeRowsFrom: flatten the fade ledger into Scoreboard short rows ──────────

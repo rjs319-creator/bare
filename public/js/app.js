@@ -6585,7 +6585,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const secUp = s.avgSecExcess != null && s.avgSecExcess >= 0;
       const secLine = s.avgSecExcess == null ? ''
         : `<div class="sb-h-sec ${secUp ? 'up' : 'down'}" title="Average return minus the pick's own SECTOR ETF (XLK, XLF, XBI…) over the same ${lb} window — 'did it beat its peers', not just the market. Strips out sector beta so a hot-sector tailwind isn't mistaken for stock-selection skill. Beat rate = share that outran their sector.">vs sector ${secUp ? '+' : ''}${s.avgSecExcess}% · beat ${s.beatSecRate}%</div>`;
-      return `<div class="sb-h"><div class="sb-h-lb" title="${esc(SB_HZ_HELP)}">${lb}</div><div class="sb-h-ret ${up ? 'up' : 'down'}">${up ? '+' : ''}${s.avg}%</div><div class="sb-h-sub">${s.winRate}% win · n=${s.n}</div>${exLine}${netLine}${secLine}</div>`;
+      // Realistic-entry line: what you'd actually get entering the NEXT session's open
+      // (you can't trade the close you screen on), plus the entry drag vs that close.
+      // Only present on sleeves whose picks had no logged entry price.
+      const realUp = s.avgReal != null && s.avgReal >= 0;
+      const realLine = s.avgReal == null ? ''
+        : `<div class="sb-h-real ${realUp ? 'up' : 'down'}" title="Return entering at the NEXT session's open instead of the signal-day close (which an end-of-day screen can't actually trade). Entry drag ${s.avgEntryDrag != null ? (s.avgEntryDrag > 0 ? '+' : '') + s.avgEntryDrag + '%' : 'n/a'} = how much the un-tradeable close flattered the result (negative = it was optimistic). Model entry-v1.">real entry ${realUp ? '+' : ''}${s.avgReal}%${s.avgEntryDrag != null ? ` · drag ${s.avgEntryDrag > 0 ? '+' : ''}${s.avgEntryDrag}%` : ''}</div>`;
+      return `<div class="sb-h"><div class="sb-h-lb" title="${esc(SB_HZ_HELP)}">${lb}</div><div class="sb-h-ret ${up ? 'up' : 'down'}">${up ? '+' : ''}${s.avg}%</div><div class="sb-h-sub">${s.winRate}% win · n=${s.n}</div>${exLine}${netLine}${secLine}${realLine}</div>`;
     }).join('');
     const hl = h['20d'] || h['1m'] || h['10d'] || h['5d'] || h['1d'] || h['3m'];
     // In a regime view, show that regime's logged-pick count; flag thin samples so

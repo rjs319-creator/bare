@@ -1177,6 +1177,9 @@
     .sb-h-sec { font-size: 0.54rem; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; opacity: 0.82; font-style: italic; }
     .sb-h-sec.up { color: var(--green); }
     .sb-h-sec.down { color: var(--red); }
+    .sb-h-real { font-size: 0.54rem; font-weight: 600; margin-top: 3px; font-variant-numeric: tabular-nums; color: var(--text-dim); }
+    .sb-h-real.up { color: var(--green); opacity: 0.85; }
+    .sb-h-real.down { color: var(--red); opacity: 0.85; }
     .sb-wl { display: flex; justify-content: space-between; font-size: 0.66rem; color: var(--text-dim); border-top: 1px solid var(--border); padding-top: 8px; }
     .sb-wl b.win  { color: var(--green); }
     .sb-wl b.loss { color: var(--red); }
