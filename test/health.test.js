@@ -35,17 +35,25 @@ test('summarizeRun: ignores non-stage keys', () => {
   assert.equal(r.stageCount, 1);   // only "track" — stageStatus/elapsedMs/etc not graded
 });
 
-test('summarizeRun: a budget-skipped stage is visible (not-ok), a weekend skip stays healthy', () => {
+test('summarizeRun: a budget-deferred stage is visible but does NOT fail health', () => {
   const r = summarizeRun({ ok: true, at: 'x',
     track: { ok: true },
-    apexlog: { ok: true, skipped: 'weekend' },      // legitimate skip → healthy
-    tonetick: { skipped: 'budget' },                // budget guard deferred it → visible
+    apexlog: { ok: true, skipped: 'market-closed' },  // legitimate skip → healthy
+    tonetick: { skipped: 'budget' },                  // deferred → tracked, not failed
     elapsedMs: 58000 });
-  assert.equal(r.ok, false);
-  assert.ok(r.failed.includes('tonetick'));
-  assert.ok(!r.failed.includes('apexlog'));
-  assert.deepEqual(r.budgetSkipped, ['tonetick']);
+  assert.equal(r.ok, true);                            // deferrals alone keep health green
+  assert.deepEqual(r.failed, []);
+  assert.deepEqual(r.budgetSkipped, ['tonetick']);    // but the deferral is visible
   assert.equal(r.elapsedMs, 58000);
+});
+
+test('summarizeRun: a real error still fails health even alongside a deferral', () => {
+  const r = summarizeRun({ ok: true, at: 'x',
+    track: { error: 'boom' },
+    tonetick: { skipped: 'budget' } });
+  assert.equal(r.ok, false);
+  assert.ok(r.failed.includes('track'));
+  assert.deepEqual(r.budgetSkipped, ['tonetick']);
 });
 
 test('summarizeRun: a degraded-but-ok ledger skip stays healthy', () => {
