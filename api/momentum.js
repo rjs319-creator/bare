@@ -11,6 +11,16 @@ const { tradeLevels } = require('../lib/levels');
 const SMA20_MAX_EXT_PCT = 8;   // exclude names trading > 8% above the 20-day SMA
 const RET5_MAX_PCT      = 25;  // exclude names up > 25% over the past 5 sessions
 
+const HOST = process.env.WARM_HOST || 'market-news-app-chi.vercel.app';
+// Read the (CDN-cached) screener for a scope — used only to borrow the WHY NOW
+// verdict the screener already composed (single source of truth). Best-effort.
+async function screenerJSON(scope) {
+  try {
+    const r = await fetch('https://' + HOST + '/api/screener?scope=' + scope, { headers: { 'x-warm': '1' } });
+    return r.ok ? await r.json() : null;
+  } catch { return null; }
+}
+
 // Daily extension + breakout stats. `buy` flips the breakout pivot between the
 // prior 20-day high (resistance being cleared) and the prior 20-day low.
 async function dailyStats(ticker, livePrice, buy) {
@@ -153,6 +163,21 @@ module.exports = async function handler(req, res) {
     buildSide('STRONG_BUY'),
     buildSide('STRONG_SELL'),
   ]);
+
+  // Attach the WHY NOW verdict badge to BUY-side names that also appear in the
+  // screener cross-section. The screener already composed c.whynow (single source
+  // of truth), so we just borrow it — no recomputation. It's a long-setup read, so
+  // buy side only; a momentum name not in any screen simply gets no badge.
+  try {
+    const screens = await Promise.all(['large', 'small', 'micro'].map(screenerJSON));
+    const wn = {};
+    for (const s of screens) {
+      if (!s) continue;
+      for (const c of (s.results || [])) if (c.ticker && c.whynow && !wn[c.ticker]) wn[c.ticker] = c.whynow;
+      for (const c of (s.ghostTop || [])) if (c.ticker && c.whynow && !wn[c.ticker]) wn[c.ticker] = c.whynow;
+    }
+    for (const card of strongBuys) { const v = wn[card.ticker]; if (v) card.whynow = v; }
+  } catch { /* best-effort — no badges on failure */ }
 
   res.setHeader('Cache-Control', 's-maxage=180'); // 3 min — signals are time-sensitive
   return res.json({

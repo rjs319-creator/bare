@@ -6762,6 +6762,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <div class="alert-badges">
           <div class="alert-live-badge"><div class="alert-live-dot"></div>LIVE</div>
           <div class="mom-action-badge ${side}">⚡ ${buy ? 'STRONG BUY' : 'STRONG SELL'}</div>
+          ${whyNowBadge(c)}
           ${c.social ? `<div class="alert-social-badge">👥 ${Number(c.social).toLocaleString()}</div>` : ''}
         </div>
 
