@@ -119,28 +119,11 @@ module.exports = async function handler(req, res) {
   // skipped slow day self-heals next run (it re-resolves all still-open signals).
   const fadetick = await stage('fadetick', '/api/tracker?op=fadetick');
 
-  // Trend Rider: resolve matured picks → learn per-stock trend quality → log
-  // today's light + basket. Self-heals if a slow day skips it.
-  const trendtick = await stage('trendtick', '/api/tracker?op=trendtick');
-
-  // Day-Trade momentum/rel-vol screener: resolve matured picks → learn per-stock →
-  // log today's picks. Reads the candle caches the screener warm just built.
-  const daytradetick = await stage('daytradetick', '/api/tracker?op=daytradetick');
-
-  // Confluence screener: resolve matured picks → learn (per-stock + per-strategy) → log.
-  const confluencetick = await stage('confluencetick', '/api/tracker?op=confluencetick');
-
-  // 🧬 Coil Radar — log today's top pre-explosion coil picks for the self-validating ledger.
-  const coiltick = await stage('coiltick', '/api/tracker?op=coiltick');
-
-  // ⚡ Gap-and-Go — resolve matured unscheduled gap-up picks + log today's for the ledger.
-  const gapgotick = await stage('gapgotick', '/api/tracker?op=gapgotick');
-
-  // 🪁 Down-Day Mode — resolve matured oversold-bounce longs + log today's IF the tape is red.
-  const downdaytick = await stage('downdaytick', '/api/tracker?op=downdaytick');
-
-  // 🐻 Gap-Down Continuation — resolve matured gap-down shorts + log today's for the ledger.
-  const gapdowntick = await stage('gapdowntick', '/api/tracker?op=gapdowntick');
+  // NOTE: the per-screener resolve/learn/log ticks (trend, daytrade, confluence, coil,
+  // gap-go, down-day, gap-down, timing, dual-read, predict, crowd, brief, leaderboard,
+  // core, attention, tone) are NO LONGER awaited here — running them sequentially blew
+  // warm's 60s wall so the tail was deferred every run. They're now dispatched as
+  // fire-and-forget CHAINS below (see tickChains), off warm's critical path.
 
   // ── 5 AI-reasoning screeners (Read-Through / Stealth / Second Wave / Cross-Asset / Tone
   // Shift) — each tick is SELF-CONTAINED (detect + AI + forward-log + cache) in its own 60s
@@ -189,41 +172,39 @@ module.exports = async function handler(req, res) {
   // ticks above, and it's heavy enough (fetches history) to keep off warm's critical path.
   const calibKick = warmOne('/api/tracker?op=calibration&force=1').catch(() => null);
 
-  // 🟢 Timing light — log today's picks' grades (accountability) then run the adaptive
-  //    weight tuner (self-improvement; dormant until the ledger matures).
-  const timinglog = await stage('timinglog', '/api/tracker?op=timinglog');
-  const timingtune = await stage('timingtune', '/api/tracker?op=timingtune');
-
-  // ⏱📈 Dual-horizon read — log today's trending universe tagged by short×long
-  //    quadrant, so the pullback-buy vs bear-bounce read is falsifiable.
-  const dualreadlog = await stage('dualreadlog', '/api/tracker?op=dualreadlog');
-  const dualreadtune = await stage('dualreadtune', '/api/tracker?op=dualreadtune');
-
-  // 🔮 Forecast — resolve matured predictions + (weekly) generate a fresh batch.
-  const predicttick = await stage('predicttick', '/api/tracker?op=predicttick');
-
-  // 🎲 Crowd — snapshot prediction-market 24h volume (builds the unusual-activity baseline).
-  const crowdtick = await stage('crowdtick', '/api/tracker?op=crowdtick');
-
-  // 🏆 Algo Leaderboard — snapshot the heavy confluence-strategy backtest into the cache.
-  const leaderboardtick = await stage('leaderboardtick', '/api/tracker?op=leaderboardtick&src=confluence');
-
-  // 🧭 Brief — log today's stance + resolve matured ones (runs after crowd/predict/tape are warm).
-  const brieftick = await stage('brieftick', '/api/tracker?op=brieftick');
-
-  // Core Momentum sleeve: refresh the feature cache (resumable, ~5 daily runs to fully seed),
-  // log the book on quarterly rebalance (self-gated), and resolve outcomes for live drift.
-  const corebuild = await stage('corebuild', '/api/tracker?op=corebuild');
-  const corelog = await stage('corelog', '/api/tracker?op=corelog');
-  const coredrift = await stage('coredrift', '/api/tracker?op=coredrift');
-  // Fast-vs-sticky attention — cheap (no API): classify the day's archived mentions and
-  // log Sticky/Fast names for the Scoreboard. Runs after op=archive wrote today's file.
-  const attentiontick = await stage('attentiontick', '/api/tracker?op=attentiontick');
-  // Earnings-call tone — LAST on purpose: it makes bounded Claude calls, so if it's
-  // slow it never blocks the critical logging ops above. Small per-run limit caps time.
-  const tonetick = await stage('tonetick', '/api/tracker?op=tonetick&limit=6');
+  // ── DECOUPLED TICK CHAINS ──────────────────────────────────────────────────
+  // The resolve/learn/log ticks run as fire-and-forget CHAINS (not awaited on the
+  // critical path). Each chain runs its ops sequentially in their own invocations
+  // (own 60s budget each), so ORDERED ops stay ordered (timinglog→tune, dual-read
+  // log→tune, core build→log→drift, brief after predict/crowd). 3 chains = ~3× the
+  // throughput of the old sequential tail while bounding concurrent feed load. They
+  // progress during the bounded drain below; any tail op not reached self-heals next
+  // run (each tick re-resolves all still-open signals). Uses warmOne (not the
+  // budget-guarded stage()) so they're not skipped past the 50s soft budget.
+  const tickChain = ops => ops.reduce((prev, op) => prev.then(() => warmOne(op).catch(() => null)), Promise.resolve());
+  const tickChains = [
+    // screener + event ticks (order-independent)
+    tickChain(['/api/tracker?op=trendtick', '/api/tracker?op=daytradetick', '/api/tracker?op=confluencetick',
+      '/api/tracker?op=coiltick', '/api/tracker?op=gapgotick', '/api/tracker?op=downdaytick', '/api/tracker?op=gapdowntick']),
+    // timing + dual-read (ordered pairs) then the predict family (brief after predict+crowd)
+    tickChain(['/api/tracker?op=timinglog', '/api/tracker?op=timingtune', '/api/tracker?op=dualreadlog',
+      '/api/tracker?op=dualreadtune', '/api/tracker?op=predicttick', '/api/tracker?op=crowdtick', '/api/tracker?op=brieftick']),
+    // leaderboard (heavy) then core (ordered build→log→drift) then cheap attention/tone
+    tickChain(['/api/tracker?op=leaderboardtick&src=confluence', '/api/tracker?op=corebuild', '/api/tracker?op=corelog',
+      '/api/tracker?op=coredrift', '/api/tracker?op=attentiontick', '/api/tracker?op=tonetick&limit=6']),
+  ];
 
   const warmedExtra = await extraWarm;   // already resolved — ran during the tail above
+
+  // Drain the tick chains within the remaining budget, capped well under the 60s hard
+  // limit (a hard timeout is a 504). The critical logging above already committed; this
+  // is best-effort for the decoupled ticks. Whatever a chain doesn't reach self-heals
+  // next run — strictly better than the old behavior where the whole tail was deferred.
+  const DRAIN_CEIL_MS = 55000;
+  await Promise.race([
+    Promise.allSettled(tickChains),
+    new Promise(r => setTimeout(r, Math.max(0, DRAIN_CEIL_MS - (Date.now() - START)))),
+  ]);
 
   // The 5 AI screener ticks were kicked fire-and-forget (not awaited) — they self-log to
   // their own ledgers in their own invocations. `aiTicksKicked` just confirms the fetches
@@ -237,7 +218,11 @@ module.exports = async function handler(req, res) {
   void putsellKick; // fire-and-forget: put-selling setups scan
   void universeKick; // fire-and-forget: reassemble the expanded candle cache
 
-  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, intracapture, cern, edgelog, alertsgrade, alertsassess, fadetick, trendtick, daytradetick, confluencetick, coiltick, gapgotick, downdaytick, gapdowntick, timinglog, timingtune, dualreadlog, dualreadtune, predicttick, crowdtick, brieftick, leaderboardtick, corebuild, corelog, coredrift, attentiontick, tonetick, aiTicksKicked: 6, calibKicked: true, stageStatus, elapsedMs: Date.now() - START, at: new Date().toISOString() };
+  // The 20 resolve/learn/log ticks are decoupled (fire-and-forget chains, see above) —
+  // no longer awaited stage() results, so they're not per-step keys here. Each self-logs
+  // to its own ledger; ledger freshness is the source of truth for them now.
+  const ticksDecoupled = 20;
+  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, intracapture, cern, edgelog, alertsgrade, alertsassess, fadetick, ticksDecoupled, aiTicksKicked: 6, calibKicked: true, stageStatus, elapsedMs: Date.now() - START, at: new Date().toISOString() };
 
   // Structured run summary — survives in Vercel logs even if the health write fails.
   const skipped = Object.keys(stageStatus).filter(k => stageStatus[k] === 'skipped:budget');
