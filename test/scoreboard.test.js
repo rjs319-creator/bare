@@ -194,6 +194,29 @@ test('summarizeReturns: null excess fields when no record carries a benchmark', 
   assert.equal(s.beatMktRate, null);
 });
 
+test('summarizeReturns: net-of-cost fields aggregate the per-record net/netExc', () => {
+  const s = summarizeReturns([
+    { ret: 5, mfe: 6, exc: 3, net: 4.84, netExc: 2.84 },  // net winner, still beats mkt net
+    { ret: 2, mfe: 3, exc: -1, net: 1.84, netExc: -1.16 },
+    { ret: 0.1, mfe: 1, exc: 0.2, net: -0.06, netExc: 0.04 }, // costs flip it to a net loser
+    { ret: 1, mfe: 2 },                                    // no net (predates cost wiring) → excluded
+  ]);
+  assert.equal(s.n, 4);
+  assert.equal(s.netN, 3);            // only 3 carry a net field
+  assert.equal(s.avgNet, 2.21);       // (4.84 + 1.84 − 0.06) / 3
+  assert.equal(s.netWinRate, 67);     // 2 of 3 positive net
+  assert.equal(s.avgNetExcess, 0.57); // (2.84 − 1.16 + 0.04) / 3
+  assert.equal(s.netBeatMktRate, 67); // 2 of 3 beat the market net
+  assert.equal(s.costModel, 'cost-v1');
+});
+
+test('summarizeReturns: net fields are null when no record carries a net', () => {
+  const s = summarizeReturns([{ ret: 5, mfe: 6, exc: 2 }]);
+  assert.equal(s.netN, 0);
+  assert.equal(s.avgNet, null);
+  assert.equal(s.avgNetExcess, null);
+});
+
 // ── fadeRowsFrom: flatten the fade ledger into Scoreboard short rows ──────────
 const FADE_DAYS = [
   { date: '2026-06-20', signals: [

@@ -1171,6 +1171,9 @@
     .sb-h-exc.up { color: var(--green); }
     .sb-h-exc.down { color: var(--red); }
     .sb-h-exc.na { color: var(--text-muted); font-weight: 400; }
+    .sb-h-net { font-size: 0.54rem; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; opacity: 0.92; }
+    .sb-h-net.up { color: var(--green); }
+    .sb-h-net.down { color: var(--red); }
     .sb-wl { display: flex; justify-content: space-between; font-size: 0.66rem; color: var(--text-dim); border-top: 1px solid var(--border); padding-top: 8px; }
     .sb-wl b.win  { color: var(--green); }
     .sb-wl b.loss { color: var(--red); }
