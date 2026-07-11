@@ -257,6 +257,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <li><b>What to do now.</b> ${h.act}</li>
         <li><b>The catch.</b> ${h.catch}</li>
       </ol>
+      <a class="howto-start-link" data-howto-start role="button" tabindex="0">📘 New to the whole app? Read the full <b>Start Here</b> beginner's guide →</a>
     </details>`;
   }
 
@@ -270,7 +271,16 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const wrap = document.createElement('div');
       wrap.innerHTML = howtoPanel(sub);
       const node = wrap.firstElementChild;
-      if (node) sec.insertBefore(node, sec.firstChild);
+      if (node) {
+        // Wire the "Start Here" link to jump to the full beginner guide (keyboard-accessible).
+        const link = node.querySelector('[data-howto-start]');
+        if (link) {
+          const goStart = e => { e.preventDefault(); e.stopPropagation(); showTab('start'); };
+          link.addEventListener('click', goStart);
+          link.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') goStart(e); });
+        }
+        sec.insertBefore(node, sec.firstChild);
+      }
     } catch { /* non-fatal — guide is a nicety */ }
   }
 

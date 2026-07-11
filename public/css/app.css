@@ -1935,7 +1935,10 @@
     .tr-howto-auto > summary::after { content: '▾ tap to expand'; margin-left: auto; font-size: 0.7rem; font-weight: 500; color: var(--text-dim); opacity: 0.8; }
     .tr-howto-auto[open] > summary::after { content: '▴ tap to hide'; }
     .tr-howto-auto[open] > summary { border-bottom: 1px solid var(--border); margin-bottom: 4px; }
-    .tr-howto-auto > ol { padding: 4px 20px 14px 36px; }
+    .tr-howto-auto > ol { padding: 4px 20px 8px 36px; }
+    .howto-start-link { display: block; margin: 0 16px 14px; padding: 8px 12px; border-radius: 8px; border: 1px solid #34c75955; background: #34c7591a; color: #34c759; font-size: 0.8rem; font-weight: 600; cursor: pointer; text-align: center; }
+    .howto-start-link:hover { background: #34c7592e; }
+    .howto-start-link b { color: #34c759; }
     /* Day Trade pick cards (with trade plan) */
     /* Hard guard: the Day Trade content must never overflow its column (was cutting
        off the right side on narrow/zoomed screens — e.g. a 15" laptop). */
