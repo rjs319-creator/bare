@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { computeAllocation, monthlySeries, maxDrawdown } = require('../lib/allocation');
+const { computeAllocation, monthlySeries, maxDrawdown, turnoverPerMonth } = require('../lib/allocation');
 
 test('monthlySeries: averages picks within a calendar month', () => {
   const s = monthlySeries([
@@ -59,6 +59,44 @@ test('computeAllocation: inverse-vol weights the lower-vol sleeve more; blend cu
   assert.ok(a.blended.volAnn < hi.volAnn);
   // diversification ratio >= 1 when correlation is low/negative
   assert.ok(a.riskReduction.diversificationRatio >= 1);
+});
+
+test('turnoverPerMonth: average distinct picks logged per active month', () => {
+  assert.equal(turnoverPerMonth([
+    { date: '2026-01-05', ret: 0.1 }, { date: '2026-01-20', ret: 0.2 }, // 2 in Jan
+    { date: '2026-02-10', ret: -0.1 },                                   // 1 in Feb
+  ]), 1.5);
+  assert.equal(turnoverPerMonth([]), null);
+  assert.equal(turnoverPerMonth(null), null);
+});
+
+// Good sleeve (+ expectancy) vs bad sleeve (− expectancy), both vol>0.
+const GOOD = [0.05, -0.01, 0.03, 0.06, -0.02, 0.04].map((v, i) => ({ date: `2026-0${i + 1}-01`, ret: v }));
+const BAD = [-0.04, 0.02, -0.05, 0.01, -0.03, 0.00].map((v, i) => ({ date: `2026-0${i + 1}-15`, ret: v }));
+
+test('computeAllocation: cash-when-thin funds only positive-expectancy sleeves', () => {
+  const a = computeAllocation({ Good: GOOD, Bad: BAD }, { minMonths: 6 });
+  assert.equal(a.status, 'ok');
+  const good = a.cashAware.deployed.find(d => d.name === 'Good');
+  const bad = a.cashAware.deployed.find(d => d.name === 'Bad');
+  assert.equal(good.funded, true);
+  assert.ok(good.weight > 0);
+  assert.equal(bad.funded, false);          // negative expectancy → not funded
+  assert.equal(bad.weight, 0);
+  assert.ok(a.cashAware.cashWeight > 0);     // the bad sleeve's weight becomes cash
+  assert.equal(a.cashAware.sitOut, false);   // at least one sleeve is fundable
+});
+
+test('computeAllocation: sits out (100% cash) when no sleeve has positive expectancy', () => {
+  const bad2 = [-0.03, 0.01, -0.04, 0.00, -0.02, -0.01].map((v, i) => ({ date: `2026-0${i + 1}-20`, ret: v }));
+  const a = computeAllocation({ Bad: BAD, Bad2: bad2 }, { minMonths: 6 });
+  assert.equal(a.cashAware.cashWeight, 100);
+  assert.equal(a.cashAware.sitOut, true);
+});
+
+test('computeAllocation: each sleeve reports its turnover per month', () => {
+  const a = computeAllocation({ Good: GOOD, Bad: BAD }, { minMonths: 6 });
+  assert.ok(a.sleeves.every(s => s.turnoverPerMonth != null));
 });
 
 test('computeAllocation: honest note present, no Sharpe-boost claim', () => {
