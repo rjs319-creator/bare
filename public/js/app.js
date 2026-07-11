@@ -470,6 +470,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   // ── News feeds ──
   document.getElementById('refresh-btn').addEventListener('click', fetchAll);
+  // Persistent "Start Here" header button → the beginner guide. 'start' is both a
+  // group key (default sub 'today') and the guide's section id, so pin the sub first.
+  document.getElementById('starthere-btn')?.addEventListener('click', () => { hubSub.start = 'start'; showTab('start'); });
   fetchAll();
   setInterval(fetchAll, 4 * 60 * 60 * 1000);
 
