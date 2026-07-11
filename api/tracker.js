@@ -173,5 +173,6 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'tone') return runTone(req, res);
   if (req.query.op === 'attentiontick') return runAttentionTick(req, res);
   if (req.query.op === 'attention') return runAttention(req, res);
+  if (req.query.op === 'whynow') return require('../lib/whynow-routes').runWhyNow(req, res);
   return runScoreboard(req, res);
 };

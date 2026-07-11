@@ -902,6 +902,71 @@
     .tkl-quote { font-size: 0.74rem; color: var(--text-dim); line-height: 1.45; margin-top: 6px; font-style: italic; }
     .tkl-fine { font-size: 0.62rem; color: var(--text-muted); line-height: 1.4; margin-top: 6px; }
 
+    /* ── WHY NOW — the composed FOR/AGAINST case + honest track record ── */
+    .wn-card {
+      border: 1px solid var(--border-hi); border-radius: 10px;
+      padding: 12px 13px; margin: 10px 0 12px;
+      background: var(--card); border-left-width: 3px;
+    }
+    .wn-card.wn-constructive { border-left-color: var(--green); background: linear-gradient(180deg, var(--green-dim), var(--card) 60%); }
+    .wn-card.wn-watch        { border-left-color: var(--amber); background: linear-gradient(180deg, var(--amber-dim), var(--card) 60%); }
+    .wn-card.wn-caution      { border-left-color: var(--red);   background: linear-gradient(180deg, var(--red-dim), var(--card) 60%); }
+    .wn-card.wn-quiet        { border-left-color: var(--text-dim); }
+    .wn-card.wn-loading      { border-left-color: var(--border-hi); display: flex; align-items: center; gap: 8px; }
+    .wn-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .wn-badge { font-size: 0.6rem; font-weight: 900; letter-spacing: 0.08em; color: var(--text-dim); }
+    .wn-regime { font-size: 0.66rem; color: var(--text-dim); }
+    .wn-loadtxt { font-size: 0.72rem; color: var(--text-dim); }
+    .wn-verdict { display: flex; align-items: flex-start; gap: 9px; }
+    .wn-vic { font-size: 1.1rem; line-height: 1.1; }
+    .wn-vhead { font-size: 0.9rem; font-weight: 800; color: var(--text); margin-bottom: 2px; }
+    .wn-vsum { font-size: 0.74rem; color: var(--text-dim); line-height: 1.45; }
+    .wn-cases { display: flex; flex-direction: column; gap: 7px; margin-top: 11px; }
+    .wn-sig { border-radius: 7px; padding: 7px 9px; background: var(--surface); border: 1px solid var(--border); }
+    .wn-sig.wn-for     { border-left: 2px solid var(--green); }
+    .wn-sig.wn-against { border-left: 2px solid var(--red); }
+    .wn-sig.wn-context { border-left: 2px solid var(--text-dim); }
+    .wn-sig-h { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+    .wn-sig-mark { font-size: 0.7rem; }
+    .wn-for .wn-sig-mark { color: var(--green); }
+    .wn-against .wn-sig-mark { color: var(--red); }
+    .wn-context .wn-sig-mark { color: var(--text-dim); }
+    .wn-sig-label { font-size: 0.76rem; font-weight: 700; color: var(--text); }
+    .wn-sig-detail { font-size: 0.7rem; color: var(--text-dim); line-height: 1.4; margin-top: 3px; }
+    .wn-track {
+      font-size: 0.6rem; font-weight: 700; color: var(--green);
+      background: var(--green-dim); border: 1px solid #10d98a33;
+      padding: 1px 6px; border-radius: 4px; white-space: nowrap; margin-left: auto;
+    }
+    .wn-track-pending { color: var(--amber); background: var(--amber-dim); border-color: #f0a83233; }
+    .wn-track-note { color: var(--text-dim); background: transparent; border-color: var(--border); font-weight: 500; white-space: normal; }
+    .wn-fine { font-size: 0.6rem; color: var(--text-muted); line-height: 1.4; margin-top: 9px; }
+    /* Collapsible pillar-level breakdown */
+    .wn-breakdown { margin: 2px 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+    .wn-breakdown > summary { cursor: pointer; padding: 8px 11px; font-size: 0.72rem; font-weight: 700; color: var(--text-dim); list-style: none; }
+    .wn-breakdown > summary::-webkit-details-marker { display: none; }
+    .wn-breakdown > summary::before { content: '▸ '; }
+    .wn-breakdown[open] > summary::before { content: '▾ '; }
+    .wn-bd-body { padding: 4px 11px 11px; display: flex; flex-direction: column; gap: 12px; }
+    .wn-bd-grp { display: flex; flex-direction: column; gap: 5px; }
+    .wn-bd-h { font-size: 0.68rem; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+    .wn-pillar { display: flex; align-items: center; gap: 8px; font-size: 0.66rem; }
+    .wn-plabel { color: var(--text-dim); flex: 0 0 42%; }
+    .wn-pbar { flex: 1; height: 6px; background: var(--surface); border-radius: 3px; overflow: hidden; }
+    .wn-pfill { display: block; height: 100%; background: linear-gradient(90deg, #2a6df0, var(--green)); }
+    .wn-pval { color: var(--text); font-variant-numeric: tabular-nums; flex: 0 0 auto; min-width: 20px; text-align: right; }
+
+    /* WHY NOW verdict badge on screener/ghost/opportunity cards */
+    .wn-badge {
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: 0.58rem; font-weight: 800; letter-spacing: 0.02em;
+      padding: 1px 6px; border-radius: 4px; white-space: nowrap;
+      border: 1px solid transparent; vertical-align: middle;
+    }
+    .wn-badge.wn-b-constructive { color: var(--green); background: var(--green-dim); border-color: #10d98a44; }
+    .wn-badge.wn-b-watch        { color: var(--amber); background: var(--amber-dim); border-color: #f0a83244; }
+    .wn-badge.wn-b-caution      { color: var(--red);   background: var(--red-dim);   border-color: #ef505044; }
+
     /* ── Strong Buy/Sell live verdict badge (shown on the toggle button) ── */
     .sig-badge {
       font-size: 0.58rem; font-weight: 900; letter-spacing: 0.04em;

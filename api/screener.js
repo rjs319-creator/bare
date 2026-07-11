@@ -4,6 +4,8 @@ const { LARGE, SMALL_CAPS, MICRO_CAPS, SECTOR_OF } = require('../lib/universe');
 const { fetchFundamentals, fetchInsiders } = require('../lib/fundamentals');
 const { runGhostAccumulationIndex, REGIME_WEIGHTS: GHOST_WEIGHTS, PILLAR_LABEL: GHOST_PILLAR_LABEL } = require('../lib/ghost');
 const { convictionScore, convictionWeights, longOk } = require('../lib/conviction');
+const apex = require('../lib/apex');
+const { composeWhyNow } = require('../lib/whynow');
 const { fetchMacro } = require('../lib/macro');
 const { loadCandleCache, cacheState, cacheGet, saveCandleCache } = require('../lib/candle-cache');
 const { readJSON, writeJSON, hasStore } = require('../lib/store');
@@ -445,6 +447,25 @@ module.exports = async function handler(req, res) {
     }
     candidates.forEach(c => { c.ghost = ghostByTicker[c.ticker] || null; });
 
+    // WHY NOW verdict badge — the SAME pure composer the lookup modal uses
+    // (lib/whynow), computed once here so every card can show a consistent, honest
+    // one-word read (constructive / watch / caution / quiet) without a per-card call.
+    // Track records + read-through are omitted for the badge (they don't change the
+    // LEVEL); the risk-off macro veto and the ghost/apex/conviction signals do.
+    const rgStr = apex.rawRegime(regime);
+    const whyNowFor = (c, ghost, conviction) => {
+      let apexHit = null;
+      try { const sc = apex.scoreCandidate(c, rgStr, null); if (sc.tier) apexHit = { tier: sc.tier, score: sc.score }; } catch { /* pillars missing → no apex */ }
+      const ghostHit = ghost ? { tier: ghost.tier, score: ghost.score, strongPillars: ghost.strongPillars || [] } : null;
+      const r = composeWhyNow({ ticker: c.ticker, apex: apexHit, ghost: ghostHit, conviction: conviction || null, macro });
+      // `standout` = the strongest tier of confirmation (confirmed breakout OR
+      // top-quintile conviction). The card badge shows a green flag only for these;
+      // a plain "constructive" is the norm for a curated list, so it's suppressed to
+      // keep the badge informative (watch/caution always show).
+      const standout = !!(conviction && conviction.sleeveA) || (apexHit && apexHit.tier === 'apex');
+      return { level: r.verdict.level, headline: r.verdict.headline, forCount: r.forCase.length, standout };
+    };
+
     // Ghost is scored over the FULL scanned cross-section (`valid`), not just the
     // breakout candidates — so surface the top accumulation names regardless of
     // whether they're breaking out. This is what makes the 👻 Ghost tab a real
@@ -459,6 +480,7 @@ module.exports = async function handler(req, res) {
         price: c.price, changePct: c.changePct, aboveSma200: c.aboveSma200,
         levels: c.levels || null, ghost: g,
         insider: c.insider || null, fundamentals: c.fundamentals || null,
+        whynow: whyNowFor(c, g, null),
       }));
 
     // ── Conviction score (Edge Book · Sleeve A) — the regime-gated ranker the
@@ -482,6 +504,8 @@ module.exports = async function handler(req, res) {
       const pctile = convPctile(score);
       c.conviction = { score, pctile, sleeveA: convCanLong && pctile >= 80 };   // top quintile of the full cohort, long-eligible
     });
+    // Attach the WHY NOW verdict now that ghost + conviction are on each candidate.
+    candidates.forEach(c => { c.whynow = whyNowFor(c, c.ghost, c.conviction); });
 
     // Fresh for 15m; then serve the STALE cached response INSTANTLY for up to a
     // day while revalidating in the background. With the daily warm cron this

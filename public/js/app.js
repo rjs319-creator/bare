@@ -3,7 +3,7 @@
   import { startFlowBadges, setFlowNav, FLOW_BADGE_TABS } from './flow-badge.js';
   import { initCommandPalette, openPalette, revealTicker } from './command-palette.js';
 import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
-  import { loadOpportunities, mountOpportunitiesTab } from './opportunities.js';
+  import { loadOpportunities, mountOpportunitiesTab, whyNowBadge } from './opportunities.js';
   import { loadQuickHit } from './quickhit.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
@@ -2389,6 +2389,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
             <div class="scr-tk-row">
               <span class="scr-ticker" data-live="${esc(c.ticker)}">${esc(c.ticker)}</span>
               <span class="scr-status ${cls}">${stLabel}</span>
+              ${whyNowBadge(c)}
               ${tierHtml}
               ${toneChip(c.ticker)}
               ${attnChip(c.ticker)}
@@ -4477,7 +4478,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     card.innerHTML = `
       <div class="cx-top">
         <div>
-          <div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(c.ticker)}">${esc(c.ticker)}</span><span class="cx-tierbadge ${GHOST_TIER_CSS[tier] || ''}">${tierLabel}</span></div>
+          <div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(c.ticker)}">${esc(c.ticker)}</span><span class="cx-tierbadge ${GHOST_TIER_CSS[tier] || ''}">${tierLabel}</span>${whyNowBadge(c)}</div>
           <div class="cx-company">${esc(c.company || c.ticker)}${c.sector ? ` · ${esc(c.sector)}` : ''}${scopeTag}${c.theme ? ` · ${esc(c.theme)}` : ''}</div>
         </div>
         <div class="cx-score-col">

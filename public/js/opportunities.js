@@ -166,8 +166,31 @@ function expertDetail(c) {
 
 // The card BODY (badges → expert detail), shared by the Opportunities strip and the
 // ⚡ Quick Hit shortlist so both render an identical thesis/levels/sizing block.
+// WHY NOW verdict badge — the one-word, honest read composed server-side
+// (api/screener → lib/whynow, the SAME logic the lookup modal uses). Shown only
+// when it carries information: caution (a risk-off/against read) and watch (a
+// single-signal caveat) ALWAYS show; a plain "constructive" is the norm for a
+// curated card, so it badges only genuine standouts (confirmed breakout or
+// top-quintile conviction). Quiet / missing → nothing. Shared across all cards.
+const WN_BADGE = {
+  standout: { cls: 'wn-b-constructive', icon: '🔥', label: 'Prime' },
+  watch:    { cls: 'wn-b-watch',        icon: '👀', label: 'Watch' },
+  caution:  { cls: 'wn-b-caution',      icon: '⚠️', label: 'Caution' },
+};
+export function whyNowBadge(c) {
+  const w = c && c.whynow;
+  if (!w) return '';
+  const kind = w.level === 'caution' ? 'caution'
+    : w.level === 'watch' ? 'watch'
+    : (w.level === 'constructive' && w.standout) ? 'standout'
+    : null;                                   // plain constructive / quiet → suppressed
+  const b = kind && WN_BADGE[kind];
+  if (!b) return '';
+  return `<span class="wn-badge ${b.cls}" title="WHY NOW — ${esc(w.headline || '')}">${b.icon} ${b.label}</span>`;
+}
+
 export function oppCardInner(c) {
-  return `<div class="opp-badges"><span class="opp-badge">${STAGE_LABEL[c.status] || c.status}</span>`
+  return `<div class="opp-badges">${whyNowBadge(c)}<span class="opp-badge">${STAGE_LABEL[c.status] || c.status}</span>`
     + `<span class="opp-badge ghost-${(c.ghost.tier || '').toLowerCase()}">${L('ghost', c.ghost.tier)}</span>`
     + (c.conviction?.sleeveA ? `<span class="opp-badge opp-sleevea expert-only" title="Top-quintile by the results-trained conviction model">🏅 ${L('conviction', 'top-quintile')}</span>` : '')
     + (c.inLeadingTheme ? `<span class="opp-badge opp-theme-lead" title="In a leading theme">🔥 ${esc(c.canonTheme)}</span>` : `<span class="dt-dim">${esc(c.canonTheme || c.sector || '')}</span>`)

@@ -39,6 +39,20 @@ let overlay = null, body = null, refreshTimer = null, curTicker = null;
 // chart refresh's body re-render via paintExtras().
 let extras = { ticker: null, options: undefined, social: undefined };
 
+// WHY NOW composition (op=whynow) — the app's own signals reasoned into a FOR/AGAINST
+// case + honest track record. Fetched once per open, survives the chart refresh via
+// paintWhyNow(). undefined = loading, null = failed, object = loaded.
+let whynow = { ticker: null, data: undefined };
+
+// Verdict level → presentation. Mirrors the signal-banner colour language.
+const WN_VERDICT = {
+  constructive: { cls: 'constructive', icon: '✅' },
+  watch:        { cls: 'watch',        icon: '👀' },
+  caution:      { cls: 'caution',      icon: '⚠️' },
+  quiet:        { cls: 'quiet',        icon: '·' },
+};
+const WN_REGIME = { 'risk-on': '🌤 Risk-on tape', 'risk-off': '⛈ Risk-off tape', neutral: '⛅ Neutral tape' };
+
 function build() {
   overlay = document.createElement('div');
   overlay.className = 'cx-help-backdrop';
@@ -155,6 +169,91 @@ function sectionNote(title, note) {
   return `<div class="tkl-sec"><div class="tkl-mtitle">${title}</div><div class="tkl-mnone">${esc(note)}</div></div>`;
 }
 
+// ── WHY NOW — the composed FOR/AGAINST case + honest track record ──
+
+// A signal's track record → a chip. Never a fabricated probability: it's the app's
+// real logged win rate + excess-vs-benchmark, or an explicit "not enough resolved".
+function wnTrackChip(track, note) {
+  if (!track) return note ? `<span class="wn-track wn-track-note">${esc(note)}</span>` : '';
+  if (track.pending) {
+    return `<span class="wn-track wn-track-pending" title="Logged, forward-tracked — not enough have resolved to trust a rate yet">📊 tracking · ${track.resolved} resolved</span>`;
+  }
+  const exc = track.avgExcess != null ? `${track.avgExcess >= 0 ? '+' : ''}${track.avgExcess}% vs bench` : '';
+  const wr = track.winRate != null ? `${track.winRate}% win` : '';
+  const bits = [wr, exc].filter(Boolean).join(' · ');
+  return `<span class="wn-track" title="${track.horizon || ''} forward record over ${track.resolved} resolved picks in this signal class">📊 ${esc(bits)} · n=${track.resolved}</span>`;
+}
+
+function wnSignalRow(s) {
+  return `<div class="wn-sig wn-${s.side}">
+    <div class="wn-sig-h"><span class="wn-sig-mark">${s.side === 'for' ? '▲' : s.side === 'against' ? '▼' : '◆'}</span><span class="wn-sig-label">${esc(s.label)}</span>${wnTrackChip(s.track, s.note)}</div>
+    <div class="wn-sig-detail">${esc(s.detail)}</div>
+  </div>`;
+}
+
+function whyNowBlock(data) {
+  if (data === undefined) return `<div class="wn-card wn-loading"><span class="wn-badge">WHY NOW?</span><span class="wn-loadtxt">Composing the case…</span></div>`;
+  if (data === null || !data.ok) return '';   // silent when unavailable — the rest of the modal still stands
+  const v = WN_VERDICT[data.verdict.level] || WN_VERDICT.quiet;
+  const regime = data.regime ? `<span class="wn-regime">${esc(WN_REGIME[data.regime] || data.regime)}</span>` : '';
+  const forRows = data.forCase.map(wnSignalRow).join('');
+  const againstRows = data.againstCase.map(wnSignalRow).join('');
+  const cases = (forRows || againstRows)
+    ? `<div class="wn-cases">${forRows}${againstRows}</div>`
+    : '';
+  return `<div class="wn-card wn-${v.cls}">
+    <div class="wn-top"><span class="wn-badge">WHY NOW?</span>${regime}</div>
+    <div class="wn-verdict"><span class="wn-vic">${v.icon}</span>
+      <div class="wn-vtext"><div class="wn-vhead">${esc(data.verdict.headline)}</div>
+      <div class="wn-vsum">${esc(data.verdict.summary)}</div></div></div>
+    ${cases}
+    <div class="wn-fine">${esc(data.disclaimer)}</div>
+  </div>`;
+}
+
+// Collapsible pillar-level breakdown — raw scores, no verdict spin.
+function pillarBars(pillars, labels) {
+  if (!pillars) return '';
+  return Object.keys(pillars).map(k => {
+    const val = Math.max(0, Math.min(100, Math.round(pillars[k] || 0)));
+    const lbl = (labels && labels[k]) || k;
+    return `<div class="wn-pillar"><span class="wn-plabel">${esc(lbl)}</span><span class="wn-pbar"><span class="wn-pfill" style="width:${val}%"></span></span><span class="wn-pval">${val}</span></div>`;
+  }).join('');
+}
+
+function breakdownBlock(data) {
+  if (!data || data === undefined || data === null || !data.ok) return '';
+  const b = data.breakdown || {};
+  if (!b.apex && !b.ghost && !(data.signals && data.signals.length)) return '';
+  const apexB = b.apex ? `<div class="wn-bd-grp"><div class="wn-bd-h">Apex breakout — composite ${b.apex.score}/100${b.apex.tier ? ` · ${esc(b.apex.tier)}` : ''}</div>${pillarBars(b.apex.pillars, b.apex.labels)}</div>` : '';
+  const ghostB = b.ghost ? `<div class="wn-bd-grp"><div class="wn-bd-h">Ghost accumulation — ${b.ghost.score}/100 · ${esc(b.ghost.tier)}</div>${pillarBars(b.ghost.pillars, b.ghost.labels)}</div>` : '';
+  // Any context signals (insider, neutral tape) not already in the FOR/AGAINST case.
+  const ctx = (data.context || []).map(wnSignalRow).join('');
+  const ctxB = ctx ? `<div class="wn-bd-grp"><div class="wn-bd-h">Also noted</div>${ctx}</div>` : '';
+  if (!apexB && !ghostB && !ctxB) return '';
+  return `<details class="wn-breakdown"><summary>Signal breakdown</summary><div class="wn-bd-body">${apexB}${ghostB}${ctxB}</div></details>`;
+}
+
+function paintWhyNow() {
+  const el = body && body.querySelector('#tkl-whynow');
+  if (el) el.innerHTML = whyNowBlock(whynow.data);
+  const bd = body && body.querySelector('#tkl-breakdown');
+  if (bd) bd.innerHTML = breakdownBlock(whynow.data);
+}
+
+// Fetch the composed WHY NOW once per open, then repaint. Degrades to silent on error.
+async function loadWhyNow(ticker) {
+  const T = ticker.toUpperCase();
+  whynow = { ticker: T, data: undefined };
+  try {
+    const r = await fetch('/api/tracker?op=whynow&ticker=' + encodeURIComponent(T));
+    const j = r.ok ? await r.json() : null;
+    if (curTicker !== T) return;   // user moved on
+    whynow.data = j && j.ok ? j : null;
+  } catch { if (curTicker === T) whynow.data = null; }
+  paintWhyNow();
+}
+
 // Paint the options + social sections from current `extras` state (called on
 // first render and again whenever fetchExtras resolves).
 function paintExtras() {
@@ -186,8 +285,10 @@ function renderBody(data) {
   body.innerHTML = `
     <div class="tkl-head"><span class="tkl-tk">📈 ${esc(ticker)}</span></div>
     ${priceLine(price)}
+    <div id="tkl-whynow"></div>
     ${verdictBanner(live)}
     <div id="tkl-chart"></div>
+    <div id="tkl-breakdown"></div>
     <div id="tkl-flow"></div>
     <div id="tkl-social"></div>
     ${mentionsBlock(ticker)}`;
@@ -197,6 +298,7 @@ function renderBody(data) {
   try { cfg.renderChart(chartPanel, data); }
   catch { chartPanel.innerHTML = `<div class="chart-err">Chart unavailable.</div>`; }
 
+  paintWhyNow();  // fill the WHY NOW block + breakdown from state
   paintExtras();  // fill options/social from state (loading first time, data on refresh)
 
   body.querySelectorAll('.tkl-chip').forEach(el => el.addEventListener('click', () => {
@@ -229,10 +331,12 @@ export function openTickerLookup(ticker) {
   overlay.hidden = false;
   document.body.style.overflow = 'hidden';
   extras = { ticker: tk, options: undefined, social: undefined };
+  whynow = { ticker: tk, data: undefined };
   body.innerHTML = `<div class="tkl-head"><span class="tkl-tk">📈 ${esc(tk)}</span></div>
     <div class="chart-loading"><div class="mom-spinner"></div>Loading live price, chart &amp; signal for ${esc(tk)}…</div>`;
   load(tk);
   loadExtras(tk);   // options flow + social mentions — once per open, not on refresh
+  loadWhyNow(tk);   // composed WHY NOW case + track record — once per open
   // Keep it live while open — /api/chart is cached 60s server-side, so cheap.
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = setInterval(() => load(tk, true), 60 * 1000);
@@ -244,6 +348,7 @@ function close() {
   document.body.style.overflow = '';
   curTicker = null;
   extras = { ticker: null, options: undefined, social: undefined };
+  whynow = { ticker: null, data: undefined };
   if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
 }
 
