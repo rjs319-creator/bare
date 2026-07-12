@@ -80,6 +80,21 @@
       display: flex; align-items: center; gap: 16px;
     }
 
+    /* On laptop widths the 7-tab nav + heavy header-right won't fit one row, so give the
+       nav its OWN full-width row (logo + controls on top, tabs below). Wide desktops
+       (≥1700px) keep the single-row layout. Mobile (≤640px) uses the scrollable top tabs. */
+    @media (min-width: 641px) and (max-width: 1699px) {
+      header {
+        grid-template-columns: 1fr auto;
+        grid-template-rows: auto auto;
+        height: auto; row-gap: 4px; padding-top: 7px; padding-bottom: 7px;
+        column-gap: 16px;
+      }
+      .logo         { grid-column: 1; grid-row: 1; }
+      .header-right { grid-column: 2; grid-row: 1; justify-self: end; }
+      .header-nav   { grid-column: 1 / -1; grid-row: 2; }
+    }
+
     #live-clock { font-size: 0.78rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 
     .market-status {
