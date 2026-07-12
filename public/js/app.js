@@ -6873,6 +6873,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (a.status !== 'ok') return '';
     const rr = a.riskReduction || {};
     const ca = a.cashAware || null;
+    const gov = a.governance || null;
+    const GOV_ICON = { production: '🟢', reduced: '🔵', probation: '🟠', paper: '⚪', disabled: '⛔', retired: '🗄️' };
     const bar = s => `<div class="sb-alloc-row">
         <span class="sb-alloc-nm">${esc(s.name)}</span>
         <span class="sb-alloc-track"><span class="sb-alloc-fill" style="width:${Math.max(2, s.weight)}%"></span></span>
@@ -6890,6 +6892,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       <div class="sb-alloc">${a.sleeves.map(bar).join('')}</div>
       <div class="sb-alloc-blend">📉 <b>Blended book:</b> vol <b>${b.volAnn}%</b> · maxDD <b>${b.maxDD}%</b> · Sharpe <b>${b.sharpe == null ? '—' : b.sharpe}</b> &nbsp;·&nbsp; ${divTxt}</div>
       ${ca ? `<div class="sb-alloc-cash" title="Only sleeves with positive expected return in-window get capital; the rest is held as CASH rather than force-deployed. Sit-out = nothing clears the bar. Gross expectancy; costs would raise it.">${ca.sitOut ? '🛑' : '💵'} <b>Cash-when-thin:</b> ${ca.sitOut ? 'sit out — hold <b>100% cash</b> (no sleeve has positive expectancy in-window)' : `fund ${ca.deployed.filter(d => d.funded).map(d => esc(d.name) + ' ' + d.weight + '%').join(' · ') || '—'} · hold <b>${ca.cashWeight}% cash</b>`}</div>` : ''}
+      ${gov && gov.applied ? `<div class="sb-alloc-gov" title="Each sleeve's deployed capital is capped by its model-governance status (Production 100% · Reduced 50% · Probation 25% · Paper/Disabled/Retired 0%). Applied after cash-when-thin; freed capital is held as cash, never reallocated — governance can only cut size.">🏛️ <b>Governed deploy:</b> ${gov.sitOut ? 'hold <b>100% cash</b> — no sleeve's model holds clearance to size' : `${gov.deployed.filter(d => d.deployedWeight > 0).map(d => `${GOV_ICON[d.status] || '·'} ${esc(d.name)} <b>${d.deployedWeight}%</b>${d.haircut > 0 ? ` <span class="dt-dim">(cut ${d.haircut} · ${esc(d.status || '')})</span>` : ''}`).join(' · ') || '—'} · hold <b>${gov.cashWeight}% cash</b>`}</div>` : ''}
       ${corrs ? `<div class="sb-alloc-corr dt-dim">correlations: ${corrs}</div>` : ''}
       <div class="sb-alloc-corr dt-dim">weights = inverse-vol (risk parity) over ${a.overlapMonths} overlapping months (${esc((a.window || [])[0] || '')}…${esc((a.window || [])[1] || '')}). Leans toward the lower-vol, validated event sleeve. Illustrative — see research caveats (small sample; blending buys smoothness, not Sharpe).</div>
     </div>`;

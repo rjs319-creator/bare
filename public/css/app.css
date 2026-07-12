@@ -1142,6 +1142,7 @@
     .sb-alloc-meta { flex-shrink: 0; font-size: 0.66rem; }
     .sb-alloc-blend { font-size: 0.74rem; color: var(--text); margin-top: 4px; }
     .sb-alloc-cash { font-size: 0.72rem; color: var(--text); margin-top: 5px; padding-top: 5px; border-top: 1px dashed var(--border); }
+    .sb-alloc-gov { font-size: 0.72rem; color: var(--text); margin-top: 5px; padding-top: 5px; border-top: 1px dashed var(--border); }
     .sb-alloc-corr { font-size: 0.66rem; margin-top: 5px; }
     .sb-regime-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;
       padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }

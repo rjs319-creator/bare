@@ -106,3 +106,55 @@ test('computeAllocation: honest note present, no Sharpe-boost claim', () => {
   assert.equal(a.status, 'ok');
   assert.match(a.note, /risk-reduction tool, not an alpha booster/);
 });
+
+// ── Governance → allocation haircut ─────────────────────────────────────────
+// Two positive-expectancy sleeves so cash-when-thin funds both; governance then caps.
+const GOOD2 = [0.04, -0.01, 0.05, 0.03, -0.01, 0.05].map((v, i) => ({ date: `2026-0${i + 1}-08`, ret: v }));
+
+test('governance haircut: caps each sleeve by its status weight; freed capital → cash, never reallocated', () => {
+  const a = computeAllocation({ Good: GOOD, Alt: GOOD2 }, { minMonths: 6,
+    govWeights: { Good: 1.0, Alt: 0.5 }, govStatus: { Good: 'production', Alt: 'reduced' } });
+  assert.equal(a.governance.applied, true);
+  const g = a.governance.deployed.find(d => d.name === 'Good');
+  const alt = a.governance.deployed.find(d => d.name === 'Alt');
+  // Production keeps its full cash-aware weight; Reduced is halved.
+  assert.equal(g.deployedWeight, g.cashAwareWeight);
+  assert.equal(alt.deployedWeight, Math.round(alt.cashAwareWeight * 0.5));
+  assert.equal(alt.status, 'reduced');
+  assert.ok(alt.haircut > 0);
+  // The cut is held as cash, so governed deploy never exceeds cash-aware deploy.
+  const govDeploy = a.governance.deployed.reduce((s, d) => s + d.deployedWeight, 0);
+  const cashDeploy = a.cashAware.deployed.reduce((s, d) => s + d.weight, 0);
+  assert.ok(govDeploy <= cashDeploy);
+  assert.equal(a.governance.cashWeight, 100 - govDeploy);
+});
+
+test('governance: a Paper/Disabled sleeve (weight 0) deploys nothing', () => {
+  const a = computeAllocation({ Good: GOOD, Alt: GOOD2 }, { minMonths: 6,
+    govWeights: { Good: 1.0, Alt: 0 }, govStatus: { Good: 'production', Alt: 'disabled' } });
+  const alt = a.governance.deployed.find(d => d.name === 'Alt');
+  assert.equal(alt.deployedWeight, 0);
+  assert.equal(alt.governed, true);
+});
+
+test('governance: sitOut when no sleeve holds clearance to size', () => {
+  const a = computeAllocation({ Good: GOOD, Alt: GOOD2 }, { minMonths: 6,
+    govWeights: { Good: 0, Alt: 0 }, govStatus: { Good: 'paper', Alt: 'paper' } });
+  assert.equal(a.governance.cashWeight, 100);
+  assert.equal(a.governance.sitOut, true);
+});
+
+test('governance: an ungoverned sleeve defaults to full clearance (backward-compatible)', () => {
+  const a = computeAllocation({ Good: GOOD, Alt: GOOD2 }, { minMonths: 6,
+    govWeights: { Good: 0.5 } });  // Alt has no governance record
+  const alt = a.governance.deployed.find(d => d.name === 'Alt');
+  assert.equal(alt.clearance, 1);          // defaults to full
+  assert.equal(alt.governed, false);
+  assert.equal(alt.deployedWeight, alt.cashAwareWeight);
+});
+
+test('governance: absent entirely → applied:false, deploy equals cash-aware', () => {
+  const a = computeAllocation({ Good: GOOD, Alt: GOOD2 }, { minMonths: 6 });
+  assert.equal(a.governance.applied, false);
+  a.governance.deployed.forEach(d => assert.equal(d.deployedWeight, d.cashAwareWeight));
+});
