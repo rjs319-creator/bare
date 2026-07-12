@@ -6696,7 +6696,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const scoreboardMeta       = document.getElementById('scoreboard-meta');
   let   lastScoreboard       = null;
 
-  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', Biotech: '🧬 Biotech Radar (Hot vs Watch)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)', DownDay: '🪁 Down-Day Bounce (Longs)', GapDown: '🐻 Gap-Down Continuation (Shorts)' };
+  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', Biotech: '🧬 Biotech Radar (Hot vs Watch)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)', DownDay: '🪁 Down-Day Bounce (Longs)', GapDown: '🐻 Gap-Down Continuation (Shorts)', daytrade: '⚡ Day Trade (A vs B)', coil: '🧬 Coil Radar (squeeze bands)' };
   const SB_TIER_LABEL = { Breakout: 'Breakout', Setup: 'Setup', Early: 'Early', StrongBuy: 'Strong Buy', StrongSell: 'Strong Sell', GHOST: '👻 Ghost', STALKING: '🥷 Stalking', SHORT: 'Short', SHORT_LIGHT: 'Short (light)',
     WATCH: '👀 Watch (fresh turn)', EMERGING: '🌗 Emerging (turning)', CONFIRMED: '✅ Confirmed (late)',
     STRONG: '🔴 Strong (≥5% gap)', MODERATE: '🟠 Moderate (3–5% gap)',
@@ -6708,7 +6708,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     Hot: '🔥 Hot (75+)', Emerging: '🌗 Emerging (60+)', Watch: '👀 Watch (45+)',
     Primed: '🌊 Primed (2nd wave)', Early: '🌱 Early', Faded: '🥱 Faded (crowded)',
     Lead: '🌐 Lead (lagging)', Inline: '🔗 Inline (caught up)', Weak: '🌫️ Weak link',
-    Brightening: '📈 Brightening', Stable: '➖ Stable', Darkening: '📉 Darkening' };
+    Brightening: '📈 Brightening', Stable: '➖ Stable', Darkening: '📉 Darkening',
+    A: '⭐ A-tier (strict)', B: '🅱️ B-tier (building)' };
   const SB_HZ         = [['1d', '1-Day'], ['5d', '5-Day'], ['10d', '10-Day'], ['20d', '20-Day'], ['1m', '1-Month'], ['3m', '3-Month']];
   // Plain-English "what is this?" hovers for a novice investor — shown on each
   // Scoreboard section header and horizon column.
@@ -6728,6 +6729,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     ToneShift: 'How a company’s latest earnings call sounded vs LAST quarter’s. BRIGHTENING = management got more confident/specific (dropped hedges, added guidance-raise language); DARKENING = more cautious. The test: do BRIGHTENING names beat their sector — and beat the Darkening ones? A slower swing-horizon signal.',
     DownDay: 'Oversold-bounce LONGS surfaced by Down-Day Mode and logged only on RED tapes (a capitulation → turn). Backtest says the edge is red-tape-specific and the EARLIER turns (WATCH/EMERGING) bounce more than CONFIRMED — this is the live test of that.',
     GapDown: 'Gap-down continuation SHORTS (the mirror of Gap & Go): a name that gapped down hard on non-earnings news and kept falling. A win here means the stock dropped. The test: do bigger gap-downs (STRONG ≥5%) continue lower more than MODERATE? Costs not deducted — subtract borrow/slippage.',
+    daytrade: 'Intraday momentum picks from the Day-Trade screener (A = strict quality, B = relaxed “building”). The test: does the A tier actually beat the B tier on forward returns? Scored in the score-decile check by its own relVol/gap ranker.',
+    coil: 'Pre-explosion compression picks from Coil Radar, grouped by calibrated squeeze band. The test: do the tightest-squeeze bands actually break out more? Scored in the score-decile check by its own Bollinger-squeeze-rank model.',
   };
   const SB_HZ_HELP = 'Average return this many trading days after the pick. The green/red “vs S&P” line under it is the market-beating number: the pick’s return minus what the S&P 500 did over the same days.';
 
