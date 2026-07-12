@@ -2251,6 +2251,12 @@
     .td-eviden { font-size: 0.72rem; color: var(--text-dim); margin: 5px 0; }
     .td-eviden b { color: var(--text); }
     .td-warn { color: var(--amber); }
+    .td-breadth-row { margin: 3px 0; min-height: 0; }
+    .td-breadth-row:empty { display: none; }
+    .td-breadth { font-size: 0.66rem; font-weight: 700; padding: .08em .45em; border-radius: 999px; }
+    .td-breadth.br-wide { color: var(--green); background: rgba(34,197,94,.12); }
+    .td-breadth.br-ok { color: var(--cyan); background: rgba(34,211,238,.12); }
+    .td-breadth.br-thin { color: var(--text-dim); background: rgba(148,163,184,.12); }
     .td-levels { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.74rem; color: var(--text-dim); margin: 6px 0; }
     .td-levels b { color: var(--text); }
     .td-rr { color: var(--cyan); }

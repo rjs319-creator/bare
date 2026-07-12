@@ -3,6 +3,46 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const D = require('../lib/decision');
 
+// ── domainBreadth (#2 — signal-domain breadth) ──────────────────────────────
+test('domainBreadth: distinct families across domains light distinct domains', () => {
+  const b = D.domainBreadth(['priceTrend', 'volumeAccum', 'fundamentalsRevisions']);
+  assert.equal(b.of, 8);
+  assert.equal(b.litCount, 3);
+  assert.deepEqual(b.lit.sort(), ['fundamentals', 'price', 'volume']);
+  assert.equal(b.domains.length, 8);
+  assert.equal(b.domains.find(d => d.key === 'price').lit, true);
+  assert.equal(b.domains.find(d => d.key === 'options').lit, false);
+});
+
+test('domainBreadth: two families sharing one domain light it ONCE (no double-count)', () => {
+  // sectorRegime + crossAsset both map to the single "regime" domain.
+  const b = D.domainBreadth(['sectorRegime', 'crossAsset']);
+  assert.equal(b.litCount, 1);
+  assert.deepEqual(b.lit, ['regime']);
+});
+
+test('domainBreadth: correlated price-only stack is honestly one domain', () => {
+  const b = D.domainBreadth(['priceTrend', 'priceTrend', 'priceTrend']);
+  assert.equal(b.litCount, 1);
+  assert.deepEqual(b.lit, ['price']);
+});
+
+test('domainBreadth: empty / unknown families → zero lit, still 8 slots', () => {
+  const b = D.domainBreadth([]);
+  assert.equal(b.litCount, 0);
+  assert.equal(b.of, 8);
+  assert.equal(b.domains.every(d => d.lit === false), true);
+});
+
+test('rankSignals attaches a domainBreadth object to every enriched signal', () => {
+  const { signal } = D.makeSignal({ ticker: 'ABC', source: 'screener', horizon: 'swing', rawConfidence: 70,
+    evidenceFamilies: ['priceTrend', 'volumeAccum'] });
+  const [r] = D.rankSignals([signal], { regime: { riskOn: true }, scoreboard: null });
+  assert.ok(r.breadth);
+  assert.equal(r.breadth.litCount, 2);
+  assert.equal(r.breadth.of, 8);
+});
+
 // ── independentEvidence (#3) ────────────────────────────────────────────────
 test('independentEvidence: distinct families count once, extras discounted', () => {
   // 3 price-trend screeners + 1 volume = should read as 2 independent families, not 4.

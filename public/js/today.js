@@ -47,6 +47,17 @@ function evidenceLine(sig, legend) {
   return `<div class="td-eviden">🧩 <b>${e.familyCount || 1}</b> independent ${e.familyCount === 1 ? 'family' : 'families'}: ${esc(names.join(' + '))}${src}${warn}</div>`;
 }
 
+// Signal-domain breadth (#2) — how many of the 8 distinct evidence DOMAINS (price,
+// volume, fundamentals, news, options, insiders, sentiment, regime) corroborate the
+// name. Broader than the family count: a real edge shows up in more than one domain.
+function breadthChip(sig) {
+  const b = sig.breadth;
+  if (!b || !b.of) return '';
+  const lit = (b.lit || []).map(d => (b.domains.find(x => x.key === d) || {}).label || d).join(', ');
+  const cls = b.litCount >= 3 ? 'br-wide' : b.litCount === 2 ? 'br-ok' : 'br-thin';
+  return `<span class="td-breadth ${cls}" title="Signal-domain breadth — ${b.litCount} of ${b.of} evidence domains lit${lit ? `: ${esc(lit)}` : ''}. One domain = a single kind of evidence, not confirmation.">🌐 ${b.litCount}/${b.of} domains</span>`;
+}
+
 // Track-record line — validated expectancy from the live Scoreboard (#4/#5). Only
 // shown when the name's section:tier has a real sample; otherwise says "building".
 function trackLine(sig) {
@@ -91,6 +102,7 @@ function signalCard(sig, legend) {
     + `<span class="td-setup">${esc(sig.setup || sig.source)}</span>`
     + (sig.sector ? `<span class="td-sect">${esc(sig.sector)}</span>` : '') + gradeChip(sig) + pctileChip(sig) + exWarn + `</div>`
     + evidenceLine(sig, legend)
+    + `<div class="td-breadth-row">${breadthChip(sig)}</div>`
     + levels(sig)
     + `<div class="td-foot">${trackLine(sig)}${eventChip(sig.event)}${sig.catalyst ? `<span class="td-cat" title="${esc(sig.catalyst)}">📰 catalyst</span>` : ''}</div>`
     + `</div>`;
