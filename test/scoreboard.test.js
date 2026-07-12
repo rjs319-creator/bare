@@ -136,6 +136,19 @@ test('forwardPath: a short measures favorable excursion to the downside', () => 
   assert.equal(r.ret, -8); // long would be +8 → short inverts to -8
 });
 
+test('forwardPath: a long captures the worst drawdown (MAE) alongside MFE', () => {
+  const r = forwardPath(PATH, { date: '2026-01-01', tier: 'X' }, 2);
+  // entry 100; lowest low across the hold is 99 → MAE 1% of heat taken
+  assert.equal(r.mae, 1);
+  assert.equal(r.mfe, 22);
+});
+
+test('forwardPath: a short measures adverse excursion to the upside (the rally against it)', () => {
+  // entry 100, short: adverse = price rising; highest high is 122 → MAE 22%
+  const r = forwardPath(PATH, { date: '2026-01-01', short: true }, 2);
+  assert.equal(r.mae, 22);
+});
+
 test('forwardPath: returns null when the horizon has not elapsed yet', () => {
   assert.equal(forwardPath(PATH, { date: '2026-01-01' }, 5), null);
 });
@@ -171,7 +184,25 @@ test('summarizeReturns: reports big-winner rates from the MFE distribution', () 
   assert.equal(s.big10, 50);   // 12 and 25 cross +10%
   assert.equal(s.big20, 25);   // only 25 crosses +20%
   assert.equal(s.avgMfe, 12.5); // (12+4+25+9)/4
+  assert.equal(s.avgMae, null); // no mae fields on these records → self-reports null
   assert.equal(summarizeReturns([]), null);
+});
+
+test('summarizeReturns: MAE — avg adverse excursion + excursion (reward/pain) ratio', () => {
+  const s = summarizeReturns([
+    { ret: 5, mfe: 12, mae: 2 }, { ret: -3, mfe: 4, mae: 6 },
+    { ret: 8, mfe: 24, mae: 4 }, { ret: -1, mfe: 8, mae: 8 },
+  ]);
+  assert.equal(s.maeN, 4);
+  assert.equal(s.avgMae, 5);              // (2+6+4+8)/4
+  assert.equal(s.avgMfe, 12);             // (12+4+24+8)/4
+  assert.equal(s.excursionRatio, 2.4);   // 12 / 5 — ran favorable 2.4× the adverse heat
+});
+
+test('summarizeReturns: excursionRatio is null when there is no adverse heat', () => {
+  const s = summarizeReturns([{ ret: 5, mfe: 5, mae: 0 }, { ret: 2, mfe: 3, mae: 0 }]);
+  assert.equal(s.avgMae, 0);
+  assert.equal(s.excursionRatio, null);   // guards divide-by-zero
 });
 
 test('summarizeReturns: excess vs market — avg excess + beat rate over records that have it', () => {

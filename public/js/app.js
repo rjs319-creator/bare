@@ -6826,7 +6826,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         : `Mean return ${lb} after the pick`;
       return `<div class="sb-h"><div class="sb-h-lb" title="${esc(SB_HZ_HELP)}">${lb}</div><div class="sb-h-ret ${up ? 'up' : 'down'}" title="${esc(distTip)}">${up ? '+' : ''}${s.avg}%</div><div class="sb-h-sub">${s.winRate}% win · n=${s.n}</div>${exLine}${netLine}${secLine}${realLine}</div>`;
     }).join('');
-    const hl = h['20d'] || h['1m'] || h['10d'] || h['5d'] || h['1d'] || h['3m'];
+    const HZ_FALLBACK = ['20d', '1m', '10d', '5d', '1d', '3m'];
+    const hzKey = HZ_FALLBACK.find(k => h[k] && h[k].n) || null;
+    const hzLabel = (SB_HZ.find(x => x[0] === hzKey) || [])[1] || hzKey || '';
+    const hl = hzKey ? h[hzKey] : (h['20d'] || h['1m'] || h['10d'] || h['5d'] || h['1d'] || h['3m']);
     // In a regime view, show that regime's logged-pick count; flag thin samples so
     // a 2-pick win-rate isn't mistaken for a real edge (the project's small-n rule).
     const regCount = sbRegime === 'all' ? g.picks : ((g.regimePicks && g.regimePicks[sbRegime]) || 0);
@@ -6836,7 +6839,23 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // Big-winner reach: how often the signal's best run-up (MFE) crossed +10% / +20%
     // before the horizon, regardless of where it closed. Surfaces the models that
     // catch large moves vs. those that only grind out a small average.
-    const bw = (hl && hl.big10 != null) ? `<div class="sb-bw"><span title="Share of signals whose best run-up reached +10% before the horizon elapsed">🚀 &gt;10%: <b>${hl.big10}%</b></span><span title="Share that reached +20%">&gt;20%: <b>${hl.big20}%</b></span><span title="Average best run-up (Maximum Favorable Excursion) per signal">Avg peak <b>+${hl.avgMfe}%</b></span></div>` : '';
+    const heatSpans = (hl && hl.avgMae != null)
+      ? `<span title="Average worst intra-hold drawdown per signal (Maximum Adverse Excursion) — the heat you sat through to earn the result, which a flat average return hides">🩸 Heat <b>−${hl.avgMae}%</b></span>${hl.excursionRatio != null ? `<span title="Avg favorable reach ÷ avg adverse reach (MFE/MAE). >1 = the path ran in your favor more than against before the horizon">R/P <b>${hl.excursionRatio}×</b></span>` : ''}`
+      : '';
+    const bw = (hl && hl.big10 != null) ? `<div class="sb-bw"><span title="Share of signals whose best run-up reached +10% before the horizon elapsed">🚀 &gt;10%: <b>${hl.big10}%</b></span><span title="Share that reached +20%">&gt;20%: <b>${hl.big20}%</b></span><span title="Average best run-up (Maximum Favorable Excursion) per signal">Avg peak <b>+${hl.avgMfe}%</b></span>${heatSpans}</div>` : '';
+    // Liquidity split (#4 "performance by liquidity"): the SAME edge, broken out by the
+    // pick's liquidity tier — does it survive in liquid, tradeable names or only in the
+    // illiquid, cost-eaten tail? Only shown when ≥2 tiers have resolved picks (else the
+    // split is just the headline). Uses the same headline horizon as the card.
+    const LIQ_LABEL = { liquid: 'Large / liquid', small: 'Small-cap', micro: 'Micro-cap', biotech: 'Biotech' };
+    const liqData = g.byLiquidity || {};
+    const liqTiers = hzKey ? Object.keys(liqData).filter(lt => liqData[lt][hzKey] && liqData[lt][hzKey].n) : [];
+    const liq = liqTiers.length >= 2
+      ? `<details class="sb-liq"><summary title="The same signal, split by the pick's liquidity bucket. An edge that only shows up in micro-caps is largely eaten by spread/slippage — see the cost-adjusted 'net' line.">💧 By liquidity <span class="dt-dim">· ${esc(hzLabel)}</span></summary><div class="sb-liq-body">${liqTiers.map(lt => {
+          const s = liqData[lt][hzKey]; const up = s.avg >= 0;
+          return `<div class="sb-liq-row"><span class="sb-liq-nm">${LIQ_LABEL[lt] || esc(lt)}</span><span class="sb-liq-v ${up ? 'up' : 'down'}">${up ? '+' : ''}${s.avg}%</span><span class="sb-liq-sub dt-dim">${s.winRate}% win · n=${s.n}${s.avgExcess != null ? ` · vs S&amp;P ${s.avgExcess > 0 ? '+' : ''}${s.avgExcess}%` : ''}</span></div>`;
+        }).join('')}</div></details>`
+      : '';
     const bwBadge = (hl && hl.big10 >= 30) ? `<span class="sb-bwbadge" title="${hl.big10}% of signals reached +10% — a big-winner model">🚀 Big-winner ${hl.big10}%</span>` : '';
     // STRATEGY efficacy (distinct from the return horizons, which measure whether the
     // stock MOVED): did the pick's published entry/stop/target actually capture it —
@@ -6855,6 +6874,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         ${wl}
         ${bw}
         ${strat}
+        ${liq}
       </div>`;
   }
 
