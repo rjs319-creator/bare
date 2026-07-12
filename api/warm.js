@@ -178,6 +178,14 @@ module.exports = async function handler(req, res) {
   // drain budget the tick chains share (doing so starved them). Self-heals next run.
   const todayKick = warmOne('/api/tracker?op=today&log=1').catch(() => null);
 
+  // 🧪 Baseline factor scan — refresh the point-in-time cross-section (rank-IC + top-
+  // quintile excess for momentum / 52-week / rel-volume) that the Baselines tab reads
+  // via op=baselines. Persists research/factors-large.json. Fire-and-forget: ~6s in
+  // its own invocation once candles are CDN-warm (the screener warm above populated
+  // them), so it must NOT sit on warm's critical path. The bearer (internalHeaders)
+  // exempts it from the op=research rate limit.
+  const researchKick = warmOne('/api/tracker?op=research&scope=large').catch(() => null);
+
   // ── DECOUPLED TICK CHAINS ──────────────────────────────────────────────────
   // The resolve/learn/log ticks run as fire-and-forget CHAINS (not awaited on the
   // critical path). Each chain runs its ops sequentially in their own invocations
@@ -219,6 +227,7 @@ module.exports = async function handler(req, res) {
   void aiTicks;
   void calibKick; // fire-and-forget like the ticks — recomputes on its own invocation
   void todayKick; // fire-and-forget: unified decision snapshot in its own 60s budget
+  void researchKick; // fire-and-forget: refresh the baseline factor cross-section
   void pulseKick; // fire-and-forget: gather→refine chain builds the refined Pulse snapshot
   void optionsAssessKick; // fire-and-forget: Fable options-flow analysis in its own budget
   void alignedKick; // fire-and-forget: Dual-Confirmed scan over the warm screener pool
@@ -229,7 +238,7 @@ module.exports = async function handler(req, res) {
   // no longer awaited stage() results, so they're not per-step keys here. Each self-logs
   // to its own ledger; ledger freshness is the source of truth for them now.
   const ticksDecoupled = 20;
-  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, intracapture, cern, edgelog, alertsgrade, alertsassess, fadetick, ticksDecoupled, aiTicksKicked: 6, calibKicked: true, stageStatus, elapsedMs: Date.now() - START, at: new Date().toISOString() };
+  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, intracapture, cern, edgelog, alertsgrade, alertsassess, fadetick, ticksDecoupled, aiTicksKicked: 6, calibKicked: true, researchKicked: true, stageStatus, elapsedMs: Date.now() - START, at: new Date().toISOString() };
 
   // Structured run summary — survives in Vercel logs even if the health write fails.
   const skipped = Object.keys(stageStatus).filter(k => stageStatus[k] === 'skipped:budget');
