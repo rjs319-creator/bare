@@ -7008,6 +7008,31 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // this buckets all of them by decile and asks whether higher conviction earned better
   // 20-session returns. Reuses rqBar + the rank-IC/verdict battery. Reads data.scoreQuality
   // directly (no extra endpoint) — so it's honest about "building" until ≥20 resolve.
+  // Per-section decile breakdown — does EACH section's own scorer rank its own winners?
+  // A compact row per section (verdict · rank-IC · top-vs-bottom spread · n), each
+  // expandable to its own decile ladder. Sorted best-separating (highest rank-IC) first.
+  function scoreBySectionHTML(bySection, hLbl) {
+    const rows = Object.entries(bySection || {}).filter(([, v]) => v && v.ready);
+    if (!rows.length) return '';
+    rows.sort((a, b) => (b[1].ic?.ic ?? -99) - (a[1].ic?.ic ?? -99));
+    const one = ([sec, v]) => {
+      const [vi, vcol, vtxt] = RQ_VERDICT[v.verdict] || RQ_VERDICT.insufficient;
+      const label = SB_SECTIONS[sec] || sec;
+      const ic = v.ic || {};
+      const maxAbs = Math.max(...(v.buckets || []).map(b => Math.abs(b.avgOutcome)), 0.01);
+      const bars = (v.buckets || []).map(b => rqBar(b, maxAbs)).join('');
+      return `<details class="rq-sec"><summary>`
+        + `<span class="rq-sec-v" style="color:${vcol}">${vi}</span>`
+        + `<span class="rq-sec-nm">${esc(label)}</span>`
+        + `<span class="rq-sec-m dt-dim">${esc(v.method)}</span>`
+        + `<span class="rq-sec-ic" title="Spearman rank-IC — does higher conviction rank better returns?">IC <b style="color:${vcol}">${ic.ic ?? '—'}</b></span>`
+        + `<span class="rq-sec-sp dt-dim">spread ${v.topBottomSpread ?? '—'}%</span>`
+        + `<span class="rq-sec-n dt-dim">n=${v.n}</span>`
+        + `</summary><div class="rq-sec-body"><div class="dt-dim rq-cap">Avg ${esc(hLbl)} return (%) by ${esc(v.method)} conviction decile:</div>${bars}</div></details>`;
+    };
+    return `<div class="rq-bysec"><div class="dt-dim rq-cap rq-bysec-h">Per section — does each model rank its OWN winners? <span class="dt-dim">(best-separating first; click to expand)</span></div>${rows.map(one).join('')}</div>`;
+  }
+
   function scoreDecilePanel(sq) {
     if (!sq) return '';
     const o = sq.overall || {};
@@ -7026,6 +7051,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + `<div class="rq-verdict" style="border-left-color:${vcol}"><b style="color:${vcol}">${vi} ${esc(vtxt)}.</b> `
       + `Rank-IC <b>${ic.ic ?? '—'}</b> (t=${ic.t ?? '—'}, ${ic.significant ? 'significant' : 'not significant'}) · top decile beat base win-rate by <b>${o.liftWinRate ?? '—'}pts</b> · top-vs-bottom spread <b>${o.topBottomSpread ?? '—'}%</b> · top-${o.topKn} precision <b>${o.topKprecision}%</b>.</div>`
       + `<div class="rq-bars"><div class="dt-dim rq-cap">Avg ${esc(hLbl)} return (%) by within-section conviction decile — a predictive score slopes up left→right:</div>${o.buckets.map(b => rqBar(b, maxAbs)).join('')}</div>`
+      + scoreBySectionHTML(sq.bySection, hLbl)
       + (regimes ? `<div class="dt-dim rq-reg">By regime → ${esc(regimes)}</div>` : '')
       + `<div class="dt-dim rq-foot">Each pick is scored by <b>its own section's real model</b> reconstructed from point-in-time candles (Breakout→Apex, Ghost→Ghost, Momentum→EMA/VWAP/MACD/RSI, Day-Trade→relVol/gap ranker, Coil→Bollinger-squeeze rank; the rest use a tagged momentum proxy), then ranked <b>within its section</b> so scores from different models compare as "top of their own model". It's a conviction RANK, not a probability. "Predictive" needs a positive, significant rank-IC AND a monotone ladder — the bar every edge here is held to. Caveat: pct-based scorers (Apex/Ghost) percentile-rank across the logged-pick cohort, not the full daily universe, so absolute scores differ from live.</div>`
       + `</div>`;
