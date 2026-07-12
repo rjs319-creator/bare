@@ -189,18 +189,51 @@ function dataTrustPanel(fr) {
     </div></details>`;
 }
 
+const TODAY_CACHE_KEY = 'today.cc.v1';
+
+// Rebuild the evidence-grade map from an op=maturity payload.
+function applyGrades(mat) {
+  GRADES = {};
+  if (mat && mat.strategies) mat.strategies.forEach(s => {
+    if (s.section) GRADES[s.section] = { grade: s.grade, icon: (mat.gradeMeta[s.grade] || {}).icon || '', label: (mat.gradeMeta[s.grade] || {}).label || s.grade, blurb: (mat.gradeMeta[s.grade] || {}).blurb };
+  });
+}
+
+// A subtle "refreshing…" hint shown over a stale (cached) render until the fresh data lands.
+function markUpdating(container, on) {
+  const cc = container.querySelector('.td-cc');
+  if (!cc) return;
+  let n = cc.querySelector('.td-refreshing');
+  if (on) { if (!n) { n = document.createElement('div'); n.className = 'td-refreshing'; n.textContent = '🔄 Showing your last scan — refreshing with the latest…'; cc.prepend(n); } }
+  else if (n) n.remove();
+}
+
 export async function loadCommandCenter(container) {
   if (!container) return null;
-  container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Ranking every screener into one table…</p></div>`;
+  // 1) INSTANT PAINT from the last cached payload so there's no long blank spinner while
+  //    op=today (which self-fetches 12 sources) computes on a cold hit. Flagged "refreshing".
+  let painted = false;
+  try {
+    const c = JSON.parse(localStorage.getItem(TODAY_CACHE_KEY) || 'null');
+    if (c && c.p && c.p.ok) { applyGrades(c.mat); renderCommandCenter(container, c.p); markUpdating(container, true); painted = true; }
+  } catch { /* corrupt cache → ignore */ }
+  if (!painted) container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Ranking every screener into one table…</p></div>`;
+
+  // 2) Fetch fresh in the background; swap in when it arrives.
   let p = null, mat = null;
   try { [p, mat] = await Promise.all([
     fetch('/api/tracker?op=today').then(r => r.json()),
     fetch('/api/tracker?op=maturity').then(r => r.json()).catch(() => null),
   ]); } catch { p = null; }
-  GRADES = {};
-  if (mat && mat.strategies) mat.strategies.forEach(s => {
-    if (s.section) GRADES[s.section] = { grade: s.grade, icon: (mat.gradeMeta[s.grade] || {}).icon || '', label: (mat.gradeMeta[s.grade] || {}).label || s.grade, blurb: (mat.gradeMeta[s.grade] || {}).blurb };
-  });
-  renderCommandCenter(container, p);
+
+  if (p && p.ok) {
+    applyGrades(mat);
+    try { localStorage.setItem(TODAY_CACHE_KEY, JSON.stringify({ p, mat, at: Date.now() })); } catch { /* quota → skip caching */ }
+    renderCommandCenter(container, p);          // replace stale with fresh
+  } else if (!painted) {
+    renderCommandCenter(container, p);          // nothing cached → show the empty/error state
+  } else {
+    markUpdating(container, false);             // fresh fetch failed but stale is shown → keep it, drop the hint
+  }
   return p;
 }
