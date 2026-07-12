@@ -187,9 +187,24 @@ function wnTrackChip(track, note) {
   return `<span class="wn-track${neg ? ' wn-track-neg' : ''}" title="${track.horizon || ''} forward record over ${track.resolved} resolved picks in this signal class">📊 ${esc(bits)} · n=${track.resolved}</span>`;
 }
 
+// Per-section decile verdict → a chip. Distinct from the track record: this says whether
+// the signal class's OWN conviction score actually RANKS its winners (higher scores → better
+// returns), from the Scoreboard's score-decile check. A weak/negative model is flagged.
+const WN_RQ = {
+  predictive: ['🎯', 'wn-rq-good', 'Predictive — higher scores in this model really do win'],
+  'weak-positive': ['🎯', 'wn-rq-ok', 'Weakly positive — the score has a mild edge'],
+  noise: ['🌫️', 'wn-rq-noise', 'Noise — this model’s score does NOT separate winners from losers'],
+  inverted: ['🔻', 'wn-rq-neg', 'Inverted — higher scores did WORSE (a red flag)'],
+};
+function wnRankChip(rq) {
+  if (!rq || !rq.verdict || rq.ic == null) return '';
+  const [icn, cls, tip] = WN_RQ[rq.verdict] || WN_RQ.noise;
+  return `<span class="wn-rq ${cls}" title="${esc(tip)} — score-decile rank-IC ${rq.ic} (t=${rq.t ?? '—'}${rq.significant ? ', significant' : ''}) over ${rq.n} resolved ${rq.horizon || ''} picks in this class.">${icn} model ${rq.ic >= 0 ? '+' : ''}${rq.ic}</span>`;
+}
+
 function wnSignalRow(s) {
   return `<div class="wn-sig wn-${s.side}">
-    <div class="wn-sig-h"><span class="wn-sig-mark">${s.side === 'for' ? '▲' : s.side === 'against' ? '▼' : '◆'}</span><span class="wn-sig-label">${esc(s.label)}</span>${wnTrackChip(s.track, s.note)}</div>
+    <div class="wn-sig-h"><span class="wn-sig-mark">${s.side === 'for' ? '▲' : s.side === 'against' ? '▼' : '◆'}</span><span class="wn-sig-label">${esc(s.label)}</span>${wnTrackChip(s.track, s.note)}${wnRankChip(s.rankQuality)}</div>
     <div class="wn-sig-detail">${esc(s.detail)}</div>
   </div>`;
 }

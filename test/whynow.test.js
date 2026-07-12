@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { composeWhyNow, buildSignals, verdictOf, trackFor, coverageOf, COVERAGE_CLASSES, MIN_RESOLVED } = require('../lib/whynow');
+const { composeWhyNow, buildSignals, verdictOf, trackFor, coverageOf, COVERAGE_CLASSES, sectionOf, MIN_RESOLVED } = require('../lib/whynow');
 const { locate, trackMap } = require('../lib/whynow-routes');
 
 const riskOn = { regime: 'risk-on', riskOn: true, riskOff: false, vix: { level: 15, pctile: 20 } };
@@ -168,4 +168,37 @@ test('coverage is attached to the composeWhyNow payload', () => {
 test('risk-off macro shows as an ACTIVE coverage lens (the validated caution)', () => {
   const cov = coverageOf({ ticker: 'QQQ', macro: { riskOff: true, vix: { level: 30, pctile: 92 } } });
   assert.equal(cov.find(c => c.key === 'macro').status, 'active');
+});
+
+// ── per-section decile join (rankQuality on each firing signal) ──────────────
+test('buildSignals attaches per-section decile verdict to Ghost/Apex/ReadThrough signals', () => {
+  const sectionDecile = {
+    Ghost: { verdict: 'noise', ic: -0.02, t: -0.3, significant: false, n: 129, method: 'ghost', horizon: '5d' },
+    screener: { verdict: 'weak-positive', ic: 0.04, t: 0.5, significant: false, n: 180, method: 'apex', horizon: '5d' },
+    ReadThrough: { verdict: 'predictive', ic: 0.2, t: 3.1, significant: true, n: 40, method: 'proxy', horizon: '5d' },
+  };
+  const sigs = buildSignals({
+    macro: riskOn, sectionDecile,
+    ghost: { tier: 'GHOST', score: 84, strongPillars: [] },
+    apex: { tier: 'apex', score: 80, pillars: {} },
+    readThrough: [{ trigger_ticker: 'AVGO', thesis: 'supplier', moved: { alreadyMoved: false } }],
+  });
+  assert.equal(sigs.find(s => s.key === 'Ghost:GHOST').rankQuality.verdict, 'noise');
+  assert.equal(sigs.find(s => s.key === 'Apex:apex').rankQuality.ic, 0.04);
+  assert.equal(sigs.find(s => s.key === 'ReadThrough:Fresh').rankQuality.verdict, 'predictive');
+  // macro/insider have no section → no rankQuality
+  assert.equal(sigs.find(s => s.key === 'macro').rankQuality, undefined);
+});
+
+test('sectionOf maps signal keys to their Scoreboard section', () => {
+  assert.equal(sectionOf('Ghost:GHOST'), 'Ghost');
+  assert.equal(sectionOf('Apex:loaded'), 'screener');
+  assert.equal(sectionOf('Conviction:sleeveA'), 'screener');
+  assert.equal(sectionOf('ReadThrough:Fresh'), 'ReadThrough');
+  assert.equal(sectionOf('macro'), null);
+});
+
+test('no sectionDecile → signals simply carry no rankQuality (graceful)', () => {
+  const sigs = buildSignals({ macro: riskOn, ghost: { tier: 'GHOST', score: 84, strongPillars: [] } });
+  assert.equal(sigs.find(s => s.key === 'Ghost:GHOST').rankQuality, undefined);
 });
