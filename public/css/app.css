@@ -1428,7 +1428,7 @@
     .mbn-item:active { transform: scale(0.92); }
     .mbn-item.active { color: var(--green); background: var(--green-dim); }
     .mbn-icon  { font-size: 1.12rem; line-height: 1; }
-    .mbn-label { font-size: 0.5rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mbn-label { font-size: 0.44rem; font-weight: 700; letter-spacing: 0; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     /* ── TABLET (≤1024px) ── */
     @media (max-width: 1024px) {
