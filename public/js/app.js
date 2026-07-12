@@ -14,14 +14,17 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   // ── App tabs with a "Markets" hub (Screener / Rotation / Sectors) ──
   const TAB_GROUPS = {
-    // Five decision-purpose workspaces (was 7 overlapping groups). Candidates &
-    // Portfolio are ordered by holding horizon (see SUB_HZ dividers). Unproven
-    // overlays live in the Research Lab; the honest report cards live in Evidence.
-    home:       ['today', 'start', 'quickhit', 'sectors', 'rotation', 'news', 'brief'],
+    // Seven decision-purpose workspaces. Candidates & Portfolio are ordered by holding
+    // horizon (see SUB_HZ dividers). Markets = macro/context; Predict = the forecast &
+    // prediction-market read. Unproven overlays live in the Research Lab; the honest
+    // report cards live in Evidence.
+    home:       ['today', 'start', 'quickhit'],
     candidates: ['daytrade', 'gapgo', 'gapdown', 'opportunities', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
     positions:  ['coremo', 'momentum', 'putsell', 'picks'],
+    markets:    ['rotation', 'sectors', 'news', 'pulse'],
+    predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     proof:      ['scoreboard', 'evidence', 'baselines', 'leaderboard', 'coreperf'],
-    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'pulse', 'gameplan', 'forecast', 'crowd', 'sharp', 'alerts', 'backtest', 'edge'],
+    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge'],
   };
   // Holding-horizon of each candidate/position sub-tab → drives the horizon dividers
   // in the sub-nav so the app is visibly separated by time horizon (the spec ask).
@@ -96,7 +99,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // Mark each section as a switchable screen
   SECTION_IDS.forEach(id => document.getElementById(id)?.classList.add('tabbable'));
 
-  let hubSub = { start: 'today', screeners: 'opportunities', markets: 'rotation', predict: 'gameplan', research: 'backtest', track: 'leaderboard' };
+  let hubSub = { home: 'today', candidates: 'opportunities', positions: 'coremo', markets: 'rotation', predict: 'gameplan', proof: 'scoreboard', lab: 'events' };
   try { const hs = JSON.parse(localStorage.getItem('hubSub')); if (hs) hubSub = { ...hubSub, ...hs }; } catch {}
   // Sanitize stored hubSub: after the nav regrouping a saved sub may no longer
   // belong to its group (e.g. markets→screener). Reset any stale entry to the
@@ -3361,7 +3364,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     };
     apply();
   }
-  const GROUP_LABEL = { home: 'Today', candidates: 'Candidates', positions: 'Portfolio', proof: 'Evidence', lab: 'Research Lab' };
+  const GROUP_LABEL = { home: 'Today', candidates: 'Candidates', positions: 'Portfolio', markets: 'Markets', predict: 'Predict', proof: 'Evidence', lab: 'Research Lab' };
   initCommandPalette({
     sections: SECTION_IDS.map(id => ({ id, label: (SUB_LABEL[id] || id).replace(/^[^\w]+\s*/, ''), group: GROUP_LABEL[topOf(id)] || '' })),
     learn: Object.keys(LEARN).map(key => ({ key, label: LEARN[key].t, group: LEARN[key].g })),
@@ -4465,7 +4468,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function paintAlertBadge() {
     const seen = getSeen();
     const unread = alertItems.filter(i => Date.parse(i.ts) > seen).length;
-    document.querySelectorAll('[data-tab="lab"]').forEach(el => {
+    document.querySelectorAll('[data-tab="predict"]').forEach(el => {
       let b = el.querySelector('.nav-badge');
       if (unread > 0) { if (!b) { b = document.createElement('span'); b.className = 'nav-badge'; el.appendChild(b); } b.textContent = unread > 9 ? '9+' : unread; b.style.display = ''; }
       else if (b) b.style.display = 'none';
