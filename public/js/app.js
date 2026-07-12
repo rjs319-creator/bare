@@ -7013,8 +7013,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const o = sq.overall || {};
     const mm = sq.methodMix || {};
     const mix = [['apex', 'Apex'], ['ghost', 'Ghost'], ['momentum', 'Momentum'], ['daytrade', 'DayTrade'], ['coil', 'Coil'], ['proxy', 'proxy']].filter(([k]) => mm[k]).map(([k, lb]) => `${lb} ${mm[k]}`).join(' · ');
+    const hLbl = String(sq.horizon || '5d').replace(/^(\d+)d$/, '$1-session').replace(/^1m$/, '1-month').replace(/^3m$/, '3-month');
     const head = `🏅 Score decile — do higher-conviction picks win? <span class="dt-dim">· per-section ${esc(sq.model || '')} · ${sq.scoredPicks || 0} scored${mix ? ` · ${esc(mix)}` : ''} · ${esc(sq.horizon || '')} outcome</span>`;
-    if (!o.ready) return `<div class="sb-secgroup"><div class="sb-secgroup-h">${head}</div><div class="dt-note">⏳ ${esc(o.note || 'Building')} Every pick is scored by <b>its own section's real model</b> reconstructed point-in-time (Breakout→Apex 4-pillar, Ghost→Ghost 6-pillar, Momentum→EMA/VWAP/MACD/RSI composite, Day-Trade→relVol/gap ranker, Coil→Bollinger-squeeze rank; the rest fall back to a tagged momentum proxy), normalized within section, then bucketed by decile. Fills in as picks resolve their 20-session return.</div></div>`;
+    if (!o.ready) return `<div class="sb-secgroup"><div class="sb-secgroup-h">${head}</div><div class="dt-note">⏳ ${esc(o.note || 'Building')} Every pick is scored by <b>its own section's real model</b> reconstructed point-in-time (Breakout→Apex 4-pillar, Ghost→Ghost 6-pillar, Momentum→EMA/VWAP/MACD/RSI composite, Day-Trade→relVol/gap ranker, Coil→Bollinger-squeeze rank; the rest fall back to a tagged momentum proxy), normalized within section, then bucketed by decile. Fills in as picks resolve their ${esc(hLbl)} return.</div></div>`;
     const [vi, vcol, vtxt] = RQ_VERDICT[o.verdict] || RQ_VERDICT.insufficient;
     const maxAbs = Math.max(...o.buckets.map(b => Math.abs(b.avgOutcome)), 0.01);
     const ic = o.ic || {};
@@ -7024,7 +7025,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + `<div class="sb-secgroup-h">${head}</div>`
       + `<div class="rq-verdict" style="border-left-color:${vcol}"><b style="color:${vcol}">${vi} ${esc(vtxt)}.</b> `
       + `Rank-IC <b>${ic.ic ?? '—'}</b> (t=${ic.t ?? '—'}, ${ic.significant ? 'significant' : 'not significant'}) · top decile beat base win-rate by <b>${o.liftWinRate ?? '—'}pts</b> · top-vs-bottom spread <b>${o.topBottomSpread ?? '—'}%</b> · top-${o.topKn} precision <b>${o.topKprecision}%</b>.</div>`
-      + `<div class="rq-bars"><div class="dt-dim rq-cap">Avg 20-session return (%) by within-section conviction decile — a predictive score slopes up left→right:</div>${o.buckets.map(b => rqBar(b, maxAbs)).join('')}</div>`
+      + `<div class="rq-bars"><div class="dt-dim rq-cap">Avg ${esc(hLbl)} return (%) by within-section conviction decile — a predictive score slopes up left→right:</div>${o.buckets.map(b => rqBar(b, maxAbs)).join('')}</div>`
       + (regimes ? `<div class="dt-dim rq-reg">By regime → ${esc(regimes)}</div>` : '')
       + `<div class="dt-dim rq-foot">Each pick is scored by <b>its own section's real model</b> reconstructed from point-in-time candles (Breakout→Apex, Ghost→Ghost, Momentum→EMA/VWAP/MACD/RSI, Day-Trade→relVol/gap ranker, Coil→Bollinger-squeeze rank; the rest use a tagged momentum proxy), then ranked <b>within its section</b> so scores from different models compare as "top of their own model". It's a conviction RANK, not a probability. "Predictive" needs a positive, significant rank-IC AND a monotone ladder — the bar every edge here is held to. Caveat: pct-based scorers (Apex/Ghost) percentile-rank across the logged-pick cohort, not the full daily universe, so absolute scores differ from live.</div>`
       + `</div>`;
