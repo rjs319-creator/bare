@@ -202,9 +202,22 @@ function wnRankChip(rq) {
   return `<span class="wn-rq ${cls}" title="${esc(tip)} — score-decile rank-IC ${rq.ic} (t=${rq.t ?? '—'}${rq.significant ? ', significant' : ''}) over ${rq.n} resolved ${rq.horizon || ''} picks in this class.">${icn} model ${rq.ic >= 0 ? '+' : ''}${rq.ic}</span>`;
 }
 
+// Section-level track record → a chip. Shown ONLY for signals that lack a per-tier
+// Scoreboard track (Apex, conviction sleeve) so they still show a win rate + avg return —
+// the SECTION's realized record at the score-decile horizon. Gross (not vs benchmark).
+function wnSectionRecordChip(rq, hasTrack) {
+  if (hasTrack || !rq || rq.winRate == null) return '';
+  const pending = rq.n != null && rq.n < 15;
+  if (pending) return `<span class="wn-track wn-track-pending" title="This class is tracked at the section level; not enough resolved yet for a win rate.">📊 tracking · ${rq.n} resolved</span>`;
+  const avg = rq.avgReturn != null ? ` · ${rq.avgReturn >= 0 ? '+' : ''}${rq.avgReturn}% avg ${rq.horizon || ''}` : '';
+  const neg = rq.avgReturn != null && rq.avgReturn < 0;
+  return `<span class="wn-track${neg ? ' wn-track-neg' : ''}" title="This signal class isn't tracked per-tier on the Scoreboard, so this is the SECTION's realized record over ${rq.n} resolved ${rq.horizon || ''} picks — win rate + GROSS avg return (not benchmark-relative).">📊 ${rq.winRate}% win${avg} · n=${rq.n}</span>`;
+}
+
 function wnSignalRow(s) {
+  const hasSectionRec = !s.track && s.rankQuality && s.rankQuality.winRate != null;
   return `<div class="wn-sig wn-${s.side}">
-    <div class="wn-sig-h"><span class="wn-sig-mark">${s.side === 'for' ? '▲' : s.side === 'against' ? '▼' : '◆'}</span><span class="wn-sig-label">${esc(s.label)}</span>${wnTrackChip(s.track, s.note)}${wnRankChip(s.rankQuality)}</div>
+    <div class="wn-sig-h"><span class="wn-sig-mark">${s.side === 'for' ? '▲' : s.side === 'against' ? '▼' : '◆'}</span><span class="wn-sig-label">${esc(s.label)}</span>${wnTrackChip(s.track, hasSectionRec ? null : s.note)}${wnSectionRecordChip(s.rankQuality, !!s.track)}${wnRankChip(s.rankQuality)}</div>
     <div class="wn-sig-detail">${esc(s.detail)}</div>
   </div>`;
 }
