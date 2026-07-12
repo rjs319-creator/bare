@@ -62,6 +62,7 @@ function signalCard(sig, legend) {
     + `<span class="td-co">${esc(sig.company || sig.setup || '')}</span>`
     + `<span class="td-score" title="Composite: confidence × regime-fit × execution × validated-expectancy × independent-evidence">${sig.score}</span></div>`
     + `<div class="td-chips"><span class="td-state ${scls}">${si} ${slbl}</span>`
+    + (sig.side === 'short' ? `<span class="td-short" title="A short setup — profits if it falls (favored in risk-off)">🔻 SHORT</span>` : '')
     + `<span class="td-setup">${esc(sig.setup || sig.source)}</span>`
     + (sig.sector ? `<span class="td-sect">${esc(sig.sector)}</span>` : '') + exWarn + `</div>`
     + evidenceLine(sig, legend)

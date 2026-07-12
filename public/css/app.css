@@ -2276,3 +2276,5 @@
     .rq-val { flex: 0 0 46px; text-align: right; font-weight: 700; }
     .rq-wr { flex: 0 0 78px; text-align: right; color: var(--text-dim); }
     .rq-reg, .rq-foot { font-size: 0.72rem; line-height: 1.5; margin-top: 6px; }
+
+    .td-short { color: var(--red) !important; font-weight: 700; }

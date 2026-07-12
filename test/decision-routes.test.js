@@ -26,6 +26,36 @@ const SECTORS = { sectors: [{ name: 'Technology', changePct: 1.5 }, { name: 'Ene
 const SCOREBOARD = { groups: [{ section: 'screener', tier: 'Setup', horizons: { '5d': { avgExcess: 3, winRate: 58, n: 30 } } }] };
 const AI = { rt: { items: [{ beneficiary_ticker: 'EEE', mechanism: 'reads through from AAA', directness: 70, moved: { alreadyMoved: false } }] } };
 
+const GAPDOWN = { strong: [{ ticker: 'ZZZ', sector: 'Technology', last: 13, tier: 'STRONG', side: 'short', continuationScore: 60,
+  avgDollarVol: 4e7, plan: { trigger: 11.5, stop: 14.2, target: 6.2, rr: 2, side: 'short' }, nextEarnings: null }] };
+const BIOTECH = { items: [{ ticker: 'AGIO', tier: 'Hot', score: 85, last: 44, relVol: 2.3, classification: 'FDA', catalyst_timing: 'Ahead' },
+  { ticker: 'WCH', tier: 'Watch', score: 40, last: 5 }] };
+
+test('fromGapDown: intraday SHORT with inverted levels', () => {
+  const s = N.fromGapDown(GAPDOWN)[0];
+  assert.equal(s.side, 'short');
+  assert.equal(s.horizon, 'intraday');
+  assert.equal(s.target < s.entry, true); // short: target below entry
+  assert.equal(s.section, 'GapDown');
+});
+
+test('fromBiotech: only Hot/Emerging, catalyst family, no levels', () => {
+  const b = N.fromBiotech(BIOTECH);
+  assert.equal(b.length, 1);            // Watch excluded
+  assert.equal(b[0].ticker, 'AGIO');
+  assert.ok(b[0].evidenceFamilies.includes('catalystForcedFlow'));
+  assert.equal(b[0].entry, undefined);  // no published levels
+});
+
+test('buildToday: gap-down shorts rank ABOVE longs in risk-off (validated lever)', () => {
+  const off = { ...SCREENER, regime: { ...SCREENER.regime, bearish: true, riskOn: false } };
+  const p = buildToday({ screener: off, gapdown: GAPDOWN, sectors: SECTORS, scoreboard: SCOREBOARD });
+  const zzz = p.horizons.intraday.find(x => x.ticker === 'ZZZ');
+  const aaa = p.horizons.swing.find(x => x.ticker === 'AAA');
+  assert.ok(zzz, 'short present in risk-off');
+  assert.ok(zzz.score > aaa.score, 'short outranks a long in risk-off');
+});
+
 test('fromScreener: attaches breakout + ghost + fundamentals evidence families', () => {
   const sigs = N.fromScreener(SCREENER);
   assert.equal(sigs.length, 2);
