@@ -210,8 +210,22 @@ function whyNowBlock(data) {
       <div class="wn-vtext"><div class="wn-vhead">${esc(data.verdict.headline)}</div>
       <div class="wn-vsum">${esc(data.verdict.summary)}</div></div></div>
     ${cases}
+    ${coverageBlock(data.coverage)}
     <div class="wn-fine">${esc(data.disclaimer)}</div>
   </div>`;
+}
+
+// Full model coverage (#5) — every lens the app ran, INCLUDING the quiet and no-data
+// ones. Collapsed so it informs without shouting; the honest "we checked, nothing here".
+const WN_COV = { active: ['🟢', 'wn-cov-active'], clear: ['○', 'wn-cov-clear'], unavailable: ['—', 'wn-cov-na'] };
+function coverageBlock(coverage) {
+  if (!Array.isArray(coverage) || !coverage.length) return '';
+  const active = coverage.filter(c => c.status === 'active').length;
+  const rows = coverage.map(c => {
+    const [mark, cls] = WN_COV[c.status] || WN_COV.unavailable;
+    return `<div class="wn-cov-row ${cls}"><span class="wn-cov-mark">${mark}</span><span class="wn-cov-label">${esc(c.label)}</span><span class="wn-cov-detail">${esc(c.detail || '')}</span></div>`;
+  }).join('');
+  return `<details class="wn-coverage"><summary>Model coverage — every lens checked <span class="wn-cov-count">${active}/${coverage.length} active</span></summary><div class="wn-cov-body">${rows}</div></details>`;
 }
 
 // Collapsible pillar-level breakdown — raw scores, no verdict spin.

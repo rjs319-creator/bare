@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { composeWhyNow, buildSignals, verdictOf, trackFor, MIN_RESOLVED } = require('../lib/whynow');
+const { composeWhyNow, buildSignals, verdictOf, trackFor, coverageOf, COVERAGE_CLASSES, MIN_RESOLVED } = require('../lib/whynow');
 const { locate, trackMap } = require('../lib/whynow-routes');
 
 const riskOn = { regime: 'risk-on', riskOn: true, riskOff: false, vix: { level: 15, pctile: 20 } };
@@ -139,4 +139,33 @@ test('trackMap: keys scoreboard groups by section:tier; tolerates a null summary
   const m = trackMap({ groups: [{ section: 'Ghost', tier: 'STALKING', picks: 5, horizons: {} }, { section: 'ReadThrough', tier: 'Fresh', picks: 2, horizons: {} }] });
   assert.ok(m['Ghost:STALKING'] && m['ReadThrough:Fresh']);
   assert.deepEqual(trackMap(null), {});
+});
+
+// ── Full model coverage (#5) ────────────────────────────────────────────────
+test('coverageOf reports every lens, incl. quiet (clear) and no-data (unavailable)', () => {
+  const cov = coverageOf({
+    ticker: 'AAA',
+    apex: { tier: 'watch', score: 40 },        // scanned, no breakout tier → clear
+    ghost: { tier: 'GHOST', score: 84 },       // firing → active
+    macro: { riskOn: true },                   // supportive → clear
+    // conviction, insider, readThrough absent
+  });
+  assert.equal(cov.length, COVERAGE_CLASSES.length);
+  const by = Object.fromEntries(cov.map(c => [c.key, c]));
+  assert.equal(by.ghost.status, 'active');
+  assert.equal(by.apex.status, 'clear');
+  assert.equal(by.conviction.status, 'unavailable'); // never scored → honest "no data"
+  assert.equal(by.insider.status, 'unavailable');
+  assert.equal(by.macro.status, 'clear');
+});
+
+test('coverage is attached to the composeWhyNow payload', () => {
+  const r = composeWhyNow({ ticker: 'ZZZ', macro: { riskOn: true } });
+  assert.ok(Array.isArray(r.coverage));
+  assert.equal(r.coverage.find(c => c.key === 'macro').status, 'clear');
+});
+
+test('risk-off macro shows as an ACTIVE coverage lens (the validated caution)', () => {
+  const cov = coverageOf({ ticker: 'QQQ', macro: { riskOff: true, vix: { level: 30, pctile: 92 } } });
+  assert.equal(cov.find(c => c.key === 'macro').status, 'active');
 });

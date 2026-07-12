@@ -944,6 +944,20 @@
     .wn-track-neg { color: var(--red); background: var(--red-dim); border-color: #ef505033; }
     .wn-track-note { color: var(--text-dim); background: transparent; border-color: var(--border); font-weight: 500; white-space: normal; }
     .wn-fine { font-size: 0.6rem; color: var(--text-muted); line-height: 1.4; margin-top: 9px; }
+    /* Full model coverage — every lens, incl. quiet + no-data */
+    .wn-coverage { margin: 9px 0 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+    .wn-coverage > summary { cursor: pointer; padding: 7px 11px; font-size: 0.7rem; font-weight: 700; color: var(--text-dim); list-style: none; display: flex; gap: 6px; align-items: center; }
+    .wn-coverage > summary::-webkit-details-marker { display: none; }
+    .wn-coverage > summary::before { content: '▸ '; }
+    .wn-coverage[open] > summary::before { content: '▾ '; }
+    .wn-cov-count { margin-left: auto; font-size: 0.64rem; color: var(--text-muted); font-weight: 600; }
+    .wn-cov-body { padding: 2px 11px 9px; display: flex; flex-direction: column; gap: 4px; }
+    .wn-cov-row { display: grid; grid-template-columns: 16px minmax(120px, auto) 1fr; gap: 7px; align-items: baseline; font-size: 0.68rem; }
+    .wn-cov-mark { text-align: center; }
+    .wn-cov-label { font-weight: 600; color: var(--text); }
+    .wn-cov-detail { color: var(--text-muted); }
+    .wn-cov-clear .wn-cov-label, .wn-cov-clear .wn-cov-mark { color: var(--text-dim); }
+    .wn-cov-na { opacity: 0.55; }
     /* Collapsible pillar-level breakdown */
     .wn-breakdown { margin: 2px 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
     .wn-breakdown > summary { cursor: pointer; padding: 8px 11px; font-size: 0.72rem; font-weight: 700; color: var(--text-dim); list-style: none; }
