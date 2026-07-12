@@ -6787,7 +6787,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const realUp = s.avgReal != null && s.avgReal >= 0;
       const realLine = s.avgReal == null ? ''
         : `<div class="sb-h-real ${realUp ? 'up' : 'down'}" title="Return entering at the NEXT session's open instead of the signal-day close (which an end-of-day screen can't actually trade). Entry drag ${s.avgEntryDrag != null ? (s.avgEntryDrag > 0 ? '+' : '') + s.avgEntryDrag + '%' : 'n/a'} = how much the un-tradeable close flattered the result (negative = it was optimistic). Model entry-v1.">real entry ${realUp ? '+' : ''}${s.avgReal}%${s.avgEntryDrag != null ? ` · drag ${s.avgEntryDrag > 0 ? '+' : ''}${s.avgEntryDrag}%` : ''}</div>`;
-      return `<div class="sb-h"><div class="sb-h-lb" title="${esc(SB_HZ_HELP)}">${lb}</div><div class="sb-h-ret ${up ? 'up' : 'down'}">${up ? '+' : ''}${s.avg}%</div><div class="sb-h-sub">${s.winRate}% win · n=${s.n}</div>${exLine}${netLine}${secLine}${realLine}</div>`;
+      // Distribution stats (#4) — median resists the fat outlier tail, trimmed drops
+      // the extremes, the CI says whether the mean is distinguishable from zero.
+      const distTip = s.median != null
+        ? `Mean ${up ? '+' : ''}${s.avg}% · median ${s.median > 0 ? '+' : ''}${s.median}% · 10%-trimmed ${s.trimmedAvg > 0 ? '+' : ''}${s.trimmedAvg}%${s.avgCI ? ` · 90% CI [${s.avgCI.lo}, ${s.avgCI.hi}]${s.avgCI.lo > 0 ? ' — above zero' : s.avgCI.hi < 0 ? ' — below zero' : ' — spans zero'}` : ''}`
+        : `Mean return ${lb} after the pick`;
+      return `<div class="sb-h"><div class="sb-h-lb" title="${esc(SB_HZ_HELP)}">${lb}</div><div class="sb-h-ret ${up ? 'up' : 'down'}" title="${esc(distTip)}">${up ? '+' : ''}${s.avg}%</div><div class="sb-h-sub">${s.winRate}% win · n=${s.n}</div>${exLine}${netLine}${secLine}${realLine}</div>`;
     }).join('');
     const hl = h['20d'] || h['1m'] || h['10d'] || h['5d'] || h['1d'] || h['3m'];
     // In a regime view, show that regime's logged-pick count; flag thin samples so
@@ -6890,12 +6895,65 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       `<div class="sb-secgroup"><div class="sb-secgroup-h"${SB_SECTION_HELP[sec] ? ` title="${esc(SB_SECTION_HELP[sec])}"` : ''}>${SB_SECTIONS[sec] || esc(sec)}${SB_SECTION_HELP[sec] ? ' <span class="sb-help-i" title="' + esc(SB_SECTION_HELP[sec]) + '">ⓘ</span>' : ''}</div><div class="sb-grid">${bySec[sec].map(sbCard).join('')}</div></div>`
     ).join('');
 
-    scoreboardContainer.innerHTML = intro + allocationPanelHTML(data.allocation) + regimeBar + html;
+    scoreboardContainer.innerHTML = intro + allocationPanelHTML(data.allocation) + `<div id="sb-rankquality"></div>` + regimeBar + html;
     const regimeSel = document.getElementById('sb-regime-sel');
     if (regimeSel) regimeSel.addEventListener('change', e => setSbRegime(e.target.value));
     scoreboardContainer.querySelectorAll('[data-sig-toggle]').forEach(btn => {
       btn.addEventListener('click', () => { const [s, t] = btn.dataset.sigToggle.split(':'); toggleSignal(s, t); });
     });
+    loadRankQuality();  // #5 — does a higher score actually win? (lazy, own endpoint)
+  }
+
+  // ── 🎯 RANKING QUALITY (#5) — validate that higher scores produce better outcomes.
+  // Reads op=rankquality (decile perf, rank-IC, top-K precision, lift, calibration/
+  // Brier, verdict) over the resolved Apex ledger. Honest: says "building" until the
+  // sample matures, and shows "noise"/"inverted" verdicts plainly.
+  const RQ_VERDICT = {
+    predictive: ['✅', 'var(--green)', 'Predictive — higher scores really do win'],
+    'weak-positive': ['🟡', 'var(--amber,#f59e0b)', 'Weakly positive — a mild edge, not yet significant'],
+    noise: ['⚪', 'var(--text-dim)', 'No signal — score does not separate winners from losers'],
+    inverted: ['🔻', 'var(--red)', 'Inverted — higher scores did WORSE (a red flag)'],
+    insufficient: ['⏳', 'var(--text-dim)', 'Not enough resolved picks yet'],
+  };
+  function rqBar(b, maxAbs) {
+    const w = maxAbs > 0 ? Math.min(100, Math.abs(b.avgOutcome) / maxAbs * 100) : 0;
+    const col = b.avgOutcome >= 0 ? 'var(--green)' : 'var(--red)';
+    return `<div class="rq-row"><span class="rq-band" title="Score ${b.scoreLo}–${b.scoreHi}">Q${b.bucket} <span class="dt-dim">(${b.scoreLo}–${b.scoreHi})</span></span>`
+      + `<span class="rq-track"><span class="rq-fill" style="width:${w}%;background:${col}"></span></span>`
+      + `<span class="rq-val" style="color:${col}">${b.avgOutcome > 0 ? '+' : ''}${b.avgOutcome}</span><span class="rq-wr">${b.winRate}% · n${b.n}</span></div>`;
+  }
+  function rankQualityPanel(rq) {
+    if (!rq || !rq.ok) return '';
+    const o = rq.overall || {};
+    if (!o.ready) return `<div class="sb-secgroup"><div class="sb-secgroup-h">🎯 Ranking quality — do higher scores win?</div><div class="dt-note">⏳ ${esc(o.note || 'Building — needs more resolved scored picks.')} This validates that the model's score actually predicts outcomes; it fills in as the Apex ledger matures.</div></div>`;
+    const [vi, vcol, vtxt] = RQ_VERDICT[o.verdict] || RQ_VERDICT.insufficient;
+    const maxAbs = Math.max(...o.buckets.map(b => Math.abs(b.avgOutcome)), 0.01);
+    const ic = o.ic || {};
+    const cal = o.calibration || {};
+    const regimes = Object.entries(rq.byRegime || {}).filter(([, v]) => v.ready)
+      .map(([k, v]) => `${k.replace('_', '-').toLowerCase()}: IC ${v.ic.ic ?? '—'} (${v.verdict})`).join(' · ');
+    return `<div class="sb-secgroup rq-panel">`
+      + `<div class="sb-secgroup-h">🎯 Ranking quality — do higher scores win? <span class="dt-dim">· Apex ledger, ${rq.resolvedCount} resolved</span></div>`
+      + `<div class="rq-verdict" style="border-left-color:${vcol}"><b style="color:${vcol}">${vi} ${esc(vtxt)}.</b> `
+      + `Rank-IC <b>${ic.ic ?? '—'}</b> (t=${ic.t ?? '—'}, ${ic.significant ? 'significant' : 'not significant'}) · top decile beat base win-rate by <b>${o.liftWinRate ?? '—'}pts</b> · top-vs-bottom spread <b>${o.topBottomSpread ?? '—'}</b> · top-${o.topKn} precision <b>${o.topKprecision}%</b> · Brier ${cal.brier ?? '—'}.</div>`
+      + `<div class="rq-bars"><div class="dt-dim rq-cap">Avg outcome (realized R×100) by score quantile — a predictive score slopes up left→right:</div>${o.buckets.map(b => rqBar(b, maxAbs)).join('')}</div>`
+      + (regimes ? `<div class="dt-dim rq-reg">By regime → ${esc(regimes)}</div>` : '')
+      + `<div class="dt-dim rq-foot">Outcome = realized R-multiple at each pick's logged stop/target. Verdict "predictive" needs a positive, statistically-significant rank-IC AND a monotone quantile ladder — the same bar this project holds every claimed edge to.</div>`
+      + `</div>`;
+  }
+  let rankQualityLoaded = false, rankQualityData = null;
+  async function loadRankQuality() {
+    const host = document.getElementById('sb-rankquality');
+    if (!host) return;
+    if (rankQualityData) { host.innerHTML = rankQualityPanel(rankQualityData); return; }
+    if (rankQualityLoaded) return;
+    rankQualityLoaded = true;
+    host.innerHTML = `<div class="sb-secgroup"><div class="sb-secgroup-h">🎯 Ranking quality — do higher scores win?</div><div class="mom-status"><div class="mom-spinner"></div><p>Checking whether higher scores actually produce better outcomes…</p></div></div>`;
+    try {
+      const rq = await fetch('/api/tracker?op=rankquality').then(r => r.json());
+      rankQualityData = rq;
+      host.innerHTML = rankQualityPanel(rq);
+    } catch { host.innerHTML = `<div class="sb-secgroup"><div class="dt-note" style="border-left-color:var(--red)">Couldn't load the ranking-quality check.</div></div>`; }
   }
 
   scoreboardRefreshBtn.addEventListener('click', fetchScoreboard);

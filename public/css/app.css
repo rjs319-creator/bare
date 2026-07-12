@@ -2264,3 +2264,15 @@
     .td-evt { cursor: default; color: var(--text-dim); }
     .td-cc-foot { font-size: 0.72rem; line-height: 1.5; margin-top: 4px; }
     .td-cc-foot b { color: var(--text-dim); }
+
+    /* ── 🎯 Ranking-quality panel (Scoreboard #5) ── */
+    .rq-panel .rq-verdict { font-size: 0.78rem; line-height: 1.5; background: var(--surface); border-left: 3px solid var(--green); border-radius: 6px; padding: 8px 11px; margin: 8px 0; }
+    .rq-bars { margin: 8px 0; }
+    .rq-cap { font-size: 0.72rem; margin-bottom: 6px; }
+    .rq-row { display: flex; align-items: center; gap: 8px; font-size: 0.74rem; margin: 3px 0; }
+    .rq-band { flex: 0 0 92px; }
+    .rq-track { flex: 1; height: 12px; background: var(--card); border-radius: 6px; overflow: hidden; }
+    .rq-fill { display: block; height: 100%; border-radius: 6px; }
+    .rq-val { flex: 0 0 46px; text-align: right; font-weight: 700; }
+    .rq-wr { flex: 0 0 78px; text-align: right; color: var(--text-dim); }
+    .rq-reg, .rq-foot { font-size: 0.72rem; line-height: 1.5; margin-top: 6px; }
