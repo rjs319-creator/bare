@@ -139,6 +139,22 @@
     </div>
   </section>
 
+  <!-- 🧪 BASELINES — does each strategy beat a dumb baseline? -->
+  <section class="scoreboard-section" id="baselines">
+    <div class="section-label">
+      <div class="accent-bar" style="background:#38bdf8"></div>
+      <h2 style="color:#38bdf8">🧪 Baseline Validation</h2>
+      <span class="label-meta">· does each strategy beat SPY, its sector, a random pick, and simple momentum / 52-week / rel-volume screens?</span>
+      <div class="label-action">
+        <span class="lbl-time" id="baselines-gen-time"></span>
+        <button class="refresh-btn" style="color:#38bdf8" id="baselines-refresh-btn">⟳ Refresh</button>
+      </div>
+    </div>
+    <div id="baselines-container">
+      <div class="mom-status"><div class="mom-spinner"></div><p>Assembling baselines…</p></div>
+    </div>
+  </section>
+
   <!-- ⭐ OPPORTUNITIES — ranked pre-breakout buys (the "what to buy" centerpiece) -->
   <!-- QUICK HIT — cross-cap Top 5 shortlist -->
   <section class="screener-section" id="quickhit">

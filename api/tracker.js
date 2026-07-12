@@ -57,13 +57,13 @@ const PRIVILEGED_OPS = new Set([
   'trendtick', 'universecompile', 'universescan',
   // Expensive non-browser builders/computes — cron/external/manual only, so gating
   // them behind the CRON_SECRET bearer costs the UI nothing.
-  'fundbuild', 'universebuild', 'research', 'emerging',
+  'fundbuild', 'universebuild', 'emerging',
 ]);
-// Expensive ops the BROWSER can trigger (Custom/Backtest panel buttons) — we can't
-// 401 them without breaking those buttons, so rate-limit anonymous callers instead
-// (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
+// Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
+// can't 401 them without breaking those buttons, so rate-limit anonymous callers
+// instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
-  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality',
+  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -198,6 +198,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'drift') return runDrift(req, res);
   if (req.query.op === 'rankquality') return runRankQuality(req, res);
   if (req.query.op === 'maturity') return require('../lib/maturity-routes').runMaturity(req, res);
+  if (req.query.op === 'baselines') return require('../lib/baselines-routes').runBaselines(req, res);
   if (req.query.op === 'recalibrate') return runRecalibrate(req, res);
   if (req.query.op === 'backfill') return runBackfillOp(req, res);
   if (req.query.op === 'research') return runResearchOp(req, res);

@@ -20,7 +20,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     home:       ['today', 'start', 'quickhit', 'sectors', 'rotation', 'news', 'brief'],
     candidates: ['daytrade', 'gapgo', 'gapdown', 'opportunities', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
     positions:  ['coremo', 'momentum', 'putsell', 'picks'],
-    proof:      ['scoreboard', 'evidence', 'leaderboard', 'coreperf'],
+    proof:      ['scoreboard', 'evidence', 'baselines', 'leaderboard', 'coreperf'],
     lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'pulse', 'gameplan', 'forecast', 'crowd', 'sharp', 'alerts', 'backtest', 'edge'],
   };
   // Holding-horizon of each candidate/position sub-tab → drives the horizon dividers
@@ -39,7 +39,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
-    leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', evidence: '🎖️ Evidence', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
+    leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', evidence: '🎖️ Evidence', baselines: '🧪 Baselines', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
   // Plain-English "what is this tab?" hovers for a novice investor — one line per
   // sub-tab, shown when you hover the tab button.
@@ -87,6 +87,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     leaderboard: 'A leaderboard ranking the app’s own algorithms by track record.',
     scoreboard: 'The honest report card: how every signal type has actually performed vs the market.',
     evidence: 'How much to trust each strategy — a Validated/Promising/Experimental grade earned from its own track record, and which unproven ones live in the Research Lab.',
+    baselines: 'Does each strategy actually beat a DUMB baseline? Compares every strategy vs SPY, its sector, a random/equal-weight pick, and simple momentum / 52-week-high / relative-volume rank screens.',
     coreperf: 'Quarterly performance of the Core Momentum model vs the market.',
     xalerts: 'Ranked trade alerts scraped from social accounts, graded on forward returns.',
   };
@@ -339,6 +340,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'events' && typeof ensureCern === 'function') ensureCern();
     if (sub === 'edge' && typeof ensureEdge === 'function') ensureEdge();
     if (sub === 'evidence' && typeof ensureEvidence === 'function') ensureEvidence();
+    if (sub === 'baselines' && typeof ensureBaselines === 'function') ensureBaselines();
     if (sub === 'today' && typeof ensureToday === 'function') ensureToday();
     if (sub === 'rotation' && typeof ensureRotationDW === 'function') ensureRotationDW();
     if (sub === 'fade' && typeof ensureFade === 'function') ensureFade();
@@ -7082,6 +7084,86 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   window.ensureEvidence = ensureEvidence;
   const evidenceRefreshBtn = document.getElementById('evidence-refresh-btn');
   if (evidenceRefreshBtn) evidenceRefreshBtn.addEventListener('click', () => loadEvidence(true));
+
+  // ── Baseline validation — does a strategy beat a DUMB baseline? ──────────────
+  let baselinesData = null, baselinesComputing = false;
+
+  function baselineRow(b) {
+    if (b.kind === 'unavailable' || b.available === false) {
+      return `<div class="bl-row bl-na"><span class="bl-name">${esc(b.name)}</span><span class="bl-edge td-dim">not computed</span><span class="bl-note td-dim">${esc(b.note || 'unavailable')}</span></div>`;
+    }
+    if (b.kind === 'benchmark' || b.kind === 'null') {
+      const bar = b.kind === 'null' ? '0% excess bar' : 'benchmark';
+      return `<div class="bl-row"><span class="bl-name">${esc(b.name)}</span><span class="bl-edge td-dim">${bar}</span><span class="bl-note td-dim">${esc(b.note || '')}</span></div>`;
+    }
+    // factor baseline
+    const ic = b.rankIC != null ? b.rankIC.toFixed(3) : '—';
+    const top = b.topQuintileExcess != null ? `${b.topQuintileExcess > 0 ? '+' : ''}${b.topQuintileExcess}%` : '—';
+    const cls = b.predictive ? 'bl-pos' : 'bl-dead';
+    return `<div class="bl-row"><span class="bl-name">${esc(b.name)}</span><span class="bl-edge ${cls}">IC ${ic} · top-20% ${top}</span><span class="bl-note td-dim">${b.predictive ? 'a real bar to beat' : 'no edge — ranking by this doesn’t predict returns'}</span></div>`;
+  }
+
+  function stratVsBaseRow(s) {
+    const grade = maturityData && maturityData.gradeMeta ? matBadge(s.grade, maturityData.gradeMeta) : esc(s.grade);
+    const spy = s.vsSpy == null ? '—' : `<span class="${s.vsSpy >= 0 ? 'bl-pos' : 'bl-neg'}">${s.vsSpy > 0 ? '+' : ''}${s.vsSpy}%</span>`;
+    const sec = s.vsSector == null ? '—' : `<span class="${s.vsSector >= 0 ? 'bl-pos' : 'bl-neg'}">${s.vsSector > 0 ? '+' : ''}${s.vsSector}%</span>`;
+    const clears = s.beatsSpy && s.beatsSector ? '✅' : (s.beatsSpy || s.beatsSector ? '➖' : '❌');
+    return `<div class="bl-srow"><span class="bl-name">${esc(s.label)}</span>${grade}<span class="bl-cell">vs SPY ${spy}</span><span class="bl-cell">vs sector ${sec}</span><span class="bl-clear" title="Clears the promotion bar = beats BOTH SPY and its sector">${clears}</span><span class="td-dim">n=${s.n}</span></div>`;
+  }
+
+  function renderBaselines(d) {
+    const host = document.getElementById('baselines-container');
+    if (!host) return;
+    if (!d || !d.ok) { host.innerHTML = `<div class="dt-note" style="border-left-color:var(--red)">Couldn't assemble baselines.</div>`; return; }
+    const gt = document.getElementById('baselines-gen-time');
+    if (gt) gt.textContent = d.researchAsOf ? `factors @ ${new Date(d.researchAsOf).toLocaleDateString()}` : 'factor scan not run yet';
+    const intro = `<div class="mat-intro">The honest promotion test: a strategy earns nothing unless it beats a <b>dumb baseline</b>. Below are the baselines (what each naive screen actually earns) and then every strategy vs the two it's graded on — SPY and its sector. A strategy only <b>clears the bar</b> (✅) when it beats <b>both</b>.</div>`;
+    const verdict = `<div class="dt-note" style="border-left-color:${d.summary && d.summary.beatSpyAndSector ? 'var(--green,#22c55e)' : 'var(--amber,#f59e0b)'}">⚖️ ${esc(d.verdict)}</div>`;
+    let html = intro + verdict;
+    html += `<div class="sb-secgroup"><div class="sb-secgroup-h">The baselines — the bar to beat</div><div class="bl-list">${(d.baselines || []).map(baselineRow).join('')}</div></div>`;
+    if (!d.summary || !d.summary.researchAvailable) {
+      html += `<div class="dt-note">The factor bars (momentum / 52-week / rel-volume) need the research cross-section. It's heavy (~50s) and rate-limited — click <b>Recompute factor scan</b> to build it, then Refresh.</div>`;
+    }
+    html += `<div class="bl-actions"><button class="refresh-btn" id="bl-recompute" ${baselinesComputing ? 'disabled' : ''} style="color:#38bdf8;border-color:#38bdf855">${baselinesComputing ? '⏳ Computing (~50s)…' : '🧪 Recompute factor scan'}</button></div>`;
+    if (d.strategies && d.strategies.length) {
+      html += `<div class="sb-secgroup"><div class="sb-secgroup-h">Every strategy vs its benchmarks</div><div class="bl-slist">${d.strategies.map(stratVsBaseRow).join('')}</div></div>`;
+    }
+    host.innerHTML = html;
+    const rc = document.getElementById('bl-recompute');
+    if (rc) rc.addEventListener('click', recomputeFactors);
+  }
+
+  async function loadBaselines(force) {
+    const host = document.getElementById('baselines-container');
+    if (!host) return;
+    if (baselinesData && !force) { renderBaselines(baselinesData); return; }
+    if (!baselinesData) host.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Assembling baselines…</p></div>`;
+    try {
+      const d = await fetch('/api/tracker?op=baselines' + (force ? '&_cb=' + Date.now() : '')).then(r => r.json());
+      baselinesData = d;
+      renderBaselines(d);
+    } catch { host.innerHTML = `<div class="dt-note" style="border-left-color:var(--red)">Couldn't load baselines.</div>`; }
+  }
+
+  // Heavy: triggers the ~50s research scan (rate-limited server-side), which persists
+  // the factor cross-section; then reloads the scorecard.
+  async function recomputeFactors() {
+    if (baselinesComputing) return;
+    baselinesComputing = true;
+    renderBaselines(baselinesData || { ok: true, baselines: [], summary: {}, verdict: 'Computing…' });
+    try {
+      const r = await fetch('/api/tracker?op=research&scope=large').then(r => r.json());
+      if (r && r.ok === false && r.error) { /* rate-limited or failed — fall through to reload */ }
+    } catch { /* ignore — reload shows whatever persisted */ }
+    baselinesComputing = false;
+    await loadBaselines(true);
+  }
+
+  let baselinesLoadedFlag = false;
+  function ensureBaselines() { if (!baselinesLoadedFlag) { baselinesLoadedFlag = true; loadBaselines(); } }
+  window.ensureBaselines = ensureBaselines;
+  const baselinesRefreshBtn = document.getElementById('baselines-refresh-btn');
+  if (baselinesRefreshBtn) baselinesRefreshBtn.addEventListener('click', () => loadBaselines(true));
 
   function buildMomColumn(side, list) {
     const buy = side === 'buy';
