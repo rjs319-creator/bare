@@ -14,14 +14,23 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   // ── App tabs with a "Markets" hub (Screener / Rotation / Sectors) ──
   const TAB_GROUPS = {
-    start:     ['today', 'start'],
-    quickhit:  ['quickhit'],
-    screeners: ['opportunities', 'aligned', 'screener', 'custom', 'coremo', 'daytrade', 'gapgo', 'downday', 'coil', 'confluence', 'ghost', 'trendrider', 'fade', 'gapdown'],
-    markets:   ['rotation', 'sectors', 'momentum', 'news', 'options', 'putsell', 'picks'],
-    predict:   ['pulse', 'readthrough', 'anomaly', 'biotech', 'secondwave', 'crossasset', 'toneshift', 'gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
-    research:  ['backtest', 'events', 'edge'],
-    track:     ['leaderboard', 'scoreboard', 'coreperf', 'xalerts'],
+    // Five decision-purpose workspaces (was 7 overlapping groups). Candidates &
+    // Portfolio are ordered by holding horizon (see SUB_HZ dividers). Unproven
+    // overlays live in the Research Lab; the honest report cards live in Evidence.
+    home:       ['today', 'start', 'quickhit', 'sectors', 'rotation', 'news', 'brief'],
+    candidates: ['opportunities', 'aligned', 'daytrade', 'gapgo', 'gapdown', 'screener', 'custom', 'ghost', 'coil', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
+    positions:  ['coremo', 'momentum', 'putsell', 'picks'],
+    proof:      ['scoreboard', 'evidence', 'leaderboard', 'coreperf'],
+    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'pulse', 'gameplan', 'forecast', 'crowd', 'sharp', 'alerts', 'backtest', 'edge'],
   };
+  // Holding-horizon of each candidate/position sub-tab → drives the horizon dividers
+  // in the sub-nav so the app is visibly separated by time horizon (the spec ask).
+  const SUB_HZ = {
+    daytrade: 'intraday', gapgo: 'intraday', gapdown: 'intraday',
+    opportunities: 'swing', aligned: 'swing', screener: 'swing', custom: 'swing', ghost: 'swing', coil: 'swing', downday: 'swing', confluence: 'swing', trendrider: 'swing', fade: 'swing', biotech: 'swing',
+    coremo: 'portfolio', momentum: 'portfolio', putsell: 'portfolio', picks: 'portfolio',
+  };
+  const HZ_DIVIDER = { intraday: '⏱ Intraday · same-day', swing: '📅 Swing · days–weeks', portfolio: '💼 Portfolio · weeks–months' };
   const TOP_TABS = Object.keys(TAB_GROUPS);
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
@@ -30,7 +39,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
-    leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
+    leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', evidence: '🎖️ Evidence', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
   // Plain-English "what is this tab?" hovers for a novice investor — one line per
   // sub-tab, shown when you hover the tab button.
@@ -77,6 +86,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     edge: 'The Edge Book: two independent strategy sleeves and their beat-the-market rate.',
     leaderboard: 'A leaderboard ranking the app’s own algorithms by track record.',
     scoreboard: 'The honest report card: how every signal type has actually performed vs the market.',
+    evidence: 'How much to trust each strategy — a Validated/Promising/Experimental grade earned from its own track record, and which unproven ones live in the Research Lab.',
     coreperf: 'Quarterly performance of the Core Momentum model vs the market.',
     xalerts: 'Ranked trade alerts scraped from social accounts, graded on forward returns.',
   };
@@ -293,9 +303,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const group = TAB_GROUPS[top] || [];
     if (group.length <= 1) { el.innerHTML = ''; el.style.display = 'none'; return; }
     el.style.display = '';
-    el.innerHTML = `<div class="hub-sub">` + group.map(s =>
-      `<button class="hub-sub-btn ${s === sub ? 'active' : ''}" data-sub="${s}"${SECTION_HELP[s] ? ` title="${esc(SECTION_HELP[s])}"` : ''}>${SUB_LABEL[s] || s}</button>`
-    ).join('') + `</div>`;
+    let lastHz = null;
+    const parts = group.map(s => {
+      let divider = '';
+      const hz = SUB_HZ[s];
+      if (hz && hz !== lastHz) { divider = `<div class="hub-sub-div">${HZ_DIVIDER[hz] || ''}</div>`; lastHz = hz; }
+      return divider + `<button class="hub-sub-btn ${s === sub ? 'active' : ''}" data-sub="${s}"${SECTION_HELP[s] ? ` title="${esc(SECTION_HELP[s])}"` : ''}>${SUB_LABEL[s] || s}</button>`;
+    });
+    el.innerHTML = `<div class="hub-sub">` + parts.join('') + `</div>`;
     el.querySelectorAll('.hub-sub-btn').forEach(b => b.onclick = () => showTab(b.dataset.sub));
   }
 
@@ -304,7 +319,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     let top, sub;
     if (TOP_TABS.includes(id)) { top = id; sub = TAB_GROUPS[id].length > 1 ? (hubSub[id] || TAB_GROUPS[id][0]) : TAB_GROUPS[id][0]; }
     else if (SECTION_IDS.includes(id)) { top = topOf(id); sub = id; if (TAB_GROUPS[top].length > 1) hubSub[top] = id; }
-    else { top = 'markets'; sub = TAB_GROUPS.markets[0]; }
+    else { top = 'home'; sub = TAB_GROUPS.home[0]; }
     currentTop = top;
     try { localStorage.setItem('activeTab', top); localStorage.setItem('hubSub', JSON.stringify(hubSub)); } catch {}
 
@@ -312,7 +327,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('active', el.dataset.tab === top));
     injectHowto(sub); // prepend the novice "how to use" guide once (no-op if already there / no config)
     renderHubSubnav(top, sub);
-    if (typeof updateTapeBadge === 'function') updateTapeBadge(top === 'screeners' ? sub : null);
+    if (typeof updateTapeBadge === 'function') updateTapeBadge(top === 'candidates' ? sub : null);
     if (sub === 'quickhit' && typeof ensureQuickHit === 'function') ensureQuickHit();
     if (sub === 'opportunities' && typeof ensureOpportunities === 'function') { ensureOpportunities(); syncOppScope(); }
     if (sub === 'screener' && typeof ensureScreener === 'function') ensureScreener();
@@ -323,6 +338,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'ghost' && typeof ensureGhost === 'function') ensureGhost();
     if (sub === 'events' && typeof ensureCern === 'function') ensureCern();
     if (sub === 'edge' && typeof ensureEdge === 'function') ensureEdge();
+    if (sub === 'evidence' && typeof ensureEvidence === 'function') ensureEvidence();
     if (sub === 'today' && typeof ensureToday === 'function') ensureToday();
     if (sub === 'rotation' && typeof ensureRotationDW === 'function') ensureRotationDW();
     if (sub === 'fade' && typeof ensureFade === 'function') ensureFade();
@@ -3343,7 +3359,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     };
     apply();
   }
-  const GROUP_LABEL = { start: 'Home', quickhit: 'Quick Hit', screeners: 'Screeners', markets: 'Markets', predict: 'Predict', research: 'Research', track: 'Track' };
+  const GROUP_LABEL = { home: 'Today', candidates: 'Candidates', positions: 'Portfolio', proof: 'Evidence', lab: 'Research Lab' };
   initCommandPalette({
     sections: SECTION_IDS.map(id => ({ id, label: (SUB_LABEL[id] || id).replace(/^[^\w]+\s*/, ''), group: GROUP_LABEL[topOf(id)] || '' })),
     learn: Object.keys(LEARN).map(key => ({ key, label: LEARN[key].t, group: LEARN[key].g })),
@@ -4447,7 +4463,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function paintAlertBadge() {
     const seen = getSeen();
     const unread = alertItems.filter(i => Date.parse(i.ts) > seen).length;
-    document.querySelectorAll('[data-tab="predict"]').forEach(el => {
+    document.querySelectorAll('[data-tab="lab"]').forEach(el => {
       let b = el.querySelector('.nav-badge');
       if (unread > 0) { if (!b) { b = document.createElement('span'); b.className = 'nav-badge'; el.appendChild(b); } b.textContent = unread > 9 ? '9+' : unread; b.style.display = ''; }
       else if (b) b.style.display = 'none';
@@ -4524,7 +4540,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     try { localStorage.setItem('uiMode', uiMode); } catch {}
     applyUiMode(uiMode);
     // If we just hid the tab the user is on (Research), bounce to a visible one.
-    if (uiMode === 'simple' && currentTop === 'research' && typeof showTab === 'function') showTab('screeners');
+    if (uiMode === 'simple' && currentTop === 'lab' && typeof showTab === 'function') showTab('candidates');
   });
 
   document.getElementById('custom-refresh-btn').addEventListener('click', () => { runApex(); fetchApexDrift(); });
@@ -6903,10 +6919,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         </div>`
       : '';
 
+    if (typeof ensureMaturityMap === 'function') ensureMaturityMap();
     const bySec = {};
     data.groups.forEach(g => { (bySec[g.section] = bySec[g.section] || []).push(g); });
+    const secBadge = sec => (maturityMap && maturityMap[sec]) ? ' ' + matBadge(maturityMap[sec].grade, maturityMap[sec].meta) : '';
     const html = Object.keys(bySec).map(sec =>
-      `<div class="sb-secgroup"><div class="sb-secgroup-h"${SB_SECTION_HELP[sec] ? ` title="${esc(SB_SECTION_HELP[sec])}"` : ''}>${SB_SECTIONS[sec] || esc(sec)}${SB_SECTION_HELP[sec] ? ' <span class="sb-help-i" title="' + esc(SB_SECTION_HELP[sec]) + '">ⓘ</span>' : ''}</div><div class="sb-grid">${bySec[sec].map(sbCard).join('')}</div></div>`
+      `<div class="sb-secgroup"><div class="sb-secgroup-h"${SB_SECTION_HELP[sec] ? ` title="${esc(SB_SECTION_HELP[sec])}"` : ''}>${SB_SECTIONS[sec] || esc(sec)}${secBadge(sec)}${SB_SECTION_HELP[sec] ? ' <span class="sb-help-i" title="' + esc(SB_SECTION_HELP[sec]) + '">ⓘ</span>' : ''}</div><div class="sb-grid">${bySec[sec].map(sbCard).join('')}</div></div>`
     ).join('');
 
     scoreboardContainer.innerHTML = intro + allocationPanelHTML(data.allocation) + `<div id="sb-rankquality"></div>` + regimeBar + html;
@@ -6972,6 +6990,94 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   scoreboardRefreshBtn.addEventListener('click', fetchScoreboard);
   fetchScoreboard();
+
+  // ── Evidence & Maturity — the earned trust grade for every strategy ──────────
+  // Grades come from op=maturity (lib/maturity): each class is graded on its own
+  // resolved Scoreboard record. A shared badge is reused on the Scoreboard headers.
+  const MAT_ORDER = ['validated', 'promising', 'experimental', 'informational', 'disabled'];
+  let maturityData = null, maturityLoaded = false, maturityMap = null;
+
+  function matBadge(grade, meta) {
+    const m = (meta && meta[grade]) || { icon: '•', label: grade };
+    return `<span class="mat-badge mat-${esc(grade)}" title="${esc(m.blurb || '')}">${m.icon} ${esc(m.label)}</span>`;
+  }
+
+  // Lazily fetch the grade map once; when it arrives, restamp a rendered Scoreboard.
+  async function ensureMaturityMap() {
+    if (maturityMap) return maturityMap;
+    if (ensureMaturityMap._p) return ensureMaturityMap._p;
+    ensureMaturityMap._p = (async () => {
+      try {
+        const d = await fetch('/api/tracker?op=maturity').then(r => r.json());
+        maturityData = d;
+        maturityMap = {};
+        (d.strategies || []).forEach(s => { if (s.section) maturityMap[s.section] = { grade: s.grade, meta: d.gradeMeta }; });
+        if (lastScoreboard && document.getElementById('scoreboard')?.classList.contains('tab-active')) renderScoreboard(lastScoreboard);
+        return maturityMap;
+      } catch { maturityMap = {}; return maturityMap; }
+    })();
+    return ensureMaturityMap._p;
+  }
+
+  function strategyCard(s, meta) {
+    const st = s.stats;
+    const track = (st && st.excessN)
+      ? `<div class="mat-track"><span class="${st.avgExcess < 0 ? 'mat-neg' : 'mat-pos'}">${st.avgExcess > 0 ? '+' : ''}${st.avgExcess}% vs benchmark</span> · beats ${st.beatMktRate}% · <b>n=${st.excessN}</b></div>`
+      : '';
+    const crit = (s.inLab && s.criteria) ? `<div class="mat-crit">🎯 To graduate: ${esc(s.criteria)}</div>` : '';
+    const hz = { intraday: 'Intraday', swing: 'Swing', position: 'Position', portfolio: 'Portfolio' }[s.horizon] || s.horizon;
+    return `<div class="mat-card">
+      <div class="mat-card-h">${matBadge(s.grade, meta)}<b>${esc(s.label)}</b>${s.core ? '<span class="mat-core" title="Core tradeable screener — stays in the main app">core</span>' : ''}<span class="mat-hz">${esc(hz)}</span></div>
+      <div class="mat-reason">${esc(s.reason || '')}</div>${track}${crit}
+    </div>`;
+  }
+
+  function renderEvidence(d) {
+    const host = document.getElementById('evidence-container');
+    if (!host) return;
+    if (!d || !d.ok) { host.innerHTML = `<div class="dt-note" style="border-left-color:var(--red)">Couldn't grade strategies right now.</div>`; return; }
+    const meta = d.gradeMeta || {};
+    const gt = document.getElementById('evidence-gen-time');
+    if (gt) gt.textContent = d.scoreboardAt ? `graded from Scoreboard @ ${new Date(d.scoreboardAt).toLocaleDateString()}` : (d.configured ? '' : 'storage not configured — grades will fill in');
+    const strategies = d.strategies || [];
+    // Legend with live counts.
+    const legend = MAT_ORDER.map(g => `<span class="mat-leg mat-${g}" title="${esc((meta[g] || {}).blurb || '')}">${(meta[g] || {}).icon || ''} ${(meta[g] || {}).label || g} <b>${(d.counts || {})[g] || 0}</b></span>`).join('');
+    const intro = `<div class="mat-intro">Each strategy earns a grade from its <b>own resolved track record</b> vs its benchmark (S&amp;P / sector) — Wilson-bounded and sample-aware, so a lucky small streak can't read as proven. Unproven overlays live in the <b>Research Lab</b> until the data promotes them.</div>`;
+    // Main app (not in lab), grouped by grade.
+    const main = strategies.filter(s => !s.inLab);
+    const lab = strategies.filter(s => s.inLab);
+    let html = `<div class="mat-legend">${legend}</div>${intro}`;
+    MAT_ORDER.forEach(g => {
+      const rows = main.filter(s => s.grade === g);
+      if (!rows.length) return;
+      html += `<div class="sb-secgroup"><div class="sb-secgroup-h">${matBadge(g, meta)} <span style="opacity:.8">${rows.length}</span></div><div class="mat-grid">${rows.map(s => strategyCard(s, meta)).join('')}</div></div>`;
+    });
+    if (lab.length) {
+      html += `<div class="sb-secgroup mat-lab"><div class="sb-secgroup-h">🔬 Research Lab <span style="opacity:.8">${lab.length}</span></div>
+        <div class="mat-lab-note">Unproven overlays — kept out of the main workspaces until they beat their benchmark out-of-sample over enough resolved picks. Still logged and tracked so they can graduate.</div>
+        <div class="mat-grid">${lab.map(s => strategyCard(s, meta)).join('')}</div></div>`;
+    }
+    host.innerHTML = html;
+  }
+
+  async function loadEvidence(force) {
+    const host = document.getElementById('evidence-container');
+    if (!host) return;
+    if (maturityData && !force) { renderEvidence(maturityData); return; }
+    host.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Grading strategies…</p></div>`;
+    try {
+      const d = await fetch('/api/tracker?op=maturity' + (force ? '&_cb=' + Date.now() : '')).then(r => r.json());
+      maturityData = d;
+      maturityMap = {};
+      (d.strategies || []).forEach(s => { if (s.section) maturityMap[s.section] = { grade: s.grade, meta: d.gradeMeta }; });
+      renderEvidence(d);
+    } catch { host.innerHTML = `<div class="dt-note" style="border-left-color:var(--red)">Couldn't load evidence grades.</div>`; }
+  }
+  let evidenceLoaded = false;
+  function ensureEvidence() { if (!evidenceLoaded) { evidenceLoaded = true; loadEvidence(); } }
+  window.ensureEvidence = ensureEvidence;
+  const evidenceRefreshBtn = document.getElementById('evidence-refresh-btn');
+  if (evidenceRefreshBtn) evidenceRefreshBtn.addEventListener('click', () => loadEvidence(true));
 
   function buildMomColumn(side, list) {
     const buy = side === 'buy';

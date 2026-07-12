@@ -25,13 +25,11 @@
   </div>
 
   <nav class="header-nav">
-    <a class="nav-link" href="#today" data-tab="start">🏠 Home</a>
-    <a class="nav-link" href="#quickhit" data-tab="quickhit">⚡ Quick Hit</a>
-    <a class="nav-link" href="#screener" data-tab="screeners">🔎 Screeners</a>
-    <a class="nav-link" href="#rotation" data-tab="markets">📊 Markets</a>
-    <a class="nav-link" href="#brief" data-tab="predict">🔮 Predict</a>
-    <a class="nav-link" href="#backtest" data-tab="research">🔬 Research</a>
-    <a class="nav-link" href="#scoreboard" data-tab="track">🏆 Track</a>
+    <a class="nav-link" href="#today" data-tab="home">🏠 Today</a>
+    <a class="nav-link" href="#opportunities" data-tab="candidates">🎯 Candidates</a>
+    <a class="nav-link" href="#coremo" data-tab="positions">💼 Portfolio</a>
+    <a class="nav-link" href="#scoreboard" data-tab="proof">🎖️ Evidence</a>
+    <a class="nav-link" href="#events" data-tab="lab">🔬 Research Lab</a>
   </nav>
 
   <div class="header-right">
@@ -48,13 +46,11 @@
 </header>
 
 <nav class="mobile-top-tabs" id="mobile-top-tabs">
-  <a class="mtt-item" href="#today" data-tab="start"><span class="mtt-ic">🏠</span>Home</a>
-  <a class="mtt-item" href="#quickhit" data-tab="quickhit"><span class="mtt-ic">⚡</span>Quick Hit</a>
-  <a class="mtt-item" href="#screener" data-tab="screeners"><span class="mtt-ic">🔎</span>Screeners</a>
-  <a class="mtt-item" href="#rotation" data-tab="markets"><span class="mtt-ic">📊</span>Markets</a>
-  <a class="mtt-item" href="#brief" data-tab="predict"><span class="mtt-ic">🔮</span>Predict</a>
-  <a class="mtt-item" href="#backtest" data-tab="research"><span class="mtt-ic">🔬</span>Research</a>
-  <a class="mtt-item" href="#scoreboard" data-tab="track"><span class="mtt-ic">🏆</span>Track</a>
+  <a class="mtt-item" href="#today" data-tab="home"><span class="mtt-ic">🏠</span>Today</a>
+  <a class="mtt-item" href="#opportunities" data-tab="candidates"><span class="mtt-ic">🎯</span>Candidates</a>
+  <a class="mtt-item" href="#coremo" data-tab="positions"><span class="mtt-ic">💼</span>Portfolio</a>
+  <a class="mtt-item" href="#scoreboard" data-tab="proof"><span class="mtt-ic">🎖️</span>Evidence</a>
+  <a class="mtt-item" href="#events" data-tab="lab"><span class="mtt-ic">🔬</span>Research Lab</a>
 </nav>
 
 <div class="page">
@@ -124,6 +120,22 @@
 
     <div id="scoreboard-container">
       <div class="mom-status"><div class="mom-spinner"></div><p>Loading tracked picks…</p></div>
+    </div>
+  </section>
+
+  <!-- 🎖️ EVIDENCE — maturity grade of every strategy, earned from its own track record -->
+  <section class="scoreboard-section" id="evidence">
+    <div class="section-label">
+      <div class="accent-bar" style="background:#22c55e"></div>
+      <h2 style="color:#22c55e">🎖️ Evidence &amp; Maturity</h2>
+      <span class="label-meta">· how much to trust each strategy — a grade earned from its own resolved track record</span>
+      <div class="label-action">
+        <span class="lbl-time" id="evidence-gen-time"></span>
+        <button class="refresh-btn" style="color:#22c55e" id="evidence-refresh-btn">⟳ Refresh</button>
+      </div>
+    </div>
+    <div id="evidence-container">
+      <div class="mom-status"><div class="mom-spinner"></div><p>Grading strategies…</p></div>
     </div>
   </section>
 
@@ -1334,13 +1346,11 @@
 
 <nav class="mobile-bottom-nav" id="mobile-bottom-nav">
   <div class="nav-items">
-    <a class="mbn-item" href="#today" data-tab="start"><span class="mbn-icon">🏠</span><span class="mbn-label">Home</span></a>
-    <a class="mbn-item" href="#quickhit" data-tab="quickhit"><span class="mbn-icon">⚡</span><span class="mbn-label">Quick</span></a>
-    <a class="mbn-item" href="#screener" data-tab="screeners"><span class="mbn-icon">🔎</span><span class="mbn-label">Screeners</span></a>
-    <a class="mbn-item" href="#rotation" data-tab="markets"><span class="mbn-icon">📊</span><span class="mbn-label">Markets</span></a>
-    <a class="mbn-item" href="#brief" data-tab="predict"><span class="mbn-icon">🔮</span><span class="mbn-label">Predict</span></a>
-    <a class="mbn-item" href="#backtest" data-tab="research"><span class="mbn-icon">🔬</span><span class="mbn-label">Research</span></a>
-    <a class="mbn-item" href="#scoreboard" data-tab="track"><span class="mbn-icon">🏆</span><span class="mbn-label">Track</span></a>
+    <a class="mbn-item" href="#today" data-tab="home"><span class="mbn-icon">🏠</span><span class="mbn-label">Today</span></a>
+    <a class="mbn-item" href="#opportunities" data-tab="candidates"><span class="mbn-icon">🎯</span><span class="mbn-label">Candidates</span></a>
+    <a class="mbn-item" href="#coremo" data-tab="positions"><span class="mbn-icon">💼</span><span class="mbn-label">Portfolio</span></a>
+    <a class="mbn-item" href="#scoreboard" data-tab="proof"><span class="mbn-icon">🎖️</span><span class="mbn-label">Evidence</span></a>
+    <a class="mbn-item" href="#events" data-tab="lab"><span class="mbn-icon">🔬</span><span class="mbn-label">Lab</span></a>
     <button class="mbn-item mbn-action" id="mbn-search" type="button" aria-label="Search"><span class="mbn-icon">🔍</span><span class="mbn-label">Search</span></button>
   </div>
 </nav>

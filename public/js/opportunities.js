@@ -287,7 +287,7 @@ export async function loadOpportunities(container, scope = 'large', limit = 6) {
       + `<span class="dt-dim opp-themes-hint">· ⭐ below favors early names <b>in</b> these themes that haven't run yet</span></div>`;
   }
   html += `<div class="dt-note" style="border-left-color:${trackCol}">${trackLine}</div>`;
-  html += top.length ? top.map(oppCard).join('') : `<div class="dt-note">No clean pre-breakout setups passed the screen today — that's normal on some days. Check back, or browse the full ${L('breakout', 'screeners')}.</div>`;
+  html += top.length ? top.map(oppCard).join('') : `<div class="dt-note">No clean pre-breakout setups passed the screen today — that's normal on some days. Check back, or browse the full ${L('breakout', 'candidate screens')}.</div>`;
 
   // 🤖 AI Screeners strip — the actionable picks from the 5 AI-reasoning screeners (each a
   // different, non-price angle). Cross-cutting, so shown as their own section; every one is

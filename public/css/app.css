@@ -1827,9 +1827,12 @@
     /* Simple/Expert progressive disclosure — Simple hides the dense expert surfaces */
     body.simple .fade-caveats,
     body.simple .expert-only,
-    body.simple .header-nav [data-tab="research"],
-    body.simple .mobile-top-tabs [data-tab="research"],
-    body.simple .mobile-bottom-nav [data-tab="research"] { display: none !important; }
+    body.simple .header-nav [data-tab="lab"],
+    body.simple .mobile-top-tabs [data-tab="lab"],
+    body.simple .mobile-bottom-nav [data-tab="lab"] { display: none !important; }
+    .hub-sub-div { width: 100%; font-size: .64rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted,#94a3b8); opacity: .8; padding: .25rem .1rem .1rem; margin-top: .15rem; border-top: 1px solid rgba(255,255,255,.06); }
+    .hub-sub-div:first-child { border-top: none; margin-top: 0; }
+    @media (max-width: 640px) { .hub-sub-div { display: none; } }
     body.expert #mode-btn { color: var(--cyan); border-color: #06c4d455; }
     @media (max-width: 640px) {
       .hub-sub { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 6px; }
@@ -2281,3 +2284,28 @@
 
     .td-evt-chip { font-size: 0.68rem; }
     .td-evt-chip.binary, .td-evt.binary { color: var(--amber) !important; font-weight: 700; }
+
+/* ── Evidence & Maturity — earned trust grade per strategy ─────────────────── */
+.mat-badge { display:inline-flex; align-items:center; gap:.25em; font-size:.7rem; font-weight:700; padding:.1em .5em; border-radius:999px; white-space:nowrap; border:1px solid transparent; }
+.mat-validated    { background:rgba(34,197,94,.14);  color:#22c55e; border-color:rgba(34,197,94,.4); }
+.mat-promising    { background:rgba(250,204,21,.14);  color:#eab308; border-color:rgba(250,204,21,.4); }
+.mat-experimental { background:rgba(139,92,246,.14);  color:#a78bfa; border-color:rgba(139,92,246,.4); }
+.mat-informational{ background:rgba(148,163,184,.14); color:#94a3b8; border-color:rgba(148,163,184,.4); }
+.mat-disabled     { background:rgba(239,68,68,.14);   color:#ef4444; border-color:rgba(239,68,68,.4); }
+.mat-legend { display:flex; flex-wrap:wrap; gap:.5rem; margin:.25rem 0 .75rem; }
+.mat-leg { font-size:.72rem; font-weight:600; padding:.2em .6em; border-radius:999px; }
+.mat-leg b { font-weight:800; margin-left:.2em; }
+.mat-leg.mat-validated{background:rgba(34,197,94,.12);color:#22c55e;} .mat-leg.mat-promising{background:rgba(250,204,21,.12);color:#eab308;} .mat-leg.mat-experimental{background:rgba(139,92,246,.12);color:#a78bfa;} .mat-leg.mat-informational{background:rgba(148,163,184,.12);color:#94a3b8;} .mat-leg.mat-disabled{background:rgba(239,68,68,.12);color:#ef4444;}
+.mat-intro { font-size:.8rem; color:var(--muted,#94a3b8); line-height:1.5; margin-bottom:1rem; }
+.mat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:.6rem; }
+.mat-card { background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:.6rem .7rem; }
+.mat-card-h { display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; margin-bottom:.35rem; }
+.mat-card-h b { font-size:.9rem; }
+.mat-core { font-size:.6rem; text-transform:uppercase; letter-spacing:.04em; background:rgba(96,165,250,.16); color:#60a5fa; padding:.05em .4em; border-radius:4px; font-weight:700; }
+.mat-hz { margin-left:auto; font-size:.68rem; color:var(--muted,#94a3b8); background:rgba(255,255,255,.04); padding:.1em .45em; border-radius:4px; }
+.mat-reason { font-size:.76rem; color:var(--muted,#cbd5e1); line-height:1.45; }
+.mat-track { font-size:.74rem; margin-top:.35rem; color:var(--muted,#94a3b8); }
+.mat-track .mat-pos { color:#22c55e; font-weight:700; } .mat-track .mat-neg { color:#ef4444; font-weight:700; }
+.mat-crit { font-size:.72rem; margin-top:.35rem; color:#a78bfa; }
+.mat-lab { border-color:rgba(139,92,246,.35) !important; }
+.mat-lab-note { font-size:.76rem; color:var(--muted,#94a3b8); line-height:1.45; margin:.25rem 0 .6rem; }

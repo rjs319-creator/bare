@@ -177,6 +177,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'cernlockprobe') return runCernLockProbe(req, res);
   if (req.query.op === 'drift') return runDrift(req, res);
   if (req.query.op === 'rankquality') return runRankQuality(req, res);
+  if (req.query.op === 'maturity') return require('../lib/maturity-routes').runMaturity(req, res);
   if (req.query.op === 'recalibrate') return runRecalibrate(req, res);
   if (req.query.op === 'backfill') return runBackfillOp(req, res);
   if (req.query.op === 'research') return runResearchOp(req, res);
