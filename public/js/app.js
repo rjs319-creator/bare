@@ -7107,8 +7107,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const grade = maturityData && maturityData.gradeMeta ? matBadge(s.grade, maturityData.gradeMeta) : esc(s.grade);
     const spy = s.vsSpy == null ? '—' : `<span class="${s.vsSpy >= 0 ? 'bl-pos' : 'bl-neg'}">${s.vsSpy > 0 ? '+' : ''}${s.vsSpy}%</span>`;
     const sec = s.vsSector == null ? '—' : `<span class="${s.vsSector >= 0 ? 'bl-pos' : 'bl-neg'}">${s.vsSector > 0 ? '+' : ''}${s.vsSector}%</span>`;
-    const clears = s.beatsSpy && s.beatsSector ? '✅' : (s.beatsSpy || s.beatsSector ? '➖' : '❌');
-    return `<div class="bl-srow"><span class="bl-name">${esc(s.label)}</span>${grade}<span class="bl-cell">vs SPY ${spy}</span><span class="bl-cell">vs sector ${sec}</span><span class="bl-clear" title="Clears the promotion bar = beats BOTH SPY and its sector">${clears}</span><span class="td-dim">n=${s.n}</span></div>`;
+    // Clears the bar = VALIDATED (beats both at significance). Positive-but-unproven
+    // (right direction, too few resolved) is ➖ — an n=4 lead must not read as proven.
+    const clears = s.grade === 'validated' ? '✅' : (s.beatsSpy && s.beatsSector ? '➖' : '❌');
+    return `<div class="bl-srow"><span class="bl-name">${esc(s.label)}</span>${grade}<span class="bl-cell">vs SPY ${spy}</span><span class="bl-cell">vs sector ${sec}</span><span class="bl-clear" title="✅ Validated — beats BOTH SPY and its sector at significance · ➖ positive but not yet proven · ❌ doesn't beat both">${clears}</span><span class="td-dim">n=${s.n}</span></div>`;
   }
 
   function renderBaselines(d) {
