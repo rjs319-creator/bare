@@ -7023,7 +7023,17 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     return ensureMaturityMap._p;
   }
 
-  function strategyCard(s, meta) {
+  // Governance status badge — the actionable status (Production/Reduced/Probation/
+  // Paper-only/Disabled/Retired) that CONTROLS sizing weight, distinct from the trust grade.
+  function govBadge(gov, statusMeta) {
+    if (!gov || !gov.status) return '';
+    const m = (statusMeta && statusMeta[gov.status]) || { icon: '•', label: gov.status, weight: 0 };
+    const wt = Math.round((m.weight ?? 0) * 100);
+    const vr = gov.versionReset ? ' 🔄' : '';
+    return `<span class="gov-badge gov-${esc(gov.status)}" title="${esc(m.blurb || '')} — cleared for ${wt}% size.${gov.versionReset ? ' Scoring version changed; track record reset.' : ''}\n${esc(gov.reason || '')}">${m.icon} ${esc(m.label)} · ${wt}%${vr}</span>`;
+  }
+
+  function strategyCard(s, meta, gov, statusMeta) {
     const st = s.stats;
     const sec = st && st.baselines && st.baselines.sector;
     const secLine = (sec && sec.n) ? ` · <span class="${sec.avgExcess < 0 ? 'mat-neg' : 'mat-pos'}">${sec.avgExcess > 0 ? '+' : ''}${sec.avgExcess}% vs sector</span>` : '';
@@ -7033,7 +7043,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const crit = (s.inLab && s.criteria) ? `<div class="mat-crit">🎯 To graduate: ${esc(s.criteria)}</div>` : '';
     const hz = { intraday: 'Intraday', swing: 'Swing', position: 'Position', portfolio: 'Portfolio' }[s.horizon] || s.horizon;
     return `<div class="mat-card">
-      <div class="mat-card-h">${matBadge(s.grade, meta)}<b>${esc(s.label)}</b>${s.core ? '<span class="mat-core" title="Core tradeable screener — stays in the main app">core</span>' : ''}<span class="mat-hz">${esc(hz)}</span></div>
+      <div class="mat-card-h">${matBadge(s.grade, meta)}${govBadge(gov, statusMeta)}<b>${esc(s.label)}</b>${s.core ? '<span class="mat-core" title="Core tradeable screener — stays in the main app">core</span>' : ''}<span class="mat-hz">${esc(hz)}</span></div>
       <div class="mat-reason">${esc(s.reason || '')}</div>${track}${crit}
     </div>`;
   }
@@ -7043,25 +7053,38 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!host) return;
     if (!d || !d.ok) { host.innerHTML = `<div class="dt-note" style="border-left-color:var(--red)">Couldn't grade strategies right now.</div>`; return; }
     const meta = d.gradeMeta || {};
+    const statusMeta = d.statusMeta || {};
+    const govMap = {};
+    ((d.governance && d.governance.strategies) || []).forEach(g => { govMap[g.id] = g; });
+    const gov = s => govMap[s.id];
     const gt = document.getElementById('evidence-gen-time');
     if (gt) gt.textContent = d.scoreboardAt ? `graded from Scoreboard @ ${new Date(d.scoreboardAt).toLocaleDateString()}` : (d.configured ? '' : 'storage not configured — grades will fill in');
     const strategies = d.strategies || [];
     // Legend with live counts.
     const legend = MAT_ORDER.map(g => `<span class="mat-leg mat-${g}" title="${esc((meta[g] || {}).blurb || '')}">${(meta[g] || {}).icon || ''} ${(meta[g] || {}).label || g} <b>${(d.counts || {})[g] || 0}</b></span>`).join('');
     const intro = `<div class="mat-intro">Each strategy earns a grade from its <b>own resolved track record</b> vs its benchmark (S&amp;P / sector) — Wilson-bounded and sample-aware, so a lucky small streak can't read as proven. Unproven overlays live in the <b>Research Lab</b> until the data promotes them. <b>A 0–100 score is a relative rank within a screen, not a probability</b> — a name scoring 80 is not "80% likely"; trust the grade and the track record, not the number.</div>`;
+    // Governance summary — the actionable layer that lets the Scoreboard CONTROL sizing.
+    let govPanel = '';
+    if (d.governance && d.governance.counts) {
+      const order = Object.keys(statusMeta).sort((a, b) => (statusMeta[b].rank || 0) - (statusMeta[a].rank || 0));
+      const chips = order.map(st => `<span class="gov-leg gov-${st}" title="${esc(statusMeta[st].blurb || '')} — ${Math.round((statusMeta[st].weight ?? 0) * 100)}% size.">${statusMeta[st].icon} ${statusMeta[st].label} <b>${d.governance.counts[st] || 0}</b></span>`).join('');
+      govPanel = `<div class="gov-panel"><div class="gov-panel-h">🏛️ Model governance <span class="mat-hz">status controls sizing weight</span></div>
+        <div class="gov-legend">${chips}</div>
+        <div class="mat-lab-note">Each grade maps to an <b>actionable status</b> gated on sample size — Production (full size) down to Retired. A model on <b>Probation</b> or below never sizes. Track records are <b>never merged across scoring versions</b> (🔄 = version reset). Total cleared weight budget: <b>${d.governance.clearedWeight ?? 0}</b>.</div></div>`;
+    }
     // Main app (not in lab), grouped by grade.
     const main = strategies.filter(s => !s.inLab);
     const lab = strategies.filter(s => s.inLab);
-    let html = `<div class="mat-legend">${legend}</div>${intro}`;
+    let html = `<div class="mat-legend">${legend}</div>${intro}${govPanel}`;
     MAT_ORDER.forEach(g => {
       const rows = main.filter(s => s.grade === g);
       if (!rows.length) return;
-      html += `<div class="sb-secgroup"><div class="sb-secgroup-h">${matBadge(g, meta)} <span style="opacity:.8">${rows.length}</span></div><div class="mat-grid">${rows.map(s => strategyCard(s, meta)).join('')}</div></div>`;
+      html += `<div class="sb-secgroup"><div class="sb-secgroup-h">${matBadge(g, meta)} <span style="opacity:.8">${rows.length}</span></div><div class="mat-grid">${rows.map(s => strategyCard(s, meta, gov(s), statusMeta)).join('')}</div></div>`;
     });
     if (lab.length) {
       html += `<div class="sb-secgroup mat-lab"><div class="sb-secgroup-h">🔬 Research Lab <span style="opacity:.8">${lab.length}</span></div>
         <div class="mat-lab-note">Unproven overlays — kept out of the main workspaces until they beat their benchmark out-of-sample over enough resolved picks. Still logged and tracked so they can graduate.</div>
-        <div class="mat-grid">${lab.map(s => strategyCard(s, meta)).join('')}</div></div>`;
+        <div class="mat-grid">${lab.map(s => strategyCard(s, meta, gov(s), statusMeta)).join('')}</div></div>`;
     }
     host.innerHTML = html;
   }

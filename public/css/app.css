@@ -2316,6 +2316,20 @@
 .mat-lab { border-color:rgba(139,92,246,.35) !important; }
 .mat-lab-note { font-size:.76rem; color:var(--muted,#94a3b8); line-height:1.45; margin:.25rem 0 .6rem; }
 
+/* Model governance — the actionable status that controls sizing weight */
+.gov-panel { background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.1); border-radius:10px; padding:.6rem .75rem; margin:0 0 1rem; }
+.gov-panel-h { display:flex; align-items:center; gap:.5rem; font-weight:700; font-size:.86rem; margin-bottom:.5rem; }
+.gov-legend { display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.5rem; }
+.gov-leg { font-size:.7rem; font-weight:600; padding:.18em .55em; border-radius:999px; }
+.gov-leg b { font-weight:800; margin-left:.2em; }
+.gov-badge { display:inline-flex; align-items:center; gap:.2em; font-size:.66rem; font-weight:700; padding:.08em .45em; border-radius:999px; white-space:nowrap; border:1px solid transparent; cursor:help; }
+.gov-production,.gov-leg.gov-production { background:rgba(34,197,94,.14); color:#22c55e; }
+.gov-reduced,.gov-leg.gov-reduced { background:rgba(59,130,246,.14); color:#60a5fa; }
+.gov-probation,.gov-leg.gov-probation { background:rgba(249,115,22,.14); color:#fb923c; }
+.gov-paper,.gov-leg.gov-paper { background:rgba(148,163,184,.14); color:#94a3b8; }
+.gov-disabled,.gov-leg.gov-disabled { background:rgba(239,68,68,.14); color:#ef4444; }
+.gov-retired,.gov-leg.gov-retired { background:rgba(120,113,108,.14); color:#a8a29e; }
+
 /* Today-card evidence grade + universe-percentile chips (score-honesty pass) */
 .td-grade { font-size:.62rem; font-weight:700; padding:.08em .4em; border-radius:999px; border:1px solid transparent; }
 .td-grade.mat-validated{background:rgba(34,197,94,.14);color:#22c55e;border-color:rgba(34,197,94,.4);} .td-grade.mat-promising{background:rgba(250,204,21,.14);color:#eab308;border-color:rgba(250,204,21,.4);} .td-grade.mat-experimental{background:rgba(139,92,246,.14);color:#a78bfa;border-color:rgba(139,92,246,.4);} .td-grade.mat-informational{background:rgba(148,163,184,.14);color:#94a3b8;} .td-grade.mat-disabled{background:rgba(239,68,68,.14);color:#ef4444;border-color:rgba(239,68,68,.4);}
