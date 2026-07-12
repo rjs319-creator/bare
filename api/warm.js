@@ -172,6 +172,12 @@ module.exports = async function handler(req, res) {
   // ticks above, and it's heavy enough (fetches history) to keep off warm's critical path.
   const calibKick = warmOne('/api/tracker?op=calibration&force=1').catch(() => null);
 
+  // 🎯 Unified decision engine — build + log today's ranked snapshot (enables the
+  // Today tab's new/upgraded/downgraded/failed/expired lanes). Fire-and-forget: it
+  // self-fetches ~13 endpoints in its OWN 60s invocation, so it must NOT sit on the
+  // drain budget the tick chains share (doing so starved them). Self-heals next run.
+  const todayKick = warmOne('/api/tracker?op=today&log=1').catch(() => null);
+
   // ── DECOUPLED TICK CHAINS ──────────────────────────────────────────────────
   // The resolve/learn/log ticks run as fire-and-forget CHAINS (not awaited on the
   // critical path). Each chain runs its ops sequentially in their own invocations
@@ -192,10 +198,6 @@ module.exports = async function handler(req, res) {
     // leaderboard (heavy) then core (ordered build→log→drift) then cheap attention/tone
     tickChain(['/api/tracker?op=leaderboardtick&src=confluence', '/api/tracker?op=corebuild', '/api/tracker?op=corelog',
       '/api/tracker?op=coredrift', '/api/tracker?op=attentiontick', '/api/tracker?op=tonetick&limit=6']),
-    // unified decision engine — logs today's ranked snapshot so tomorrow's Today tab can
-    // show the new/upgraded/downgraded/failed/expired lanes. Own chain = runs in parallel,
-    // best-effort within the drain ceiling; self-heals next run if it doesn't finish.
-    tickChain(['/api/tracker?op=today&log=1']),
   ];
 
   const warmedExtra = await extraWarm;   // already resolved — ran during the tail above
@@ -216,6 +218,7 @@ module.exports = async function handler(req, res) {
   // 504). void-reference so the array isn't dropped before the requests flush.
   void aiTicks;
   void calibKick; // fire-and-forget like the ticks — recomputes on its own invocation
+  void todayKick; // fire-and-forget: unified decision snapshot in its own 60s budget
   void pulseKick; // fire-and-forget: gather→refine chain builds the refined Pulse snapshot
   void optionsAssessKick; // fire-and-forget: Fable options-flow analysis in its own budget
   void alignedKick; // fire-and-forget: Dual-Confirmed scan over the warm screener pool
