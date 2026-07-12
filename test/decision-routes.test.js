@@ -118,3 +118,12 @@ test('buildToday: lanes diff against a previous snapshot', () => {
   assert.equal(second.lanes.new.length, 0);                 // all were in prev
   assert.ok(second.lanes.upgraded.length >= 1);             // score rose ≥8 vs prev
 });
+
+test('classifyEarnings: binary inside window, scheduled beyond, passed if negative', () => {
+  assert.equal(N.classifyEarnings(5, '2026-07-16', 'swing').kind, 'binary');   // 5d <= 21d window
+  assert.equal(N.classifyEarnings(60, '2026-09-01', 'swing').kind, 'scheduled'); // 60d > 21d
+  assert.equal(N.classifyEarnings(-2, '2026-07-09', 'swing').kind, 'passed');
+  assert.equal(N.classifyEarnings(null, null, 'swing'), null);
+  assert.equal(N.classifyEarnings(5, null, 'intraday').kind, 'scheduled');      // intraday window 3, 5>3 → scheduled
+  assert.equal(N.classifyEarnings(2, null, 'intraday').kind, 'binary');         // 2 <= 3 → binary
+});

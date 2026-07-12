@@ -42,6 +42,16 @@ function trackLine(sig) {
   return `<span class="td-track ${col}" title="Realized forward return of this signal class at its horizon, vs SPY (n=${x.n})">📊 ${esc(beat)} · n=${x.n}</span>`;
 }
 
+// Per-card event chip (#8): only the actionable case — a binary print inside the
+// hold window — is loud (amber). Passed/scheduled stay quiet to avoid clutter.
+const evWhen = ev => (Number.isFinite(ev.inDays) ? `in ${ev.inDays}d` : ev.when ? `~${String(ev.when).slice(0, 10)}` : 'soon');
+function eventChip(ev) {
+  if (!ev || ev.type !== 'earnings') return '';
+  if (ev.kind === 'binary') return `<span class="td-evt-chip binary" title="Earnings report lands inside this trade's window — a binary gap risk. Size down or wait until after.">⚠️ ER ${esc(evWhen(ev))}</span>`;
+  if (ev.kind === 'passed') return `<span class="td-evt-chip" title="Already reported — the catalyst may already be in the price.">✓ reported</span>`;
+  return '';
+}
+
 function levels(sig) {
   if (!(sig.entry > 0)) return '';
   const parts = [`<span>Entry <b>$${esc(sig.entry)}</b></span>`];
@@ -67,7 +77,7 @@ function signalCard(sig, legend) {
     + (sig.sector ? `<span class="td-sect">${esc(sig.sector)}</span>` : '') + exWarn + `</div>`
     + evidenceLine(sig, legend)
     + levels(sig)
-    + `<div class="td-foot">${trackLine(sig)}${sig.catalyst ? `<span class="td-cat" title="${esc(sig.catalyst)}">📰 catalyst</span>` : ''}</div>`
+    + `<div class="td-foot">${trackLine(sig)}${eventChip(sig.event)}${sig.catalyst ? `<span class="td-cat" title="${esc(sig.catalyst)}">📰 catalyst</span>` : ''}</div>`
     + `</div>`;
 }
 
@@ -112,8 +122,11 @@ export function renderCommandCenter(container, p) {
 
   // Upcoming risk events (#8).
   if (p.events && p.events.length) {
-    html += `<div class="td-events"><div class="td-lanes-h">⚠️ Upcoming events</div>`
-      + p.events.slice(0, 8).map(e => `<span class="td-evt" title="${esc(e.kind || '')}">${esc(e.ticker)}: ${esc(e.type)}${e.when ? ` (${esc(String(e.when).slice(0, 10))})` : ''}</span>`).join('') + `</div>`;
+    const evLabel = e => e.type === 'earnings'
+      ? (e.kind === 'binary' ? `⚠️ ${esc(e.ticker)} earnings ${esc(evWhen(e))}` : e.kind === 'passed' ? `✓ ${esc(e.ticker)} reported` : `📅 ${esc(e.ticker)} earnings ${esc(evWhen(e))}`)
+      : `${esc(e.ticker)}: ${esc(e.type)}`;
+    html += `<div class="td-events"><div class="td-lanes-h">⚠️ Upcoming events <span class="td-dim">— a print inside a trade's window is a binary gap risk</span></div>`
+      + p.events.slice(0, 10).map(e => `<span class="td-evt ${e.kind === 'binary' ? 'binary' : ''}" title="${esc(e.when ? String(e.when).slice(0, 10) : e.kind || '')}">${evLabel(e)}</span>`).join('') + `</div>`;
   }
 
   // Freshness / system health (#10/#11) — error ≠ empty.
