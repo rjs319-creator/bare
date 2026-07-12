@@ -459,7 +459,21 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!d || !d.ok) return;
     const warns = [];
     if (d.data && d.data.stale) warns.push(`⚠️ Market data is ${d.data.ageDays}d stale (last EOD ${esc(d.data.spyDate || '—')}) — prices may be behind.`);
-    if (d.lastRun && !d.lastRun.ok) warns.push(`⚠️ Last data refresh had ${d.lastRun.failCount} failed step${d.lastRun.failCount === 1 ? '' : 's'}${d.failStreak > 1 ? ` (${d.failStreak} runs in a row)` : ''}: ${esc((d.lastRun.failed || []).slice(0, 4).join(', ') || 'cache warms')}.`);
+    // Only warn on REAL failures. Budget-deferred ticks (steps skipped because the cron
+    // hit its time budget) are best-effort work that self-heals on the next run — they
+    // are NOT errors, so exclude them from the count and the list. Real failures = stages
+    // that errored (not merely deferred) plus any cache-warm fetch failures.
+    if (d.lastRun && !d.lastRun.ok) {
+      const deferred = new Set(d.lastRun.budgetSkipped || []);
+      const realFailed = (d.lastRun.failed || []).filter(s => !deferred.has(s));
+      const warmFailPaths = (d.lastRun.warmFails || []).map(w => (w && w.path) || '').filter(Boolean);
+      const nReal = realFailed.length + warmFailPaths.length;
+      if (nReal > 0) {
+        const names = realFailed.concat(warmFailPaths).slice(0, 4).join(', ');
+        warns.push(`⚠️ Last data refresh had ${nReal} failed step${nReal === 1 ? '' : 's'}${d.failStreak > 1 ? ` (${d.failStreak} runs in a row)` : ''}: ${esc(names || 'cache warms')}.`);
+      }
+      // else: only budget-deferred steps — nothing broke; suppressed.
+    }
     if (!warns.length) return;
     const page = document.querySelector('.page'); if (!page) return;
     const bar = document.createElement('div');
