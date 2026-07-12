@@ -125,6 +125,48 @@ test('reconstruct: momentum & daytrade picks use their OWN scorers (not proxy)',
   assert.ok(Number.isFinite(out[0].score) && Number.isFinite(out[1].score));
 });
 
+// Build a series whose per-bar volatility follows volFn(i) — for coil (compression) tests.
+function volSeries(n, volFn, startMs = Date.UTC(2024, 0, 1)) {
+  const out = [];
+  let px = 100;
+  for (let i = 0; i < n; i++) {
+    const d = new Date(startMs + i * 86400000).toISOString().slice(0, 10);
+    const v = volFn(i);                       // fractional daily range
+    const move = ((i % 2) ? -1 : 1) * v * 0.5; // deterministic alternating drift
+    const close = px * (1 + move);
+    const high = Math.max(px, close) * (1 + v / 2);
+    const low = Math.min(px, close) * (1 - v / 2);
+    out.push({ date: d, open: +px.toFixed(3), high: +high.toFixed(3), low: +low.toFixed(3), close: +close.toFixed(3), volume: 1_000_000 });
+    px = close;
+  }
+  return out;
+}
+
+test('reconstruct: coil picks use the real coil scorer — a compressing name out-coils an expanding one', () => {
+  // COILED: volatile for a year, then tightens hard at the end (recent vol low vs own history).
+  const coiled = volSeries(280, i => (i < 240 ? 0.05 : 0.006));
+  // LOOSE: quiet for a year, then EXPANDS at the end (recent vol high vs own history).
+  const loose = volSeries(280, i => (i < 240 ? 0.01 : 0.05));
+  const candlesByT = { COIL: coiled, LOOSE: loose };
+  const asOf = coiled[279].date;
+  const picks = [
+    { ticker: 'COIL', date: asOf, section: 'coil', regime: 'neutral' },
+    { ticker: 'LOOSE', date: asOf, section: 'coil', regime: 'neutral' },
+  ];
+  const out = S.reconstruct(picks, { candlesFor: t => candlesByT[t] });
+  assert.equal(out[0].method, 'coil');
+  assert.equal(out[1].method, 'coil');
+  assert.ok(out[0].score > out[1].score, `compressed ${out[0].score} should out-coil expanding ${out[1].score}`);
+});
+
+test('reconstruct: a coil pick with too little history falls through (proxy or none), not a crash', () => {
+  const short = volSeries(40, () => 0.02);
+  const out = S.reconstruct([{ ticker: 'X', date: short[39].date, section: 'coil', regime: 'neutral' }],
+    { candlesFor: () => short, proxyScore: () => 55 });
+  assert.equal(out[0].method, 'proxy');   // no features → proxy fallback
+  assert.equal(out[0].score, 55);
+});
+
 test('apexRegime: maps macro buckets to the Apex preset keys', () => {
   assert.equal(S.apexRegime('risk-on'), 'RISK_ON');
   assert.equal(S.apexRegime('risk-off'), 'RISK_OFF');
