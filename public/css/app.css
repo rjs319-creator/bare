@@ -1183,6 +1183,7 @@
     .sb-toggle.on  { color: var(--green); border-color: #10d98a55; background: var(--green-dim); }
     .sb-toggle.off { color: var(--red);   border-color: #ef505055; background: var(--red-dim); }
     .sb-count { font-size: 0.64rem; color: var(--text-muted); margin-bottom: 11px; }
+    .sb-model { display: inline-block; font-size: 0.56rem; font-weight: 800; border: 1px solid transparent; border-radius: 999px; padding: 1px 7px; margin-left: 6px; vertical-align: middle; cursor: help; }
     .sb-horizons { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 6px; margin-bottom: 10px; }
     .sb-h { border: 1px solid var(--border); border-radius: 8px; padding: 8px 4px; text-align: center; }
     .sb-h-lb { font-size: 0.54rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }

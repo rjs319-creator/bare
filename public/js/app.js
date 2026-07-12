@@ -6790,6 +6790,17 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   const SB_THIN_N = 10; // below this resolved-sample, flag the regime split as thin
 
+  // Model-quality chip — the section's score-decile verdict: does THIS section's own
+  // conviction score actually rank its winners? (Same for every tier in the section.)
+  function sbModelChip(sec) {
+    const rq = sbBySection[sec];
+    if (!rq || !rq.ready) return '';
+    const ic = rq.ic || {};
+    if (ic.ic == null) return '';
+    const [icn, vcol, vtxt] = RQ_VERDICT[rq.verdict] || RQ_VERDICT.insufficient;
+    return `<span class="sb-model" style="color:${vcol};border-color:${vcol}55" title="Score-decile — does this section's own conviction score rank its winners? ${esc(vtxt)}. Rank-IC ${ic.ic} (t=${ic.t ?? '—'}${ic.significant ? ', significant' : ''}) over ${rq.n} resolved ${esc(sbScoreHz)} picks · ${esc(rq.method || '')} scorer.">${icn} model ${ic.ic >= 0 ? '+' : ''}${ic.ic}</span>`;
+  }
+
   function sbCard(g) {
     const v = sbVerdict(g);
     const h = sbHz(g);
@@ -6872,7 +6883,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           <div class="sb-title"><div class="sb-sig">${SB_TIER_LABEL[g.tier] || esc(g.tier)}${bwBadge}</div></div>
           <button class="sb-toggle ${disabled ? 'off' : 'on'}" data-sig-toggle="${g.section}:${g.tier}">${disabled ? '✕ Disabled' : '✓ Enabled'}</button>
         </div>
-        <div class="sb-count">${regCount} pick${regCount === 1 ? '' : 's'} logged${sbRegime === 'all' ? '' : ` in ${sbRegime === 'risk-on' ? 'risk-on' : 'risk-off'}`} ${thin}</div>
+        <div class="sb-count">${regCount} pick${regCount === 1 ? '' : 's'} logged${sbRegime === 'all' ? '' : ` in ${sbRegime === 'risk-on' ? 'risk-on' : 'risk-off'}`} ${thin}${sbModelChip(g.section)}</div>
         <div class="sb-horizons">${hz}</div>
         ${wl}
         ${bw}
@@ -6921,7 +6932,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     </div>`;
   }
 
+  let sbBySection = {}, sbScoreHz = '5d';   // per-section score-decile verdict for the card chips
   function renderScoreboard(data) {
+    sbBySection = (data.scoreQuality && data.scoreQuality.bySection) || {};
+    sbScoreHz = (data.scoreQuality && data.scoreQuality.horizon) || '5d';
     if (data.generatedAt) scoreboardGenTime.textContent = `Updated ${new Date(data.generatedAt).toLocaleTimeString()}`;
     if (!data.configured) {
       scoreboardMeta.textContent = '· storage not configured';
