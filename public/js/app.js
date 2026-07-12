@@ -6952,7 +6952,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       `<div class="sb-secgroup"><div class="sb-secgroup-h"${SB_SECTION_HELP[sec] ? ` title="${esc(SB_SECTION_HELP[sec])}"` : ''}>${SB_SECTIONS[sec] || esc(sec)}${secBadge(sec)}${SB_SECTION_HELP[sec] ? ' <span class="sb-help-i" title="' + esc(SB_SECTION_HELP[sec]) + '">ⓘ</span>' : ''}</div><div class="sb-grid">${bySec[sec].map(sbCard).join('')}</div></div>`
     ).join('');
 
-    scoreboardContainer.innerHTML = intro + allocationPanelHTML(data.allocation) + `<div id="sb-rankquality"></div>` + regimeBar + html;
+    scoreboardContainer.innerHTML = intro + allocationPanelHTML(data.allocation) + scoreDecilePanel(data.scoreQuality) + `<div id="sb-rankquality"></div>` + regimeBar + html;
     const regimeSel = document.getElementById('sb-regime-sel');
     if (regimeSel) regimeSel.addEventListener('change', e => setSbRegime(e.target.value));
     scoreboardContainer.querySelectorAll('[data-sig-toggle]').forEach(btn => {
@@ -6996,6 +6996,32 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + `<div class="rq-bars"><div class="dt-dim rq-cap">Avg outcome (realized R×100) by score quantile — a predictive score slopes up left→right:</div>${o.buckets.map(b => rqBar(b, maxAbs)).join('')}</div>`
       + (regimes ? `<div class="dt-dim rq-reg">By regime → ${esc(regimes)}</div>` : '')
       + `<div class="dt-dim rq-foot">Outcome = realized R-multiple at each pick's logged stop/target. Verdict "predictive" needs a positive, statistically-significant rank-IC AND a monotone quantile ladder — the same bar this project holds every claimed edge to.</div>`
+      + `</div>`;
+  }
+
+  // 🏅 SCORE DECILE (#4 "performance by score decile") — the WHOLE-BOOK version of the
+  // ranking-quality check. Every pick, regardless of section, carries a single UNIFORM
+  // momentum-conviction score (uscore-v1, computed server-side in the scoreboard payload);
+  // this buckets all of them by decile and asks whether higher conviction earned better
+  // 20-session returns. Reuses rqBar + the rank-IC/verdict battery. Reads data.scoreQuality
+  // directly (no extra endpoint) — so it's honest about "building" until ≥20 resolve.
+  function scoreDecilePanel(sq) {
+    if (!sq) return '';
+    const o = sq.overall || {};
+    const head = `🏅 Score decile — do higher-conviction picks win? <span class="dt-dim">· uniform ${esc(sq.model || '')} · ${sq.scoredPicks || 0} scored · ${esc(sq.horizon || '')} outcome</span>`;
+    if (!o.ready) return `<div class="sb-secgroup"><div class="sb-secgroup-h">${head}</div><div class="dt-note">⏳ ${esc(o.note || 'Building')} A single uniform momentum-conviction score is assigned to <b>every pick across all sections</b>, then bucketed by decile — the whole book's ranking test, not one screener's. Fills in as picks resolve their 20-session return.</div></div>`;
+    const [vi, vcol, vtxt] = RQ_VERDICT[o.verdict] || RQ_VERDICT.insufficient;
+    const maxAbs = Math.max(...o.buckets.map(b => Math.abs(b.avgOutcome)), 0.01);
+    const ic = o.ic || {};
+    const regimes = Object.entries(sq.byRegime || {}).filter(([, v]) => v.ready)
+      .map(([k, v]) => `${esc(k)}: IC ${v.ic.ic ?? '—'} (${esc(v.verdict)})`).join(' · ');
+    return `<div class="sb-secgroup rq-panel">`
+      + `<div class="sb-secgroup-h">${head}</div>`
+      + `<div class="rq-verdict" style="border-left-color:${vcol}"><b style="color:${vcol}">${vi} ${esc(vtxt)}.</b> `
+      + `Rank-IC <b>${ic.ic ?? '—'}</b> (t=${ic.t ?? '—'}, ${ic.significant ? 'significant' : 'not significant'}) · top decile beat base win-rate by <b>${o.liftWinRate ?? '—'}pts</b> · top-vs-bottom spread <b>${o.topBottomSpread ?? '—'}%</b> · top-${o.topKn} precision <b>${o.topKprecision}%</b>.</div>`
+      + `<div class="rq-bars"><div class="dt-dim rq-cap">Avg 20-session return (%) by conviction decile — a predictive score slopes up left→right:</div>${o.buckets.map(b => rqBar(b, maxAbs)).join('')}</div>`
+      + (regimes ? `<div class="dt-dim rq-reg">By regime → ${esc(regimes)}</div>` : '')
+      + `<div class="dt-dim rq-foot">One UNIFORM score on every pick (regime-normalized excess momentum + trend, direction-aware) makes this the <b>whole book's</b> ranking test, not a single screener's — and it's a conviction RANK, not a probability. "Predictive" needs a positive, significant rank-IC AND a monotone ladder — the bar every edge here is held to.</div>`
       + `</div>`;
   }
   let rankQualityLoaded = false, rankQualityData = null;
