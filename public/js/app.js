@@ -5,6 +5,7 @@
 import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadOpportunities, mountOpportunitiesTab, whyNowBadge } from './opportunities.js';
   import { loadQuickHit } from './quickhit.js';
+  import { loadCommandCenter } from './today.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
 
@@ -298,6 +299,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.querySelectorAll('.hub-sub-btn').forEach(b => b.onclick = () => showTab(b.dataset.sub));
   }
 
+  window.showTab = showTab; // let ES-module views (today.js) deep-link to a tab
   function showTab(id, opts = {}) {
     let top, sub;
     if (TOP_TABS.includes(id)) { top = id; sub = TAB_GROUPS[id].length > 1 ? (hubSub[id] || TAB_GROUPS[id][0]) : TAB_GROUPS[id][0]; }
@@ -3465,15 +3467,16 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (picks.length) ideas = `<div class="rot-panel"><div class="rot-head">👀 A few names moving today</div><div class="rot-sub">Today's biggest movers on heavy volume — a starting watchlist, not advice. Tap a row to open the full Day Trade view.</div>`
         + picks.map(p => `<div class="bt-ic-row today-idea" data-go="daytrade"><span><b>${esc(p.ticker)}</b> <span style="color:var(--text-dim)">${esc(p.sector || '')}</span></span><span style="color:var(--green)">+${p.pctChange}%</span><span>RVOL ${p.relVol}×</span></div>`).join('') + `</div>`;
     }
-    const opps = `<div id="today-opps" class="opp-wrap"></div>`;
-    const links = `<div class="today-links"><button class="today-link" data-go="start">📘 New here? Read the 2-min guide</button><button class="today-link" id="today-learn">📚 Learn the basics</button><button class="today-link" data-go="screener">🔎 All screeners</button></div>`;
-    el.innerHTML = read + rec + downNudge + opps + ideas + links;
+    // 🎯 The centerpiece: the UNIFIED decision command center (op=today) — every
+    // screener's picks ranked into one validated, horizon-bucketed table with an
+    // honest independent-evidence count. Server-authoritative; loads independently.
+    const cc = `<div id="today-cc" class="td-cc-wrap"></div>`;
+    const links = `<div class="today-links"><button class="today-link" data-go="opportunities">⭐ Detailed opportunity cards</button><button class="today-link" data-go="start">📘 New here? Read the 2-min guide</button><button class="today-link" id="today-learn">📚 Learn the basics</button><button class="today-link" data-go="screener">🔎 All screeners</button></div>`;
+    el.innerHTML = read + rec + downNudge + cc + ideas + links;
     el.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => { if (typeof showTab === 'function') showTab(b.dataset.go); }));
     el.querySelector('#today-learn')?.addEventListener('click', () => openLearn());
-    // ⭐ The centerpiece: pre-breakout buy opportunities, ranked. Loads independently.
-    loadOpportunities(el.querySelector('#today-opps')).then(() => {
-      el.querySelectorAll('#today-opps [data-go]').forEach(b => b.addEventListener('click', () => { if (typeof showTab === 'function') showTab(b.dataset.go); }));
-      if (typeof startScreenerLive === 'function') startScreenerLive(el.querySelector('#today-opps'));   // live prices on opp cards too
+    loadCommandCenter(el.querySelector('#today-cc')).then(() => {
+      if (typeof startScreenerLive === 'function') startScreenerLive(el.querySelector('#today-cc')); // live prices on ticker chips
     });
     const gt = document.getElementById('today-gen-time'); if (gt && ok && tape.generatedAt) gt.textContent = new Date(tape.generatedAt).toLocaleTimeString();
     const meta = document.getElementById('today-meta'); if (meta) meta.textContent = `· ${regLbl} · ${clbl} tape`;

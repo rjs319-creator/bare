@@ -204,5 +204,6 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'attentiontick') return runAttentionTick(req, res);
   if (req.query.op === 'attention') return runAttention(req, res);
   if (req.query.op === 'whynow') return require('../lib/whynow-routes').runWhyNow(req, res);
+  if (req.query.op === 'today') return require('../lib/decision-routes').runToday(req, res);
   return runScoreboard(req, res);
 };

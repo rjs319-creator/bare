@@ -2218,3 +2218,49 @@
 
 /* 🎚️ Tone Shift — reuses .pulse-card/.pulse-grid; purple accent */
 #toneshift .pulse-card { border-left-color: #a855f7; }
+
+    /* ── 🎯 Unified decision command center (today.js) ── */
+    .td-cc-wrap { margin-top: 10px; }
+    .td-cc { display: flex; flex-direction: column; gap: 14px; }
+    .td-head { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--green); border-radius: 10px; padding: 11px 14px; }
+    .td-regime { font-size: 0.9rem; margin-bottom: 6px; }
+    .td-sectors { font-size: 0.72rem; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+    .td-sec-chip { border-radius: 5px; padding: 2px 7px; background: var(--surface); }
+    .td-sec-chip.lead { color: var(--green); }
+    .td-sec-chip.weak { color: var(--red); }
+    .td-horizons { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+    .td-hz-h { font-size: 0.82rem; font-weight: 700; margin-bottom: 8px; }
+    .td-hz-h .td-dim { font-weight: 400; }
+    .td-empty { font-size: 0.76rem; padding: 8px 4px; }
+    .td-card { background: var(--card); border: 1px solid var(--border); border-radius: 11px; padding: 11px 13px; margin-bottom: 9px; cursor: pointer; transition: border-color .15s, background .15s; }
+    .td-card:hover { border-color: var(--border-hi); background: var(--card-hover); }
+    .td-top { display: flex; align-items: baseline; gap: 7px; }
+    .td-rank { font-size: 0.68rem; color: var(--text-muted); font-weight: 700; }
+    .td-tk { font-weight: 700; font-size: 0.95rem; }
+    .td-co { color: var(--text-dim); font-size: 0.72rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .td-score { font-weight: 700; font-size: 0.9rem; color: var(--cyan); }
+    .td-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0; font-size: 0.68rem; }
+    .td-chips > span { border-radius: 5px; padding: 2px 7px; background: var(--surface); color: var(--text-dim); }
+    .td-state.st-green { color: var(--green); background: var(--green-dim); }
+    .td-state.st-amber { color: var(--amber); background: var(--amber-dim); }
+    .td-state.st-red { color: var(--red); background: var(--red-dim); }
+    .td-exec { color: var(--amber) !important; }
+    .td-eviden { font-size: 0.72rem; color: var(--text-dim); margin: 5px 0; }
+    .td-eviden b { color: var(--text); }
+    .td-warn { color: var(--amber); }
+    .td-levels { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.74rem; color: var(--text-dim); margin: 6px 0; }
+    .td-levels b { color: var(--text); }
+    .td-rr { color: var(--cyan); }
+    .td-foot { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; font-size: 0.7rem; margin-top: 5px; }
+    .td-track.td-pos { color: var(--green); }
+    .td-track.td-neg { color: var(--red); }
+    .td-cat { color: var(--amber); }
+    .td-dim { color: var(--text-muted); }
+    .td-lanes, .td-events { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 13px; }
+    .td-lanes-h { font-size: 0.78rem; font-weight: 700; margin-bottom: 8px; }
+    .td-lane { margin-bottom: 7px; font-size: 0.72rem; }
+    .td-lane-h { color: var(--text-dim); margin-bottom: 3px; }
+    .td-lane-tk, .td-evt { display: inline-block; background: var(--surface); border-radius: 5px; padding: 2px 7px; margin: 2px 4px 2px 0; cursor: pointer; font-size: 0.7rem; }
+    .td-evt { cursor: default; color: var(--text-dim); }
+    .td-cc-foot { font-size: 0.72rem; line-height: 1.5; margin-top: 4px; }
+    .td-cc-foot b { color: var(--text-dim); }

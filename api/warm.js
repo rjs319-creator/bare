@@ -192,6 +192,10 @@ module.exports = async function handler(req, res) {
     // leaderboard (heavy) then core (ordered build→log→drift) then cheap attention/tone
     tickChain(['/api/tracker?op=leaderboardtick&src=confluence', '/api/tracker?op=corebuild', '/api/tracker?op=corelog',
       '/api/tracker?op=coredrift', '/api/tracker?op=attentiontick', '/api/tracker?op=tonetick&limit=6']),
+    // unified decision engine — logs today's ranked snapshot so tomorrow's Today tab can
+    // show the new/upgraded/downgraded/failed/expired lanes. Own chain = runs in parallel,
+    // best-effort within the drain ceiling; self-heals next run if it doesn't finish.
+    tickChain(['/api/tracker?op=today&log=1']),
   ];
 
   const warmedExtra = await extraWarm;   // already resolved — ran during the tail above
