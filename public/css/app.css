@@ -2309,3 +2309,20 @@
 .mat-crit { font-size:.72rem; margin-top:.35rem; color:#a78bfa; }
 .mat-lab { border-color:rgba(139,92,246,.35) !important; }
 .mat-lab-note { font-size:.76rem; color:var(--muted,#94a3b8); line-height:1.45; margin:.25rem 0 .6rem; }
+
+/* Today-card evidence grade + universe-percentile chips (score-honesty pass) */
+.td-grade { font-size:.62rem; font-weight:700; padding:.08em .4em; border-radius:999px; border:1px solid transparent; }
+.td-grade.mat-validated{background:rgba(34,197,94,.14);color:#22c55e;border-color:rgba(34,197,94,.4);} .td-grade.mat-promising{background:rgba(250,204,21,.14);color:#eab308;border-color:rgba(250,204,21,.4);} .td-grade.mat-experimental{background:rgba(139,92,246,.14);color:#a78bfa;border-color:rgba(139,92,246,.4);} .td-grade.mat-informational{background:rgba(148,163,184,.14);color:#94a3b8;} .td-grade.mat-disabled{background:rgba(239,68,68,.14);color:#ef4444;border-color:rgba(239,68,68,.4);}
+.td-pctile { font-size:.62rem; font-weight:700; color:#60a5fa; background:rgba(96,165,250,.12); padding:.08em .4em; border-radius:999px; }
+
+/* Data-trust provenance panel on the Today command center */
+.dt-trust { margin:.6rem 0; border:1px solid rgba(255,255,255,.08); border-radius:10px; background:rgba(255,255,255,.02); }
+.dt-trust summary { cursor:pointer; padding:.55rem .75rem; font-size:.78rem; font-weight:600; color:var(--muted,#cbd5e1); }
+.dt-trust-body { padding:0 .75rem .7rem; }
+.dt-trust-note { font-size:.75rem; color:var(--amber,#f59e0b); margin:.2rem 0 .6rem; line-height:1.45; }
+.dt-src { display:grid; grid-template-columns:1.4fr 1.6fr .9fr; gap:.5rem; align-items:center; font-size:.72rem; padding:.22rem 0; border-top:1px solid rgba(255,255,255,.05); }
+.dt-src:first-child { border-top:none; }
+.dt-src-st { text-align:right; color:#22c55e; } .dt-src-st.stale { color:var(--amber,#f59e0b); }
+.dt-leg-h { font-size:.72rem; font-weight:700; margin:.7rem 0 .3rem; color:var(--muted,#cbd5e1); }
+.dt-leg { font-size:.72rem; padding:.18rem 0; line-height:1.4; }
+@media (max-width:640px){ .dt-src { grid-template-columns:1fr; gap:.1rem; } .dt-src-st { text-align:left; } }

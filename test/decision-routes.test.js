@@ -47,6 +47,24 @@ test('fromBiotech: only Hot/Emerging, catalyst family, no levels', () => {
   assert.equal(b[0].entry, undefined);  // no published levels
 });
 
+test('fromCoreMomentum: fills the portfolio horizon with rank→percentile confidence', () => {
+  const c = N.fromCoreMomentum({ book: [
+    { ticker: 'MMM', sector: 'Industrials', price: 100, rank: 1, marketCap: 5e9 },
+    { ticker: 'NNN', sector: 'Energy', price: 40, rank: 2, marketCap: 2e9 },
+  ] });
+  assert.equal(c.length, 2);
+  assert.equal(c[0].horizon, 'portfolio');
+  assert.equal(c[0].percentile, 100);            // rank 1 of 2 → top
+  assert.ok(c[0].rawConfidence > c[1].rawConfidence, 'higher rank → higher confidence');
+  assert.ok(c[0].evidenceFamilies.includes('priceTrend'));
+  assert.equal(c[0].entry, undefined);           // no intraday levels — quarterly hold
+});
+
+test('buildToday: Core Momentum populates the portfolio bucket', () => {
+  const p = buildToday({ coremo: { book: [{ ticker: 'MMM', sector: 'Industrials', price: 100, rank: 1, marketCap: 5e9 }] }, scoreboard: SCOREBOARD });
+  assert.ok(p.horizons.portfolio.find(x => x.ticker === 'MMM'), 'MMM in portfolio horizon');
+});
+
 test('buildToday: gap-down shorts rank ABOVE longs in risk-off (validated lever)', () => {
   const off = { ...SCREENER, regime: { ...SCREENER.regime, bearish: true, riskOn: false } };
   const p = buildToday({ screener: off, gapdown: GAPDOWN, sectors: SECTORS, scoreboard: SCOREBOARD });

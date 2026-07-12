@@ -41,6 +41,20 @@ test('gradeTrack: big sample, positive avg but coin-flip beat-rate → not valid
   assert.notEqual(g.grade, 'disabled');
 });
 
+test('gradeTrack: beats SPY but NOT its sector → promising, not validated (sector control)', () => {
+  // Strong vs market, but the sector ran even harder → the edge is sector beta.
+  const g = M.gradeTrack({ excessN: 40, avgExcess: 2.4, beatMktRate: 70, secExcN: 40, avgSecExcess: -1.5, beatSecRate: 40 });
+  assert.equal(g.grade, 'promising');
+  assert.match(g.reason, /sector beta/);
+  assert.equal(g.stats.baselines.sector.avgExcess, -1.5);
+});
+
+test('gradeTrack: beats BOTH market and sector → validated', () => {
+  const g = M.gradeTrack({ excessN: 40, avgExcess: 2.4, beatMktRate: 70, secExcN: 40, avgSecExcess: 1.8, beatSecRate: 62 });
+  assert.equal(g.grade, 'validated');
+  assert.match(g.reason, /its sector/);
+});
+
 // ── poolSectionTrack: excessN-weighted pooling across tiers ───────────────────
 test('poolSectionTrack: pools tiers by excessN at the intended horizon', () => {
   const groups = [

@@ -43,7 +43,8 @@ const { runAttention, runAttentionTick } = require('../lib/attention-routes');
 const { runOptionsFlow, runOptionsPerf, runOptionsAssess } = require('../lib/optionsflow-routes');
 const { runPulse, runPulseRefine } = require('../lib/pulse-routes');
 const { runDualRead, runDualReadLog, runDualReadBook, runDualReadTune, runDualReadBackfill, runLtRecs } = require('../lib/dualread-routes');
-const { requireTrusted, requireMethod, stripForceParams } = require('../lib/auth');
+const { requireTrusted, requireMethod, stripForceParams, isTrusted } = require('../lib/auth');
+const { rateLimit, clientKey } = require('../lib/ratelimit');
 
 // Ops the DAILY CRON fans out to and the browser never fetches directly — safe to
 // require the CRON_SECRET bearer (enforced only once the secret is configured).
@@ -54,7 +55,17 @@ const PRIVILEGED_OPS = new Set([
   'fadetick', 'gapdowntick', 'gapgotick', 'ghostlog', 'intracapture', 'leaderboardtick',
   'narrative', 'optionsassess', 'predicttick', 'timinglog', 'timingtune', 'tonetick',
   'trendtick', 'universecompile', 'universescan',
+  // Expensive non-browser builders/computes — cron/external/manual only, so gating
+  // them behind the CRON_SECRET bearer costs the UI nothing.
+  'fundbuild', 'universebuild', 'research', 'emerging',
 ]);
+// Expensive ops the BROWSER can trigger (Custom/Backtest panel buttons) — we can't
+// 401 them without breaking those buttons, so rate-limit anonymous callers instead
+// (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
+const EXPENSIVE_OPS = new Set([
+  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality',
+]);
+const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
 // the expensive force/refresh rebuild levers for untrusted callers.
 const SHARED_FORCE_OPS = new Set([
@@ -80,6 +91,15 @@ module.exports = async function handler(req, res) {
   if (INGEST_OPS.has(op) && !requireMethod(req, res, ['POST'])) return;
   if (PRIVILEGED_OPS.has(op)) { if (!requireTrusted(req, res)) return; }
   else if (SHARED_FORCE_OPS.has(op)) { stripForceParams(req); }
+  // Cost-abuse throttle on browser-triggerable heavy recomputes (cron exempt).
+  if (EXPENSIVE_OPS.has(op) && !isTrusted(req)) {
+    const rl = rateLimit(`${op}:${clientKey(req)}`, EXPENSIVE_LIMIT);
+    if (!rl.ok) {
+      res.setHeader('Retry-After', Math.ceil(rl.retryAfterMs / 1000));
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(429).json({ ok: false, error: 'rate limited — too many heavy recomputes; try again shortly.' });
+    }
+  }
 
   if (req.query.op === 'dualread') return runDualRead(req, res);
   if (req.query.op === 'dualreadlog') return runDualReadLog(req, res);

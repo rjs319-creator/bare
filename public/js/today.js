@@ -10,6 +10,7 @@ const HORIZONS = [
   ['intraday', '⚡ Intraday', 'gaps · momentum · VWAP/ORB — same-session'],
   ['swing', '📈 Swing', 'breakouts · coils · accumulation — days to weeks'],
   ['position', '🧭 Position', '1–6 month leads — momentum, revisions, cross-asset'],
+  ['portfolio', '💼 Portfolio', 'core momentum sleeve — quarterly rebalance, multi-month hold'],
 ];
 const STATE = {
   detected: ['·', 'Detected', 'st-grey'], early: ['🌱', 'Early', 'st-grey'],
@@ -17,8 +18,22 @@ const STATE = {
   extended: ['🟡', 'Extended', 'st-amber'], failed: ['❌', 'Failed', 'st-red'],
   expired: ['⏰', 'Expired', 'st-red'], resolved: ['🏁', 'Resolved', 'st-grey'],
 };
-const SRC_TAB = { screener: 'screener', gapgo: 'gapgo', daytrade: 'daytrade', coil: 'coil',
+const SRC_TAB = { screener: 'screener', gapgo: 'gapgo', daytrade: 'daytrade', coil: 'coil', coremo: 'coremo', biotech: 'biotech', gapdown: 'gapdown',
   readthrough: 'readthrough', anomaly: 'anomaly', secondwave: 'secondwave', crossasset: 'crossasset', toneshift: 'toneshift' };
+
+// Evidence grade per source (section → {icon,label,grade}), from op=maturity. Lets
+// every card carry the EARNED trust grade next to its raw score — the honest read
+// (a 0–100 score is a relative rank, the grade is what the track record supports).
+let GRADES = {};
+function gradeChip(sig) {
+  const g = GRADES[sig.section];
+  if (!g) return '';
+  return `<span class="td-grade mat-${esc(g.grade)}" title="${esc(g.blurb || '')}">${g.icon} ${esc(g.label)}</span>`;
+}
+function pctileChip(sig) {
+  if (sig.percentile == null) return '';
+  return `<span class="td-pctile" title="Universe percentile — a relative rank within this screen, NOT a probability.">${sig.percentile}th pct</span>`;
+}
 
 const pct = v => (v == null ? '' : `${v > 0 ? '+' : ''}${v}%`);
 
@@ -74,7 +89,7 @@ function signalCard(sig, legend) {
     + `<div class="td-chips"><span class="td-state ${scls}">${si} ${slbl}</span>`
     + (sig.side === 'short' ? `<span class="td-short" title="A short setup — profits if it falls (favored in risk-off)">🔻 SHORT</span>` : '')
     + `<span class="td-setup">${esc(sig.setup || sig.source)}</span>`
-    + (sig.sector ? `<span class="td-sect">${esc(sig.sector)}</span>` : '') + exWarn + `</div>`
+    + (sig.sector ? `<span class="td-sect">${esc(sig.sector)}</span>` : '') + gradeChip(sig) + pctileChip(sig) + exWarn + `</div>`
     + evidenceLine(sig, legend)
     + levels(sig)
     + `<div class="td-foot">${trackLine(sig)}${eventChip(sig.event)}${sig.catalyst ? `<span class="td-cat" title="${esc(sig.catalyst)}">📰 catalyst</span>` : ''}</div>`
@@ -132,6 +147,7 @@ export function renderCommandCenter(container, p) {
   // Freshness / system health (#10/#11) — error ≠ empty.
   const fr = p.freshness || {};
   if (fr.warnings && fr.warnings.length) html += `<div class="dt-note" style="border-left-color:var(--amber,#f59e0b)">🔧 ${esc(fr.warnings.join(' · '))}</div>`;
+  html += dataTrustPanel(fr);
   html += `<div class="td-dim td-cc-foot">One ranked table across ${p.counts?.signals ?? 0} signals — ranked by validated track record × confidence × regime-fit × execution × <b>independent evidence</b> (not a sum of screener scores). Leads, not advice; always confirm and use a stop.</div>`;
   html += `</div>`;
   container.innerHTML = html;
@@ -141,11 +157,38 @@ export function renderCommandCenter(container, p) {
   }));
 }
 
+// Data-trust panel — per-source feed + freshness, plus the fact/feature/AI/unknown
+// legend. Collapsed by default so it informs without cluttering the daily read.
+function dataTrustPanel(fr) {
+  const sources = fr.sources || [];
+  if (!sources.length && !(fr.legend || []).length) return '';
+  const rows = sources.map(s => {
+    const dot = !s.ok ? '🔴' : s.stale ? '🟠' : '🟢';
+    const age = s.ageHours == null ? 'age unknown' : s.ageHours < 1 ? '<1h old' : `${Math.round(s.ageHours)}h old`;
+    const status = !s.ok ? 'unavailable' : `${age} · ${s.delayed ? 'delayed' : 'real-time'}`;
+    return `<div class="dt-src"><span>${dot} <b>${esc(s.label || s.source)}</b></span><span class="td-dim">${esc((s.feed || []).join(', '))}</span><span class="dt-src-st ${s.stale ? 'stale' : ''}">${esc(status)}</span></div>`;
+  }).join('');
+  const legend = (fr.legend || []).map(l => `<div class="dt-leg"><span>${l.icon} <b>${esc(l.label)}</b></span> <span class="td-dim">${esc(l.basis)}</span></div>`).join('');
+  return `<details class="dt-trust"><summary>🔎 Data trust — sources, freshness &amp; what's fact vs interpretation${fr.dataVersion ? ` · ${esc(fr.dataVersion)}` : ''}</summary>
+    <div class="dt-trust-body">
+      <div class="dt-trust-note">This is an <b>end-of-day dashboard</b> — market data is <b>delayed</b>, not a live trading feed. Always confirm a live quote before acting.</div>
+      <div class="dt-srcs">${rows}</div>
+      <div class="dt-leg-h">What each output is grounded in:</div>${legend}
+    </div></details>`;
+}
+
 export async function loadCommandCenter(container) {
   if (!container) return null;
   container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Ranking every screener into one table…</p></div>`;
-  let p = null;
-  try { p = await fetch('/api/tracker?op=today').then(r => r.json()); } catch { p = null; }
+  let p = null, mat = null;
+  try { [p, mat] = await Promise.all([
+    fetch('/api/tracker?op=today').then(r => r.json()),
+    fetch('/api/tracker?op=maturity').then(r => r.json()).catch(() => null),
+  ]); } catch { p = null; }
+  GRADES = {};
+  if (mat && mat.strategies) mat.strategies.forEach(s => {
+    if (s.section) GRADES[s.section] = { grade: s.grade, icon: (mat.gradeMeta[s.grade] || {}).icon || '', label: (mat.gradeMeta[s.grade] || {}).label || s.grade, blurb: (mat.gradeMeta[s.grade] || {}).blurb };
+  });
   renderCommandCenter(container, p);
   return p;
 }

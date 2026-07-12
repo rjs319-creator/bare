@@ -18,7 +18,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // Portfolio are ordered by holding horizon (see SUB_HZ dividers). Unproven
     // overlays live in the Research Lab; the honest report cards live in Evidence.
     home:       ['today', 'start', 'quickhit', 'sectors', 'rotation', 'news', 'brief'],
-    candidates: ['opportunities', 'aligned', 'daytrade', 'gapgo', 'gapdown', 'screener', 'custom', 'ghost', 'coil', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
+    candidates: ['daytrade', 'gapgo', 'gapdown', 'opportunities', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
     positions:  ['coremo', 'momentum', 'putsell', 'picks'],
     proof:      ['scoreboard', 'evidence', 'leaderboard', 'coreperf'],
     lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'pulse', 'gameplan', 'forecast', 'crowd', 'sharp', 'alerts', 'backtest', 'edge'],
@@ -7012,7 +7012,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         maturityData = d;
         maturityMap = {};
         (d.strategies || []).forEach(s => { if (s.section) maturityMap[s.section] = { grade: s.grade, meta: d.gradeMeta }; });
-        if (lastScoreboard && document.getElementById('scoreboard')?.classList.contains('tab-active')) renderScoreboard(lastScoreboard);
+        // Bake grade badges into the Scoreboard as soon as the map lands (harmless
+        // if the tab is hidden — it's re-rendered in place, ready when opened).
+        if (lastScoreboard) renderScoreboard(lastScoreboard);
         return maturityMap;
       } catch { maturityMap = {}; return maturityMap; }
     })();
@@ -7021,8 +7023,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   function strategyCard(s, meta) {
     const st = s.stats;
+    const sec = st && st.baselines && st.baselines.sector;
+    const secLine = (sec && sec.n) ? ` · <span class="${sec.avgExcess < 0 ? 'mat-neg' : 'mat-pos'}">${sec.avgExcess > 0 ? '+' : ''}${sec.avgExcess}% vs sector</span>` : '';
     const track = (st && st.excessN)
-      ? `<div class="mat-track"><span class="${st.avgExcess < 0 ? 'mat-neg' : 'mat-pos'}">${st.avgExcess > 0 ? '+' : ''}${st.avgExcess}% vs benchmark</span> · beats ${st.beatMktRate}% · <b>n=${st.excessN}</b></div>`
+      ? `<div class="mat-track"><span class="${st.avgExcess < 0 ? 'mat-neg' : 'mat-pos'}">${st.avgExcess > 0 ? '+' : ''}${st.avgExcess}% vs SPY</span> · beats ${st.beatMktRate}%${secLine} · <b>n=${st.excessN}</b></div>`
       : '';
     const crit = (s.inLab && s.criteria) ? `<div class="mat-crit">🎯 To graduate: ${esc(s.criteria)}</div>` : '';
     const hz = { intraday: 'Intraday', swing: 'Swing', position: 'Position', portfolio: 'Portfolio' }[s.horizon] || s.horizon;
@@ -7042,7 +7046,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const strategies = d.strategies || [];
     // Legend with live counts.
     const legend = MAT_ORDER.map(g => `<span class="mat-leg mat-${g}" title="${esc((meta[g] || {}).blurb || '')}">${(meta[g] || {}).icon || ''} ${(meta[g] || {}).label || g} <b>${(d.counts || {})[g] || 0}</b></span>`).join('');
-    const intro = `<div class="mat-intro">Each strategy earns a grade from its <b>own resolved track record</b> vs its benchmark (S&amp;P / sector) — Wilson-bounded and sample-aware, so a lucky small streak can't read as proven. Unproven overlays live in the <b>Research Lab</b> until the data promotes them.</div>`;
+    const intro = `<div class="mat-intro">Each strategy earns a grade from its <b>own resolved track record</b> vs its benchmark (S&amp;P / sector) — Wilson-bounded and sample-aware, so a lucky small streak can't read as proven. Unproven overlays live in the <b>Research Lab</b> until the data promotes them. <b>A 0–100 score is a relative rank within a screen, not a probability</b> — a name scoring 80 is not "80% likely"; trust the grade and the track record, not the number.</div>`;
     // Main app (not in lab), grouped by grade.
     const main = strategies.filter(s => !s.inLab);
     const lab = strategies.filter(s => s.inLab);
