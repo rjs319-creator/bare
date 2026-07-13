@@ -70,7 +70,9 @@ const sign = (x, s = '') => x == null ? '–' : `${x >= 0 ? '+' : ''}${x}${s}`;
 function rowHtml(r) {
   const stageCls = STAGE_CLASS[r.stage] || '';
   const sm = r.stageMeta || {};
-  const cat = r.catalyst ? `<span class="ig-cat${r.catalystFresh ? ' ig-fresh' : ''}" title="${esc((r.reasons || []).join(' · '))}">${esc(r.catalyst)}</span>` : '<span class="ig-nocat">—</span>';
+  const catText = r.catalyst || '';
+  const catShort = catText.length > 34 ? catText.slice(0, 32).replace(/\s+\S*$/, '') + '…' : catText;
+  const cat = r.catalyst ? `<span class="ig-cat${r.catalystFresh ? ' ig-fresh' : ''}" title="${esc(catText + ((r.reasons || []).length ? ' — ' + r.reasons.join(' · ') : ''))}">${esc(catShort)}</span>` : '<span class="ig-nocat">—</span>';
   const age = r.catalystAgeDays == null ? '—' : `${r.catalystAgeDays}d`;
   const accelCls = r.priceAccel >= 0 ? 'ig-pos' : 'ig-neg';
   return `<tr data-ticker="${esc(r.ticker)}" title="${esc((r.risks || []).join(' · '))}">
