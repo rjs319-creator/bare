@@ -2309,6 +2309,13 @@
     .td-levels { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.74rem; color: var(--text-dim); margin: 6px 0; }
     .td-levels b { color: var(--text); }
     .td-rr { color: var(--cyan); }
+    .td-hold { color: var(--text-muted); }
+    /* Related-workspace strip + the single top-plays shortlist (#1) */
+    .td-related { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; margin: 10px 0 4px; font-size: 0.72rem; }
+    .td-rel { border: 1px solid var(--border); background: var(--surface); color: var(--text-dim); border-radius: 999px; padding: 3px 11px; cursor: pointer; font-size: 0.72rem; transition: border-color .15s, color .15s; }
+    .td-rel:hover { border-color: var(--border-hi); color: var(--text); }
+    .td-top-plays { margin: 14px 0; }
+    .td-top-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 9px; }
     .td-foot { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; font-size: 0.7rem; margin-top: 5px; }
     .td-track.td-pos { color: var(--green); }
     .td-track.td-neg { color: var(--red); }

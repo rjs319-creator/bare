@@ -115,7 +115,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (SECTION_IDS.includes(h)) { const t = topOf(h); if (TAB_GROUPS[t].length > 1) hubSub[t] = h; return t; }
     if (TOP_TABS.includes(h)) return h;
     try { const s = localStorage.getItem('activeTab'); if (TOP_TABS.includes(s)) return s; if (SECTION_IDS.includes(s)) return topOf(s); } catch {}
-    return 'start';   // first-time visitors land on the beginner's guide
+    return 'home';    // first-time visitors land on the Today command center (📘 Guide sits beside it in the home sub-nav)
   })();
 
   // ── NOVICE "how to use" guides ────────────────────────────────────────────

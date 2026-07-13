@@ -43,6 +43,16 @@ test('rankSignals attaches a domainBreadth object to every enriched signal', () 
   assert.equal(r.breadth.of, 8);
 });
 
+test('rankSignals attaches a plain-English holdWindow per horizon (#1 holding period)', () => {
+  const mk = h => D.rankSignals([D.makeSignal({ ticker: 'ABC', source: 'screener', horizon: h, rawConfidence: 70 }).signal],
+    { regime: { riskOn: true }, scoreboard: null })[0];
+  assert.equal(mk('intraday').holdWindow, D.HOLD_WINDOW.intraday);
+  assert.equal(mk('swing').holdWindow, D.HOLD_WINDOW.swing);
+  assert.equal(mk('position').holdWindow, D.HOLD_WINDOW.position);
+  assert.equal(mk('portfolio').holdWindow, D.HOLD_WINDOW.portfolio);
+  assert.ok(/session|weeks|months/i.test(mk('intraday').holdWindow));
+});
+
 // ── independentEvidence (#3) ────────────────────────────────────────────────
 test('independentEvidence: distinct families count once, extras discounted', () => {
   // 3 price-trend screeners + 1 volume = should read as 2 independent families, not 4.

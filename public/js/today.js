@@ -79,11 +79,17 @@ function eventChip(ev) {
 }
 
 function levels(sig) {
-  if (!(sig.entry > 0)) return '';
-  const parts = [`<span>Entry <b>$${esc(sig.entry)}</b></span>`];
-  if (sig.stop > 0) parts.push(`<span>Stop <b>$${esc(sig.stop)}</b></span>`);
-  if (sig.target > 0) parts.push(`<span>Target <b>$${esc(sig.target)}</b></span>`);
-  if (sig.rr) parts.push(`<span class="td-rr">${esc(sig.rr)}:1 R:R</span>`);
+  const parts = [];
+  if (sig.entry > 0) {
+    parts.push(`<span>Entry <b>$${esc(sig.entry)}</b></span>`);
+    if (sig.stop > 0) parts.push(`<span title="Invalidation — the setup is wrong if it trades through here">Stop <b>$${esc(sig.stop)}</b></span>`);
+    if (sig.target > 0) parts.push(`<span>Target <b>$${esc(sig.target)}</b></span>`);
+    if (sig.rr) parts.push(`<span class="td-rr">${esc(sig.rr)}:1 R:R</span>`);
+  }
+  // Holding period is horizon-derived, so it shows even for names without price levels
+  // (answers the spec's "holding period" ask on every card).
+  if (sig.holdWindow) parts.push(`<span class="td-hold" title="Expected holding period for this horizon">⏳ ${esc(sig.holdWindow)}</span>`);
+  if (!parts.length) return '';
   return `<div class="td-levels">${parts.join('')}</div>`;
 }
 
@@ -129,6 +135,22 @@ export function renderCommandCenter(container, p) {
     + `<div class="td-sectors"><span class="td-dim">Leading</span> ${(p.sectors?.leading || []).map(s => secChip(s, 'lead')).join('')} `
     + `<span class="td-dim">Weakening</span> ${(p.sectors?.weakening || []).map(s => secChip(s, 'weak')).join('')}</div></div>`;
 
+  // Related workspaces — Today is the single starting point; the overlapping shortlists
+  // (Quick Hit / Opportunities / Edge Book / Game Plan) are one tap away as drill-downs,
+  // not competing landing pages (#1 consolidation).
+  html += `<div class="td-related"><span class="td-dim">Also explore:</span>`
+    + [['quickhit', '⚡ Quick Hit'], ['opportunities', '⭐ Opportunities'], ['edge', '📓 Edge Book'], ['gameplan', '🗞️ Game Plan']]
+      .map(([t, l]) => `<button class="td-rel" data-go="${t}">${l}</button>`).join('') + `</div>`;
+
+  // THE shortlist (#1b): one ranked top 5–10 across every screener and horizon, so the
+  // reader gets a single actionable list before drilling into the horizon buckets below.
+  const top = (p.top || []).slice(0, 10);
+  if (top.length) {
+    html += `<div class="td-top-plays"><div class="td-hz-h">⭐ Top ${top.length} plays `
+      + `<span class="td-dim">the single ranked shortlist across every screener &amp; horizon</span></div>`
+      + `<div class="td-top-grid">` + top.map(s => signalCard(s, legend)).join('') + `</div></div>`;
+  }
+
   // Top-3 per horizon (#2 — never mixed).
   html += `<div class="td-horizons">`;
   for (const [key, title, sub] of HORIZONS) {
@@ -143,8 +165,8 @@ export function renderCommandCenter(container, p) {
   // Movement lanes (#10) — populated once yesterday's snapshot exists.
   const L = p.lanes || {};
   const laneHtml = lane('🆕 New', L.new, legend) + lane('⬆️ Upgraded', L.upgraded, legend)
-    + lane('⬇️ Downgraded', L.downgraded, legend) + lane('❌ Failed', L.failed, legend)
-    + lane('⏰ Expired', L.expired, legend);
+    + lane('⬇️ Downgraded', L.downgraded, legend) + lane('🏁 Resolved', L.resolved, legend)
+    + lane('❌ Failed', L.failed, legend) + lane('⏰ Expired', L.expired, legend);
   if (laneHtml) html += `<div class="td-lanes"><div class="td-lanes-h">Since yesterday</div>${laneHtml}</div>`;
 
   // Upcoming risk events (#8).
