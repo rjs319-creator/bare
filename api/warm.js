@@ -186,6 +186,17 @@ module.exports = async function handler(req, res) {
   // exempts it from the op=research rate limit.
   const researchKick = warmOne('/api/tracker?op=research&scope=large').catch(() => null);
 
+  // 🧬 EVOLVE — after today's decision snapshot is fresh, (1) log EVOLVE predictions
+  // (feature snapshots + triple-barrier targets) for later resolution, then (2) resolve
+  // any matured past predictions → update specialist performance + the calibrator.
+  // Fire-and-forget in its own invocations (each self-fetches op=today + fetches its own
+  // candles), so it never sits on the shared drain budget. Both self-heal next run.
+  const evolveKick = todayKick
+    .then(() => warmOne('/api/tracker?op=evolvescore&log=1').catch(() => null))
+    .then(() => warmOne('/api/tracker?op=evolveresolve').catch(() => null))
+    .then(() => warmOne('/api/tracker?op=evolve').catch(() => null))   // prime the live tab's CDN cache
+    .catch(() => null);
+
   // ── DECOUPLED TICK CHAINS ──────────────────────────────────────────────────
   // The resolve/learn/log ticks run as fire-and-forget CHAINS (not awaited on the
   // critical path). Each chain runs its ops sequentially in their own invocations
@@ -227,6 +238,7 @@ module.exports = async function handler(req, res) {
   void aiTicks;
   void calibKick; // fire-and-forget like the ticks — recomputes on its own invocation
   void todayKick; // fire-and-forget: unified decision snapshot in its own 60s budget
+  void evolveKick; // fire-and-forget: EVOLVE log-predictions → resolve-labels chain
   void researchKick; // fire-and-forget: refresh the baseline factor cross-section
   void pulseKick; // fire-and-forget: gather→refine chain builds the refined Pulse snapshot
   void optionsAssessKick; // fire-and-forget: Fable options-flow analysis in its own budget
