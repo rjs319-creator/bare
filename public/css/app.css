@@ -2505,3 +2505,31 @@
 .ev-disc-body { margin-top:.5rem; color:var(--text-dim,#b8c2d0); line-height:1.55; }
 .ev-disc-body b { color:var(--text,#e8edf4); } .ev-disc-body p { margin:.5rem 0; }
 .ev-dim-note { font-size:.78rem; color:var(--text-muted,#8590a0); margin-top:.3rem; }
+
+/* ── Momentum Ignition ───────────────────────────────────────────────────── */
+.ig-banner { background:var(--surface-2,#161b26); border:1px solid var(--border,#2a3240); border-left:3px solid #f97316; border-radius:8px; padding:.7rem .9rem; font-size:.9rem; line-height:1.5; color:var(--text-dim,#b8c2d0); margin-bottom:.7rem; }
+.ig-banner b { color:var(--text,#e8edf4); }
+.ig-note { margin-top:.4rem; font-size:.8rem; color:var(--amber,#f59e0b); }
+.ig-controls { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:.5rem; font-size:.85rem; color:var(--text-dim,#b8c2d0); }
+.ig-controls select { background:var(--card,#1a2030); color:var(--text,#e8edf4); border:1px solid var(--border,#2a3240); border-radius:5px; padding:.15rem .4rem; }
+.ig-table-wrap { overflow-x:auto; border:1px solid var(--border,#2a3240); border-radius:8px; }
+.ig-table { width:100%; border-collapse:collapse; font-size:.82rem; min-width:820px; }
+.ig-table th { text-align:right; padding:.45rem .5rem; color:var(--text-muted,#8590a0); font-weight:600; border-bottom:1px solid var(--border,#2a3240); white-space:nowrap; position:sticky; top:0; background:var(--surface-2,#161b26); }
+.ig-table th:first-child, .ig-table td:first-child { text-align:left; }
+.ig-table td { text-align:right; padding:.4rem .5rem; border-bottom:1px solid var(--border,#222a3a); white-space:nowrap; }
+.ig-table tbody tr { cursor:pointer; }
+.ig-table tbody tr:hover { background:var(--card-hover,#222a3a); }
+.ig-tk b { color:var(--accent,#60a5fa); }
+.ig-score { font-weight:700; color:var(--text,#e8edf4); font-family:var(--font-mono,monospace); }
+.ig-pos { color:var(--green,#22c55e); }
+.ig-neg { color:var(--red,#ef4444); }
+.ig-dim { color:var(--text-muted,#8590a0); }
+.ig-na { color:var(--text-muted,#8590a0); font-style:italic; font-size:.75rem; }
+.ig-watch { color:#60a5fa; } .ig-ign { color:#f97316; font-weight:600; } .ig-press { color:#22c55e; font-weight:600; } .ig-ext { color:var(--amber,#f59e0b); }
+.ig-cat { color:var(--cyan,#22d3ee); } .ig-cat.ig-fresh { font-weight:700; }
+.ig-nocat { color:var(--text-muted,#8590a0); }
+.ig-empty { text-align:center; padding:1.5rem; color:var(--text-muted,#8590a0); background:var(--surface-2,#161b26); border:1px dashed var(--border,#2a3240); border-radius:8px; }
+.ig-consol { margin-top:.8rem; background:var(--surface-2,#161b26); border:1px solid var(--border,#2a3240); border-radius:8px; padding:.5rem .8rem; font-size:.85rem; }
+.ig-consol summary { cursor:pointer; color:var(--text-dim,#b8c2d0); font-weight:600; }
+.ig-consol-body { margin-top:.5rem; color:var(--text-dim,#b8c2d0); line-height:1.55; }
+.ig-consol-body b { color:var(--text,#e8edf4); } .ig-consol-body ul { margin:.3rem 0 .3rem 1.1rem; } .ig-consol-body li { margin:.25rem 0; }

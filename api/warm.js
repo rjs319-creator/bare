@@ -197,6 +197,13 @@ module.exports = async function handler(req, res) {
     .then(() => warmOne('/api/tracker?op=evolve').catch(() => null))   // prime the live tab's CDN cache
     .catch(() => null);
 
+  // 🔥 Momentum Ignition — after today's merged signals are fresh, log the acceleration-
+  // ranked ignition picks (IGNITION/WATCH) to the Scoreboard ledger, then prime the tab.
+  const ignitionKick = todayKick
+    .then(() => warmOne('/api/tracker?op=ignitionlog').catch(() => null))
+    .then(() => warmOne('/api/tracker?op=ignition').catch(() => null))
+    .catch(() => null);
+
   // ── DECOUPLED TICK CHAINS ──────────────────────────────────────────────────
   // The resolve/learn/log ticks run as fire-and-forget CHAINS (not awaited on the
   // critical path). Each chain runs its ops sequentially in their own invocations
@@ -239,6 +246,7 @@ module.exports = async function handler(req, res) {
   void calibKick; // fire-and-forget like the ticks — recomputes on its own invocation
   void todayKick; // fire-and-forget: unified decision snapshot in its own 60s budget
   void evolveKick; // fire-and-forget: EVOLVE log-predictions → resolve-labels chain
+  void ignitionKick; // fire-and-forget: Momentum Ignition log → prime tab
   void researchKick; // fire-and-forget: refresh the baseline factor cross-section
   void pulseKick; // fire-and-forget: gather→refine chain builds the refined Pulse snapshot
   void optionsAssessKick; // fire-and-forget: Fable options-flow analysis in its own budget

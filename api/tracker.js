@@ -57,7 +57,7 @@ const PRIVILEGED_OPS = new Set([
   'trendtick', 'universecompile', 'universescan',
   // EVOLVE writers — cron/manual-with-bearer only (persist predictions / resolve labels /
   // heavy historical backfill of specialist performance).
-  'evolvescore', 'evolveresolve', 'evolvebackfill',
+  'evolvescore', 'evolveresolve', 'evolvebackfill', 'ignitionlog',
   // Expensive non-browser builders/computes — cron/external/manual only, so gating
   // them behind the CRON_SECRET bearer costs the UI nothing.
   'fundbuild', 'universebuild', 'emerging',
@@ -240,5 +240,8 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'evolvehealth') return require('../lib/evolve-routes').runEvolveHealth(req, res);
   if (req.query.op === 'evolvewalkforward') return require('../lib/evolve-routes').runEvolveWalkforward(req, res);
   if (req.query.op === 'evolvebackfill') return require('../lib/evolve-routes').runEvolveBackfillOp(req, res);
+  // 🔥 Momentum Ignition — one acceleration-ranked view over the momentum scanners.
+  if (req.query.op === 'ignition') return require('../lib/ignition-routes').runIgnition(req, res);
+  if (req.query.op === 'ignitionlog') return require('../lib/ignition-routes').runIgnitionLog(req, res);
   return runScoreboard(req, res);
 };

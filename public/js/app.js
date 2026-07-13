@@ -7,6 +7,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadQuickHit } from './quickhit.js';
   import { loadCommandCenter } from './today.js';
   import { loadEvolve } from './evolve.js';
+  import { loadIgnition } from './ignition.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
 
@@ -20,7 +21,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // prediction-market read. Unproven overlays live in the Research Lab; the honest
     // report cards live in Evidence.
     home:       ['today', 'start', 'quickhit'],
-    candidates: ['daytrade', 'gapgo', 'gapdown', 'opportunities', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
+    candidates: ['daytrade', 'gapgo', 'ignition', 'gapdown', 'opportunities', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
     positions:  ['coremo', 'momentum', 'putsell', 'picks'],
     markets:    ['rotation', 'sectors', 'news', 'pulse', 'evolve'],
     predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
@@ -31,6 +32,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // in the sub-nav so the app is visibly separated by time horizon (the spec ask).
   const SUB_HZ = {
     daytrade: 'intraday', gapgo: 'intraday', gapdown: 'intraday',
+    ignition: 'intraday',
     opportunities: 'swing', aligned: 'swing', screener: 'swing', custom: 'swing', ghost: 'swing', coil: 'swing', downday: 'swing', confluence: 'swing', trendrider: 'swing', fade: 'swing', biotech: 'swing',
     coremo: 'portfolio', momentum: 'portfolio', putsell: 'portfolio', picks: 'portfolio',
   };
@@ -39,7 +41,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
     today: '🏠 Today', start: '📘 Guide',
-    quickhit: '⚡ Quick Hit', opportunities: '⭐ Opportunities', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
+    quickhit: '⚡ Quick Hit', opportunities: '⭐ Opportunities', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
@@ -59,6 +61,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     coremo: 'Steady, confirmed uptrends with the strongest 12-month momentum.',
     daytrade: 'Short-term setups for same-day trading, with a live entry-timing grade.',
     gapgo: 'Stocks gapping up on news and continuing — the one validated event edge.',
+    ignition: 'One acceleration-ranked view over all the momentum scanners: catch names whose price AND volume are speeding up (up 10% and accelerating beats up 60% and slowing), with a catalyst tag, ignition score, and stage. EOD/daily data — no real-time or LULD halt prediction.',
     downday: 'What to trade when the market is red: oversold-bounce longs + overheated shorts, with the honest proof that chasing strength on down days loses.',
     coil: 'Names coiling in tight compression before a potential explosive move.',
     confluence: 'Stocks flagged by several screeners at once (agreement = higher conviction).',
@@ -352,6 +355,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'trendrider' && typeof ensureTrendRider === 'function') ensureTrendRider();
     if (sub === 'daytrade' && typeof ensureDaytrade === 'function') ensureDaytrade();
     if (sub === 'gapgo' && typeof ensureGapGo === 'function') ensureGapGo();
+    if (sub === 'ignition' && typeof ensureIgnition === 'function') ensureIgnition();
     if (sub === 'downday' && typeof ensureDownDay === 'function') ensureDownDay();
     if (sub === 'gapdown' && typeof ensureGapDown === 'function') ensureGapDown();
     if (sub === 'aligned' && typeof ensureAligned === 'function') ensureAligned();
@@ -3533,6 +3537,17 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   let pulseLoaded = false, pulseRefining = false;
   function ensurePulse() { if (!pulseLoaded) { pulseLoaded = true; runPulseUI(false); } }
 
+  // 🔥 Momentum Ignition — acceleration-ranked momentum view (loadIgnition renders op=ignition).
+  let ignitionLoaded = false;
+  function ensureIgnition() {
+    if (!ignitionLoaded) {
+      ignitionLoaded = true;
+      const btn = document.getElementById('ignition-refresh-btn');
+      if (btn) btn.addEventListener('click', () => loadIgnition(document.getElementById('ignition-container')));
+    }
+    loadIgnition(document.getElementById('ignition-container'));
+  }
+
   // 🧬 EVOLVE — adaptive pre-move discovery (loadEvolve renders the op=evolve payload).
   let evolveLoaded = false;
   function ensureEvolve() {
@@ -6713,9 +6728,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const scoreboardMeta       = document.getElementById('scoreboard-meta');
   let   lastScoreboard       = null;
 
-  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', Biotech: '🧬 Biotech Radar (Hot vs Watch)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)', DownDay: '🪁 Down-Day Bounce (Longs)', GapDown: '🐻 Gap-Down Continuation (Shorts)', daytrade: '⚡ Day Trade (A vs B)', coil: '🧬 Coil Radar (squeeze bands)' };
+  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', Biotech: '🧬 Biotech Radar (Hot vs Watch)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)', DownDay: '🪁 Down-Day Bounce (Longs)', GapDown: '🐻 Gap-Down Continuation (Shorts)', daytrade: '⚡ Day Trade (A vs B)', coil: '🧬 Coil Radar (squeeze bands)', Ignition: '🔥 Momentum Ignition (Ignition vs Watch)' };
   const SB_TIER_LABEL = { Breakout: 'Breakout', Setup: 'Setup', Early: 'Early', StrongBuy: 'Strong Buy', StrongSell: 'Strong Sell', GHOST: '👻 Ghost', STALKING: '🥷 Stalking', SHORT: 'Short', SHORT_LIGHT: 'Short (light)',
     WATCH: '👀 Watch (fresh turn)', EMERGING: '🌗 Emerging (turning)', CONFIRMED: '✅ Confirmed (late)',
+    IGNITION: '🔥 Ignition (accelerating)',
     STRONG: '🔴 Strong (≥5% gap)', MODERATE: '🟠 Moderate (3–5% gap)',
     INDEX_DELETE: 'Index Delete', INDEX_ADD_FADE: 'Index Add (fade)', LOCKUP_EXPIRY: 'Lockup Expiry', TAX_LOSS: 'Tax-Loss Selling', FIRE_SALE: 'Fire Sale', MARGIN_SPIRAL: 'Margin Spiral', FORCED_DOWNGRADE: 'Forced Downgrade',
     Bullish: '📈 Bullish tone', Neutral: '➖ Neutral tone', Bearish: '📉 Bearish tone',
