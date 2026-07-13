@@ -46,7 +46,7 @@ function assertUniqueIds(arr, key = 'id') {
 
 const REGIME = { riskOn: true, bearish: false, breadthPct: 62, condition: 'trending' };
 const SCOREBOARD = { groups: [
-  { section: 'screener', tier: 'apex', horizons: { '5d': { excessN: 25, avgExcess: 2.1, winRate: 58, beatMktRate: 60 } } },
+  { section: 'screener', tier: 'apex', horizons: { '5d': { excessN: 25, avgExcess: 2.1, avg: 1.8, median: 1.2, avgCI: { lo: -0.4, hi: 4.0, level: 90 }, winRate: 58, beatMktRate: 60, n: 25 } } },
 ] };
 
 function sampleSignals() {
@@ -70,6 +70,18 @@ test('every ranked signal carries a domainBreadth and finite score', () => {
   for (const s of sampleSignals()) {
     assert.ok(s.breadth && Number.isFinite(s.breadth.litCount), `breadth missing on ${s.ticker}`);
     assert.ok(Number.isFinite(s.score), `non-finite score on ${s.ticker}`);
+  }
+});
+
+test('new Today card fields (holdWindow, strategyFamily, expectancy median/CI) are present + clean', () => {
+  for (const s of sampleSignals()) {
+    assert.ok(typeof s.holdWindow === 'string' && s.holdWindow.length, `holdWindow missing on ${s.ticker}`);
+    assert.ok(D.STRATEGY_FAMILY_META[s.strategyFamily], `bad strategyFamily on ${s.ticker}`);
+    assert.ok(Array.isArray(s.strategyFamilies), `strategyFamilies not an array on ${s.ticker}`);
+    // expectancy distribution stats, when known, must be finite or null — never NaN/undefined leaks.
+    if (s.expectancy && s.expectancy.known) {
+      for (const k of ['avg', 'median']) assert.ok(s.expectancy[k] === null || Number.isFinite(s.expectancy[k]), `${k} not finite on ${s.ticker}`);
+    }
   }
 });
 
