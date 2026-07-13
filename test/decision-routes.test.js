@@ -115,8 +115,15 @@ test('buildToday: horizon buckets are disjoint and regime/sectors populated', ()
   assert.equal(p.regime.label, 'Risk-on');
   assert.equal(p.sectors.leading[0].name, 'Technology');
   assert.equal(p.counts.byHorizon.swing, p.horizons.swing.length);
-  // Every top signal has a rank, score, state, evidence.
-  for (const s of p.top) { assert.ok(s.rank >= 1); assert.ok('score' in s); assert.ok(s.state); assert.ok(s.evidence); }
+  // Every top signal has a rank, score, state, evidence, and a hold window.
+  for (const s of p.top) { assert.ok(s.rank >= 1); assert.ok('score' in s); assert.ok(s.state); assert.ok(s.evidence); assert.ok(s.holdWindow); }
+});
+
+test('buildToday: top shortlist is the single ranked list, capped at 10 and rank-ordered', () => {
+  const p = buildToday({ screener: SCREENER, gapgo: GAPGO, daytrade: DAYTRADE, coil: COIL, sectors: SECTORS, scoreboard: SCOREBOARD, ai: AI });
+  assert.ok(p.top.length <= 10);
+  for (let i = 1; i < p.top.length; i++) assert.ok(p.top[i - 1].rank <= p.top[i].rank); // ascending rank
+  assert.ok(p.lanes.resolved !== undefined); // resolved lane always present (rendered on Today)
 });
 
 test('buildToday: risk-off buries longs (validated lever) + all-new lane on day 1', () => {

@@ -188,6 +188,20 @@ test('summarizeReturns: reports big-winner rates from the MFE distribution', () 
   assert.equal(summarizeReturns([]), null);
 });
 
+test('summarizeReturns: exclude-largest-winners exposes lottery-winner concentration (#4)', () => {
+  // Nine flat-ish picks + one +100% lottery winner. The headline mean is inflated by it;
+  // dropping the top winner should collapse the mean toward the boring base.
+  const arr = [{ ret: 100, mfe: 100 }, ...Array.from({ length: 9 }, () => ({ ret: 1, mfe: 1 }))];
+  const s = summarizeReturns(arr);
+  assert.equal(s.n, 10);
+  assert.equal(s.exTopN, 1);                 // drops the single biggest winner
+  assert.equal(s.avg, 10.9);                 // (100 + 9)/10
+  assert.equal(s.avgExTopWinners, 1);        // without the outlier, the true base is +1%
+  assert.ok(s.avgExTopWinners < s.avg);      // edge was carried by the outlier
+  // Below the 5-pick floor there's nothing to drop → exTopN 0, ex-mean == median fallback.
+  assert.equal(summarizeReturns([{ ret: 3, mfe: 3 }, { ret: 1, mfe: 1 }]).exTopN, 0);
+});
+
 test('summarizeReturns: MAE — avg adverse excursion + excursion (reward/pain) ratio', () => {
   const s = summarizeReturns([
     { ret: 5, mfe: 12, mae: 2 }, { ret: -3, mfe: 4, mae: 6 },

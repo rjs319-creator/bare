@@ -34,6 +34,18 @@ function pctileChip(sig) {
   if (sig.percentile == null) return '';
   return `<span class="td-pctile" title="Universe percentile — a relative rank within this screen, NOT a probability.">${sig.percentile}th pct</span>`;
 }
+// Strategy-family chip (#2) — the archetype this trade belongs to (Trend / Early-momentum /
+// Event-driven / Intraday / Context), consolidating overlapping screeners under one banner.
+// The contributing models stay visible via the evidence line's screener list.
+let FAM_LEGEND = {};
+function familyChip(sig) {
+  const key = sig.strategyFamily;
+  const meta = key && FAM_LEGEND[key];
+  if (!meta) return '';
+  const extra = (sig.strategyFamilies && sig.strategyFamilies.length > 1)
+    ? ` +${sig.strategyFamilies.length - 1}` : '';
+  return `<span class="td-fam fam-${esc(key)}" title="Strategy family — ${esc(meta.blurb || '')}${extra ? ' · also spans other families' : ''}">${meta.icon} ${esc(meta.label)}${extra}</span>`;
+}
 
 const pct = v => (v == null ? '' : `${v > 0 ? '+' : ''}${v}%`);
 
@@ -62,10 +74,24 @@ function breadthChip(sig) {
 // shown when the name's section:tier has a real sample; otherwise says "building".
 function trackLine(sig) {
   const x = sig.expectancy;
-  if (!x || !x.known || !x.n) return `<span class="td-dim td-track">📊 no track record yet</span>`;
-  const beat = x.avgExcess != null ? `${pct(x.avgExcess)} vs market` : `${x.winRate}% win`;
+  // Honest empty state — never invent a number when the sample is inadequate (#3).
+  if (!x || !x.known || !x.n) return `<span class="td-dim td-track">📊 no track record yet — insufficient data</span>`;
   const col = (x.avgExcess ?? 0) >= 0 ? 'td-pos' : 'td-neg';
-  return `<span class="td-track ${col}" title="Realized forward return of this signal class at its horizon, vs SPY (n=${x.n})">📊 ${esc(beat)} · n=${x.n}</span>`;
+  // Evidence-based metrics shown SEPARATELY (#3): success rate · mean-vs-market · median · sample.
+  const parts = [];
+  if (x.winRate != null) parts.push(`${x.winRate}% win`);
+  if (x.avgExcess != null) parts.push(`${pct(x.avgExcess)} vs mkt`);
+  if (x.median != null) parts.push(`med ${pct(x.median)}`);
+  parts.push(`n=${x.n}`);
+  const ci = x.ci ? `<span class="td-ci" title="90% confidence interval on the mean forward return — if it straddles 0, the average isn't distinguishable from zero at this sample.">CI [${pct(x.ci.lo)}, ${pct(x.ci.hi)}]</span>` : '';
+  return `<span class="td-track ${col}" title="Realized forward return of this signal class at its ${esc(x.horizonKey || '')} horizon, vs SPY (n=${x.n})">📊 ${esc(parts.join(' · '))}</span>${ci}`;
+}
+// Model/scoring version chip (#3) — the reader can see WHICH model version produced this,
+// so track records are never silently blended across versions.
+function versionChip(sig) {
+  const v = sig.scoringVersion || sig.schemaVersion;
+  if (!v) return '';
+  return `<span class="td-ver" title="Model / scoring version that produced this signal">⚙︎ ${esc(v)}</span>`;
 }
 
 // Per-card event chip (#8): only the actionable case — a binary print inside the
@@ -79,11 +105,17 @@ function eventChip(ev) {
 }
 
 function levels(sig) {
-  if (!(sig.entry > 0)) return '';
-  const parts = [`<span>Entry <b>$${esc(sig.entry)}</b></span>`];
-  if (sig.stop > 0) parts.push(`<span>Stop <b>$${esc(sig.stop)}</b></span>`);
-  if (sig.target > 0) parts.push(`<span>Target <b>$${esc(sig.target)}</b></span>`);
-  if (sig.rr) parts.push(`<span class="td-rr">${esc(sig.rr)}:1 R:R</span>`);
+  const parts = [];
+  if (sig.entry > 0) {
+    parts.push(`<span>Entry <b>$${esc(sig.entry)}</b></span>`);
+    if (sig.stop > 0) parts.push(`<span title="Invalidation — the setup is wrong if it trades through here">Stop <b>$${esc(sig.stop)}</b></span>`);
+    if (sig.target > 0) parts.push(`<span>Target <b>$${esc(sig.target)}</b></span>`);
+    if (sig.rr) parts.push(`<span class="td-rr">${esc(sig.rr)}:1 R:R</span>`);
+  }
+  // Holding period is horizon-derived, so it shows even for names without price levels
+  // (answers the spec's "holding period" ask on every card).
+  if (sig.holdWindow) parts.push(`<span class="td-hold" title="Expected holding period for this horizon">⏳ ${esc(sig.holdWindow)}</span>`);
+  if (!parts.length) return '';
   return `<div class="td-levels">${parts.join('')}</div>`;
 }
 
@@ -99,8 +131,9 @@ function signalCard(sig, legend) {
     + `<span class="td-score" title="Composite: confidence × regime-fit × execution × validated-expectancy × independent-evidence">${sig.score}</span></div>`
     + `<div class="td-chips"><span class="td-state ${scls}">${si} ${slbl}</span>`
     + (sig.side === 'short' ? `<span class="td-short" title="A short setup — profits if it falls (favored in risk-off)">🔻 SHORT</span>` : '')
+    + familyChip(sig)
     + `<span class="td-setup">${esc(sig.setup || sig.source)}</span>`
-    + (sig.sector ? `<span class="td-sect">${esc(sig.sector)}</span>` : '') + gradeChip(sig) + pctileChip(sig) + exWarn + `</div>`
+    + (sig.sector ? `<span class="td-sect">${esc(sig.sector)}</span>` : '') + gradeChip(sig) + pctileChip(sig) + versionChip(sig) + exWarn + `</div>`
     + evidenceLine(sig, legend)
     + `<div class="td-breadth-row">${breadthChip(sig)}</div>`
     + levels(sig)
@@ -118,6 +151,7 @@ export function renderCommandCenter(container, p) {
   if (!container) return;
   if (!p || !p.ok) { container.innerHTML = `<div class="dt-note" style="border-left-color:var(--red)">⚠️ The command center couldn't load its signals right now — a data source may be down. Try Refresh.</div>`; return; }
   const legend = p.evidenceLegend || {};
+  FAM_LEGEND = p.strategyFamilyLegend || {};
   const reg = p.regime || {};
   const regCol = reg.bearish ? 'var(--red)' : reg.riskOn ? 'var(--green)' : 'var(--amber,#f59e0b)';
 
@@ -128,6 +162,22 @@ export function renderCommandCenter(container, p) {
     + `<div class="td-regime"><b>${esc(p.regime.label)}</b>${reg.breadthPct != null ? ` · breadth ${reg.breadthPct}%` : ''}${reg.condition ? ` · ${esc(reg.condition)} tape` : ''}</div>`
     + `<div class="td-sectors"><span class="td-dim">Leading</span> ${(p.sectors?.leading || []).map(s => secChip(s, 'lead')).join('')} `
     + `<span class="td-dim">Weakening</span> ${(p.sectors?.weakening || []).map(s => secChip(s, 'weak')).join('')}</div></div>`;
+
+  // Related workspaces — Today is the single starting point; the overlapping shortlists
+  // (Quick Hit / Opportunities / Edge Book / Game Plan) are one tap away as drill-downs,
+  // not competing landing pages (#1 consolidation).
+  html += `<div class="td-related"><span class="td-dim">Also explore:</span>`
+    + [['quickhit', '⚡ Quick Hit'], ['opportunities', '⭐ Opportunities'], ['edge', '📓 Edge Book'], ['gameplan', '🗞️ Game Plan']]
+      .map(([t, l]) => `<button class="td-rel" data-go="${t}">${l}</button>`).join('') + `</div>`;
+
+  // THE shortlist (#1b): one ranked top 5–10 across every screener and horizon, so the
+  // reader gets a single actionable list before drilling into the horizon buckets below.
+  const top = (p.top || []).slice(0, 10);
+  if (top.length) {
+    html += `<div class="td-top-plays"><div class="td-hz-h">⭐ Top ${top.length} plays `
+      + `<span class="td-dim">the single ranked shortlist across every screener &amp; horizon</span></div>`
+      + `<div class="td-top-grid">` + top.map(s => signalCard(s, legend)).join('') + `</div></div>`;
+  }
 
   // Top-3 per horizon (#2 — never mixed).
   html += `<div class="td-horizons">`;
@@ -143,8 +193,8 @@ export function renderCommandCenter(container, p) {
   // Movement lanes (#10) — populated once yesterday's snapshot exists.
   const L = p.lanes || {};
   const laneHtml = lane('🆕 New', L.new, legend) + lane('⬆️ Upgraded', L.upgraded, legend)
-    + lane('⬇️ Downgraded', L.downgraded, legend) + lane('❌ Failed', L.failed, legend)
-    + lane('⏰ Expired', L.expired, legend);
+    + lane('⬇️ Downgraded', L.downgraded, legend) + lane('🏁 Resolved', L.resolved, legend)
+    + lane('❌ Failed', L.failed, legend) + lane('⏰ Expired', L.expired, legend);
   if (laneHtml) html += `<div class="td-lanes"><div class="td-lanes-h">Since yesterday</div>${laneHtml}</div>`;
 
   // Upcoming risk events (#8).

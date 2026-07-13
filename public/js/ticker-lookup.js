@@ -239,6 +239,7 @@ function whyNowBlock(data) {
       <div class="wn-vsum">${esc(data.verdict.summary)}</div></div></div>
     ${cases}
     ${coverageBlock(data.coverage)}
+    ${data.trackAsOf ? `<div class="wn-asof" title="When the track-record snapshot backing these signals was last computed">📅 Track record as of ${esc(String(data.trackAsOf).slice(0, 10))}${data.scoringVersion ? ` · model ${esc(data.scoringVersion)}` : ''}</div>` : ''}
     <div class="wn-fine">${esc(data.disclaimer)}</div>
   </div>`;
 }

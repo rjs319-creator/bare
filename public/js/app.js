@@ -115,7 +115,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (SECTION_IDS.includes(h)) { const t = topOf(h); if (TAB_GROUPS[t].length > 1) hubSub[t] = h; return t; }
     if (TOP_TABS.includes(h)) return h;
     try { const s = localStorage.getItem('activeTab'); if (TOP_TABS.includes(s)) return s; if (SECTION_IDS.includes(s)) return topOf(s); } catch {}
-    return 'start';   // first-time visitors land on the beginner's guide
+    return 'home';    // first-time visitors land on the Today command center (📘 Guide sits beside it in the home sub-nav)
   })();
 
   // ── NOVICE "how to use" guides ────────────────────────────────────────────
@@ -6873,6 +6873,22 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           return `<div class="sb-liq-row"><span class="sb-liq-nm">${LIQ_LABEL[lt] || esc(lt)}</span><span class="sb-liq-v ${up ? 'up' : 'down'}">${up ? '+' : ''}${s.avg}%</span><span class="sb-liq-sub dt-dim">${s.winRate}% win · n=${s.n}${s.avgExcess != null ? ` · vs S&amp;P ${s.avgExcess > 0 ? '+' : ''}${s.avgExcess}%` : ''}</span></div>`;
         }).join('')}</div></details>`
       : '';
+    // Concentration check (#4 "results excluding the largest winners"): the mean with the
+    // top winners dropped. If it collapses vs the headline avg, a few lottery winners were
+    // carrying it — not a repeatable edge.
+    const exWin = (hl && hl.avgExTopWinners != null && hl.exTopN > 0 && hl.avg != null)
+      ? `<div class="sb-exwin" title="Mean forward return with the ${hl.exTopN} biggest winner(s) removed. If it falls toward or below 0 while the headline average is positive, the edge was a handful of outliers, not a process.">✂️ Ex top-${hl.exTopN}: <b class="${hl.avgExTopWinners >= 0 ? 'win' : 'loss'}">${hl.avgExTopWinners > 0 ? '+' : ''}${hl.avgExTopWinners}%</b> <span class="dt-dim">vs ${hl.avg > 0 ? '+' : ''}${hl.avg}% avg</span></div>`
+      : '';
+    // Per-SECTOR split (#4) — is the edge broad or concentrated in one hot sector?
+    const secData = g.bySector || {};
+    const secKeys = hzKey ? Object.keys(secData).filter(s => secData[s][hzKey] && secData[s][hzKey].n) : [];
+    const sector = secKeys.length >= 2
+      ? `<details class="sb-liq"><summary title="The same signal split by the pick's GICS sector — a broad edge holds across sectors; a narrow one lives in one.">🏦 By sector <span class="dt-dim">· ${esc(hzLabel)}</span></summary><div class="sb-liq-body">${secKeys
+          .sort((a, b) => secData[b][hzKey].avg - secData[a][hzKey].avg)
+          .map(sc => { const s = secData[sc][hzKey]; const up = s.avg >= 0;
+            return `<div class="sb-liq-row"><span class="sb-liq-nm">${esc(sc)}</span><span class="sb-liq-v ${up ? 'up' : 'down'}">${up ? '+' : ''}${s.avg}%</span><span class="sb-liq-sub dt-dim">${s.winRate}% win · n=${s.n}</span></div>`;
+          }).join('')}</div></details>`
+      : '';
     const bwBadge = (hl && hl.big10 >= 30) ? `<span class="sb-bwbadge" title="${hl.big10}% of signals reached +10% — a big-winner model">🚀 Big-winner ${hl.big10}%</span>` : '';
     // STRATEGY efficacy (distinct from the return horizons, which measure whether the
     // stock MOVED): did the pick's published entry/stop/target actually capture it —
@@ -6889,9 +6905,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <div class="sb-count">${regCount} pick${regCount === 1 ? '' : 's'} logged${sbRegime === 'all' ? '' : ` in ${sbRegime === 'risk-on' ? 'risk-on' : 'risk-off'}`} ${thin}${sbModelChip(g.section)}</div>
         <div class="sb-horizons">${hz}</div>
         ${wl}
+        ${exWin}
         ${bw}
         ${strat}
         ${liq}
+        ${sector}
       </div>`;
   }
 
@@ -6999,6 +7017,23 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + `<span class="rq-track"><span class="rq-fill" style="width:${w}%;background:${col}"></span></span>`
       + `<span class="rq-val" style="color:${col}">${b.avgOutcome > 0 ? '+' : ''}${b.avgOutcome}</span><span class="rq-wr">${b.winRate}% · n${b.n}</span></div>`;
   }
+  // Calibration curve (#4 "calibration") — the binned table the backend already computes,
+  // finally drawn. For each score band (treated as an implied win-probability) it shows the
+  // ACTUAL realized win rate. Close = the score is calibrated; far apart = the score is a
+  // relative RANK, not a probability (which the app states everywhere).
+  function calibrationHTML(cal) {
+    if (!cal || !Array.isArray(cal.table) || cal.table.length < 2) return '';
+    const rows = cal.table.map(t => {
+      const gap = Math.abs((t.predicted ?? 0) - (t.actual ?? 0));
+      const col = gap <= 10 ? 'var(--green)' : gap <= 20 ? 'var(--amber,#f59e0b)' : 'var(--red)';
+      return `<div class="cal-row"><span class="cal-band" title="Score band ${esc(t.band)}">${esc(t.band)}</span>`
+        + `<span class="cal-track"><span class="cal-act" style="width:${Math.max(0, Math.min(100, t.actual))}%;background:${col}"></span>`
+        + `<span class="cal-tick" style="left:${Math.max(0, Math.min(100, t.predicted))}%" title="Score implies ${t.predicted}%"></span></span>`
+        + `<span class="cal-val">pred <b>${t.predicted}%</b> → act <b style="color:${col}">${t.actual}%</b> <span class="dt-dim">n${t.n}</span></span></div>`;
+    }).join('');
+    return `<details class="rq-cal"><summary>📈 Calibration — does a score translate to that win rate? <span class="dt-dim">Brier ${cal.brier ?? '—'}</span></summary>`
+      + `<div class="rq-cal-body"><div class="dt-dim rq-cap">Bar = ACTUAL win rate; the tick = the score's implied probability. Aligned = calibrated; far apart = the score is a rank, not a probability.</div>${rows}</div></details>`;
+  }
   function rankQualityPanel(rq) {
     if (!rq || !rq.ok) return '';
     const o = rq.overall || {};
@@ -7014,6 +7049,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + `<div class="rq-verdict" style="border-left-color:${vcol}"><b style="color:${vcol}">${vi} ${esc(vtxt)}.</b> `
       + `Rank-IC <b>${ic.ic ?? '—'}</b> (t=${ic.t ?? '—'}, ${ic.significant ? 'significant' : 'not significant'}) · top decile beat base win-rate by <b>${o.liftWinRate ?? '—'}pts</b> · top-vs-bottom spread <b>${o.topBottomSpread ?? '—'}</b> · top-${o.topKn} precision <b>${o.topKprecision}%</b> · Brier ${cal.brier ?? '—'}.</div>`
       + `<div class="rq-bars"><div class="dt-dim rq-cap">Avg outcome (realized R×100) by score quantile — a predictive score slopes up left→right:</div>${o.buckets.map(b => rqBar(b, maxAbs)).join('')}</div>`
+      + calibrationHTML(cal)
       + (regimes ? `<div class="dt-dim rq-reg">By regime → ${esc(regimes)}</div>` : '')
       + `<div class="dt-dim rq-foot">Outcome = realized R-multiple at each pick's logged stop/target. Verdict "predictive" needs a positive, statistically-significant rank-IC AND a monotone quantile ladder — the same bar this project holds every claimed edge to.</div>`
       + `</div>`;
@@ -7720,8 +7756,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       <div class="chart-levels">
         <div class="cl-box"><div class="cl-label">Entry</div><div class="cl-val entry">$${lv.entry}</div></div>
         <div class="cl-box"><div class="cl-label">Target</div><div class="cl-val target">$${lv.target}</div></div>
-        <div class="cl-box"><div class="cl-label">Stop</div><div class="cl-val stop">$${lv.stop}</div></div>
+        <div class="cl-box"><div class="cl-label" title="Invalidation — the setup is wrong below here">Stop</div><div class="cl-val stop">$${lv.stop}</div></div>
         <div class="cl-box"><div class="cl-label">R/R</div><div class="cl-val rr">${lv.riskReward}</div></div>
+        ${lv.atr ? `<div class="cl-box"><div class="cl-label" title="Average True Range (14) — typical daily move; sizes the stop">ATR</div><div class="cl-val">$${lv.atr}</div></div>` : ''}
       </div>` : '';
 
     const ahHtml = price.afterHours
@@ -7748,6 +7785,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <span><i class="cleg-swatch" style="background:#8a6dff"></i>EMA50</span>
         ${source === 'yahoo' ? '<span><i class="cleg-swatch" style="background:#ff6b35;height:0;border-top:2px dashed #ff6b35"></i>VWAP</span>' : ''}
         <span style="color:var(--green)">▲ Buy</span><span style="color:var(--red)">▼ Sell</span>
+        ${lv ? '<span style="color:#06c4d4">┈ Entry</span><span style="color:#10d98a">┈ Target</span><span style="color:#ef5050">┈ Stop</span>' : ''}
       </div>
       <div class="chart-stats">
         <span>Live <b>$${price.live}</b></span>
@@ -7760,7 +7798,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     `;
 
     const canvas = panel.querySelector('canvas');
-    drawChart(canvas, candles, indicators, signals, source);
+    // Overlay the trade plan (entry/breakout, stop=invalidation, target) as lines on the
+    // chart, plus any real event markers (earnings) the payload carries (#5). Levels come
+    // as strings from lib/signal.js → coerce to numbers; drop non-finite ones.
+    const num = v => { const f = parseFloat(v); return Number.isFinite(f) ? f : null; };
+    const chartLevels = lv ? { entry: num(lv.entry), stop: num(lv.stop), target: num(lv.target) } : null;
+    const chartEvents = Array.isArray(data.events) ? data.events : [];
+    drawChart(canvas, candles, indicators, signals, source, { levels: chartLevels, events: chartEvents });
 
     handleSignalUpdate(data.ticker, live.action);
 
@@ -7920,7 +7964,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     return _dualBookPromise;
   }
 
-  function drawChart(canvas, candles, ind, signals, source) {
+  function drawChart(canvas, candles, ind, signals, source, opts = {}) {
+    const levels = opts.levels || null;
+    const events = opts.events || [];
     const wrap = canvas.parentElement;
     const cssW = wrap.clientWidth || 380;
     const cssH = 220;
@@ -7945,6 +7991,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     [ind.ema9, ind.ema21, ind.ema50, ind.vwap].forEach(arr => arr && arr.forEach(v => {
       if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
     }));
+    // Keep the plan lines (entry/stop/target) inside the visible range.
+    if (levels) [levels.entry, levels.stop, levels.target].forEach(v => {
+      if (Number.isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    });
     const pad = (hi - lo) * 0.06 || 1; lo -= pad; hi += pad;
     const maxVol = Math.max(1, ...candles.map(c => c.volume || 0));
 
@@ -8000,6 +8050,45 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     line(ind.ema21, '#f0a832');
     line(ind.ema50, '#8a6dff');
     if (source === 'yahoo') line(ind.vwap, '#ff6b35', [4, 3]);
+
+    // ── trade-plan level lines (#5): entry/breakout, stop=invalidation, target ──
+    const hLine = (p, color, label) => {
+      if (!Number.isFinite(p) || p < lo || p > hi) return;
+      const py = y(p);
+      ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.setLineDash([5, 4]);
+      ctx.beginPath(); ctx.moveTo(padL, py); ctx.lineTo(padL + plotW, py); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = color; ctx.font = '8px ui-monospace, monospace'; ctx.textBaseline = 'bottom'; ctx.textAlign = 'left';
+      ctx.fillText(label, padL + 2, py - 1);
+      ctx.textBaseline = 'middle';
+    };
+    if (levels) {
+      hLine(levels.target, '#10d98a', 'Target');
+      hLine(levels.entry,  '#06c4d4', 'Entry / breakout');
+      hLine(levels.stop,   '#ef5050', 'Stop (invalidation)');
+    }
+
+    // ── event markers (#5): a vertical dotted line + ⧫ at any real event date in range ──
+    const idxByTime = {}; candles.forEach((c, i) => { idxByTime[c.date] = i; });
+    const nearestIdx = (dateStr) => {
+      if (idxByTime[dateStr] != null) return idxByTime[dateStr];
+      const t = new Date(dateStr).getTime();
+      if (!Number.isFinite(t)) return null;
+      let best = null, bestD = Infinity;
+      candles.forEach((c, i) => { const d = Math.abs(new Date(c.date).getTime() - t); if (d < bestD) { bestD = d; best = i; } });
+      return best;
+    };
+    (events || []).forEach(ev => {
+      const i = nearestIdx(ev.date || ev.when); if (i == null) return;
+      const cx = x(i);
+      ctx.strokeStyle = 'rgba(240,168,50,0.55)'; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
+      ctx.beginPath(); ctx.moveTo(cx, padT); ctx.lineTo(cx, padT + priceH); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#f0a832'; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText(ev.mark || '⧫', cx, padT + 1);
+      ctx.textBaseline = 'middle';
+    });
+    ctx.textAlign = 'left';
 
     // ── buy/sell signal markers ──
     const byTime = {}; candles.forEach((c, i) => { byTime[c.date] = i; });

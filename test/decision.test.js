@@ -43,6 +43,32 @@ test('rankSignals attaches a domainBreadth object to every enriched signal', () 
   assert.equal(r.breadth.of, 8);
 });
 
+test('strategy family (#2): screeners consolidate into the 5 archetypes + span-count on merge', () => {
+  assert.equal(D.familyForSource('screener'), 'trend');
+  assert.equal(D.familyForSource('ghost'), 'earlyMomentum');
+  assert.equal(D.familyForSource('gapgo'), 'event');
+  assert.equal(D.familyForSource('daytrade'), 'intraday');
+  assert.equal(D.familyForSource('toneshift'), 'context');
+  assert.equal(D.familyForSource('nonexistent'), 'trend'); // safe default
+  // makeSignal stamps the family; rankSignals rolls up the distinct families a merged name spans.
+  const { signal } = D.makeSignal({ ticker: 'ABC', source: 'gapgo', horizon: 'intraday', rawConfidence: 80 });
+  assert.equal(signal.strategyFamily, 'event');
+  const merged = { ...signal, sources: ['gapgo', 'screener'] }; // event + trend
+  const [r] = D.rankSignals([merged], { regime: { riskOn: true }, scoreboard: null });
+  assert.deepEqual(r.strategyFamilies.sort(), ['event', 'trend']);
+  assert.ok(D.STRATEGY_FAMILY_META[r.strategyFamily].label);
+});
+
+test('rankSignals attaches a plain-English holdWindow per horizon (#1 holding period)', () => {
+  const mk = h => D.rankSignals([D.makeSignal({ ticker: 'ABC', source: 'screener', horizon: h, rawConfidence: 70 }).signal],
+    { regime: { riskOn: true }, scoreboard: null })[0];
+  assert.equal(mk('intraday').holdWindow, D.HOLD_WINDOW.intraday);
+  assert.equal(mk('swing').holdWindow, D.HOLD_WINDOW.swing);
+  assert.equal(mk('position').holdWindow, D.HOLD_WINDOW.position);
+  assert.equal(mk('portfolio').holdWindow, D.HOLD_WINDOW.portfolio);
+  assert.ok(/session|weeks|months/i.test(mk('intraday').holdWindow));
+});
+
 // ── independentEvidence (#3) ────────────────────────────────────────────────
 test('independentEvidence: distinct families count once, extras discounted', () => {
   // 3 price-trend screeners + 1 volume = should read as 2 independent families, not 4.
@@ -133,6 +159,18 @@ test('expectancyFor: looks up section:tier at the horizon metric', () => {
   assert.equal(e.n, 40);
   assert.equal(e.known, true);
   assert.equal(D.expectancyFor('Nope', 'Nope', 'position', SUMMARY).known, false);
+});
+
+test('expectancyFor: passes through mean, median + CI when the Scoreboard has them (#3)', () => {
+  const rich = { groups: [{ section: 'Ghost', tier: 'GHOST', horizons: { '1m': { avgExcess: 4, avg: 3.1, median: 2.4, avgCI: { lo: -0.5, hi: 6.7, level: 90 }, winRate: 60, n: 40 } } }] };
+  const e = D.expectancyFor('Ghost', 'GHOST', 'position', rich);
+  assert.equal(e.avg, 3.1);
+  assert.equal(e.median, 2.4);
+  assert.deepEqual(e.ci, { lo: -0.5, hi: 6.7, level: 90 });
+  // Absent distribution stats degrade to null (older records), never NaN.
+  const lean = D.expectancyFor('Ghost', 'GHOST', 'position', SUMMARY);
+  assert.equal(lean.median, null);
+  assert.equal(lean.ci, null);
 });
 
 test('expectancyTilt: winners boost, losers trim, tiny samples barely move', () => {

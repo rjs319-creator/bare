@@ -964,6 +964,7 @@
     .wn-rq-ok { color: var(--cyan, #22d3ee); background: rgba(34,211,238,.12); border-color: rgba(34,211,238,.2); }
     .wn-rq-noise { color: var(--text-dim); background: rgba(148,163,184,.12); border-color: var(--border); }
     .wn-rq-neg { color: var(--red); background: var(--red-dim); border-color: #ef505033; }
+    .wn-asof { font-size: 0.62rem; color: var(--text-muted); margin-top: 8px; }
     .wn-fine { font-size: 0.6rem; color: var(--text-muted); line-height: 1.4; margin-top: 9px; }
     /* Full model coverage — every lens, incl. quiet + no-data */
     .wn-coverage { margin: 9px 0 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
@@ -2151,6 +2152,9 @@
     .opp-sig.sig-cat { color: var(--cyan); border-color: #06c4d444; }
     .opp-size { font-size: 0.72rem; color: var(--text-dim); margin-top: 6px; }
     .opp-size b { color: var(--text); }
+    .opp-track { font-size: 0.72rem; margin-top: 6px; }
+    .opp-track.opp-pos { color: var(--green); }
+    .opp-track.opp-neg { color: var(--red); }
     .opp-sig.sig-rs-lead { color: var(--green); border-color: #10d98a55; }
     .opp-sig.sig-rs-lag { color: #f0a832; border-color: #f0a83255; }
     .opp-sig.sig-pp { color: var(--green); border-color: #10d98a66; background: var(--green-dim); }
@@ -2297,6 +2301,12 @@
     .td-state.st-amber { color: var(--amber); background: var(--amber-dim); }
     .td-state.st-red { color: var(--red); background: var(--red-dim); }
     .td-exec { color: var(--amber) !important; }
+    .td-fam { font-weight: 600; }
+    .td-fam.fam-trend { color: var(--green); }
+    .td-fam.fam-earlyMomentum { color: var(--cyan); }
+    .td-fam.fam-event { color: var(--amber, #f59e0b); }
+    .td-fam.fam-intraday { color: #8a6dff; }
+    .td-fam.fam-context { color: var(--text-dim); }
     .td-eviden { font-size: 0.72rem; color: var(--text-dim); margin: 5px 0; }
     .td-eviden b { color: var(--text); }
     .td-warn { color: var(--amber); }
@@ -2309,9 +2319,18 @@
     .td-levels { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.74rem; color: var(--text-dim); margin: 6px 0; }
     .td-levels b { color: var(--text); }
     .td-rr { color: var(--cyan); }
+    .td-hold { color: var(--text-muted); }
+    /* Related-workspace strip + the single top-plays shortlist (#1) */
+    .td-related { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; margin: 10px 0 4px; font-size: 0.72rem; }
+    .td-rel { border: 1px solid var(--border); background: var(--surface); color: var(--text-dim); border-radius: 999px; padding: 3px 11px; cursor: pointer; font-size: 0.72rem; transition: border-color .15s, color .15s; }
+    .td-rel:hover { border-color: var(--border-hi); color: var(--text); }
+    .td-top-plays { margin: 14px 0; }
+    .td-top-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 9px; }
     .td-foot { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; font-size: 0.7rem; margin-top: 5px; }
     .td-track.td-pos { color: var(--green); }
     .td-track.td-neg { color: var(--red); }
+    .td-ci { color: var(--text-muted); font-size: 0.66rem; }
+    .td-ver { color: var(--text-muted) !important; font-variant-numeric: tabular-nums; }
     .td-cat { color: var(--amber); }
     .td-dim { color: var(--text-muted); }
     .td-lanes, .td-events { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 13px; }
@@ -2334,6 +2353,18 @@
     .rq-val { flex: 0 0 46px; text-align: right; font-weight: 700; }
     .rq-wr { flex: 0 0 78px; text-align: right; color: var(--text-dim); }
     .rq-reg, .rq-foot { font-size: 0.72rem; line-height: 1.5; margin-top: 6px; }
+    /* Calibration curve (#4) + exclude-largest-winners line */
+    .rq-cal { margin: 8px 0; font-size: 0.74rem; }
+    .rq-cal > summary { cursor: pointer; }
+    .rq-cal-body { margin-top: 6px; }
+    .cal-row { display: flex; align-items: center; gap: 8px; margin: 3px 0; font-size: 0.72rem; }
+    .cal-band { flex: 0 0 64px; color: var(--text-dim); }
+    .cal-track { flex: 1; position: relative; height: 12px; background: var(--card); border-radius: 6px; overflow: hidden; }
+    .cal-act { display: block; height: 100%; border-radius: 6px; }
+    .cal-tick { position: absolute; top: -2px; width: 2px; height: 16px; background: var(--text); opacity: .7; }
+    .cal-val { flex: 0 0 150px; text-align: right; }
+    .sb-exwin { font-size: 0.72rem; color: var(--text-dim); margin-top: 4px; }
+    .sb-exwin .win { color: var(--green); } .sb-exwin .loss { color: var(--red); }
     /* Per-section decile breakdown */
     .rq-bysec { margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 8px; }
     .rq-bysec-h { margin-bottom: 6px; }
