@@ -2301,6 +2301,12 @@
     .td-state.st-amber { color: var(--amber); background: var(--amber-dim); }
     .td-state.st-red { color: var(--red); background: var(--red-dim); }
     .td-exec { color: var(--amber) !important; }
+    .td-fam { font-weight: 600; }
+    .td-fam.fam-trend { color: var(--green); }
+    .td-fam.fam-earlyMomentum { color: var(--cyan); }
+    .td-fam.fam-event { color: var(--amber, #f59e0b); }
+    .td-fam.fam-intraday { color: #8a6dff; }
+    .td-fam.fam-context { color: var(--text-dim); }
     .td-eviden { font-size: 0.72rem; color: var(--text-dim); margin: 5px 0; }
     .td-eviden b { color: var(--text); }
     .td-warn { color: var(--amber); }

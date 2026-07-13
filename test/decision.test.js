@@ -43,6 +43,22 @@ test('rankSignals attaches a domainBreadth object to every enriched signal', () 
   assert.equal(r.breadth.of, 8);
 });
 
+test('strategy family (#2): screeners consolidate into the 5 archetypes + span-count on merge', () => {
+  assert.equal(D.familyForSource('screener'), 'trend');
+  assert.equal(D.familyForSource('ghost'), 'earlyMomentum');
+  assert.equal(D.familyForSource('gapgo'), 'event');
+  assert.equal(D.familyForSource('daytrade'), 'intraday');
+  assert.equal(D.familyForSource('toneshift'), 'context');
+  assert.equal(D.familyForSource('nonexistent'), 'trend'); // safe default
+  // makeSignal stamps the family; rankSignals rolls up the distinct families a merged name spans.
+  const { signal } = D.makeSignal({ ticker: 'ABC', source: 'gapgo', horizon: 'intraday', rawConfidence: 80 });
+  assert.equal(signal.strategyFamily, 'event');
+  const merged = { ...signal, sources: ['gapgo', 'screener'] }; // event + trend
+  const [r] = D.rankSignals([merged], { regime: { riskOn: true }, scoreboard: null });
+  assert.deepEqual(r.strategyFamilies.sort(), ['event', 'trend']);
+  assert.ok(D.STRATEGY_FAMILY_META[r.strategyFamily].label);
+});
+
 test('rankSignals attaches a plain-English holdWindow per horizon (#1 holding period)', () => {
   const mk = h => D.rankSignals([D.makeSignal({ ticker: 'ABC', source: 'screener', horizon: h, rawConfidence: 70 }).signal],
     { regime: { riskOn: true }, scoreboard: null })[0];

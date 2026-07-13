@@ -34,6 +34,18 @@ function pctileChip(sig) {
   if (sig.percentile == null) return '';
   return `<span class="td-pctile" title="Universe percentile — a relative rank within this screen, NOT a probability.">${sig.percentile}th pct</span>`;
 }
+// Strategy-family chip (#2) — the archetype this trade belongs to (Trend / Early-momentum /
+// Event-driven / Intraday / Context), consolidating overlapping screeners under one banner.
+// The contributing models stay visible via the evidence line's screener list.
+let FAM_LEGEND = {};
+function familyChip(sig) {
+  const key = sig.strategyFamily;
+  const meta = key && FAM_LEGEND[key];
+  if (!meta) return '';
+  const extra = (sig.strategyFamilies && sig.strategyFamilies.length > 1)
+    ? ` +${sig.strategyFamilies.length - 1}` : '';
+  return `<span class="td-fam fam-${esc(key)}" title="Strategy family — ${esc(meta.blurb || '')}${extra ? ' · also spans other families' : ''}">${meta.icon} ${esc(meta.label)}${extra}</span>`;
+}
 
 const pct = v => (v == null ? '' : `${v > 0 ? '+' : ''}${v}%`);
 
@@ -119,6 +131,7 @@ function signalCard(sig, legend) {
     + `<span class="td-score" title="Composite: confidence × regime-fit × execution × validated-expectancy × independent-evidence">${sig.score}</span></div>`
     + `<div class="td-chips"><span class="td-state ${scls}">${si} ${slbl}</span>`
     + (sig.side === 'short' ? `<span class="td-short" title="A short setup — profits if it falls (favored in risk-off)">🔻 SHORT</span>` : '')
+    + familyChip(sig)
     + `<span class="td-setup">${esc(sig.setup || sig.source)}</span>`
     + (sig.sector ? `<span class="td-sect">${esc(sig.sector)}</span>` : '') + gradeChip(sig) + pctileChip(sig) + versionChip(sig) + exWarn + `</div>`
     + evidenceLine(sig, legend)
@@ -138,6 +151,7 @@ export function renderCommandCenter(container, p) {
   if (!container) return;
   if (!p || !p.ok) { container.innerHTML = `<div class="dt-note" style="border-left-color:var(--red)">⚠️ The command center couldn't load its signals right now — a data source may be down. Try Refresh.</div>`; return; }
   const legend = p.evidenceLegend || {};
+  FAM_LEGEND = p.strategyFamilyLegend || {};
   const reg = p.regime || {};
   const regCol = reg.bearish ? 'var(--red)' : reg.riskOn ? 'var(--green)' : 'var(--amber,#f59e0b)';
 
