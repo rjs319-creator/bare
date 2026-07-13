@@ -130,6 +130,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // (tabs that already have their own inline guide — trendrider/daytrade/coil/
   // confluence/gapgo/gapdown/fade/aligned/putsell — are deliberately omitted).
   const HOWTO = {
+    ignition: {
+      what: `One list that ranks every momentum candidate by how fast it's <b>speeding up</b> — price AND volume accelerating — not by how much it's already moved. A stock up 10% and accelerating ranks <b>above</b> one up 60% and slowing down.`,
+      read: `Higher <b>Ignition Score</b> = stronger acceleration + a fresh catalyst + a clean trend. The <b>Stage</b> tells you where the move is: 👁 Watch (early) → 🔥 Ignition → 🚀 Pressure → ⚠️ Extended (already run — be careful). Sort and filter with the dropdowns.`,
+      act: `An <b>early-momentum watchlist</b>. Prefer Watch/Ignition (room left to run) over Extended; check the catalyst is real and fresh, confirm on a chart, and size so a stop-out costs ~1% of your account.`,
+      catch: `This uses <b>end-of-day daily data</b> — it can't see intraday ticks, predict an LULD halt, or measure sub-minute moves (those need a live feed the app doesn't have). And chasing momentum isn't proven forward edge — check the 🔥 Momentum Ignition section on the <b>Scoreboard</b> to see if it's actually working.`,
+    },
     custom: {
       what: `Stocks that just broke OUT to new highs, scored 0–100 by a four-part model (trend, momentum, volume, fundamentals) that re-weights itself for the current market mood.`,
       read: `Higher score and higher tier (<b>Apex &gt; Loaded &gt; Watch</b>) mean more of the four parts agree. The strip up top shows the market "regime" the model is using right now.`,
