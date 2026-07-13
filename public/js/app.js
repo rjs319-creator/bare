@@ -6873,6 +6873,22 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           return `<div class="sb-liq-row"><span class="sb-liq-nm">${LIQ_LABEL[lt] || esc(lt)}</span><span class="sb-liq-v ${up ? 'up' : 'down'}">${up ? '+' : ''}${s.avg}%</span><span class="sb-liq-sub dt-dim">${s.winRate}% win · n=${s.n}${s.avgExcess != null ? ` · vs S&amp;P ${s.avgExcess > 0 ? '+' : ''}${s.avgExcess}%` : ''}</span></div>`;
         }).join('')}</div></details>`
       : '';
+    // Concentration check (#4 "results excluding the largest winners"): the mean with the
+    // top winners dropped. If it collapses vs the headline avg, a few lottery winners were
+    // carrying it — not a repeatable edge.
+    const exWin = (hl && hl.avgExTopWinners != null && hl.exTopN > 0 && hl.avg != null)
+      ? `<div class="sb-exwin" title="Mean forward return with the ${hl.exTopN} biggest winner(s) removed. If it falls toward or below 0 while the headline average is positive, the edge was a handful of outliers, not a process.">✂️ Ex top-${hl.exTopN}: <b class="${hl.avgExTopWinners >= 0 ? 'win' : 'loss'}">${hl.avgExTopWinners > 0 ? '+' : ''}${hl.avgExTopWinners}%</b> <span class="dt-dim">vs ${hl.avg > 0 ? '+' : ''}${hl.avg}% avg</span></div>`
+      : '';
+    // Per-SECTOR split (#4) — is the edge broad or concentrated in one hot sector?
+    const secData = g.bySector || {};
+    const secKeys = hzKey ? Object.keys(secData).filter(s => secData[s][hzKey] && secData[s][hzKey].n) : [];
+    const sector = secKeys.length >= 2
+      ? `<details class="sb-liq"><summary title="The same signal split by the pick's GICS sector — a broad edge holds across sectors; a narrow one lives in one.">🏦 By sector <span class="dt-dim">· ${esc(hzLabel)}</span></summary><div class="sb-liq-body">${secKeys
+          .sort((a, b) => secData[b][hzKey].avg - secData[a][hzKey].avg)
+          .map(sc => { const s = secData[sc][hzKey]; const up = s.avg >= 0;
+            return `<div class="sb-liq-row"><span class="sb-liq-nm">${esc(sc)}</span><span class="sb-liq-v ${up ? 'up' : 'down'}">${up ? '+' : ''}${s.avg}%</span><span class="sb-liq-sub dt-dim">${s.winRate}% win · n=${s.n}</span></div>`;
+          }).join('')}</div></details>`
+      : '';
     const bwBadge = (hl && hl.big10 >= 30) ? `<span class="sb-bwbadge" title="${hl.big10}% of signals reached +10% — a big-winner model">🚀 Big-winner ${hl.big10}%</span>` : '';
     // STRATEGY efficacy (distinct from the return horizons, which measure whether the
     // stock MOVED): did the pick's published entry/stop/target actually capture it —
@@ -6889,9 +6905,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <div class="sb-count">${regCount} pick${regCount === 1 ? '' : 's'} logged${sbRegime === 'all' ? '' : ` in ${sbRegime === 'risk-on' ? 'risk-on' : 'risk-off'}`} ${thin}${sbModelChip(g.section)}</div>
         <div class="sb-horizons">${hz}</div>
         ${wl}
+        ${exWin}
         ${bw}
         ${strat}
         ${liq}
+        ${sector}
       </div>`;
   }
 
@@ -6999,6 +7017,23 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + `<span class="rq-track"><span class="rq-fill" style="width:${w}%;background:${col}"></span></span>`
       + `<span class="rq-val" style="color:${col}">${b.avgOutcome > 0 ? '+' : ''}${b.avgOutcome}</span><span class="rq-wr">${b.winRate}% · n${b.n}</span></div>`;
   }
+  // Calibration curve (#4 "calibration") — the binned table the backend already computes,
+  // finally drawn. For each score band (treated as an implied win-probability) it shows the
+  // ACTUAL realized win rate. Close = the score is calibrated; far apart = the score is a
+  // relative RANK, not a probability (which the app states everywhere).
+  function calibrationHTML(cal) {
+    if (!cal || !Array.isArray(cal.table) || cal.table.length < 2) return '';
+    const rows = cal.table.map(t => {
+      const gap = Math.abs((t.predicted ?? 0) - (t.actual ?? 0));
+      const col = gap <= 10 ? 'var(--green)' : gap <= 20 ? 'var(--amber,#f59e0b)' : 'var(--red)';
+      return `<div class="cal-row"><span class="cal-band" title="Score band ${esc(t.band)}">${esc(t.band)}</span>`
+        + `<span class="cal-track"><span class="cal-act" style="width:${Math.max(0, Math.min(100, t.actual))}%;background:${col}"></span>`
+        + `<span class="cal-tick" style="left:${Math.max(0, Math.min(100, t.predicted))}%" title="Score implies ${t.predicted}%"></span></span>`
+        + `<span class="cal-val">pred <b>${t.predicted}%</b> → act <b style="color:${col}">${t.actual}%</b> <span class="dt-dim">n${t.n}</span></span></div>`;
+    }).join('');
+    return `<details class="rq-cal"><summary>📈 Calibration — does a score translate to that win rate? <span class="dt-dim">Brier ${cal.brier ?? '—'}</span></summary>`
+      + `<div class="rq-cal-body"><div class="dt-dim rq-cap">Bar = ACTUAL win rate; the tick = the score's implied probability. Aligned = calibrated; far apart = the score is a rank, not a probability.</div>${rows}</div></details>`;
+  }
   function rankQualityPanel(rq) {
     if (!rq || !rq.ok) return '';
     const o = rq.overall || {};
@@ -7014,6 +7049,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + `<div class="rq-verdict" style="border-left-color:${vcol}"><b style="color:${vcol}">${vi} ${esc(vtxt)}.</b> `
       + `Rank-IC <b>${ic.ic ?? '—'}</b> (t=${ic.t ?? '—'}, ${ic.significant ? 'significant' : 'not significant'}) · top decile beat base win-rate by <b>${o.liftWinRate ?? '—'}pts</b> · top-vs-bottom spread <b>${o.topBottomSpread ?? '—'}</b> · top-${o.topKn} precision <b>${o.topKprecision}%</b> · Brier ${cal.brier ?? '—'}.</div>`
       + `<div class="rq-bars"><div class="dt-dim rq-cap">Avg outcome (realized R×100) by score quantile — a predictive score slopes up left→right:</div>${o.buckets.map(b => rqBar(b, maxAbs)).join('')}</div>`
+      + calibrationHTML(cal)
       + (regimes ? `<div class="dt-dim rq-reg">By regime → ${esc(regimes)}</div>` : '')
       + `<div class="dt-dim rq-foot">Outcome = realized R-multiple at each pick's logged stop/target. Verdict "predictive" needs a positive, statistically-significant rank-IC AND a monotone quantile ladder — the same bar this project holds every claimed edge to.</div>`
       + `</div>`;

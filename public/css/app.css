@@ -2347,6 +2347,18 @@
     .rq-val { flex: 0 0 46px; text-align: right; font-weight: 700; }
     .rq-wr { flex: 0 0 78px; text-align: right; color: var(--text-dim); }
     .rq-reg, .rq-foot { font-size: 0.72rem; line-height: 1.5; margin-top: 6px; }
+    /* Calibration curve (#4) + exclude-largest-winners line */
+    .rq-cal { margin: 8px 0; font-size: 0.74rem; }
+    .rq-cal > summary { cursor: pointer; }
+    .rq-cal-body { margin-top: 6px; }
+    .cal-row { display: flex; align-items: center; gap: 8px; margin: 3px 0; font-size: 0.72rem; }
+    .cal-band { flex: 0 0 64px; color: var(--text-dim); }
+    .cal-track { flex: 1; position: relative; height: 12px; background: var(--card); border-radius: 6px; overflow: hidden; }
+    .cal-act { display: block; height: 100%; border-radius: 6px; }
+    .cal-tick { position: absolute; top: -2px; width: 2px; height: 16px; background: var(--text); opacity: .7; }
+    .cal-val { flex: 0 0 150px; text-align: right; }
+    .sb-exwin { font-size: 0.72rem; color: var(--text-dim); margin-top: 4px; }
+    .sb-exwin .win { color: var(--green); } .sb-exwin .loss { color: var(--red); }
     /* Per-section decile breakdown */
     .rq-bysec { margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 8px; }
     .rq-bysec-h { margin-bottom: 6px; }
