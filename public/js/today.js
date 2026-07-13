@@ -62,10 +62,24 @@ function breadthChip(sig) {
 // shown when the name's section:tier has a real sample; otherwise says "building".
 function trackLine(sig) {
   const x = sig.expectancy;
-  if (!x || !x.known || !x.n) return `<span class="td-dim td-track">📊 no track record yet</span>`;
-  const beat = x.avgExcess != null ? `${pct(x.avgExcess)} vs market` : `${x.winRate}% win`;
+  // Honest empty state — never invent a number when the sample is inadequate (#3).
+  if (!x || !x.known || !x.n) return `<span class="td-dim td-track">📊 no track record yet — insufficient data</span>`;
   const col = (x.avgExcess ?? 0) >= 0 ? 'td-pos' : 'td-neg';
-  return `<span class="td-track ${col}" title="Realized forward return of this signal class at its horizon, vs SPY (n=${x.n})">📊 ${esc(beat)} · n=${x.n}</span>`;
+  // Evidence-based metrics shown SEPARATELY (#3): success rate · mean-vs-market · median · sample.
+  const parts = [];
+  if (x.winRate != null) parts.push(`${x.winRate}% win`);
+  if (x.avgExcess != null) parts.push(`${pct(x.avgExcess)} vs mkt`);
+  if (x.median != null) parts.push(`med ${pct(x.median)}`);
+  parts.push(`n=${x.n}`);
+  const ci = x.ci ? `<span class="td-ci" title="90% confidence interval on the mean forward return — if it straddles 0, the average isn't distinguishable from zero at this sample.">CI [${pct(x.ci.lo)}, ${pct(x.ci.hi)}]</span>` : '';
+  return `<span class="td-track ${col}" title="Realized forward return of this signal class at its ${esc(x.horizonKey || '')} horizon, vs SPY (n=${x.n})">📊 ${esc(parts.join(' · '))}</span>${ci}`;
+}
+// Model/scoring version chip (#3) — the reader can see WHICH model version produced this,
+// so track records are never silently blended across versions.
+function versionChip(sig) {
+  const v = sig.scoringVersion || sig.schemaVersion;
+  if (!v) return '';
+  return `<span class="td-ver" title="Model / scoring version that produced this signal">⚙︎ ${esc(v)}</span>`;
 }
 
 // Per-card event chip (#8): only the actionable case — a binary print inside the
@@ -106,7 +120,7 @@ function signalCard(sig, legend) {
     + `<div class="td-chips"><span class="td-state ${scls}">${si} ${slbl}</span>`
     + (sig.side === 'short' ? `<span class="td-short" title="A short setup — profits if it falls (favored in risk-off)">🔻 SHORT</span>` : '')
     + `<span class="td-setup">${esc(sig.setup || sig.source)}</span>`
-    + (sig.sector ? `<span class="td-sect">${esc(sig.sector)}</span>` : '') + gradeChip(sig) + pctileChip(sig) + exWarn + `</div>`
+    + (sig.sector ? `<span class="td-sect">${esc(sig.sector)}</span>` : '') + gradeChip(sig) + pctileChip(sig) + versionChip(sig) + exWarn + `</div>`
     + evidenceLine(sig, legend)
     + `<div class="td-breadth-row">${breadthChip(sig)}</div>`
     + levels(sig)

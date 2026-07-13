@@ -145,6 +145,18 @@ test('expectancyFor: looks up section:tier at the horizon metric', () => {
   assert.equal(D.expectancyFor('Nope', 'Nope', 'position', SUMMARY).known, false);
 });
 
+test('expectancyFor: passes through mean, median + CI when the Scoreboard has them (#3)', () => {
+  const rich = { groups: [{ section: 'Ghost', tier: 'GHOST', horizons: { '1m': { avgExcess: 4, avg: 3.1, median: 2.4, avgCI: { lo: -0.5, hi: 6.7, level: 90 }, winRate: 60, n: 40 } } }] };
+  const e = D.expectancyFor('Ghost', 'GHOST', 'position', rich);
+  assert.equal(e.avg, 3.1);
+  assert.equal(e.median, 2.4);
+  assert.deepEqual(e.ci, { lo: -0.5, hi: 6.7, level: 90 });
+  // Absent distribution stats degrade to null (older records), never NaN.
+  const lean = D.expectancyFor('Ghost', 'GHOST', 'position', SUMMARY);
+  assert.equal(lean.median, null);
+  assert.equal(lean.ci, null);
+});
+
 test('expectancyTilt: winners boost, losers trim, tiny samples barely move', () => {
   const win = D.expectancyTilt(D.expectancyFor('Ghost', 'GHOST', 'position', SUMMARY));
   const lose = D.expectancyTilt(D.expectancyFor('Ghost', 'WATCH', 'position', SUMMARY));

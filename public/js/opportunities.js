@@ -188,6 +188,19 @@ export function whyNowBadge(c) {
   return `<span class="wn-badge ${b.cls}" title="WHY NOW — ${esc(w.headline || '')}">${b.icon} ${b.label}</span>`;
 }
 
+// Evidence-based track line (#3): the realized forward record of THIS setup class from
+// the live Scoreboard (c.rec = reliability[Ghost|tier]). Never fabricates — shows an
+// explicit "insufficient data" state below the 8-pick trust floor.
+function oppTrack(c) {
+  const r = c.rec;
+  if (!r || (r.n || 0) < 8) return `<div class="opp-track dt-dim">📊 Track record: insufficient data yet${r && r.n ? ` (n=${r.n})` : ''}</div>`;
+  const col = (r.avg ?? 0) >= 0 ? 'opp-pos' : 'opp-neg';
+  const winTxt = r.winRate != null ? `${r.winRate}% win` : '';
+  const avgTxt = r.avg != null ? `${r.avg > 0 ? '+' : ''}${r.avg}% avg` : '';
+  return `<div class="opp-track ${col}">📊 This setup class: ${[winTxt, avgTxt].filter(Boolean).join(' · ')} (1m) · n=${r.n} `
+    + `<span class="dt-dim">— realized forward return, not a forecast</span></div>`;
+}
+
 export function oppCardInner(c) {
   return `<div class="opp-badges">${whyNowBadge(c)}<span class="opp-badge">${STAGE_LABEL[c.status] || c.status}</span>`
     + `<span class="opp-badge ghost-${(c.ghost.tier || '').toLowerCase()}">${L('ghost', c.ghost.tier)}</span>`
@@ -198,6 +211,7 @@ export function oppCardInner(c) {
     + proximity(c)
     + levelsRow(c.levels)
     + sizing(c.levels)
+    + oppTrack(c)
     + ((c.smBadges && c.smBadges.length) || c.rsTheme ? `<div class="opp-sigs expert-only">`
         + (c.rsTheme === 'leads' ? `<span class="opp-sig sig-rs-lead">⚡ ${L('relStrength', 'leads its theme')}</span>` : c.rsTheme === 'lags' ? `<span class="opp-sig sig-rs-lag">🐢 ${L('relStrength', 'lags its theme — catch-up')}</span>` : '')
         + (c.smBadges || []).join('') + `</div>` : '')
