@@ -6,6 +6,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadOpportunities, mountOpportunitiesTab, whyNowBadge } from './opportunities.js';
   import { loadQuickHit } from './quickhit.js';
   import { loadCommandCenter } from './today.js';
+  import { loadEvolve } from './evolve.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
 
@@ -21,7 +22,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     home:       ['today', 'start', 'quickhit'],
     candidates: ['daytrade', 'gapgo', 'gapdown', 'opportunities', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
     positions:  ['coremo', 'momentum', 'putsell', 'picks'],
-    markets:    ['rotation', 'sectors', 'news', 'pulse'],
+    markets:    ['rotation', 'sectors', 'news', 'pulse', 'evolve'],
     predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     proof:      ['scoreboard', 'evidence', 'baselines', 'leaderboard', 'coreperf'],
     lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge'],
@@ -40,7 +41,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     today: '🏠 Today', start: '📘 Guide',
     quickhit: '⚡ Quick Hit', opportunities: '⭐ Opportunities', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
-    pulse: '📡 Market Pulse', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
+    pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
     leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', evidence: '🎖️ Evidence', baselines: '🧪 Baselines', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
@@ -72,6 +73,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     options: 'Unusual options activity — where the big option bets are landing.',
     picks: 'Your saved / tracked picks.',
     pulse: 'What the crowd is buzzing about on social + finance media (attention, not advice).',
+    evolve: 'An adaptive engine that composes the app’s own screeners, learns which one works in which market regime, and only surfaces names where a CALIBRATED probability of a large upside move clears an honest guardrail — split by Fast/Swing/Position horizon. It’s allowed to show nothing.',
     readthrough: 'Second-order “who benefits and hasn’t moved yet” — names linked to today’s gappers by supply chain or competition.',
     anomaly: 'Stocks quietly climbing on volume with NO news — the AI investigates each for a hidden catalyst (possible stealth accumulation).',
     biotech: 'Biotech names that just started running (micro→large cap), scored 0–100 with a catalyst-aware model — the AI finds WHY each is moving (FDA/data/M&A/deal) or flags it Unknown, and the score penalizes dilution & pump-and-dump traps.',
@@ -362,6 +364,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'options' && typeof ensureOptions === 'function') ensureOptions();
     if (sub === 'picks' && typeof ensurePicks === 'function') ensurePicks();
     if (sub === 'pulse' && typeof ensurePulse === 'function') ensurePulse();
+    if (sub === 'evolve' && typeof ensureEvolve === 'function') ensureEvolve();
     if (sub === 'readthrough' && typeof ensureReadThrough === 'function') ensureReadThrough();
     if (sub === 'anomaly' && typeof ensureAnomaly === 'function') ensureAnomaly();
     if (sub === 'biotech' && typeof ensureBiotech === 'function') ensureBiotech();
@@ -3529,6 +3532,17 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // how fast the news is trending. Attention digest, NOT buy signals. Refreshes ~4h.
   let pulseLoaded = false, pulseRefining = false;
   function ensurePulse() { if (!pulseLoaded) { pulseLoaded = true; runPulseUI(false); } }
+
+  // 🧬 EVOLVE — adaptive pre-move discovery (loadEvolve renders the op=evolve payload).
+  let evolveLoaded = false;
+  function ensureEvolve() {
+    if (!evolveLoaded) {
+      evolveLoaded = true;
+      const btn = document.getElementById('evolve-refresh-btn');
+      if (btn) btn.addEventListener('click', () => loadEvolve(document.getElementById('evolve-container')));
+    }
+    loadEvolve(document.getElementById('evolve-container'));
+  }
   async function runPulseUI(force) {
     const el = document.getElementById('pulse-container');
     if (!el) return;
