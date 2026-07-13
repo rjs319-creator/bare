@@ -7720,8 +7720,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       <div class="chart-levels">
         <div class="cl-box"><div class="cl-label">Entry</div><div class="cl-val entry">$${lv.entry}</div></div>
         <div class="cl-box"><div class="cl-label">Target</div><div class="cl-val target">$${lv.target}</div></div>
-        <div class="cl-box"><div class="cl-label">Stop</div><div class="cl-val stop">$${lv.stop}</div></div>
+        <div class="cl-box"><div class="cl-label" title="Invalidation — the setup is wrong below here">Stop</div><div class="cl-val stop">$${lv.stop}</div></div>
         <div class="cl-box"><div class="cl-label">R/R</div><div class="cl-val rr">${lv.riskReward}</div></div>
+        ${lv.atr ? `<div class="cl-box"><div class="cl-label" title="Average True Range (14) — typical daily move; sizes the stop">ATR</div><div class="cl-val">$${lv.atr}</div></div>` : ''}
       </div>` : '';
 
     const ahHtml = price.afterHours
@@ -7748,6 +7749,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <span><i class="cleg-swatch" style="background:#8a6dff"></i>EMA50</span>
         ${source === 'yahoo' ? '<span><i class="cleg-swatch" style="background:#ff6b35;height:0;border-top:2px dashed #ff6b35"></i>VWAP</span>' : ''}
         <span style="color:var(--green)">▲ Buy</span><span style="color:var(--red)">▼ Sell</span>
+        ${lv ? '<span style="color:#06c4d4">┈ Entry</span><span style="color:#10d98a">┈ Target</span><span style="color:#ef5050">┈ Stop</span>' : ''}
       </div>
       <div class="chart-stats">
         <span>Live <b>$${price.live}</b></span>
@@ -7760,7 +7762,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     `;
 
     const canvas = panel.querySelector('canvas');
-    drawChart(canvas, candles, indicators, signals, source);
+    // Overlay the trade plan (entry/breakout, stop=invalidation, target) as lines on the
+    // chart, plus any real event markers (earnings) the payload carries (#5). Levels come
+    // as strings from lib/signal.js → coerce to numbers; drop non-finite ones.
+    const num = v => { const f = parseFloat(v); return Number.isFinite(f) ? f : null; };
+    const chartLevels = lv ? { entry: num(lv.entry), stop: num(lv.stop), target: num(lv.target) } : null;
+    const chartEvents = Array.isArray(data.events) ? data.events : [];
+    drawChart(canvas, candles, indicators, signals, source, { levels: chartLevels, events: chartEvents });
 
     handleSignalUpdate(data.ticker, live.action);
 
@@ -7920,7 +7928,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     return _dualBookPromise;
   }
 
-  function drawChart(canvas, candles, ind, signals, source) {
+  function drawChart(canvas, candles, ind, signals, source, opts = {}) {
+    const levels = opts.levels || null;
+    const events = opts.events || [];
     const wrap = canvas.parentElement;
     const cssW = wrap.clientWidth || 380;
     const cssH = 220;
@@ -7945,6 +7955,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     [ind.ema9, ind.ema21, ind.ema50, ind.vwap].forEach(arr => arr && arr.forEach(v => {
       if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
     }));
+    // Keep the plan lines (entry/stop/target) inside the visible range.
+    if (levels) [levels.entry, levels.stop, levels.target].forEach(v => {
+      if (Number.isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    });
     const pad = (hi - lo) * 0.06 || 1; lo -= pad; hi += pad;
     const maxVol = Math.max(1, ...candles.map(c => c.volume || 0));
 
@@ -8000,6 +8014,45 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     line(ind.ema21, '#f0a832');
     line(ind.ema50, '#8a6dff');
     if (source === 'yahoo') line(ind.vwap, '#ff6b35', [4, 3]);
+
+    // ── trade-plan level lines (#5): entry/breakout, stop=invalidation, target ──
+    const hLine = (p, color, label) => {
+      if (!Number.isFinite(p) || p < lo || p > hi) return;
+      const py = y(p);
+      ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.setLineDash([5, 4]);
+      ctx.beginPath(); ctx.moveTo(padL, py); ctx.lineTo(padL + plotW, py); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = color; ctx.font = '8px ui-monospace, monospace'; ctx.textBaseline = 'bottom'; ctx.textAlign = 'left';
+      ctx.fillText(label, padL + 2, py - 1);
+      ctx.textBaseline = 'middle';
+    };
+    if (levels) {
+      hLine(levels.target, '#10d98a', 'Target');
+      hLine(levels.entry,  '#06c4d4', 'Entry / breakout');
+      hLine(levels.stop,   '#ef5050', 'Stop (invalidation)');
+    }
+
+    // ── event markers (#5): a vertical dotted line + ⧫ at any real event date in range ──
+    const idxByTime = {}; candles.forEach((c, i) => { idxByTime[c.date] = i; });
+    const nearestIdx = (dateStr) => {
+      if (idxByTime[dateStr] != null) return idxByTime[dateStr];
+      const t = new Date(dateStr).getTime();
+      if (!Number.isFinite(t)) return null;
+      let best = null, bestD = Infinity;
+      candles.forEach((c, i) => { const d = Math.abs(new Date(c.date).getTime() - t); if (d < bestD) { bestD = d; best = i; } });
+      return best;
+    };
+    (events || []).forEach(ev => {
+      const i = nearestIdx(ev.date || ev.when); if (i == null) return;
+      const cx = x(i);
+      ctx.strokeStyle = 'rgba(240,168,50,0.55)'; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
+      ctx.beginPath(); ctx.moveTo(cx, padT); ctx.lineTo(cx, padT + priceH); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#f0a832'; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText(ev.mark || '⧫', cx, padT + 1);
+      ctx.textBaseline = 'middle';
+    });
+    ctx.textAlign = 'left';
 
     // ── buy/sell signal markers ──
     const byTime = {}; candles.forEach((c, i) => { byTime[c.date] = i; });

@@ -964,6 +964,7 @@
     .wn-rq-ok { color: var(--cyan, #22d3ee); background: rgba(34,211,238,.12); border-color: rgba(34,211,238,.2); }
     .wn-rq-noise { color: var(--text-dim); background: rgba(148,163,184,.12); border-color: var(--border); }
     .wn-rq-neg { color: var(--red); background: var(--red-dim); border-color: #ef505033; }
+    .wn-asof { font-size: 0.62rem; color: var(--text-muted); margin-top: 8px; }
     .wn-fine { font-size: 0.6rem; color: var(--text-muted); line-height: 1.4; margin-top: 9px; }
     /* Full model coverage — every lens, incl. quiet + no-data */
     .wn-coverage { margin: 9px 0 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
