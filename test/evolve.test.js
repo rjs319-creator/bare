@@ -139,6 +139,18 @@ test('scoreCandidate: strong ledger in supportive regime → TRADE_CANDIDATE wit
   assert.ok(r.edge > 0 && r.expectedPayoff > 0);
 });
 
+test('buildEvolve: PROBE budget obeys the absolute ceiling and spreads across horizons', () => {
+  // 60 cold names across all 3 horizons → probes should hit the maxProbeCount ceiling
+  // and be distributed, not all dumped in one horizon by source order.
+  const hs = ['intraday', 'swing', 'position'];
+  const signals = Array.from({ length: 60 }, (_, i) => sig({ ticker: 'T' + i, horizon: hs[i % 3] }));
+  const out = E.buildEvolve(signals, { regime: { label: 'neutral' },
+    barriersByHorizon: { fast: { up: 0.08, down: 0.04, window: 5 }, swing: { up: 0.15, down: 0.07, window: 21 }, position: { up: 0.25, down: 0.1, window: 63 } } });
+  assert.ok(out.counts.probe <= E.GUARDRAILS.maxProbeCount, 'absolute ceiling honored');
+  const horizonsWithProbes = ['fast', 'swing', 'position'].filter(h => out.byHorizon[h].some(c => c.decision === 'PROBE'));
+  assert.ok(horizonsWithProbes.length >= 2, 'probes spread across horizons, not dumped in one');
+});
+
 test('buildEvolve: caps PROBE share and reports abstentions; may surface zero trades', () => {
   const signals = Array.from({ length: 10 }, (_, i) => sig({ ticker: 'T' + i, execution: { quality: 0.3 } })); // illiquid
   const out = E.buildEvolve(signals, { regime: { label: 'neutral' },
