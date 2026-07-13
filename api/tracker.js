@@ -55,8 +55,9 @@ const PRIVILEGED_OPS = new Set([
   'fadetick', 'gapdowntick', 'gapgotick', 'ghostlog', 'intracapture', 'leaderboardtick',
   'narrative', 'optionsassess', 'predicttick', 'timinglog', 'timingtune', 'tonetick',
   'trendtick', 'universecompile', 'universescan',
-  // EVOLVE writers — cron-only (persist predictions / resolve triple-barrier labels).
-  'evolvescore', 'evolveresolve',
+  // EVOLVE writers — cron/manual-with-bearer only (persist predictions / resolve labels /
+  // heavy historical backfill of specialist performance).
+  'evolvescore', 'evolveresolve', 'evolvebackfill',
   // Expensive non-browser builders/computes — cron/external/manual only, so gating
   // them behind the CRON_SECRET bearer costs the UI nothing.
   'fundbuild', 'universebuild', 'emerging',
@@ -238,5 +239,6 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'evolveresolve') return require('../lib/evolve-routes').runEvolveResolve(req, res);
   if (req.query.op === 'evolvehealth') return require('../lib/evolve-routes').runEvolveHealth(req, res);
   if (req.query.op === 'evolvewalkforward') return require('../lib/evolve-routes').runEvolveWalkforward(req, res);
+  if (req.query.op === 'evolvebackfill') return require('../lib/evolve-routes').runEvolveBackfillOp(req, res);
   return runScoreboard(req, res);
 };
