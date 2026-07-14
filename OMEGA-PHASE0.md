@@ -1,6 +1,6 @@
 # OMEGA — Phase 0 (Inventory · Overlap Map · Feasibility · Optimized Spec)
 
-**Status:** Phase-0 complete + **Phase A SHIPPED & prod-verified** (2026-07-13). Ground-truthed against the live repo (not memory). Gap 1 (purged+embargoed walk-forward) is live on `main`; Gaps 2 & 3 deliberately **deprioritized** after Phase A's evidence (see the Phase-A Results box below).
+**Status:** Phase-0 complete + **all three rigor gaps SHIPPED & prod-verified** (2026-07-13). Ground-truthed against the live repo (not memory). Gap 1 (purged+embargoed walk-forward), Gap 2 (uniqueness weighting), and Gap 3 (deflated-Sharpe / multiple-testing gate) are all live on `main`. Verdict across all three: **no durable positive edge; the risk-off veto is the alpha** (see the Phase-A Results box and §4).
 **Verdict:** Do **not** build OMEGA standalone. Build it as **`evolve-omega-v2`** — a hardening milestone of the existing EVOLVE engine, reusing the Scoreboard as its evaluation spine. The entire genuine delta is **three rigor additions**; everything else in the original OMEGA spec is already shipped and running in prod.
 
 > **⚑ Phase-A Results (SHIPPED, PR #95 + #96, merged `0a88f80`, deployed, prod-verified).** Built `lib/evolve-walkforward.js` — a purged **+ embargoed** walk-forward over EVOLVE's triple-barrier labels, `op=evolveomegawf` (read-only, rate-limited; no new function). Run against real 5-year multi-regime data (3,873 labels; risk-off ~19%):
@@ -101,10 +101,10 @@ Each has existing machinery to borrow — none needs a new engine or function.
 - **Live finding (5y):** the discount is real and horizon-scaled — fast ratio **1.00** (no overlap), swing **0.87**, **position 0.62** (63-day labels only ~62% independent; 38% was double-counting). Applying the weights softens the negatives slightly (pooled −0.045 → −0.030) but the verdict is **unchanged: no-edge** — so the "no durable edge" conclusion is *robust to the overcounting correction*, not an artifact of it. Weighting correctly does **not** manufacture an edge.
 - **Live flip (not yet done):** the harness proves the correction; wiring it into the *live* `recomputePerf` (evolve-routes) would make production gating more conservative (lower effN → more shrinkage → more abstention). Aligned with the app's ethos, but a deliberate gating change — flip it as a separate, explicit step.
 
-### Gap 3 — Live deflated-Sharpe / multiple-testing gate — ⏸ deprioritized (low-value, but its need was proven)
+### Gap 3 — Live deflated-Sharpe / multiple-testing gate — ✅ DONE (built)
 - **Was:** deflated Sharpe only as static comment annotations (`gapgo.js:7`); `grep bonferroni|fdr` → zero matches.
-- **Would add:** a runtime deflated-Sharpe / multiple-testing correction over the specialist × regime × horizon grid, reporting trial count.
-- **Why parked (with evidence):** the Phase-A prototypes *demonstrated the need live* — searching 3 horizons × 2 barrier modes × 3 fold-counts surfaced one "pass" that evaporated under scrutiny. But with no durable positive edge to gate, a live DSR module would currently only be guarding a signal already shown to be flat-at-best. Build it the moment a positive edge is a candidate for promotion.
+- **Delivered:** `lib/evolve-dsr.js` — Bailey & López de Prado Probabilistic + **Deflated** Sharpe (own normal CDF / inverse-CDF), and `gridDeflatedSharpe()` over the specialist × regime × horizon grid: each cell's SPY-relative per-trade Sharpe is judged against the **expected maximum under the null across N trials**, so a cell that looks good only because many were tried does not pass. Uses Gap-B uniqueness-weighted `effN`. Surfaced in the walk-forward output **and** live `op=evolvehealth` (`deflatedSharpe`); reports the trial count explicitly.
+- **Live finding (5y):** 18 cells tried, trial-Sharpe dispersion → **E[max Sharpe | null] = 0.32**, while the *best actual cell is SR 0.016* — below what chance alone would produce. **DSR = 0 for every cell; 0 survive; verdict "no cell survives multiple-testing."** The strongest form of the no-edge result: the best cell doesn't even clear the bar random selection would clear. This gate would have killed the "swing vol-adjusted folds=4 passed" mirage on sight — exactly the guard the prototypes proved was needed.
 
 ---
 
@@ -159,7 +159,7 @@ Each has existing machinery to borrow — none needs a new engine or function.
 - [x] No duplicate scorer — extends EVOLVE; scores via the live `specialistProb → metaWeights → ensembleProbability` path.
 - [x] Purged **and embargoed** CV runs over EVOLVE labels (`grep embargo` now non-zero).
 - [x] Overlapping-label uniqueness weights applied (`grep uniqueness` now non-zero); tested — Gap 2 built (`lib/evolve-uniqueness.js`, opt-in `?uniqueness=1`); position labels ~62% independent; verdict robust.
-- [ ] Live deflated-Sharpe / multiple-testing gate over the grid — **deprioritized** (Gap 3; need proven but low-value now).
+- [x] Live deflated-Sharpe / multiple-testing gate over the grid; trial count reported — Gap 3 built (`lib/evolve-dsr.js`, in the harness + `op=evolvehealth`); 18 cells tried, 0 survive (best SR 0.016 < E[max|null] 0.32).
 - [x] Pre-registered ship criterion frozen before OOS inspection — MARGIN 0.02, ≥3 blocks all positive, mean > margin (mirrors `ghost-backtest.js`).
 - [x] Champion/challenger decision honest — Phase A returns `no-edge`/`inconclusive`; **no TRADE-model promotion justified**, incumbent `evolve-core-v1` retained.
 - [x] Honest verdict rendered — the harness returns `no-edge`/`inconclusive`/`insufficient` and refuses to pass a non-durable signal.
