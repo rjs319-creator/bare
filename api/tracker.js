@@ -66,7 +66,7 @@ const PRIVILEGED_OPS = new Set([
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
-  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research',
+  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -239,6 +239,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'evolveresolve') return require('../lib/evolve-routes').runEvolveResolve(req, res);
   if (req.query.op === 'evolvehealth') return require('../lib/evolve-routes').runEvolveHealth(req, res);
   if (req.query.op === 'evolvewalkforward') return require('../lib/evolve-routes').runEvolveWalkforward(req, res);
+  if (req.query.op === 'evolveomegawf') return require('../lib/evolve-routes').runEvolveOmegaWalkforward(req, res);
   if (req.query.op === 'evolvebackfill') return require('../lib/evolve-routes').runEvolveBackfillOp(req, res);
   // 🔥 Momentum Ignition — one acceleration-ranked view over the momentum scanners.
   if (req.query.op === 'ignition') return require('../lib/ignition-routes').runIgnition(req, res);
