@@ -1,7 +1,15 @@
 # OMEGA — Phase 0 (Inventory · Overlap Map · Feasibility · Optimized Spec)
 
-**Status:** Phase-0 complete. Ground-truthed against the live repo (not memory) on 2026-07-13.
+**Status:** Phase-0 complete + **Phase A SHIPPED & prod-verified** (2026-07-13). Ground-truthed against the live repo (not memory). Gap 1 (purged+embargoed walk-forward) is live on `main`; Gaps 2 & 3 deliberately **deprioritized** after Phase A's evidence (see the Phase-A Results box below).
 **Verdict:** Do **not** build OMEGA standalone. Build it as **`evolve-omega-v2`** — a hardening milestone of the existing EVOLVE engine, reusing the Scoreboard as its evaluation spine. The entire genuine delta is **three rigor additions**; everything else in the original OMEGA spec is already shipped and running in prod.
+
+> **⚑ Phase-A Results (SHIPPED, PR #95 + #96, merged `0a88f80`, deployed, prod-verified).** Built `lib/evolve-walkforward.js` — a purged **+ embargoed** walk-forward over EVOLVE's triple-barrier labels, `op=evolveomegawf` (read-only, rate-limited; no new function). Run against real 5-year multi-regime data (3,873 labels; risk-off ~19%):
+> - **Ungated swing IC is negative over a full cycle** (−0.046/−0.064/−0.037 at folds 4/6/8). The earlier 2-year "+0.09 swing edge" was a **risk-on-window artifact** — the same trap the app hit with exits (PF 1.06→0.77) and PEAD (t −3.3→dead OOS).
+> - **Risk-off swing IC is robustly negative in every block** (−0.10 to −0.14) → momentum/accumulation ranking **inverts in risk-off**, now confirmed by EVOLVE's own OOS harness.
+> - **Avoiding risk-off is defensive, not generative**: it removes the drag (negative → ~flat) but does **not** create a durable positive edge (blocks still sign-flip).
+> - **Vol-adjusted (ATR-scaled) barriers** sharpen swing *magnitude* (~0.09–0.13 IC) but **not durability**.
+>
+> **Net:** no durable positive selection edge at any horizon. EVOLVE's shipped **risk-off long-veto → ABSTAIN** is **vindicated by its own rigorous walk-forward — the regime veto *is* the alpha.** Phase A is now a reusable rigor gate any future EVOLVE change must clear. Prototypes also demonstrated live *why* Gap 3 matters (multiple-testing: 3 horizons × 2 barrier modes × 3 fold-counts surfaced one "pass" that evaporated) — and simultaneously showed Gaps 2 & 3 are now **low-value**, since they would only sharpen significance accounting on a signal already shown to have no durable positive edge.
 
 > **The honesty wall (read this first).** The app's multi-session edge hunt — reconfirmed in code, not just notes — found **no durable, regime-robust, statistically-significant standalone selection edge** on this data. `lib/longshort.js` (t-stat ≈ 0.53, "a momentum tilt, not stock-picking skill"), `lib/exits.js` (composite predicts direction but PF < 1; stops are the leak), and EVOLVE's own 672-label backfill (hit rates 0.063/0.116/0.188 **below** the barrier breakevens, negative SPY-relative → **0 trades live, correct abstention**) all say the same thing. The one durable lever is **regime avoidance** (`lib/apex.js:84-90`, `lib/macro.js:3-6`). OMEGA inherits this wall. Its job is to be the most rigorous possible *arbiter* of that reality — not to conjure an edge that the data does not contain. **Do not claim OMEGA beats the champion until frozen purged walk-forward evidence supports it. "OMEGA correctly abstains" is a valid, shippable outcome.**
 
@@ -83,17 +91,19 @@ Confluence (`lib/confluence.js`), Aligned/Dual-Confirmed (`lib/aligned.js`, `lib
 
 Each has existing machinery to borrow — none needs a new engine or function.
 
-### Gap 1 — Purged + embargoed CV wired *into* EVOLVE
-- **Today:** the purged harness exists (`ghost-backtest.js purgedBlocks(folds:4, purgeDates:1)`, `recalibrate.js purgedWalkForward`) but **EVOLVE's own** walk-forward is OOS-on-live-ledger only — its code comment (`evolve-routes.js:362`) flags a full historical purged walk-forward as a TODO. `grep embargo` → **zero matches** anywhere.
-- **Add:** point the existing purged harness at `evolve-labels.js` triple-barrier outputs; add an **embargo** band (drop training samples whose label window overlaps the test window) on top of the existing purge gap. This is the mandatory rigor for the 21/63-day horizons whose windows overlap heavily.
+### Gap 1 — Purged + embargoed CV wired *into* EVOLVE — ✅ DONE (shipped)
+- **Was:** the purged harness existed (`ghost-backtest.js purgedBlocks`, `recalibrate.js purgedWalkForward`) but **EVOLVE's own** walk-forward was OOS-on-live-ledger only; `grep embargo` → zero matches.
+- **Delivered:** `lib/evolve-walkforward.js` — trains specialist perf on the strict past, **purges + embargoes** the boundary (calendar-day distance vs each label's forward window, so a 63-day label can't leak into the test block), scores test events via the live path (`specialistProb → metaWeights → ensembleProbability`), reports per-horizon + pooled rank-IC + Brier + a deliberately-leaky comparison (`leakageInflation`). Ship criterion mirrors `ghost-backtest.js` (≥3 OOS blocks, all positive, mean > 0.02). `op=evolveomegawf` (read-only, rate-limited). Opt-in levers `?volAdjust`, `?regime=favorable|riskon`, `?range=1y|2y|5y` — all default-off, production `op=evolvebackfill` untouched. 8 tests; suite green; prod-verified.
 
-### Gap 2 — Overlapping-label uniqueness weighting
-- **Today:** `grep uniqueness` → **zero matches**. Overlap is mitigated only by *spacing* backfill cohorts 21 days apart (`evolve-backfill.js` step=21) — serviceable but throws away data.
-- **Add:** López de Prado average-uniqueness sample weights (weight each label by the inverse of how many concurrent labels share its return window). Lets EVOLVE use all samples without inflating significance from autocorrelated 63-day windows.
+### Gap 2 — Overlapping-label uniqueness weighting — ⏸ deprioritized (low-value)
+- **Was:** `grep uniqueness` → zero matches; overlap mitigated only by cohort *spacing*.
+- **Would add:** López de Prado average-uniqueness sample weights so autocorrelated 63-day windows don't inflate significance.
+- **Why parked:** Phase A showed no durable positive edge to protect. Uniqueness weighting sharpens significance *accounting*; it doesn't create signal. Revisit only if a genuinely positive edge appears.
 
-### Gap 3 — Live deflated-Sharpe / multiple-testing gate
-- **Today:** deflated Sharpe exists only as **static hand-computed annotations** in comments (`gapgo.js:7` DSR 0.99; `screener-routes.js:1147`). No runtime module. `grep bonferroni|fdr` → **zero matches**.
-- **Add:** a runtime deflated-Sharpe / multiple-testing correction over the **specialist × regime × horizon grid** (report the number of trials tested; discount significance accordingly). This is the single biggest differentiator vs. any retail quant tool — it stops the meta-layer from promoting a cell that only looks good because thousands were tried.
+### Gap 3 — Live deflated-Sharpe / multiple-testing gate — ⏸ deprioritized (low-value, but its need was proven)
+- **Was:** deflated Sharpe only as static comment annotations (`gapgo.js:7`); `grep bonferroni|fdr` → zero matches.
+- **Would add:** a runtime deflated-Sharpe / multiple-testing correction over the specialist × regime × horizon grid, reporting trial count.
+- **Why parked (with evidence):** the Phase-A prototypes *demonstrated the need live* — searching 3 horizons × 2 barrier modes × 3 fold-counts surfaced one "pass" that evaporated under scrutiny. But with no durable positive edge to gate, a live DSR module would currently only be guarding a signal already shown to be flat-at-best. Build it the moment a positive edge is a candidate for promotion.
 
 ---
 
@@ -144,11 +154,11 @@ Each has existing machinery to borrow — none needs a new engine or function.
 
 ## 7. Acceptance criteria
 
-- [ ] No new serverless function (still ≤12).
-- [ ] No duplicate scorer (extend `lib/evolve.js`, don't fork it).
-- [ ] Purged **and embargoed** CV runs over EVOLVE labels (`grep embargo` now non-zero).
-- [ ] Overlapping-label uniqueness weights applied (`grep uniqueness` now non-zero); tested.
-- [ ] Live deflated-Sharpe / multiple-testing gate over the grid; trial count reported.
-- [ ] Pre-registered promotion criterion frozen before OOS inspection.
-- [ ] Champion/challenger decision made via `governance.js`; prior track record not merged across a version change.
-- [ ] Honest verdict rendered — including "abstains" / "does not beat champion" if that is what the evidence shows.
+- [x] No new serverless function (still ≤12) — folded into `api/tracker.js` as `op=evolveomegawf`.
+- [x] No duplicate scorer — extends EVOLVE; scores via the live `specialistProb → metaWeights → ensembleProbability` path.
+- [x] Purged **and embargoed** CV runs over EVOLVE labels (`grep embargo` now non-zero).
+- [ ] Overlapping-label uniqueness weights applied — **deprioritized** (Gap 2; no durable edge to protect).
+- [ ] Live deflated-Sharpe / multiple-testing gate over the grid — **deprioritized** (Gap 3; need proven but low-value now).
+- [x] Pre-registered ship criterion frozen before OOS inspection — MARGIN 0.02, ≥3 blocks all positive, mean > margin (mirrors `ghost-backtest.js`).
+- [x] Champion/challenger decision honest — Phase A returns `no-edge`/`inconclusive`; **no TRADE-model promotion justified**, incumbent `evolve-core-v1` retained.
+- [x] Honest verdict rendered — the harness returns `no-edge`/`inconclusive`/`insufficient` and refuses to pass a non-durable signal.
