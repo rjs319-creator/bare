@@ -67,7 +67,7 @@ function regimeStrip(ev) {
     .slice(0, 8).map(([k, v]) => `<span class="ev-dim" title="${esc(k)}">${esc(k)} ${Math.round(v.value * 100)}</span>`).join('');
   return `<div class="ev-regime">
     <span class="ev-reg-label">Regime: <b>${esc(label)}</b></span>
-    <span class="ev-reg-sup">history in this regime: ${sup.samples || 0} resolved</span>
+    <span class="ev-reg-sup">history in this regime: ${Math.round(sup.samples || 0)} resolved</span>
     <div class="ev-dims">${chips || '<span class="ev-dim ev-dim-un">regime vector building…</span>'}</div>
   </div>`;
 }
