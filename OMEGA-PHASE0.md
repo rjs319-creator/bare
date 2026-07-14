@@ -95,10 +95,11 @@ Each has existing machinery to borrow — none needs a new engine or function.
 - **Was:** the purged harness existed (`ghost-backtest.js purgedBlocks`, `recalibrate.js purgedWalkForward`) but **EVOLVE's own** walk-forward was OOS-on-live-ledger only; `grep embargo` → zero matches.
 - **Delivered:** `lib/evolve-walkforward.js` — trains specialist perf on the strict past, **purges + embargoes** the boundary (calendar-day distance vs each label's forward window, so a 63-day label can't leak into the test block), scores test events via the live path (`specialistProb → metaWeights → ensembleProbability`), reports per-horizon + pooled rank-IC + Brier + a deliberately-leaky comparison (`leakageInflation`). Ship criterion mirrors `ghost-backtest.js` (≥3 OOS blocks, all positive, mean > 0.02). `op=evolveomegawf` (read-only, rate-limited). Opt-in levers `?volAdjust`, `?regime=favorable|riskon`, `?range=1y|2y|5y` — all default-off, production `op=evolvebackfill` untouched. 8 tests; suite green; prod-verified.
 
-### Gap 2 — Overlapping-label uniqueness weighting — ⏸ deprioritized (low-value)
+### Gap 2 — Overlapping-label uniqueness weighting — ✅ DONE (built)
 - **Was:** `grep uniqueness` → zero matches; overlap mitigated only by cohort *spacing*.
-- **Would add:** López de Prado average-uniqueness sample weights so autocorrelated 63-day windows don't inflate significance.
-- **Why parked:** Phase A showed no durable positive edge to protect. Uniqueness weighting sharpens significance *accounting*; it doesn't create signal. Revisit only if a genuinely positive edge appears.
+- **Delivered:** `lib/evolve-uniqueness.js` — López de Prado average-uniqueness weights (each label weighted by the average, over the days it is open, of 1 / concurrent labels), computed per (ticker, horizon) series. Wired opt-in into the walk-forward perf fit (`fitPerf({weighted})` → honest, de-duplicated `pooledRate` effN), surfaced always as an `uniqueness` summary, exposed via `?uniqueness=1`. 5 tests.
+- **Live finding (5y):** the discount is real and horizon-scaled — fast ratio **1.00** (no overlap), swing **0.87**, **position 0.62** (63-day labels only ~62% independent; 38% was double-counting). Applying the weights softens the negatives slightly (pooled −0.045 → −0.030) but the verdict is **unchanged: no-edge** — so the "no durable edge" conclusion is *robust to the overcounting correction*, not an artifact of it. Weighting correctly does **not** manufacture an edge.
+- **Live flip (not yet done):** the harness proves the correction; wiring it into the *live* `recomputePerf` (evolve-routes) would make production gating more conservative (lower effN → more shrinkage → more abstention). Aligned with the app's ethos, but a deliberate gating change — flip it as a separate, explicit step.
 
 ### Gap 3 — Live deflated-Sharpe / multiple-testing gate — ⏸ deprioritized (low-value, but its need was proven)
 - **Was:** deflated Sharpe only as static comment annotations (`gapgo.js:7`); `grep bonferroni|fdr` → zero matches.
@@ -157,7 +158,7 @@ Each has existing machinery to borrow — none needs a new engine or function.
 - [x] No new serverless function (still ≤12) — folded into `api/tracker.js` as `op=evolveomegawf`.
 - [x] No duplicate scorer — extends EVOLVE; scores via the live `specialistProb → metaWeights → ensembleProbability` path.
 - [x] Purged **and embargoed** CV runs over EVOLVE labels (`grep embargo` now non-zero).
-- [ ] Overlapping-label uniqueness weights applied — **deprioritized** (Gap 2; no durable edge to protect).
+- [x] Overlapping-label uniqueness weights applied (`grep uniqueness` now non-zero); tested — Gap 2 built (`lib/evolve-uniqueness.js`, opt-in `?uniqueness=1`); position labels ~62% independent; verdict robust.
 - [ ] Live deflated-Sharpe / multiple-testing gate over the grid — **deprioritized** (Gap 3; need proven but low-value now).
 - [x] Pre-registered ship criterion frozen before OOS inspection — MARGIN 0.02, ≥3 blocks all positive, mean > margin (mirrors `ghost-backtest.js`).
 - [x] Champion/challenger decision honest — Phase A returns `no-edge`/`inconclusive`; **no TRADE-model promotion justified**, incumbent `evolve-core-v1` retained.
