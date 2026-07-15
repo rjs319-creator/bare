@@ -1,8 +1,22 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { assignRelScores, buildBestOpportunities } = require('../lib/screener-routes');
+const { assignRelScores, buildBestOpportunities, stampGate } = require('../lib/screener-routes');
 const { SCANS, passesScan } = require('../lib/daytrade');
+const { pcarryPriceFeatures } = require('../lib/pcarry');
+
+// Build pcarry price features (_cf) from a synthetic candle series ending on the signal day.
+// `todayPct` = today's % move, `adrPct` = typical daily range %, `nearHighFrac` = close vs 5d high.
+const cfFor = (todayPct, adrPct = 4, nearHighFrac = 0.99) => {
+  const c = [];
+  let px = 100;
+  for (let i = 0; i < 25; i++) { const h = px * (1 + adrPct / 200), l = px * (1 - adrPct / 200); c.push({ close: px, high: h, low: l }); }
+  const prev = c[c.length - 1].close;
+  const close = prev * (1 + todayPct / 100);
+  const high5 = close / nearHighFrac;
+  c.push({ close, high: Math.max(high5, close), low: close * 0.98 });
+  return pcarryPriceFeatures(c);
+};
 
 const mk = (ticker, relVol, pctChange, excessPct, extra = {}) => ({ ticker, relVol, pctChange, excessPct, last: 10, score: relVol * 10 + pctChange, ...extra });
 
@@ -78,6 +92,34 @@ test('buildBestOpportunities: ranks #1..N by carry odds and caps the list', () =
   assert.equal(best.length, 8);
   assert.deepEqual(best.map(b => b.rank), [1, 2, 3, 4, 5, 6, 7, 8]);
   for (let i = 1; i < best.length; i++) assert.ok(best[i - 1].carry >= best[i].carry, 'sorted by carry desc');
+});
+
+test('stampGate: flags a clean, near-high, non-overextended momentum name as gated', () => {
+  const cf = cfFor(5, 4, 0.99);   // +5% today, normal range, holding near the 5d high
+  const g = stampGate({ scan: 'momentum_liquid', pctChange: 5, _cf: cf }, 'neutral');
+  assert.equal(typeof g.gated, 'boolean');
+  assert.ok(g.carry >= 50, 'above-base-rate carry');
+  assert.equal(g.overextended, false);
+  assert.equal(g.gated, true);
+});
+
+test('stampGate: flags an overextended blow-off as NOT gated', () => {
+  const cf = cfFor(28, 4, 0.99);  // +28% on a ~4% ADR = extADR ~7 = blow-off
+  const g = stampGate({ scan: 'momentum_liquid', pctChange: 28, _cf: cf }, 'neutral');
+  assert.equal(g.overextended, true);
+  assert.equal(g.gated, false);
+});
+
+test('stampGate: explosive small-cap base rate keeps a marginal name below the gate', () => {
+  const cf = cfFor(9, 5, 0.99);
+  const g = stampGate({ scan: 'explosive_small', pctChange: 9, _cf: cf }, 'neutral');
+  assert.ok(g.carry < 50, 'explosive base-rate offset pushes carry below the floor');
+  assert.equal(g.gated, false);
+});
+
+test('stampGate: missing pcarry features degrades gracefully (not gated)', () => {
+  const g = stampGate({ scan: 'momentum_liquid', pctChange: 5 }, 'neutral');
+  assert.deepEqual(g, { carry: null, overextended: null, gated: false });
 });
 
 test('SCANS.momentum_building is a real relaxation of momentum_liquid (surfaces more picks)', () => {
