@@ -124,6 +124,29 @@ test('classifyStrategies output is render-clean over the real registry', () => {
   assertUniqueIds(classified.strategies);
 });
 
+test('buildOmega output is render-clean and terminal', () => {
+  const { buildOmega } = require('../lib/omega-swing-routes');
+  // Synthetic candles: a couple of movers + benchmarks.
+  const mk = (drift, start = 30) => { let d = new Date('2025-01-01T00:00:00Z'), px = start; const c = [];
+    for (let i = 0; i < 80; i++) { px *= (1 + drift + Math.sin(i / 4) * 0.002); const date = d.toISOString().slice(0, 10); d = new Date(d.getTime() + 864e5);
+      c.push({ date, open: px * 0.999, high: px * 1.01, low: px * 0.99, close: +px.toFixed(2), volume: 3e6 * (1 + i * 0.004) }); } return c; };
+  const signals = [
+    { ticker: 'AAA', company: 'Alpha Co', sector: 'Technology', sources: ['screener'], score: 80 },
+    { ticker: 'BBB', company: 'Beta Inc', sector: 'Energy', sources: ['gapgo'], score: 60 },
+  ];
+  const candles = { AAA: mk(0.004), BBB: mk(0.002, 12) };
+  const bench = { SPY: mk(0.001, 400), XLK: mk(0.0012, 200), XLE: mk(0.0008, 90) };
+  const payload = buildOmega(signals, candles, bench, { riskOn: true }, {});
+  scanClean(payload, 'omega');
+  assert.ok(Array.isArray(payload.cards), 'cards array present');
+  assert.ok(payload.counts && Number.isFinite(payload.counts.total), 'terminal counts');
+  for (const c of payload.cards) assert.ok(O_TIERS.has(c.tier), `valid tier ${c.tier}`);
+  // Empty input still yields a definite, renderable object.
+  const empty = buildOmega([], {}, bench, {}, {});
+  assert.equal(empty.counts.total, 0);
+});
+const O_TIERS = new Set(require('../lib/omega-swing').TIERS);
+
 test('builders return terminal objects (not a stuck-loading shape) even with empty inputs', () => {
   // Empty scoreboard / no signals must still yield a definite, renderable object.
   const empty = D.rankSignals([], { regime: {}, scoreboard: null });

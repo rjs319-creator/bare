@@ -8,6 +8,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadCommandCenter } from './today.js';
   import { loadEvolve } from './evolve.js';
   import { loadIgnition } from './ignition.js';
+  import { loadOmega } from './omega-swing.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
 
@@ -21,7 +22,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // prediction-market read. Unproven overlays live in the Research Lab; the honest
     // report cards live in Evidence.
     home:       ['today', 'start', 'quickhit'],
-    candidates: ['daytrade', 'gapgo', 'ignition', 'gapdown', 'opportunities', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
+    candidates: ['daytrade', 'gapgo', 'ignition', 'gapdown', 'opportunities', 'omega', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
     positions:  ['coremo', 'momentum', 'putsell', 'picks'],
     markets:    ['rotation', 'sectors', 'news', 'pulse', 'evolve'],
     predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
@@ -33,7 +34,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const SUB_HZ = {
     daytrade: 'intraday', gapgo: 'intraday', gapdown: 'intraday',
     ignition: 'intraday',
-    opportunities: 'swing', aligned: 'swing', screener: 'swing', custom: 'swing', ghost: 'swing', coil: 'swing', downday: 'swing', confluence: 'swing', trendrider: 'swing', fade: 'swing', biotech: 'swing',
+    opportunities: 'swing', omega: 'swing', aligned: 'swing', screener: 'swing', custom: 'swing', ghost: 'swing', coil: 'swing', downday: 'swing', confluence: 'swing', trendrider: 'swing', fade: 'swing', biotech: 'swing',
     coremo: 'portfolio', momentum: 'portfolio', putsell: 'portfolio', picks: 'portfolio',
   };
   const HZ_DIVIDER = { intraday: '⏱ Intraday · same-day', swing: '📅 Swing · days–weeks', portfolio: '💼 Portfolio · weeks–months' };
@@ -41,7 +42,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
     today: '🏠 Today', start: '📘 Guide',
-    quickhit: '⚡ Quick Hit', opportunities: '⭐ Opportunities', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
+    quickhit: '⚡ Quick Hit', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
@@ -61,6 +62,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     coremo: 'Steady, confirmed uptrends with the strongest 12-month momentum.',
     daytrade: 'Short-term setups for same-day trading, with a live entry-timing grade.',
     gapgo: 'Stocks gapping up on news and continuing — the one validated event edge.',
+    omega: 'OMEGA-SWING — liquid names with early-to-middle-stage momentum likely to keep rising over the next 5–10 trading days. Sector- and market-relative, ranked by expected utility, with an entry plan and invalidation for each. Not a chaser of already-vertical moves; won’t force picks in weak regimes.',
     ignition: 'One acceleration-ranked view over all the momentum scanners: catch names whose price AND volume are speeding up (up 10% and accelerating beats up 60% and slowing), with a catalyst tag, ignition score, and stage. EOD/daily data — no real-time or LULD halt prediction.',
     downday: 'What to trade when the market is red: oversold-bounce longs + overheated shorts, with the honest proof that chasing strength on down days loses.',
     coil: 'Names coiling in tight compression before a potential explosive move.',
@@ -130,6 +132,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // (tabs that already have their own inline guide — trendrider/daytrade/coil/
   // confluence/gapgo/gapdown/fade/aligned/putsell — are deliberately omitted).
   const HOWTO = {
+    omega: {
+      what: `A shortlist of liquid stocks with <b>early-to-middle-stage momentum</b> that's likely to keep rising over the next <b>5–10 trading days</b>. It looks for sustainable continuation — strong relative strength, real multi-day volume, a smooth trend, a fresh catalyst, and a good entry — <b>not</b> stocks that already went vertical.`,
+      read: `Cards are grouped into <b>💠 Prime</b> (best), <b>🟢 Qualified</b>, and <b>👁 Watch</b> (wait for a trigger). Each shows a <b>Stage</b> (Early/Confirmed/Continuation), an <b>entry recommendation</b> (Buy now / on breakout / on pullback), expected 5- and 10-day <b>sector- & market-relative</b> return, the odds of a ≥3% and ≥5% move, and an <b>invalidation</b> price. Names are ranked by expected utility (reward vs downside), not win rate.`,
+      act: `Prefer <b>Prime</b> with a "Buy now" entry. Enter in the shown entry zone, place your stop at the <b>invalidation</b>, aim for the target zones, and use the <b>suggested size</b> (sized so a stop-out costs ~1% of your account). Hold ~1–2 weeks.`,
+      catch: `Uses <b>end-of-day data</b> — entry levels are next-session positioning, not live triggers. The probabilities are a <b>baseline</b> until the walk-forward confirms them, and the app's own research found no durable edge on this data beyond avoiding weak markets — so check the <b>OMEGA section on the Scoreboard</b> to see if it's actually working. Zero Prime picks on a given day is normal.`,
+    },
     ignition: {
       what: `One list that ranks every momentum candidate by how fast it's <b>speeding up</b> — price AND volume accelerating — not by how much it's already moved. A stock up 10% and accelerating ranks <b>above</b> one up 60% and slowing down.`,
       read: `Higher <b>Ignition Score</b> = stronger acceleration + a fresh catalyst + a clean trend. The <b>Stage</b> tells you where the move is: 👁 Watch (early) → 🔥 Ignition → 🚀 Pressure → ⚠️ Extended (already run — be careful). Sort and filter with the dropdowns.`,
@@ -362,6 +370,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'daytrade' && typeof ensureDaytrade === 'function') ensureDaytrade();
     if (sub === 'gapgo' && typeof ensureGapGo === 'function') ensureGapGo();
     if (sub === 'ignition' && typeof ensureIgnition === 'function') ensureIgnition();
+    if (sub === 'omega' && typeof ensureOmega === 'function') ensureOmega();
     if (sub === 'downday' && typeof ensureDownDay === 'function') ensureDownDay();
     if (sub === 'gapdown' && typeof ensureGapDown === 'function') ensureGapDown();
     if (sub === 'aligned' && typeof ensureAligned === 'function') ensureAligned();
@@ -3554,6 +3563,17 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     loadIgnition(document.getElementById('ignition-container'));
   }
 
+  // 💠 OMEGA-SWING — 5–10 day momentum continuation (loadOmega renders op=omega).
+  let omegaLoaded = false;
+  function ensureOmega() {
+    if (!omegaLoaded) {
+      omegaLoaded = true;
+      const btn = document.getElementById('omega-refresh-btn');
+      if (btn) btn.addEventListener('click', () => loadOmega(document.getElementById('omega-container')));
+    }
+    loadOmega(document.getElementById('omega-container'));
+  }
+
   // 🧬 EVOLVE — adaptive pre-move discovery (loadEvolve renders the op=evolve payload).
   let evolveLoaded = false;
   function ensureEvolve() {
@@ -6739,10 +6759,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const scoreboardMeta       = document.getElementById('scoreboard-meta');
   let   lastScoreboard       = null;
 
-  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', Biotech: '🧬 Biotech Radar (Hot vs Watch)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)', DownDay: '🪁 Down-Day Bounce (Longs)', GapDown: '🐻 Gap-Down Continuation (Shorts)', daytrade: '⚡ Day Trade (A vs B)', coil: '🧬 Coil Radar (squeeze bands)', Ignition: '🔥 Momentum Ignition (Ignition vs Watch)' };
+  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', Biotech: '🧬 Biotech Radar (Hot vs Watch)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)', DownDay: '🪁 Down-Day Bounce (Longs)', GapDown: '🐻 Gap-Down Continuation (Shorts)', daytrade: '⚡ Day Trade (A vs B)', coil: '🧬 Coil Radar (squeeze bands)', Ignition: '🔥 Momentum Ignition (Ignition vs Watch)', OMEGA: '💠 OMEGA-Swing (Prime vs Watch)' };
   const SB_TIER_LABEL = { Breakout: 'Breakout', Setup: 'Setup', Early: 'Early', StrongBuy: 'Strong Buy', StrongSell: 'Strong Sell', GHOST: '👻 Ghost', STALKING: '🥷 Stalking', SHORT: 'Short', SHORT_LIGHT: 'Short (light)',
     WATCH: '👀 Watch (fresh turn)', EMERGING: '🌗 Emerging (turning)', CONFIRMED: '✅ Confirmed (late)',
     IGNITION: '🔥 Ignition (accelerating)',
+    OMEGA_PRIME: '💠 Prime', OMEGA_QUALIFIED: '🟢 Qualified', OMEGA_WATCH: '👁 Watch',
     STRONG: '🔴 Strong (≥5% gap)', MODERATE: '🟠 Moderate (3–5% gap)',
     INDEX_DELETE: 'Index Delete', INDEX_ADD_FADE: 'Index Add (fade)', LOCKUP_EXPIRY: 'Lockup Expiry', TAX_LOSS: 'Tax-Loss Selling', FIRE_SALE: 'Fire Sale', MARGIN_SPIRAL: 'Margin Spiral', FORCED_DOWNGRADE: 'Forced Downgrade',
     Bullish: '📈 Bullish tone', Neutral: '➖ Neutral tone', Bearish: '📉 Bearish tone',
@@ -6775,6 +6796,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     GapDown: 'Gap-down continuation SHORTS (the mirror of Gap & Go): a name that gapped down hard on non-earnings news and kept falling. A win here means the stock dropped. The test: do bigger gap-downs (STRONG ≥5%) continue lower more than MODERATE? Costs not deducted — subtract borrow/slippage.',
     daytrade: 'Intraday momentum picks from the Day-Trade screener (A = strict quality, B = relaxed “building”). The test: does the A tier actually beat the B tier on forward returns? Scored in the score-decile check by its own relVol/gap ranker.',
     coil: 'Pre-explosion compression picks from Coil Radar, grouped by calibrated squeeze band. The test: do the tightest-squeeze bands actually break out more? Scored in the score-decile check by its own Bollinger-squeeze-rank model.',
+    OMEGA: 'OMEGA-SWING 5–10 day continuation picks (💠 Prime / 🟢 Qualified / 👁 Watch). The test: do the Prime names actually beat Qualified and Watch — and beat the market — over 1–2 weeks? Each pick is sector- & market-relative and ranked by expected utility.',
   };
   const SB_HZ_HELP = 'Average return this many trading days after the pick. The green/red “vs S&P” line under it is the market-beating number: the pick’s return minus what the S&P 500 did over the same days.';
 

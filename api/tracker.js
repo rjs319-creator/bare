@@ -58,6 +58,7 @@ const PRIVILEGED_OPS = new Set([
   // EVOLVE writers — cron/manual-with-bearer only (persist predictions / resolve labels /
   // heavy historical backfill of specialist performance).
   'evolvescore', 'evolveresolve', 'evolvebackfill', 'ignitionlog', 'ignitionbackfill',
+  'omegalog', 'omegabackfill',
   // Expensive non-browser builders/computes — cron/external/manual only, so gating
   // them behind the CRON_SECRET bearer costs the UI nothing.
   'fundbuild', 'universebuild', 'emerging',
@@ -66,7 +67,7 @@ const PRIVILEGED_OPS = new Set([
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
-  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf',
+  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -245,5 +246,11 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'ignition') return require('../lib/ignition-routes').runIgnition(req, res);
   if (req.query.op === 'ignitionlog') return require('../lib/ignition-routes').runIgnitionLog(req, res);
   if (req.query.op === 'ignitionbackfill') return require('../lib/ignition-routes').runIgnitionBackfillOp(req, res);
+  // 💠 OMEGA-SWING — 5–10 day momentum continuation engine (Prime/Qualified/Watch tiers).
+  if (req.query.op === 'omega') return require('../lib/omega-swing-routes').runOmega(req, res);
+  if (req.query.op === 'omegalog') return require('../lib/omega-swing-routes').runOmegaLog(req, res);
+  if (req.query.op === 'omegamodel') return require('../lib/omega-swing-routes').runOmegaModel(req, res);
+  if (req.query.op === 'omegawf') return require('../lib/omega-swing-routes').runOmegaWf(req, res);
+  if (req.query.op === 'omegabackfill') return require('../lib/omega-swing-routes').runOmegaBackfillOp(req, res);
   return runScoreboard(req, res);
 };

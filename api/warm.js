@@ -204,6 +204,13 @@ module.exports = async function handler(req, res) {
     .then(() => warmOne('/api/tracker?op=ignition').catch(() => null))
     .catch(() => null);
 
+  // 💠 OMEGA-SWING — after today's merged signals are fresh, log the 5–10 day continuation
+  // picks (Prime/Qualified/Watch) to the Scoreboard ledger, then prime the tab's CDN cache.
+  const omegaKick = todayKick
+    .then(() => warmOne('/api/tracker?op=omegalog').catch(() => null))
+    .then(() => warmOne('/api/tracker?op=omega').catch(() => null))
+    .catch(() => null);
+
   // ── DECOUPLED TICK CHAINS ──────────────────────────────────────────────────
   // The resolve/learn/log ticks run as fire-and-forget CHAINS (not awaited on the
   // critical path). Each chain runs its ops sequentially in their own invocations
@@ -247,6 +254,7 @@ module.exports = async function handler(req, res) {
   void todayKick; // fire-and-forget: unified decision snapshot in its own 60s budget
   void evolveKick; // fire-and-forget: EVOLVE log-predictions → resolve-labels chain
   void ignitionKick; // fire-and-forget: Momentum Ignition log → prime tab
+  void omegaKick; // fire-and-forget: OMEGA-SWING log → prime tab
   void researchKick; // fire-and-forget: refresh the baseline factor cross-section
   void pulseKick; // fire-and-forget: gather→refine chain builds the refined Pulse snapshot
   void optionsAssessKick; // fire-and-forget: Fable options-flow analysis in its own budget
