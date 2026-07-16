@@ -2506,6 +2506,46 @@
 .ev-disc-body b { color:var(--text,#e8edf4); } .ev-disc-body p { margin:.5rem 0; }
 .ev-dim-note { font-size:.78rem; color:var(--text-muted,#8590a0); margin-top:.3rem; }
 
+/* ── OMEGA Evidence panel (§20 champion-vs-challenger walk-forward) ───────── */
+.evi-panel summary { color:#8b5cf6; }
+.evi-warn { font-size:.8rem; color:var(--amber,#f59e0b); margin:.4rem 0; }
+.evi-run-btn { border-color:#8b5cf6; color:#8b5cf6; }
+.evi-run-btn:hover { background:rgba(139,92,246,.12); }
+.evi-run-btn:disabled { opacity:.6; cursor:progress; }
+.evi-wrap { margin-top:.7rem; display:flex; flex-direction:column; gap:.7rem; }
+.evi-verdict { border-radius:8px; padding:.6rem .8rem; border:1px solid var(--border,#2a3240); border-left-width:3px; font-size:.86rem; line-height:1.5; color:var(--text-dim,#b8c2d0); }
+.evi-verdict-head { font-size:.95rem; color:var(--text,#e8edf4); margin-bottom:.2rem; }
+.evi-verdict p { margin:0; }
+.evi-pass { border-left-color:#22c55e; } .evi-fail { border-left-color:#ef4444; }
+.evi-warn { border-left-color:#f59e0b; } .evi-muted { border-left-color:#6b7280; }
+.evi-section { background:var(--surface-2,#161b26); border:1px solid var(--border,#2a3240); border-radius:8px; padding:.6rem .8rem; }
+.evi-sec-title { font-size:.82rem; font-weight:700; color:var(--text,#e8edf4); margin-bottom:.45rem; text-transform:uppercase; letter-spacing:.03em; }
+.evi-cc { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.5rem; }
+.evi-cc-cell { display:flex; flex-direction:column; gap:.15rem; background:var(--surface,#0f1320); border-radius:6px; padding:.4rem .55rem; }
+.evi-k { font-size:.72rem; color:var(--text-muted,#8590a0); }
+.evi-v { font-size:1rem; font-weight:700; color:var(--text,#e8edf4); font-variant-numeric:tabular-nums; }
+.evi-v-wide { font-size:.8rem; font-weight:600; }
+.evi-muted-v { color:var(--text-muted,#8590a0); }
+.evi-note { font-size:.8rem; color:var(--text-dim,#b8c2d0); line-height:1.5; margin:.5rem 0 0; }
+.evi-pass-text { color:#22c55e; } .evi-fail-text { color:#f87171; }
+.evi-badge { font-size:.66rem; font-weight:800; padding:2px 7px; border-radius:10px; margin-left:.4rem; vertical-align:middle; letter-spacing:.04em; }
+.evi-badge-pass { background:rgba(34,197,94,.15); color:#4ade80; }
+.evi-badge-hold { background:rgba(107,114,128,.18); color:#9ca3af; }
+.evi-table-scroll { overflow-x:auto; }
+.evi-table { width:100%; border-collapse:collapse; font-size:.8rem; }
+.evi-table th { text-align:left; color:var(--text-muted,#8590a0); font-weight:600; padding:.25rem .5rem; border-bottom:1px solid var(--border,#2a3240); }
+.evi-table td { padding:.3rem .5rem; border-bottom:1px solid rgba(42,50,64,.4); color:var(--text-dim,#b8c2d0); font-variant-numeric:tabular-nums; }
+.evi-pos { color:#4ade80; } .evi-neg { color:#f87171; }
+.evi-hv { font-size:.7rem; font-weight:700; padding:1px 6px; border-radius:8px; }
+.evi-hv-pass { background:rgba(34,197,94,.15); color:#4ade80; }
+.evi-hv-fail { background:rgba(239,68,68,.15); color:#f87171; }
+.evi-hv-warn { background:rgba(245,158,11,.15); color:#fbbf24; }
+.evi-hv-muted { background:rgba(107,114,128,.15); color:#9ca3af; }
+.evi-inline { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:.9rem; }
+.evi-inline > div .evi-note { margin-top:.3rem; }
+.evi-promotion { border-left:3px solid #8b5cf6; }
+.evi-foot { font-size:.72rem; color:var(--text-muted,#8590a0); text-align:center; padding-top:.2rem; }
+
 /* ── Momentum Ignition ───────────────────────────────────────────────────── */
 .ig-banner { background:var(--surface-2,#161b26); border:1px solid var(--border,#2a3240); border-left:3px solid #f97316; border-radius:8px; padding:.7rem .9rem; font-size:.9rem; line-height:1.5; color:var(--text-dim,#b8c2d0); margin-bottom:.7rem; }
 .ig-banner b { color:var(--text,#e8edf4); }

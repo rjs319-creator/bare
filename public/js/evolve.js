@@ -7,6 +7,7 @@
 // show nothing — that is a feature, not an empty state to apologize for.
 
 import { esc } from './format.js';
+import { evidencePanelHtml, wireEvidencePanel } from './evolve-evidence.js';
 
 const DEC_CLASS = { TRADE_CANDIDATE: 'ev-trade', PROBE: 'ev-probe', WATCH: 'ev-watch', ABSTAIN: 'ev-abstain' };
 const pct = (x, d = 0) => (x == null ? '–' : `${(x * 100).toFixed(d)}%`);
@@ -39,8 +40,9 @@ function renderEvolve(container, ev, health) {
   } else {
     for (const h of ['fast', 'swing', 'position']) parts.push(horizonColumn(h, ev));
   }
-  parts.push(abstainNote(ev), disclosure(ev));
+  parts.push(abstainNote(ev), evidencePanelHtml(), disclosure(ev));
   container.innerHTML = `<div class="ev-wrap">${parts.join('')}</div>`;
+  wireEvidencePanel(container);
   container.querySelectorAll('[data-ticker]').forEach(el => el.addEventListener('click', () => {
     const t = el.getAttribute('data-ticker');
     if (window.openTickerLookup) window.openTickerLookup(t); else if (window.showTab) window.showTab('today');
