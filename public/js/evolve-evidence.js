@@ -13,8 +13,13 @@ const TONE_ICON = { pass: '🟢', fail: '🔴', warn: '🟡', muted: '⚪' };
 const dec3 = (x) => (x == null ? '–' : (x >= 0 ? '+' : '') + Number(x).toFixed(3));
 const brierStr = (x) => (x == null ? '–' : Number(x).toFixed(3));
 
-// Collapsed shell + trigger button. Rendered into the EVOLVE tab; fetch happens on click.
+const RANGES = ['1y', '2y', '5y'];
+const DEFAULT_RANGE = '2y';
+
+// Collapsed shell + range selector + trigger button. Rendered into the EVOLVE tab; the heavy
+// fetch happens only on click, for the selected range.
 export function evidencePanelHtml() {
+  const rangeBtns = RANGES.map((r) => `<button class="evi-range-btn${r === DEFAULT_RANGE ? ' evi-range-on' : ''}" data-range="${r}">${r}</button>`).join('');
   return `<details class="ev-disclosure evi-panel">
     <summary>🔬 Evidence — purged walk-forward vs the champion (${esc('OMEGA §20')})</summary>
     <div class="ev-disc-body">
@@ -23,37 +28,55 @@ export function evidencePanelHtml() {
       63-day label can't leak into the test block, and judges every specialist×regime×horizon cell
       against the max Sharpe random trials alone would produce. <b>This is the arbiter of whether
       the challenger may promote over the champion — and today it does not.</b></p>
-      <p class="evi-warn">⚠ Heavy: replays years of history (~20–45s). Read-only, cached ~30 min.</p>
-      <p><button class="today-cta evi-run-btn">▶ Run walk-forward evidence</button></p>
+      <p class="evi-warn">⚠ Heavy: replays history (~20–45s; a longer range covers more of the cycle but is slower). Read-only, cached ~30 min.</p>
+      <div class="evi-controls">
+        <span class="evi-range-label">Range</span>
+        <div class="evi-range" role="group" aria-label="Walk-forward lookback range">${rangeBtns}</div>
+        <button class="today-cta evi-run-btn">▶ Run walk-forward evidence</button>
+      </div>
       <div class="evi-result" hidden></div>
     </div>
   </details>`;
 }
 
-// Wire the run button inside `container` (called once after the tab renders).
+// Wire the range selector + run button inside `container` (called once after the tab renders).
+// The panel is re-runnable: pick a range, run; pick another, run again.
 export function wireEvidencePanel(container) {
   if (!container) return;
+  const panel = container.querySelector('.evi-panel');
   const btn = container.querySelector('.evi-run-btn');
   const out = container.querySelector('.evi-result');
-  if (!btn || !out) return;
-  let ran = false;
+  const rangeBtns = container.querySelectorAll('.evi-range-btn');
+  if (!panel || !btn || !out) return;
+
+  let selectedRange = DEFAULT_RANGE;
+  let busy = false;
+  const setRangeEnabled = (on) => rangeBtns.forEach((b) => { b.disabled = !on; });
+
+  rangeBtns.forEach((b) => b.addEventListener('click', () => {
+    if (busy) return;
+    selectedRange = RANGES.includes(b.dataset.range) ? b.dataset.range : DEFAULT_RANGE;
+    rangeBtns.forEach((x) => x.classList.toggle('evi-range-on', x === b));
+  }));
+
   btn.addEventListener('click', async () => {
-    if (ran) return;
-    ran = true;
-    btn.disabled = true;
-    btn.textContent = '⏳ Running purged walk-forward…';
+    if (busy) return;
+    busy = true;
+    btn.disabled = true; setRangeEnabled(false);
+    btn.textContent = `⏳ Running ${selectedRange} walk-forward…`;
     out.hidden = false;
-    out.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Replaying history, purging &amp; embargoing folds, scoring cells…</p></div>`;
+    out.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Replaying ${esc(selectedRange)} of history, purging &amp; embargoing folds, scoring cells…</p></div>`;
     try {
-      const data = await fetch('/api/tracker?op=evolveomegawf').then((r) => r.json());
+      const url = `/api/tracker?op=evolveomegawf&range=${encodeURIComponent(selectedRange)}`;
+      const data = await fetch(url).then((r) => r.json());
       out.innerHTML = renderEvidence(data && data.evidenceView);
-      btn.textContent = '↻ Re-run evidence';
+      btn.textContent = `↻ Re-run (${selectedRange})`;
     } catch (e) {
       out.innerHTML = `<div class="mom-status error"><p>Could not run the walk-forward evidence right now.</p></div>`;
       btn.textContent = '▶ Run walk-forward evidence';
-      ran = false;
     } finally {
-      btn.disabled = false;
+      busy = false;
+      btn.disabled = false; setRangeEnabled(true);
     }
   });
 }

@@ -2512,6 +2512,14 @@
 .evi-run-btn { border-color:#8b5cf6; color:#8b5cf6; }
 .evi-run-btn:hover { background:rgba(139,92,246,.12); }
 .evi-run-btn:disabled { opacity:.6; cursor:progress; }
+.evi-controls { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin:.5rem 0; }
+.evi-range-label { font-size:.74rem; color:var(--text-muted,#8590a0); text-transform:uppercase; letter-spacing:.03em; }
+.evi-range { display:inline-flex; border:1px solid var(--border,#2a3240); border-radius:7px; overflow:hidden; }
+.evi-range-btn { background:transparent; color:var(--text-dim,#b8c2d0); border:0; border-right:1px solid var(--border,#2a3240); padding:3px 12px; font-size:.76rem; font-weight:700; cursor:pointer; }
+.evi-range-btn:last-child { border-right:0; }
+.evi-range-btn:hover:not(:disabled) { background:rgba(139,92,246,.1); }
+.evi-range-btn.evi-range-on { background:#8b5cf6; color:#fff; }
+.evi-range-btn:disabled { opacity:.5; cursor:not-allowed; }
 .evi-wrap { margin-top:.7rem; display:flex; flex-direction:column; gap:.7rem; }
 .evi-verdict { border-radius:8px; padding:.6rem .8rem; border:1px solid var(--border,#2a3240); border-left-width:3px; font-size:.86rem; line-height:1.5; color:var(--text-dim,#b8c2d0); }
 .evi-verdict-head { font-size:.95rem; color:var(--text,#e8edf4); margin-bottom:.2rem; }
