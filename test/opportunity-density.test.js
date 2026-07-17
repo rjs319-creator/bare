@@ -32,6 +32,37 @@ test('§6 acceptance: ZERO qualifying names → no-trade regardless of score', (
   assert.equal(o.maxExposurePct, 0);
 });
 
+test('§6 fix: a RED same-day tape penalizes even when the breadth regime says risk-on', () => {
+  // The exact reported inconsistency: risk-on breadth regime + a strong board, but SPY is down on
+  // the day. Must NOT read "normal/100%" — it should drop a tier and cap exposure.
+  const board = Array.from({ length: 6 }, (_, i) => sig({ ticker: 'R' + i, cost: { known: true, netMovePct: 9 } }));
+  const on = OD.computeOpportunityDensity(board, { regime: { riskOn: true } });
+  const redDay = OD.computeOpportunityDensity(board, { regime: { riskOn: true }, tape: { spyChangePct: -0.99, condition: 'choppy', efficiency: 0.14, regime: 'neutral' } });
+  assert.equal(on.decision, 'normal');                       // baseline: green day → normal
+  assert.notEqual(redDay.decision, 'normal', 'a red tape must not read normal');
+  assert.ok(redDay.score < on.score, 'red tape lowers the score');
+  assert.ok(redDay.maxExposurePct <= OD.CONFIG.RED_TAPE_CAP, 'exposure capped on a red tape');
+  assert.equal(redDay.regimeGate.redTape, true);
+  assert.ok(redDay.reasons.some(r => /red tape/i.test(r)));
+});
+
+test('§6 fix: a CHOPPY (but not red) tape trims exposure and score, less than a red tape', () => {
+  const board = Array.from({ length: 6 }, (_, i) => sig({ ticker: 'C' + i, cost: { known: true, netMovePct: 9 } }));
+  const choppy = OD.computeOpportunityDensity(board, { regime: { riskOn: true }, tape: { spyChangePct: 0.1, condition: 'choppy', efficiency: 0.15 } });
+  assert.equal(choppy.regimeGate.choppyTape, true);
+  assert.equal(choppy.regimeGate.redTape, false);
+  assert.ok(choppy.maxExposurePct <= OD.CONFIG.CHOPPY_CAP);
+});
+
+test('§6 fix: no tape supplied → behaviour is unchanged (byte-compatible)', () => {
+  const board = Array.from({ length: 6 }, (_, i) => sig({ ticker: 'N' + i, cost: { known: true, netMovePct: 9 } }));
+  const a = OD.computeOpportunityDensity(board, { regime: { riskOn: true } });
+  const b = OD.computeOpportunityDensity(board, { regime: { riskOn: true }, tape: null });
+  assert.equal(a.score, b.score);
+  assert.equal(a.decision, b.decision);
+  assert.equal(a.maxExposurePct, b.maxExposurePct);
+});
+
 test('§6 discipline: a BULLISH regime alone does not force a positive recommendation', () => {
   // Risk-on, but the candidates are weak: tiny edge, poor track record, one name only.
   const board = [sig({ ticker: 'W', cost: { known: true, netMovePct: 1 }, expectancyTilt: 0.8, score: 40, evidence: { familyCount: 1 } })];
