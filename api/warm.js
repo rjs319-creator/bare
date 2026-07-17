@@ -226,6 +226,21 @@ module.exports = async function handler(req, res) {
     .then(() => warmOne('/api/tracker?op=today').catch(() => null))
     .catch(() => null);
 
+  // 🎯 OMEGA Ensemble — prime the composed board's CDN cache.
+  //
+  // Chained off redundancyKick, NOT todayKick: op=ensemble is a pure projection of
+  // op=today, so priming it before the redundancy rebuild re-primes op=today would cache
+  // a board scored on the PREVIOUS model — a stale projection of a fresh source, which is
+  // worse than no priming because it looks current.
+  //
+  // Fire-and-forget in its own invocation: it self-fetches op=today (~10s even CDN-warm)
+  // and must not sit on the drain budget the tick chains share. Without this the first
+  // visitor after each deploy pays ~21s cold (op=ensemble → op=today), since a deploy
+  // flushes the CDN and only this cron re-primes.
+  const ensembleKick = redundancyKick
+    .then(() => warmOne('/api/tracker?op=ensemble').catch(() => null))
+    .catch(() => null);
+
   // ── DECOUPLED TICK CHAINS ──────────────────────────────────────────────────
   // The resolve/learn/log ticks run as fire-and-forget CHAINS (not awaited on the
   // critical path). Each chain runs its ops sequentially in their own invocations
@@ -271,6 +286,7 @@ module.exports = async function handler(req, res) {
   void ignitionKick; // fire-and-forget: Momentum Ignition log → prime tab
   void omegaKick; // fire-and-forget: OMEGA-SWING log → prime tab
   void redundancyKick; // fire-and-forget: rebuild the measured-redundancy model → re-prime op=today
+  void ensembleKick; // fire-and-forget: prime the OMEGA Ensemble board AFTER redundancy re-primes op=today
   void researchKick; // fire-and-forget: refresh the baseline factor cross-section
   void pulseKick; // fire-and-forget: gather→refine chain builds the refined Pulse snapshot
   void optionsAssessKick; // fire-and-forget: Fable options-flow analysis in its own budget
