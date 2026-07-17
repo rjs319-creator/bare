@@ -24,6 +24,7 @@ function summaryPanel(s) {
   const r = s.regime || {};
   const red = s.redundancy;
   const val = s.validation || {};
+  const m = s.model || null;
   const regimeClass = r.bearish ? 'oe-bad' : r.riskOn ? 'oe-good' : 'oe-mid';
   return `
     <div class="oe-summary">
@@ -48,10 +49,12 @@ function summaryPanel(s) {
         <div class="oe-sum-note">${esc(val.verdict || '')}</div>
       </div>
       <div class="oe-sum-cell">
-        <div class="oe-sum-k">Mode</div>
-        <div class="oe-sum-v">${esc((s.mode || '').split(' ')[0])}</div>
-        <div class="oe-sum-sub">${esc(s.mode || '')}</div>
-        <div class="oe-sum-note">${s.generatedAt ? `as of ${esc(new Date(s.generatedAt).toLocaleString())}` : ''}</div>
+        <div class="oe-sum-k">Model</div>
+        <div class="oe-sum-v">${esc((m && m.version) || (s.mode || '').split(' ')[0])}</div>
+        <div class="oe-sum-sub">${m && m.known
+    ? `${m.resolvedSamples ?? '—'} resolved · ${m.calibrated ? `calibrated (Brier ${nn(m.brier, 3)})` : 'not calibrated'}`
+    : esc(s.mode || '')}</div>
+        <div class="oe-sum-note">${esc(s.mode || '')}${s.generatedAt ? ` · as of ${esc(new Date(s.generatedAt).toLocaleString())}` : ''}</div>
       </div>
     </div>
     ${(s.warnings || []).length ? `<div class="oe-warn">⚠️ ${s.warnings.map(w => esc(w)).join(' · ')}</div>` : ''}`;

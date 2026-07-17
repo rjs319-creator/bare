@@ -39,7 +39,15 @@ const today = (o = {}) => ({
   ...o,
 });
 
-const health = { dsr: { trials: 18, passing: 0 } };
+// Shape taken VERBATIM from the live op=evolvehealth payload — the first prod run of this
+// page reported "op=evolvehealth did not answer" while the source was ok:true, because this
+// fixture had been guessed (`dsr`) instead of read (`deflatedSharpe`).
+const health = {
+  ok: true, version: 'evolve-core-v1', resolved: 672, logged: 9,
+  calibrated: true, calibrationError: 0.1844,
+  calibration: { brier: 0.105, table: [] },
+  deflatedSharpe: { trials: 12, passing: 0, passDSR: 0.95, survivors: [], verdict: 'no cell survives multiple-testing' },
+};
 
 test('composes the view from op=today without recomputing a score', () => {
   const v = OE.buildEnsembleView({ today: today(), health });
@@ -82,13 +90,38 @@ test('0 surviving DSR cells reads as a RESULT, not as missing data', () => {
   const v = OE.buildEnsembleView({ today: today(), health });
   assert.strictEqual(v.summary.validation.known, true);
   assert.strictEqual(v.summary.validation.passing, 0);
-  assert.ok(/no specialist.*survives/.test(v.summary.validation.verdict));
+  assert.strictEqual(v.summary.validation.trials, 12);
+  // The engine that ran the test owns the wording — we pass its verdict through.
+  assert.strictEqual(v.summary.validation.verdict, 'no cell survives multiple-testing');
 });
 
 test('validation absent when op=evolvehealth did not answer', () => {
   const v = OE.buildEnsembleView({ today: today(), health: null });
   assert.strictEqual(v.summary.validation.known, false);
-  assert.ok(/unavailable/.test(v.summary.validation.verdict));
+  assert.ok(/did not answer/.test(v.summary.validation.verdict));
+});
+
+// Regression: an absent FIELD and an absent ANSWER are different failures. Prod said
+// "did not answer" while sources.evolvehealth was ok:true, because the code read a guessed
+// key. A wrong reason is worse than no reason on a page whose whole premise is honesty.
+test('a health payload MISSING the dsr block is not reported as "did not answer"', () => {
+  const v = OE.buildEnsembleView({ today: today(), health: { ok: true, version: 'evolve-core-v1' } });
+  assert.strictEqual(v.summary.validation.known, false);
+  assert.ok(!/did not answer/.test(v.summary.validation.verdict),
+    'it DID answer — saying otherwise is a false reason');
+  assert.ok(/no deflated-Sharpe block/.test(v.summary.validation.verdict));
+});
+
+test('surfaces the model version, sample count and calibration quality (§9 summary)', () => {
+  const v = OE.buildEnsembleView({ today: today(), health });
+  const m = v.summary.model;
+  assert.strictEqual(m.known, true);
+  assert.strictEqual(m.version, 'evolve-core-v1');
+  assert.strictEqual(m.resolvedSamples, 672);
+  assert.strictEqual(m.calibrated, true);
+  assert.strictEqual(m.brier, 0.105);
+  assert.strictEqual(m.calibrationError, 0.1844);
+  assert.ok(m.source);
 });
 
 test('mode distinguishes measured redundancy from the asserted prior', () => {
