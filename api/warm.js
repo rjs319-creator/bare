@@ -27,6 +27,23 @@ async function warmOne(p) {
   }
 }
 
+// A warmchain dispatch, WITH its response body. A chain returns HTTP 200 even when its
+// steps failed or budget-skipped (the ok/failed/skipped truth is in the body, not the
+// status) — so reading only r.status here would re-create the exact "200 == healthy" blind
+// spot the chain refactor was built to remove, one layer up. This parses the body so a
+// chain's real outcome reaches op=health instead of only the [warmchain] log lines.
+async function warmChainOne(name) {
+  const t0 = Date.now();
+  try {
+    const r = await fetch(`https://${HOST}/api/tracker?op=warmchain&name=${name}`, { headers: internalHeaders() });
+    let body = null;
+    try { body = await r.json(); } catch { /* a truncated/killed chain may not return JSON */ }
+    return { name, httpStatus: r.status, body, ms: Date.now() - t0 };
+  } catch (e) {
+    return { name, error: String((e && e.message) || e), ms: Date.now() - t0 };
+  }
+}
+
 
 module.exports = async function handler(req, res) {
   // Gate the cron entrypoint: Vercel auto-sends the CRON_SECRET bearer on scheduled
@@ -62,7 +79,7 @@ module.exports = async function handler(req, res) {
   // no longer means the work was lost, because the chain is not running in this process.
   const chainKicks = WC.ROOT_CHAINS.map(name => ({
     name,
-    p: warmOne(`/api/tracker?op=warmchain&name=${name}`).catch(e => ({ error: String((e && e.message) || e) })),
+    p: warmChainOne(name).catch(e => ({ name, error: String((e && e.message) || e) })),
   }));
 
   // NOTE: the per-screener resolve/learn/log ticks (trend, daytrade, confluence, coil,
@@ -117,14 +134,21 @@ module.exports = async function handler(req, res) {
   await Promise.race([
     Promise.all(chainKicks.map(async (k) => {
       const r = await k.p;
-      chainReports[k.name] = r && r.error ? { dispatched: true, reportError: r.error }
-        : { dispatched: true, status: (r && r.status) || null };
+      if (r && r.error) { chainReports[k.name] = { dispatched: true, reportError: r.error }; return; }
+      // A warmchain ALWAYS returns HTTP 200 (unknown-name→400, throw→500), so the status
+      // alone hides a chain whose STEPS failed or budget-skipped — the ok/failed/skipped
+      // truth is in the body. Surface it, so op=health grades the real outcome instead of
+      // rubber-stamping every 200. This is the same "200 == healthy" trap, one layer up.
+      const b = r && r.body;
+      chainReports[k.name] = b && typeof b === 'object'
+        ? { dispatched: true, httpStatus: r.httpStatus, complete: b.complete !== false,
+            stepFails: Array.isArray(b.failed) ? b.failed : [], skipped: Array.isArray(b.skipped) ? b.skipped : [] }
+        : { dispatched: true, httpStatus: (r && r.httpStatus) || null, complete: null };
     })),
     new Promise(r => setTimeout(r, Math.max(0, DRAIN_CEIL_MS - (Date.now() - START)))),
   ]);
-  // A chain we didn't hear back from is STILL RUNNING — not failed, and not skipped.
-  // Saying "unknown" is the honest word: the old code called this "deferred, self-heals
-  // next run" and it was neither.
+  // A chain we didn't hear back from is STILL RUNNING — not failed, and not skipped. The
+  // honest word is "running", not the old "deferred, self-heals next run" (which it wasn't).
   for (const k of chainKicks) if (!chainReports[k.name]) chainReports[k.name] = { dispatched: true, status: 'running-past-warm' };
 
   // The 6 AI screener ticks are kicked fire-and-forget — a single dispatch each, which is
