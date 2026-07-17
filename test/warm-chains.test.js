@@ -148,3 +148,48 @@ test('decision: the ensemble is NOT behind the unknown-cost rebuild in one budge
   assert.ok(!call.calls.some(p => p.includes('op=ensemble')),
     'ensemble must live in its own invocation, not behind the rebuild');
 });
+
+// ── nested-chain failure propagation (finding #1, one level down) ───────────
+// A recorder that returns a BODY for nested @chain dispatches, simulating the child's
+// own runChain result — so we can prove a nested failure bubbles up to the parent.
+const nestedRecorder = (childBodies = {}) => {
+  const calls = [];
+  const fn = async (path) => {
+    calls.push(path);
+    const m = path.match(/op=warmchain&name=(\w+)/);
+    if (m) return { ok: true, status: 200, body: childBodies[m[1]] || { ok: true, failed: [], skipped: [] } };
+    return { ok: true, status: 200 };
+  };
+  fn.calls = calls;
+  return fn;
+};
+
+test('PROPAGATE: a nested chain\'s failed step bubbles into the parent, name-prefixed', async () => {
+  // ledger → @decision, where decision reported a failed redundancy rebuild.
+  const call = nestedRecorder({ decision: { ok: false, failed: ['op=redundancy&force=1'], skipped: [] } });
+  const r = await WC.runChain('ledger', { call, now: clock().now });
+  assert.strictEqual(r.ok, false, 'a nested failure must fail the parent');
+  assert.ok(r.failed.includes('decision/op=redundancy&force=1'),
+    `expected the prefixed nested failure, got ${JSON.stringify(r.failed)}`);
+});
+
+test('PROPAGATE: a nested chain\'s budget skip bubbles up as a parent skip', async () => {
+  const call = nestedRecorder({ decision: { ok: false, failed: [], skipped: ['op=ensemble'] } });
+  const r = await WC.runChain('ledger', { call, now: clock().now });
+  assert.ok(r.skipped.includes('decision/op=ensemble'));
+  assert.strictEqual(r.complete, false);
+});
+
+test('PROPAGATE: a healthy nested chain leaves the parent healthy', async () => {
+  const call = nestedRecorder({ decision: { ok: true, failed: [], skipped: [] } });
+  const r = await WC.runChain('ledger', { call, now: clock().now });
+  assert.strictEqual(r.ok, true);
+  assert.deepStrictEqual(r.failed, []);
+});
+
+test('PROPAGATE: a nested chain with NO body (child killed) is unknown, not a failure', async () => {
+  // The recorder returns no body for the child → honest "dispatched", parent stays ok.
+  const call = recorder();
+  const r = await WC.runChain('ledger', { call, now: clock().now });
+  assert.strictEqual(r.ok, true, 'no body = child still running/killed = not a failure');
+});

@@ -101,3 +101,65 @@ test('the chains block is never graded as a stage', () => {
   assert.ok(!('chainRoots' in r.stages));
   assert.strictEqual(r.stageCount, 0);
 });
+
+// ── finding #1: a warmchain returns 200 even when its STEPS failed ──────────
+test('a chain reporting FAILED STEPS in its body is a failure despite HTTP 200', () => {
+  const r = sr({
+    ok: true, at: 'x',
+    chains: { decision: { dispatched: true, httpStatus: 200, complete: true, stepFails: ['op=redundancy&force=1'], skipped: [] } },
+    chainsDispatched: 1,
+  });
+  assert.strictEqual(r.ok, false, 'failed steps must fail health even though the dispatch was 200');
+  assert.deepStrictEqual(r.chainDispatchFails, ['decision']);
+});
+
+test('a chain that budget-skipped steps is surfaced but does not fail the single run', () => {
+  const r = sr({
+    ok: true, at: 'x',
+    chains: { capture: { dispatched: true, httpStatus: 200, complete: false, stepFails: [], skipped: ['op=fadetick'] } },
+  });
+  assert.strictEqual(r.ok, true, 'a one-off skip self-heals — not a per-run failure');
+  assert.deepStrictEqual(r.chainSkips, [{ chain: 'capture', skipped: ['op=fadetick'] }]);
+});
+
+test('a healthy completed chain (no fails, no skips) stays green', () => {
+  const r = sr({ ok: true, at: 'x', chains: { ledger: { dispatched: true, httpStatus: 200, complete: true, stepFails: [], skipped: [] } } });
+  assert.strictEqual(r.ok, true);
+  assert.deepStrictEqual(r.chainDispatchFails, []);
+  assert.deepStrictEqual(r.chainSkips, []);
+});
+
+// ── finding #2: chronic deferral must actually be detected (the premise was never checked) ──
+const { detectChronicSkips } = require('../lib/health');
+
+test('a one-off skip is NOT chronic (it self-heals)', () => {
+  const runs = [
+    { chainSkips: [{ chain: 'capture', skipped: ['op=fadetick'] }] },
+    { chainSkips: [] }, { chainSkips: [] }, { chainSkips: [] },
+  ];
+  assert.deepStrictEqual(detectChronicSkips(runs).chronicSkips, []);
+});
+
+test('the SAME chain skipped on 3+ of the last 4 runs is chronic — the bug that hid for weeks', () => {
+  const runs = [
+    { chainSkips: [{ chain: 'capture', skipped: ['op=archive'] }] },
+    { chainSkips: [{ chain: 'capture', skipped: ['op=archive'] }] },
+    { chainSkips: [{ chain: 'capture', skipped: ['op=archive'] }] },
+    { chainSkips: [] },
+  ];
+  const c = detectChronicSkips(runs).chronicSkips;
+  assert.strictEqual(c.length, 1);
+  assert.strictEqual(c[0].name, 'capture');
+  assert.strictEqual(c[0].runs, 3);
+});
+
+test('legacy top-level budgetSkipped also feeds the chronic detector', () => {
+  const runs = Array(3).fill({ budgetSkipped: ['tonetick'] });
+  assert.strictEqual(detectChronicSkips(runs).chronicSkips[0].name, 'tonetick');
+});
+
+test('empty / malformed history never throws', () => {
+  assert.deepStrictEqual(detectChronicSkips(null).chronicSkips, []);
+  assert.deepStrictEqual(detectChronicSkips([]).chronicSkips, []);
+  assert.deepStrictEqual(detectChronicSkips([null, {}]).chronicSkips, []);
+});
