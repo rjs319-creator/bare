@@ -163,3 +163,41 @@ test('empty / malformed history never throws', () => {
   assert.deepStrictEqual(detectChronicSkips([]).chronicSkips, []);
   assert.deepStrictEqual(detectChronicSkips([null, {}]).chronicSkips, []);
 });
+
+// ── runHealth response assembly (guards the ReferenceError class) ───────────
+// A prior edit shipped `recent.length` out of scope here — a 500 on prod that the pure
+// helper tests could not catch because they never built the response. This exercises it.
+const { buildHealthResponse } = require('../lib/health');
+
+test('buildHealthResponse: assembles a healthy response from real-shaped runs', () => {
+  const runs = [
+    { at: '2026-07-17T13:00:00Z', ok: true, failCount: 0, chains: { ledger: { dispatched: true, httpStatus: 200 } } },
+    { at: '2026-07-16T13:00:00Z', ok: true, failCount: 0 },
+  ];
+  const r = buildHealthResponse(runs, { spyDate: '2026-07-17', ageDays: 0.5, now: 0 });
+  assert.strictEqual(r.healthy, true);
+  assert.strictEqual(r.warning, null);
+  assert.strictEqual(r.failStreak, 0);
+  assert.strictEqual(r.recentRuns.length, 2);
+});
+
+test('buildHealthResponse: chronic skips flip healthy to false with a warning', () => {
+  const runs = Array(4).fill(0).map(() => ({ at: 'x', ok: true, failCount: 0, chainSkips: [{ chain: 'capture', skipped: ['op=archive'] }] }));
+  const r = buildHealthResponse(runs, { spyDate: '2026-07-17', ageDays: 0.5 });
+  assert.strictEqual(r.healthy, false);
+  assert.ok(/capture/.test(r.warning) && /not self-healing/.test(r.warning));
+  assert.strictEqual(r.chronicSkips[0].name, 'capture');
+});
+
+test('buildHealthResponse: stale data flips healthy to false', () => {
+  const r = buildHealthResponse([{ at: 'x', ok: true }], { spyDate: '2026-07-01', ageDays: 10 });
+  assert.strictEqual(r.healthy, false);
+  assert.strictEqual(r.data.stale, true);
+});
+
+test('buildHealthResponse: empty history never throws and is not healthy', () => {
+  const r = buildHealthResponse([], {});
+  assert.strictEqual(r.healthy, false);
+  assert.strictEqual(r.lastRun, null);
+  assert.deepStrictEqual(r.chronicSkips, []);
+});
