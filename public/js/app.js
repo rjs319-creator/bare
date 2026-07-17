@@ -7190,20 +7190,25 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + `<div class="dt-dim rq-foot">Each pick is scored by <b>its own section's real model</b> reconstructed from point-in-time candles (Breakout→Apex, Ghost→Ghost, Momentum→EMA/VWAP/MACD/RSI, Day-Trade→relVol/gap ranker, Coil→Bollinger-squeeze rank; the rest use a tagged momentum proxy), then ranked <b>within its section</b> so scores from different models compare as "top of their own model". It's a conviction RANK, not a probability. "Predictive" needs a positive, significant rank-IC AND a monotone ladder — the bar every edge here is held to. Caveat: pct-based scorers (Apex/Ghost) percentile-rank across the logged-pick cohort, not the full daily universe, so absolute scores differ from live.</div>`
       + `</div>`;
   }
-  let rankQualityLoaded = false, rankQualityData = null;
-  async function loadRankQuality() {
-    const host = document.getElementById('sb-rankquality');
-    if (!host) return;
-    if (rankQualityData) { host.innerHTML = rankQualityPanel(rankQualityData); return; }
-    if (rankQualityLoaded) return;
-    rankQualityLoaded = true;
-    host.innerHTML = `<div class="sb-secgroup"><div class="sb-secgroup-h">🎯 Ranking quality — do higher scores win?</div><div class="mom-status"><div class="mom-spinner"></div><p>Checking whether higher scores actually produce better outcomes…</p></div></div>`;
-    try {
-      const rq = await fetch('/api/tracker?op=rankquality').then(r => r.json());
-      rankQualityData = rq;
-      host.innerHTML = rankQualityPanel(rq);
-    } catch { host.innerHTML = `<div class="sb-secgroup"><div class="dt-note" style="border-left-color:var(--red)">Couldn't load the ranking-quality check.</div></div>`; }
+  // Shared lazy-panel loader for the Scoreboard's own-endpoint panels. Fixes a re-render race:
+  // renderScoreboard runs again on a regime toggle / maturity restamp and rebuilds the panel
+  // divs, so the loader must (a) re-show the spinner into the CURRENT host on every call while a
+  // fetch is in flight — never early-return to a blank div — and (b) write the result to the host
+  // re-queried at completion time, not a host captured before an intervening re-render detached it.
+  const _panelState = {}; // id → { loading, data }
+  const _panelErr = `<div class="sb-secgroup"><div class="dt-note" style="border-left-color:var(--red)">Couldn't load this panel right now — the ranking is unaffected.</div></div>`;
+  async function loadLazyPanel(id, url, render, spinner) {
+    const set = (html) => { const h = document.getElementById(id); if (h) h.innerHTML = html; };
+    const st = _panelState[id] || (_panelState[id] = {});
+    if (st.data !== undefined) { set(render(st.data)); return; }
+    set(spinner);                 // always (re)show the spinner into the current host
+    if (st.loading) return;       // a fetch is already in flight; the spinner is showing
+    st.loading = true;
+    try { const d = await fetch(url).then(r => r.json()); st.data = d; set(render(d)); }
+    catch { set(_panelErr); } finally { st.loading = false; }
   }
+  const rqSpinner = `<div class="sb-secgroup"><div class="sb-secgroup-h">🎯 Ranking quality — do higher scores win?</div><div class="mom-status"><div class="mom-spinner"></div><p>Checking whether higher scores actually produce better outcomes…</p></div></div>`;
+  const loadRankQuality = () => loadLazyPanel('sb-rankquality', '/api/tracker?op=rankquality', rankQualityPanel, rqSpinner);
 
   // ── ⏱ EARLY DETECTION (§7) — does each algorithm find moves EARLY enough to be useful?
   // Reads op=leadtime (days-before-breakout, share of the move captured before confirmation,
@@ -7252,20 +7257,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + `<div class="dt-dim rq-foot">🎯 = share of the eventual move captured before confirmation (the payoff for earliness). ✅ = conversion rate. A high ⏱ with low ✅ is a screener that fires into names that never move. Same first-appearance ledgers and point-in-time candles as the Scoreboard above.</div>`
       + `</div>`;
   }
-  let leadTimeLoaded = false, leadTimeData = null;
-  async function loadLeadTime() {
-    const host = document.getElementById('sb-leadtime');
-    if (!host) return;
-    if (leadTimeData) { host.innerHTML = leadTimePanel(leadTimeData); return; }
-    if (leadTimeLoaded) return;
-    leadTimeLoaded = true;
-    host.innerHTML = `<div class="sb-secgroup"><div class="sb-secgroup-h">⏱ Early detection — does each algorithm find moves early?</div><div class="mom-status"><div class="mom-spinner"></div><p>Measuring how early each algorithm detects moves…</p></div></div>`;
-    try {
-      const lt = await fetch('/api/tracker?op=leadtime').then(r => r.json());
-      leadTimeData = lt;
-      host.innerHTML = leadTimePanel(lt);
-    } catch { host.innerHTML = `<div class="sb-secgroup"><div class="dt-note" style="border-left-color:var(--red)">Couldn't load the early-detection check.</div></div>`; }
-  }
+  const ltSpinner = `<div class="sb-secgroup"><div class="sb-secgroup-h">⏱ Early detection — does each algorithm find moves early?</div><div class="mom-status"><div class="mom-spinner"></div><p>Measuring how early each algorithm detects moves…</p></div></div>`;
+  const loadLeadTime = () => loadLazyPanel('sb-leadtime', '/api/tracker?op=leadtime', leadTimePanel, ltSpinner);
 
   // ── 🛡 ADVERSARIAL FAILURE MODEL (§5) — a SHADOW model that flags likely-to-fail setups.
   // Reads op=failuremodel: replays the candle-derivable failure features point-in-time over the
@@ -7304,20 +7297,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + `<div class="dt-dim rq-foot">Rejected/approved are the top/bottom third by failure score. Replays only the candle-derivable failure features (earnings/single-factor/track aren't in the ledger). ${fm.coverage ? `Evaluated ${fm.coverage.evaluated} resolved picks.` : ''}</div>`
       + `</div>`;
   }
-  let failureLoaded = false, failureData = null;
-  async function loadFailureModel() {
-    const host = document.getElementById('sb-failure');
-    if (!host) return;
-    if (failureData) { host.innerHTML = failureModelPanel(failureData); return; }
-    if (failureLoaded) return;
-    failureLoaded = true;
-    host.innerHTML = `<div class="sb-secgroup"><div class="sb-secgroup-h">🛡 Adversarial failure model (shadow)</div><div class="mom-status"><div class="mom-spinner"></div><p>Testing whether flagged setups actually underperform…</p></div></div>`;
-    try {
-      const fm = await fetch('/api/tracker?op=failuremodel').then(r => r.json());
-      failureData = fm;
-      host.innerHTML = failureModelPanel(fm);
-    } catch { host.innerHTML = `<div class="sb-secgroup"><div class="dt-note" style="border-left-color:var(--red)">Couldn't load the failure-model check.</div></div>`; }
-  }
+  const fmSpinner = `<div class="sb-secgroup"><div class="sb-secgroup-h">🛡 Adversarial failure model (shadow)</div><div class="mom-status"><div class="mom-spinner"></div><p>Testing whether flagged setups actually underperform…</p></div></div>`;
+  const loadFailureModel = () => loadLazyPanel('sb-failure', '/api/tracker?op=failuremodel', failureModelPanel, fmSpinner);
 
   // ── 🧪 COMPONENT LABORATORY (§2) — does each algorithm component ADD value beyond the rest
   // of the setup? Reads op=complab: a matched treated-vs-control study over the resolved ledger
@@ -7363,20 +7344,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + `<div class="dt-dim rq-foot">Nearest-neighbour matched treated-vs-control (${cl.window || 21}-bar forward return). Never auto-removes a feature — recommendations are evidence for a human decision.</div>`
       + `</div>`;
   }
-  let complabLoaded = false, complabData = null;
-  async function loadComponentLab() {
-    const host = document.getElementById('sb-complab');
-    if (!host) return;
-    if (complabData) { host.innerHTML = componentLabPanel(complabData); return; }
-    if (complabLoaded) return;
-    complabLoaded = true;
-    host.innerHTML = `<div class="sb-secgroup"><div class="sb-secgroup-h">🧪 Component laboratory</div><div class="mom-status"><div class="mom-spinner"></div><p>Matching treated vs control to isolate what each component adds…</p></div></div>`;
-    try {
-      const cl = await fetch('/api/tracker?op=complab').then(r => r.json());
-      complabData = cl;
-      host.innerHTML = componentLabPanel(cl);
-    } catch { host.innerHTML = `<div class="sb-secgroup"><div class="dt-note" style="border-left-color:var(--red)">Couldn't load the component laboratory.</div></div>`; }
-  }
+  const clSpinner = `<div class="sb-secgroup"><div class="sb-secgroup-h">🧪 Component laboratory</div><div class="mom-status"><div class="mom-spinner"></div><p>Matching treated vs control to isolate what each component adds…</p></div></div>`;
+  const loadComponentLab = () => loadLazyPanel('sb-complab', '/api/tracker?op=complab', componentLabPanel, clSpinner);
 
   scoreboardRefreshBtn.addEventListener('click', fetchScoreboard);
   fetchScoreboard();
