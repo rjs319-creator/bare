@@ -27,7 +27,7 @@ test('insufficient sample → honest insufficient verdict, no false claim', () =
   assert.equal(out.promoted, false);
 });
 
-test('§5 acceptance: when rejected names DO underperform approved ones OOS → predictive', () => {
+test('§5 acceptance: rejected names underperform approved ones OOS → predictive', () => {
   const hist = new Map(), picks = [];
   for (let i = 0; i < 25; i++) { hist.set('BAD' + i, parabolicThenDrop); picks.push({ ticker: 'BAD' + i, date: '2026-01-30', section: 'Ext', tier: 'T' }); }
   for (let i = 0; i < 25; i++) { hist.set('OK' + i, calmThenRise); picks.push({ ticker: 'OK' + i, date: '2026-01-30', section: 'Calm', tier: 'T' }); }
@@ -36,7 +36,28 @@ test('§5 acceptance: when rejected names DO underperform approved ones OOS → 
   assert.ok(out.buckets.rejected.n >= 10 && out.buckets.approved.n >= 10, JSON.stringify(out.buckets));
   assert.equal(out.verdict, 'predictive');
   assert.ok(out.predictiveGap > 0, 'approved must out-return rejected');
+});
+
+test('§5 discipline: a predictive verdict on a SINGLE window is held in SHADOW (not promoted)', () => {
+  const hist = new Map(), picks = [];
+  for (let i = 0; i < 25; i++) { hist.set('BAD' + i, parabolicThenDrop); picks.push({ ticker: 'BAD' + i, date: '2026-01-30', section: 'Ext', tier: 'T' }); }
+  for (let i = 0; i < 25; i++) { hist.set('OK' + i, calmThenRise); picks.push({ ticker: 'OK' + i, date: '2026-01-30', section: 'Calm', tier: 'T' }); }
+  const out = EV.evaluateFailureModel(picks, hist);
+  assert.equal(out.verdict, 'predictive');
+  assert.equal(out.promoted, false, 'one regime window must not promote it out of shadow');
+  assert.ok(out.promotionBlockedReason, 'and it says why it is held');
+  assert.equal(out.coverage.distinctMonths, 1);
+});
+
+test('promotion gate mechanics: only clears when span + sample bars are met', () => {
+  const hist = new Map(), picks = [];
+  for (let i = 0; i < 25; i++) { hist.set('BAD' + i, parabolicThenDrop); picks.push({ ticker: 'BAD' + i, date: '2026-01-30', section: 'Ext', tier: 'T' }); }
+  for (let i = 0; i < 25; i++) { hist.set('OK' + i, calmThenRise); picks.push({ ticker: 'OK' + i, date: '2026-01-30', section: 'Calm', tier: 'T' }); }
+  // Relax the bar to a single window → the gate now clears, proving the mechanics work.
+  const out = EV.evaluateFailureModel(picks, hist, { config: { PROMOTE_MIN_MONTHS: 1, PROMOTE_MIN_TOTAL: 40 } });
+  assert.equal(out.verdict, 'predictive');
   assert.equal(out.promoted, true);
+  assert.equal(out.promotionBlockedReason, null);
 });
 
 test('byMode reports a per-failure-mode loss rate (the historical analog)', () => {

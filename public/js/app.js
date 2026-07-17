@@ -7287,9 +7287,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
   function failureModelPanel(fm) {
     if (!fm || !fm.ok) return `<div class="sb-secgroup"><div class="dt-note" style="border-left-color:var(--red)">Couldn't load the failure-model check.</div></div>`;
-    const [vi, vcol, vtxt] = FMV[fm.verdict] || FMV.insufficient;
+    let [vi, vcol, vtxt] = FMV[fm.verdict] || FMV.insufficient;
+    // A predictive verdict that is NOT promoted is honestly "promising but still shadow".
+    if (fm.verdict === 'predictive' && !fm.promoted) { vi = '🟡'; vcol = 'var(--amber,#f59e0b)'; vtxt = 'Predictive on this window — but held in SHADOW pending multi-regime confirmation'; }
     const b = fm.buckets || {};
-    const gap = fm.predictiveGap == null ? '' : `<div class="dt-dim rq-cap">Approved − rejected forward-return gap: <b style="color:${fm.predictiveGap > 0 ? 'var(--green)' : 'var(--red)'}">${fm.predictiveGap > 0 ? '+' : ''}${fm.predictiveGap}%</b> (positive = the model's rejected names did worse).</div>`;
+    const gap = fm.predictiveGap == null ? '' : `<div class="dt-dim rq-cap">Approved − rejected forward-return gap: <b style="color:${fm.predictiveGap > 0 ? 'var(--green)' : 'var(--red)'}">${fm.predictiveGap > 0 ? '+' : ''}${fm.predictiveGap}%</b> (positive = the model's rejected names did worse).</div>`
+      + (fm.promotionBlockedReason ? `<div class="dt-dim rq-cap">⏳ ${esc(fm.promotionBlockedReason)}</div>` : '');
     const modes = (fm.byMode || []).slice(0, 5).map(m => `<span class="lt-lead"><b>${esc(m.label)}</b> ${m.lossRate}% loss <span class="dt-dim">n${m.n}</span></span>`).join('');
     return `<div class="sb-secgroup rq-panel lt-panel">`
       + `<div class="sb-secgroup-h">🛡 Adversarial failure model <span class="dt-dim">— SHADOW: never changes the rank until it's proven</span></div>`
