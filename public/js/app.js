@@ -7,6 +7,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadQuickHit } from './quickhit.js';
   import { loadCommandCenter } from './today.js';
   import { loadEvolve } from './evolve.js';
+  import { loadEnsemble } from './omega-ensemble.js';
   import { loadIgnition } from './ignition.js';
   import { loadOmega } from './omega-swing.js';
   import { loadLeaderboard } from './leaderboard.js';
@@ -21,7 +22,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // horizon (see SUB_HZ dividers). Markets = macro/context; Predict = the forecast &
     // prediction-market read. Unproven overlays live in the Research Lab; the honest
     // report cards live in Evidence.
-    home:       ['today', 'start', 'quickhit'],
+    home:       ['today', 'ensemble', 'start', 'quickhit'],
     candidates: ['daytrade', 'gapgo', 'ignition', 'gapdown', 'opportunities', 'omega', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
     positions:  ['coremo', 'momentum', 'putsell', 'picks'],
     markets:    ['rotation', 'sectors', 'news', 'pulse', 'evolve'],
@@ -41,7 +42,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const TOP_TABS = Object.keys(TAB_GROUPS);
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
-    today: '🏠 Today', start: '📘 Guide',
+    today: '🏠 Today', ensemble: '🎯 OMEGA Ensemble', start: '📘 Guide',
     quickhit: '⚡ Quick Hit', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
@@ -52,6 +53,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // sub-tab, shown when you hover the tab button.
   const SECTION_HELP = {
     today: 'Your daily home base: the market mood and where to start.',
+    ensemble: 'Every screener combined into ONE portfolio-aware book. Correlated screeners are counted once (not seven times), trading costs are charged against each target, and names are dropped when they add duplicate risk — with the reason shown. It composes the existing engines and computes no score of its own, so it is allowed to hand you fewer than 10 names, or none.',
     start: 'A beginner’s guide to what everything in this app means.',
     quickhit: 'The Top 5 plays across large, small AND micro caps — one fast shortlist with links to where each lives.',
     opportunities: 'The best setups across all the screeners, gathered in one ranked list.',
@@ -384,6 +386,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'picks' && typeof ensurePicks === 'function') ensurePicks();
     if (sub === 'pulse' && typeof ensurePulse === 'function') ensurePulse();
     if (sub === 'evolve' && typeof ensureEvolve === 'function') ensureEvolve();
+    if (sub === 'ensemble' && typeof ensureEnsemble === 'function') ensureEnsemble();
     if (sub === 'readthrough' && typeof ensureReadThrough === 'function') ensureReadThrough();
     if (sub === 'anomaly' && typeof ensureAnomaly === 'function') ensureAnomaly();
     if (sub === 'biotech' && typeof ensureBiotech === 'function') ensureBiotech();
@@ -3572,6 +3575,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (btn) btn.addEventListener('click', () => loadOmega(document.getElementById('omega-container')));
     }
     loadOmega(document.getElementById('omega-container'));
+  }
+
+  // 🎯 OMEGA ENSEMBLE — the composed board (loadEnsemble renders the op=ensemble payload,
+  // which is a pure projection of op=today + op=evolvehealth; no scoring client-side).
+  let ensembleLoaded = false;
+  function ensureEnsemble() {
+    if (!ensembleLoaded) {
+      ensembleLoaded = true;
+      const btn = document.getElementById('ensemble-refresh-btn');
+      if (btn) btn.addEventListener('click', () => loadEnsemble(document.getElementById('ensemble-container'), true));
+    }
+    loadEnsemble(document.getElementById('ensemble-container'));
   }
 
   // 🧬 EVOLVE — adaptive pre-move discovery (loadEvolve renders the op=evolve payload).

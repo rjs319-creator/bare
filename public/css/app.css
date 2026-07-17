@@ -2650,3 +2650,50 @@
 .td-redunp-cov, .td-redunp-foot { font-size:.68rem; margin-top:.45rem; line-height:1.4; }
 /* Per-card measured discount — only rendered when measurement DISAGREES with the map. */
 .td-redun { font-size:.7rem; color:var(--amber,#f59e0b); margin-top:.15rem; line-height:1.35; }
+
+/* ── 🎯 OMEGA ENSEMBLE (op=ensemble) ────────────────────────────────────────
+   Renders the composed board: summary, portfolio caps, ranking, exclusions.
+   No colour here encodes a claim the backend does not make — "not calibrated"
+   is styled as dim/neutral, never as a green number. */
+.oe-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:10px; margin-bottom:12px; }
+.oe-sum-cell { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:10px 12px; }
+.oe-sum-k { font-size:11px; text-transform:uppercase; letter-spacing:.06em; opacity:.6; }
+.oe-sum-v { font-size:19px; font-weight:700; margin:3px 0; }
+.oe-sum-sub { font-size:12px; opacity:.75; }
+.oe-sum-note { font-size:11px; opacity:.55; margin-top:5px; line-height:1.35; }
+.oe-good { color:#22c55e; } .oe-bad { color:#ef4444; } .oe-mid { color:#f59e0b; }
+.oe-warn { background:rgba(245,158,11,.1); border:1px solid rgba(245,158,11,.3); border-radius:8px; padding:7px 10px; font-size:12px; margin-bottom:10px; }
+
+.oe-pf { background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.07); border-radius:10px; padding:10px 12px; margin-bottom:12px; }
+.oe-pf-line { font-size:12.5px; margin:3px 0; opacity:.9; }
+.oe-pf-note { font-size:11px; opacity:.55; margin-top:6px; font-style:italic; }
+
+.oe-tablewrap { overflow-x:auto; }
+.oe-table { width:100%; border-collapse:collapse; font-size:13px; }
+.oe-table th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em; opacity:.6; padding:6px 8px; border-bottom:1px solid rgba(255,255,255,.12); white-space:nowrap; }
+.oe-table td { padding:8px; border-bottom:1px solid rgba(255,255,255,.05); vertical-align:top; }
+.oe-rank { opacity:.5; font-variant-numeric:tabular-nums; }
+.oe-tk strong { font-size:14px; }
+.oe-sub { font-size:11px; opacity:.55; margin-top:2px; }
+.oe-score { font-weight:700; font-variant-numeric:tabular-nums; }
+.oe-short { color:#ef4444; }
+/* The probability column states an absence. It must never look like a value. */
+.oe-prob { font-size:11.5px; opacity:.45; font-style:italic; cursor:help; }
+.oe-chips { display:flex; flex-wrap:wrap; gap:4px; }
+.oe-chip { display:inline-block; font-size:11px; padding:2px 6px; border-radius:5px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); white-space:nowrap; }
+.oe-chip-good { background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.3); }
+.oe-chip-warn { background:rgba(245,158,11,.12); border-color:rgba(245,158,11,.3); }
+.oe-chip-dim { opacity:.45; }
+
+.oe-empty { padding:18px; text-align:center; opacity:.7; font-size:13px; line-height:1.5; }
+.oe-excl, .oe-disc { margin-top:12px; background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.07); border-radius:10px; padding:8px 12px; }
+.oe-excl summary, .oe-disc summary { cursor:pointer; font-size:12.5px; font-weight:600; opacity:.85; }
+.oe-excl-body { margin-top:8px; }
+.oe-excl-row { display:grid; grid-template-columns:64px 52px 190px 1fr; gap:8px; padding:5px 0; border-bottom:1px solid rgba(255,255,255,.04); font-size:12px; align-items:baseline; }
+.oe-excl-tk { font-weight:700; }
+.oe-excl-score { opacity:.6; font-variant-numeric:tabular-nums; }
+.oe-excl-reason { opacity:.9; }
+.oe-excl-detail { opacity:.6; font-size:11.5px; }
+.oe-disc ul { margin:8px 0 2px 16px; padding:0; }
+.oe-disc li { font-size:11.5px; opacity:.7; line-height:1.5; margin-bottom:5px; }
+@media (max-width:720px) { .oe-excl-row { grid-template-columns:1fr; gap:2px; } }
