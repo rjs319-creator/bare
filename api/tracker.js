@@ -49,6 +49,9 @@ const { rateLimit, clientKey } = require('../lib/ratelimit');
 // Ops the DAILY CRON fans out to and the browser never fetches directly — safe to
 // require the CRON_SECRET bearer (enforced only once the secret is configured).
 const PRIVILEGED_OPS = new Set([
+  // 'warmchain' runs ledger WRITES and expensive rebuilds (op=redundancy&force=1 refetches
+  // candles for every ticker in the ledger history) — cron-only, never public.
+  'warmchain',
   'alertsassess', 'alertsgrade', 'alignedlog', 'apexlog', 'archive', 'attentiontick',
   'brieftick', 'cerntick', 'coiltick', 'confluencetick', 'corebuild', 'corelog',
   'crowdtick', 'daytradetick', 'downdaytick', 'dualreadlog', 'dualreadtune', 'edgelog',
@@ -250,6 +253,9 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'evolvebackfill') return require('../lib/evolve-routes').runEvolveBackfillOp(req, res);
   // OMEGA Ensemble page (§9) — a read-only projection of op=today + op=evolvehealth.
   if (req.query.op === 'ensemble') return require('../lib/omega-ensemble-routes').runEnsemble(req, res);
+  // Ordered cron work, run in ITS OWN invocation (see lib/warm-chains.js — a .then()
+  // chain inside api/warm.js dies when warm returns at its 55s ceiling).
+  if (req.query.op === 'warmchain') return require('../lib/warm-chains-routes').runWarmChain(req, res);
   // 🔥 Momentum Ignition — one acceleration-ranked view over the momentum scanners.
   if (req.query.op === 'ignition') return require('../lib/ignition-routes').runIgnition(req, res);
   if (req.query.op === 'ignitionlog') return require('../lib/ignition-routes').runIgnitionLog(req, res);
