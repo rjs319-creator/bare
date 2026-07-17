@@ -52,6 +52,24 @@ test('SECTOR CAP: an UNKNOWN sector is never capped (unknown is not a violation)
   assert.strictEqual(p.selected.length, 3, 'a missing sector must not bury a name');
 });
 
+// Regression: the live feed emits a literal '?' for an unknown sector, so two unrelated
+// names were capped against each other as though "?" were a sector. Whether unknown means
+// null or '?' is an upstream accident and must not change the decision.
+test('SECTOR CAP: a PLACEHOLDER sector is unknown, not a sector called "?"', () => {
+  for (const placeholder of ['?', '', '  ', 'N/A', 'Unknown', '-']) {
+    const ranked = ['A', 'B', 'C'].map(t => sig({ ticker: t, sector: placeholder }));
+    const p = P.buildPortfolio(ranked, { size: 10, maxPerSector: 1 });
+    assert.strictEqual(p.selected.length, 3, `sector "${placeholder}" must be treated as unknown`);
+    assert.deepStrictEqual(p.exposure, {}, `sector "${placeholder}" must not appear as exposure`);
+  }
+});
+
+test('SECTOR CAP: a real sector is still capped, and whitespace does not fork the bucket', () => {
+  const ranked = [sig({ ticker: 'A', sector: 'Tech' }), sig({ ticker: 'B', sector: ' Tech ' })];
+  const p = P.buildPortfolio(ranked, { size: 10, maxPerSector: 1 });
+  assert.strictEqual(p.selected.length, 1, '" Tech " and "Tech" are one sector');
+});
+
 // ── duplicate underlying ────────────────────────────────────────────────────
 test('DUPLICATE: the same ticker at a second horizon is excluded, stronger one kept', () => {
   const ranked = [sig({ ticker: 'AAPL', horizon: 'swing', score: 90 }),

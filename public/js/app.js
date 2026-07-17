@@ -3584,7 +3584,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!ensembleLoaded) {
       ensembleLoaded = true;
       const btn = document.getElementById('ensemble-refresh-btn');
-      if (btn) btn.addEventListener('click', () => loadEnsemble(document.getElementById('ensemble-container')));
+      if (btn) btn.addEventListener('click', () => loadEnsemble(document.getElementById('ensemble-container'), true));
     }
     loadEnsemble(document.getElementById('ensemble-container'));
   }

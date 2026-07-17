@@ -118,6 +118,33 @@ test('fromOptionsFlow: empty / malformed input never throws', () => {
   assert.deepStrictEqual(N.fromOptionsFlow({ byTicker: [null] }), []);
 });
 
+// ── the merge SAFETY guard ──────────────────────────────────────────────────
+// Regression for a real bug this diff made reachable: mergeSignals keyed on
+// ticker|horizon with NO side, so a long and a short on the same name at the same horizon
+// collapsed into one row and the loser's evidence was unioned onto the winner. Adding
+// downday (bounce long + fade short) and optionsflow (bullish + bearish) at swing put
+// both sides in one bucket for the first time.
+test('MERGE SAFETY: a bearish read never becomes confirming evidence for a long', () => {
+  const D = require('../lib/decision');
+  const long = { source: 'screener', ticker: 'SNOW', horizon: 'swing', side: 'long', price: 100, entry: 100, stop: 95, target: 115, rawConfidence: 80, evidenceFamilies: ['priceTrend'] };
+  const short = { source: 'optionsflow', ticker: 'SNOW', horizon: 'swing', side: 'short', price: 100, rawConfidence: 70, evidenceFamilies: ['optionsPositioning'] };
+  const merged = D.mergeSignals([long, short]);
+  assert.strictEqual(merged.length, 2, 'disagreement must stay two competing rows, not one');
+  const l = merged.find(m => m.side === 'long');
+  assert.deepStrictEqual(l.evidenceFamilies, ['priceTrend'],
+    'the long must NOT absorb the bearish options family as confirmation');
+  assert.ok(merged.find(m => m.side === 'short'), 'the short survives as its own row');
+});
+
+test('MERGE SAFETY: same-side signals on one name still merge (the feature is intact)', () => {
+  const D = require('../lib/decision');
+  const a = { source: 'screener', ticker: 'X', horizon: 'swing', side: 'long', entry: 10, stop: 9, target: 12, rawConfidence: 70, evidenceFamilies: ['priceTrend'] };
+  const b = { source: 'optionsflow', ticker: 'X', horizon: 'swing', side: 'long', rawConfidence: 60, evidenceFamilies: ['optionsPositioning'] };
+  const merged = D.mergeSignals([a, b]);
+  assert.strictEqual(merged.length, 1);
+  assert.deepStrictEqual(merged[0].evidenceFamilies.sort(), ['optionsPositioning', 'priceTrend']);
+});
+
 // ── the merge payoff ────────────────────────────────────────────────────────
 test('MERGE: options positioning adds an INDEPENDENT family to a screener row', () => {
   const D = require('../lib/decision');

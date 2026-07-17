@@ -158,11 +158,15 @@ export function renderEnsemble(container, p) {
     ${disclosurePanel(p.disclosures)}`;
 }
 
-export async function loadEnsemble(container) {
+// `force` busts the CDN. Only the Refresh button should: op=ensemble self-fetches op=today
+// (~12s cold), and a cache-buster on every tab open would make the route a guaranteed CDN
+// MISS — re-running the whole merge per visit and throwing away the s-maxage=300 the route
+// sets on itself.
+export async function loadEnsemble(container, force = false) {
   if (!container) return;
   container.innerHTML = '<div class="mom-status"><div class="mom-spinner"></div><p>Composing the ensemble from every engine… <span class="dt-dim">(can take ~15s cold)</span></p></div>';
   try {
-    const r = await fetch(`/api/tracker?op=ensemble&_cb=${Date.now()}`);
+    const r = await fetch(`/api/tracker?op=ensemble${force ? `&_cb=${Date.now()}` : ''}`);
     const p = await r.json();
     renderEnsemble(container, p);
   } catch (e) {
