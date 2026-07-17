@@ -237,3 +237,83 @@ test('a single-source signal is never touched by the redundancy model', () => {
   const meas = D.rankSignals(sigs, { regime: { riskOn: true }, scoreboard: null, redundancy: model })[0];
   assert.strictEqual(meas.score, base.score, 'one source cannot be redundant with itself');
 });
+
+// ── The production case: Ghost confirmation riding on a screener signal ──────
+// Measured on prod: ghost x screener overlap 0.80, return corr 0.96 => credit 0.36,
+// while the static family map called them INDEPENDENT (different families => 1.0).
+// This is the inflation the model exists to correct, so it must actually bind.
+
+function ghostScreenerModel() {
+  const dates = Array.from({ length: 30 }, (_, i) => `2026-06-${String(i + 1).padStart(2, '0')}`);
+  const rws = [];
+  for (const date of dates) for (const ticker of ['NVDA', 'AMD']) {
+    const ex = +(Math.sin(dates.indexOf(date) * 0.7) * 3).toFixed(2);
+    rws.push({ date, ticker, algorithm: 'screener', excess: ex });
+    rws.push({ date, ticker, algorithm: 'ghost', excess: ex });   // near-duplicate, as measured
+  }
+  return R.buildRedundancyModel(rws, {
+    priorCredit: D.CORR_DISCOUNT, familyOf: (s) => D.SOURCE_FAMILY[s] || null,
+  });
+}
+
+test('a screener signal carrying Ghost evidence is charged against the screener', () => {
+  const model = ghostScreenerModel();
+  const sig = D.makeSignal({
+    ticker: 'NVDA', source: 'screener', sources: ['screener'], horizon: 'swing', side: 'long',
+    rawConfidence: 70, price: 10, family: 'priceTrend',
+    evidenceFamilies: ['priceTrend', 'volumeAccum'],
+    evidenceOrigins: { priceTrend: 'screener', volumeAccum: 'ghost' },
+    liquidity: { dollarVol: 5e7 },
+  }).signal;
+  assert.deepStrictEqual(sig.evidenceOrigins, { priceTrend: 'screener', volumeAccum: 'ghost' },
+    'makeSignal must carry evidenceOrigins through validation');
+
+  const base = D.rankSignals([sig], { regime: { riskOn: true }, scoreboard: null })[0];
+  const meas = D.rankSignals([sig], { regime: { riskOn: true }, scoreboard: null, redundancy: model })[0];
+
+  // The static map awards two different families full independent credit: 1 + 1 = 2.
+  assert.strictEqual(base.evidence.score, 2, 'baseline over-credits the correlated pair');
+  assert.strictEqual(meas.evidence.measured, true, 'the ghost/screener credit must BIND on a one-source signal');
+  assert.ok(meas.evidence.score < 2, `measured score must fall below the asserted 2.0, got ${meas.evidence.score}`);
+  const ghostCredit = meas.evidence.credits.find(c => c.source === 'ghost');
+  assert.strictEqual(ghostCredit.against, 'screener', 'Ghost must be charged against the screener it re-ranks');
+  assert.ok(ghostCredit.credit < 0.5, `near-duplicate engine should earn well under half credit, got ${ghostCredit.credit}`);
+  assert.ok(meas.score < base.score, 'the correlated confirmation must lower the composite score');
+});
+
+test('a screener signal WITHOUT Ghost evidence is unaffected by the model', () => {
+  const model = ghostScreenerModel();
+  const sig = D.makeSignal({
+    ticker: 'NVDA', source: 'screener', sources: ['screener'], horizon: 'swing', side: 'long',
+    rawConfidence: 70, price: 10, family: 'priceTrend',
+    evidenceFamilies: ['priceTrend'], evidenceOrigins: { priceTrend: 'screener' },
+    liquidity: { dollarVol: 5e7 },
+  }).signal;
+  const base = D.rankSignals([sig], { regime: { riskOn: true }, scoreboard: null })[0];
+  const meas = D.rankSignals([sig], { regime: { riskOn: true }, scoreboard: null, redundancy: model })[0];
+  assert.strictEqual(meas.score, base.score, 'a single-engine signal has nothing to be redundant with');
+});
+
+test('an UNMEASURED origin engine keeps the static prior (no fabricated penalty)', () => {
+  const model = ghostScreenerModel(); // knows nothing about the fundamentals feed
+  const sig = D.makeSignal({
+    ticker: 'NVDA', source: 'screener', sources: ['screener'], horizon: 'swing', side: 'long',
+    rawConfidence: 70, price: 10, family: 'priceTrend',
+    evidenceFamilies: ['priceTrend', 'fundamentalsRevisions'],
+    evidenceOrigins: { priceTrend: 'screener', fundamentalsRevisions: 'fundamentals' },
+    liquidity: { dollarVol: 5e7 },
+  }).signal;
+  const base = D.rankSignals([sig], { regime: { riskOn: true }, scoreboard: null })[0];
+  const meas = D.rankSignals([sig], { regime: { riskOn: true }, scoreboard: null, redundancy: model })[0];
+  assert.strictEqual(meas.score, base.score, 'an unmeasured pair must not be penalised on speculation');
+});
+
+test('mergeSignals unions evidenceOrigins across sources', () => {
+  const a = { ticker: 'NVDA', horizon: 'swing', source: 'screener', sources: ['screener'], rawConfidence: 60, entry: 10,
+    evidenceFamilies: ['priceTrend'], evidenceOrigins: { priceTrend: 'screener' } };
+  const b = { ticker: 'NVDA', horizon: 'swing', source: 'coil', sources: ['coil'], rawConfidence: 50,
+    evidenceFamilies: ['volumeAccum'], evidenceOrigins: { volumeAccum: 'ghost' } };
+  const merged = D.mergeSignals([a, b]);
+  assert.strictEqual(merged.length, 1);
+  assert.deepStrictEqual(merged[0].evidenceOrigins, { priceTrend: 'screener', volumeAccum: 'ghost' });
+});
