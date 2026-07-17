@@ -166,6 +166,21 @@ test('buildToday: remaining-edge (§3) re-ranks a run-up name and emits the mode
   assert.ok(reRun.score < baseRun.score, `run-up name must be demoted: ${reRun.score} < ${baseRun.score}`);
 });
 
+test('buildToday: emits an opportunity-density decision, and a bull tape alone does not force "normal"', () => {
+  // A thin board: one leveled name in a risk-on tape. §6 says a bullish regime alone must not
+  // force a positive recommendation — with a single mediocre candidate this must not be "normal".
+  const THIN = { regime: { riskOn: true, bearish: false, breadthPct: 55 }, results: [
+    { ticker: 'ONE', company: 'One', sector: 'Technology', status: 'Setup', price: 20,
+      levels: { entry: 20, stop: 18, target: 21, rr: 0.5 }, factors: { dollarVol: 3e7 }, quant: { score: 55 } },
+  ] };
+  const p = buildToday({ screener: THIN, sectors: SECTORS, scoreboard: SCOREBOARD });
+  assert.ok(p.opportunity, 'payload carries the opportunity decision');
+  assert.ok(['normal', 'selective', 'reduced', 'no-trade'].includes(p.opportunity.decision));
+  assert.notEqual(p.opportunity.decision, 'normal', 'a bull tape + one thin name must not be normal');
+  assert.equal(p.opportunity.regimeGate.riskOff, false);
+  assert.ok(Number.isFinite(p.opportunity.score) && p.opportunity.maxExposurePct != null);
+});
+
 test('classifyEarnings: binary inside window, scheduled beyond, passed if negative', () => {
   assert.equal(N.classifyEarnings(5, '2026-07-16', 'swing').kind, 'binary');   // 5d <= 21d window
   assert.equal(N.classifyEarnings(60, '2026-09-01', 'swing').kind, 'scheduled'); // 60d > 21d

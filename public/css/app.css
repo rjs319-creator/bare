@@ -2661,6 +2661,19 @@
 /* Per-card measured discount — only rendered when measurement DISAGREES with the map. */
 .td-redun { font-size:.7rem; color:var(--amber,#f59e0b); margin-top:.15rem; line-height:1.35; }
 
+/* Daily no-trade / opportunity-density banner (#6). */
+.td-opp { border-radius:8px; padding:9px 12px; margin:0 0 10px; border-left:4px solid var(--text-dim); background:var(--surface); }
+.td-opp-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 12px; }
+.td-opp-badge { font-size:.92rem; }
+.td-opp-metrics { font-size:.74rem; color:var(--text-dim); }
+.td-opp-metrics b { color:var(--text); }
+.td-opp-why { margin:6px 0 2px; padding-left:18px; font-size:.72rem; line-height:1.45; }
+.td-opp-avail { font-size:.7rem; margin-top:3px; }
+.td-opp.op-normal { border-left-color:var(--green); }
+.td-opp.op-selective { border-left-color:var(--amber,#f59e0b); }
+.td-opp.op-reduced { border-left-color:#fb923c; }
+.td-opp.op-notrade { border-left-color:var(--red); background:rgba(239,68,68,.06); }
+
 /* Per-card remaining-edge (#3) — how much of the advertised move is still ahead. */
 .td-remain { font-size:.7rem; margin:.15rem 0; line-height:1.35; padding:.1em .5em; border-radius:6px; }
 .td-remain.re-fresh { color:var(--green); background:rgba(34,197,94,.10); }

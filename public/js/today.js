@@ -49,6 +49,32 @@ function familyChip(sig) {
 
 const pct = v => (v == null ? '' : `${v > 0 ? '+' : ''}${v}%`);
 
+// Daily no-trade / opportunity-density banner (#6) — the first read of the day: is the
+// opportunity set strong enough to trade at all? Regime is only a penalty in the score, so a
+// bullish tape with weak candidates still reads "selective", never a forced "go".
+const OPP = {
+  normal: ['🟢', 'op-normal', 'Normal opportunity'],
+  selective: ['🟡', 'op-selective', 'Be selective'],
+  reduced: ['🟠', 'op-reduced', 'Reduced exposure'],
+  'no-trade': ['🔴', 'op-notrade', 'No trade today'],
+};
+function opportunityBanner(o) {
+  if (!o || !o.decision) return '';
+  const [icon, cls, label] = OPP[o.decision] || OPP.selective;
+  const avail = Object.entries(o.byHorizon || {})
+    .filter(([, v]) => v.availability !== 'none')
+    .map(([h, v]) => `${h} ${v.availability === 'available' ? '✓' : '·'}`).join(' · ') || 'none';
+  const reasons = (o.reasons || []).slice(0, 2).map(r => `<li>${esc(r)}</li>`).join('');
+  return `<div class="td-opp ${cls}">`
+    + `<div class="td-opp-head"><span class="td-opp-badge">${icon} <b>${esc(label)}</b></span>`
+    + `<span class="td-opp-metrics">density <b>${o.score}</b>/100 · max exposure <b>${o.maxExposurePct}%</b>`
+    + (o.qualifyingCount != null ? ` · <b>${o.qualifyingCount}</b> qualify` : '')
+    + (o.expectedBestEdgeAfterCostsPct != null ? ` · best net edge <b>${pct(o.expectedBestEdgeAfterCostsPct)}</b>` : '') + `</span></div>`
+    + (reasons ? `<ul class="td-opp-why">${reasons}</ul>` : '')
+    + `<div class="td-opp-avail td-dim">Available: ${esc(avail)}</div>`
+    + `</div>`;
+}
+
 // Independent-evidence chip — the honest core of #3. Shows how many DISTINCT families
 // back the name, flags the misleading "several screeners but one factor" case.
 function evidenceLine(sig, legend) {
@@ -199,6 +225,7 @@ export function renderCommandCenter(container, p) {
   // Header: regime + leading/weakening sectors.
   const secChip = (s, dir) => `<span class="td-sec-chip ${dir}">${esc(s.name)} <b>${pct(+(+s.changePct).toFixed(1))}</b></span>`;
   let html = `<div class="td-cc">`;
+  html += opportunityBanner(p.opportunity);
   html += `<div class="td-head" style="border-left-color:${regCol}">`
     + `<div class="td-regime"><b>${esc(p.regime.label)}</b>${reg.breadthPct != null ? ` · breadth ${reg.breadthPct}%` : ''}${reg.condition ? ` · ${esc(reg.condition)} tape` : ''}</div>`
     + `<div class="td-sectors"><span class="td-dim">Leading</span> ${(p.sectors?.leading || []).map(s => secChip(s, 'lead')).join('')} `
