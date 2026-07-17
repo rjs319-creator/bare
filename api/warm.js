@@ -211,6 +211,21 @@ module.exports = async function handler(req, res) {
     .then(() => warmOne('/api/tracker?op=omega').catch(() => null))
     .catch(() => null);
 
+  // Measured redundancy (lib/redundancy.js) — REBUILD then RE-PRIME. Both halves matter:
+  //   • force=1 because runRedundancy serves its cached model otherwise, so without it the
+  //     credits would freeze at whatever day they were first built while the ledgers keep
+  //     growing — a stale model that still looks live.
+  //   • the op=today re-prime because the CDN copy primed by todayKick above was built
+  //     against the PREVIOUS model; without this the fresh credits wouldn't reach a reader
+  //     until that cache expired.
+  // Ordered after the op=track / op=ghostlog stages above (already awaited), so today's
+  // picks are in the ledger before the model reads them. Best-effort: if it doesn't land
+  // inside the budget, the live path keeps the last good model (or the static prior).
+  const redundancyKick = todayKick
+    .then(() => warmOne('/api/tracker?op=redundancy&force=1').catch(() => null))
+    .then(() => warmOne('/api/tracker?op=today').catch(() => null))
+    .catch(() => null);
+
   // ── DECOUPLED TICK CHAINS ──────────────────────────────────────────────────
   // The resolve/learn/log ticks run as fire-and-forget CHAINS (not awaited on the
   // critical path). Each chain runs its ops sequentially in their own invocations
@@ -255,6 +270,7 @@ module.exports = async function handler(req, res) {
   void evolveKick; // fire-and-forget: EVOLVE log-predictions → resolve-labels chain
   void ignitionKick; // fire-and-forget: Momentum Ignition log → prime tab
   void omegaKick; // fire-and-forget: OMEGA-SWING log → prime tab
+  void redundancyKick; // fire-and-forget: rebuild the measured-redundancy model → re-prime op=today
   void researchKick; // fire-and-forget: refresh the baseline factor cross-section
   void pulseKick; // fire-and-forget: gather→refine chain builds the refined Pulse snapshot
   void optionsAssessKick; // fire-and-forget: Fable options-flow analysis in its own budget

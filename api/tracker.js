@@ -76,6 +76,11 @@ const SHARED_FORCE_OPS = new Set([
   'aligned', 'anomalytick', 'biotechtick', 'calibration', 'coredrift', 'crossassettick',
   'optionsflow', 'pulse', 'pulserefine', 'putsell', 'readthroughtick', 'secondwavetick',
   'toneshifttick', 'track',
+  // redundancy: the cached model is public (the UI panel reads it), but a force=1 rebuild
+  // refetches candles for every ticker in the ledger history — trusted callers (the cron)
+  // only. Rate-limiting alone wasn't enough: 6/min per IP of a 200+ ticker rebuild is still
+  // a cheap way to burn the function budget.
+  'redundancy',
 ]);
 // Ingest endpoints: POST-only + their own token/secret gate inside the route.
 const INGEST_OPS = new Set(['insideringest', 'alertsingest']);
