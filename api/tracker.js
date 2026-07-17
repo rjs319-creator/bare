@@ -248,6 +248,8 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'evolvewalkforward') return require('../lib/evolve-routes').runEvolveWalkforward(req, res);
   if (req.query.op === 'evolveomegawf') return require('../lib/evolve-routes').runEvolveOmegaWalkforward(req, res);
   if (req.query.op === 'evolvebackfill') return require('../lib/evolve-routes').runEvolveBackfillOp(req, res);
+  // OMEGA Ensemble page (§9) — a read-only projection of op=today + op=evolvehealth.
+  if (req.query.op === 'ensemble') return require('../lib/omega-ensemble-routes').runEnsemble(req, res);
   // 🔥 Momentum Ignition — one acceleration-ranked view over the momentum scanners.
   if (req.query.op === 'ignition') return require('../lib/ignition-routes').runIgnition(req, res);
   if (req.query.op === 'ignitionlog') return require('../lib/ignition-routes').runIgnitionLog(req, res);
