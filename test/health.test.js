@@ -61,3 +61,43 @@ test('summarizeRun: a degraded-but-ok ledger skip stays healthy', () => {
   assert.equal(r.ok, true);
   assert.deepEqual(r.failed, []);
 });
+
+// ── warmchain dispatch reporting ────────────────────────────────────────────
+// Ordered cron work moved into its own invocations (lib/warm-chains.js). A chain that
+// hasn't reported by warm's ceiling is STILL RUNNING, not failed — the previous model
+// ("skipped:budget → deferred → ok:true, self-heals next run") reported healthy while
+// 7 stages never ran on ANY run, which is how this stayed invisible for weeks.
+const { summarizeRun: sr } = require('../lib/health');
+
+test('a chain still running past warm is healthy, not a failure', () => {
+  const r = sr({
+    ok: true, at: '2026-07-17T13:00:00Z', elapsedMs: 30000,
+    chains: { ledger: { dispatched: true, status: 200 }, capture: { dispatched: true, status: 'running-past-warm' } },
+    chainsDispatched: 2,
+  });
+  assert.strictEqual(r.ok, true);
+  assert.deepStrictEqual(r.chainDispatchFails, []);
+  assert.strictEqual(r.chains.capture.status, 'running-past-warm');
+});
+
+test('a chain whose DISPATCH failed is a real failure', () => {
+  const r = sr({
+    ok: true, at: 'x', chains: { ledger: { dispatched: true, reportError: 'ECONNRESET' } }, chainsDispatched: 1,
+  });
+  assert.strictEqual(r.ok, false);
+  assert.deepStrictEqual(r.chainDispatchFails, ['ledger']);
+  assert.strictEqual(r.failCount, 1);
+});
+
+test('an HTTP-error chain dispatch is a failure', () => {
+  const r = sr({ ok: true, at: 'x', chains: { capture: { dispatched: true, status: 500 } } });
+  assert.strictEqual(r.ok, false);
+  assert.deepStrictEqual(r.chainDispatchFails, ['capture']);
+});
+
+test('the chains block is never graded as a stage', () => {
+  const r = sr({ ok: true, at: 'x', chains: { a: { dispatched: true, status: 200 } }, chainRoots: ['a'], chainsDispatched: 1 });
+  assert.ok(!('chains' in r.stages), 'chains must not appear as a stage');
+  assert.ok(!('chainRoots' in r.stages));
+  assert.strictEqual(r.stageCount, 0);
+});

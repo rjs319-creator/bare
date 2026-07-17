@@ -2,6 +2,7 @@
 // fresh (combined with stale-while-revalidate, the app stays instant for users).
 const HOST = process.env.WARM_HOST || 'market-news-app-chi.vercel.app';
 const { requireTrusted, internalHeaders } = require('../lib/auth');
+const WC = require('../lib/warm-chains');
 
 const PATHS = [
   '/api/backtest?scope=large&months=6',
@@ -26,10 +27,6 @@ async function warmOne(p) {
   }
 }
 
-// Soft budget: stop STARTING new awaited stages once this much of the 60s function
-// wall is gone, so late jobs record skipped:'budget' instead of silently vanishing
-// when the run 504s. Fire-and-forget kicks run in their own invocations regardless.
-const SOFT_BUDGET_MS = 50000;
 
 module.exports = async function handler(req, res) {
   // Gate the cron entrypoint: Vercel auto-sends the CRON_SECRET bearer on scheduled
@@ -37,31 +34,6 @@ module.exports = async function handler(req, res) {
   if (!requireTrusted(req, res)) return;
 
   const START = Date.now();
-  const stageStatus = {};   // name -> 'ok' | 'http:<code>' | 'error' | 'skipped:budget'
-
-  // Run one awaited sub-request, budget-aware and observable. Past the soft budget
-  // it records a skip and returns immediately so the run finishes and still writes a
-  // health record. Per-stage console lines survive even a partial (504'd) run.
-  async function stage(name, path) {
-    if (Date.now() - START > SOFT_BUDGET_MS) {
-      stageStatus[name] = 'skipped:budget';
-      console.info('[warm]', name, 'skipped:budget', (Date.now() - START) + 'ms elapsed');
-      return { skipped: 'budget' };
-    }
-    const t0 = Date.now();
-    try {
-      const r = await fetch('https://' + HOST + path, { headers: internalHeaders() });
-      const j = await r.json();
-      stageStatus[name] = r.ok ? 'ok' : ('http:' + r.status);
-      console.info('[warm]', name, stageStatus[name], (Date.now() - t0) + 'ms');
-      return j;
-    } catch (e) {
-      stageStatus[name] = 'error';
-      console.error('[warm]', name, 'error', String(e && e.message || e));
-      return { error: String(e && e.message || e) };
-    }
-  }
-
   const queue = [...PATHS], out = [];
   async function worker() { while (queue.length) out.push(await warmOne(queue.shift())); }
   await Promise.all([worker(), worker(), worker()]); // 3 at a time
@@ -75,49 +47,23 @@ module.exports = async function handler(req, res) {
   const EXTRA = ['/api/screener?scope=large&lookback=3M', '/api/screener?scope=large&lookback=6M'];
   const extraWarm = Promise.all(EXTRA.map(warmOne)).catch(() => []);
 
-  // Once caches are fresh, snapshot today's picks for the scoreboard (one cron
-  // does both — warm then log — so we stay within Vercel cron limits).
-  const track = await stage('track', '/api/tracker?op=track');
-
-  // Refresh this week's market-narrative tag (cheap; no-ops if already set this week),
-  // THEN log today's Apex/Loaded signals so they're stamped with the current tag.
-  const narrative = await stage('narrative', '/api/tracker?op=narrative');
-
-  const apexlog = await stage('apexlog', '/api/tracker?op=apexlog');
-
-  // Log today's Ghost/Stalking signals to their own ledger (Phase-2 adaptive engine).
-  const ghostlog = await stage('ghostlog', '/api/tracker?op=ghostlog');
-
-  // Snapshot today's per-ticker mention counts + options baselines — the
-  // unrecoverable data capture (option chains & social mentions can't be
-  // reconstructed historically). One Blob write per day.
-  const archive = await stage('archive', '/api/tracker?op=archive');
-
-  // Accrue the prior completed session's 5-min bars for the day-trade picks (regime-
-  // tagged) so the regime-conditional opening-range-gate hypothesis can be re-validated
-  // once neutral/risk-off fader days accumulate. Own tracker call = own 60s budget.
-  const intracapture = await stage('intracapture', '/api/tracker?op=intracapture');
-
-  // Run one CERN daily cycle — scan for forced-flow events, advance/resolve the
-  // ledger, update the Bayesian posteriors. The counterfactual archive is the moat.
-  const cern = await stage('cern', '/api/tracker?op=cerntick');
-
-  // Snapshot the two-sleeve Edge Book (conviction longs + CERN forced-flow) AFTER
-  // the CERN tick so Sleeve B reflects the freshest decisions. This is the paper
-  // book whose realized beat-SPY rate + cross-sleeve correlation we track.
-  const edgelog = await stage('edgelog', '/api/tracker?op=edgelog');
-
-  // Grade any matured trade-alerts on forward excess return (hands-off track record).
-  const alertsgrade = await stage('alertsgrade', '/api/tracker?op=alertsgrade');
-
-  // Bounded Fable-5 review over the current top ranked alerts: annotate cards and
-  // stamp the pending log entries with Fable's direction for the A/B edge test.
-  const alertsassess = await stage('alertsassess', '/api/tracker?op=alertsassess');
-
-  // Self-improving fade engine: resolve matured logged shorts → update per-stock
-  // posteriors → log today's setups. Last (candle data is CDN-warm by now); a
-  // skipped slow day self-heals next run (it re-resolves all still-open signals).
-  const fadetick = await stage('fadetick', '/api/tracker?op=fadetick');
+  // ── ORDERED WORK RUNS IN ITS OWN INVOCATIONS (see lib/warm-chains.js) ──────
+  //
+  // These stages used to be awaited HERE, sequentially. The Vercel logs showed what that
+  // cost: track 12.7s + narrative 0.1s + apexlog 6.8s + ghostlog 10.2s on top of ~22s of
+  // cache warming meant elapsed was already 51.8s by the `archive` stage — so archive,
+  // intracapture, cern, edgelog, alertsgrade, alertsassess and fadetick recorded
+  // `skipped:budget` on EVERY run, and everything below (the tick chains and every
+  // ordered kick) was created with ~3s left of the 55s drain ceiling.
+  //
+  // Now warm DISPATCHES each root chain and the chain runs its steps inside its own
+  // tracker invocation, with its own 60s budget, independent of warm's lifetime. Warm
+  // still awaits them in the bounded drain below, but only to REPORT: a truncated report
+  // no longer means the work was lost, because the chain is not running in this process.
+  const chainKicks = WC.ROOT_CHAINS.map(name => ({
+    name,
+    p: warmOne(`/api/tracker?op=warmchain&name=${name}`).catch(e => ({ error: String((e && e.message) || e) })),
+  }));
 
   // NOTE: the per-screener resolve/learn/log ticks (trend, daytrade, confluence, coil,
   // gap-go, down-day, gap-down, timing, dual-read, predict, crowd, brief, leaderboard,
@@ -142,168 +88,68 @@ module.exports = async function handler(req, res) {
   // must NOT be awaited on warm's critical path.
   const optionsAssessKick = warmOne('/api/tracker?op=optionsassess').catch(() => null);
 
-  // 🎯 Dual Confirmed — scan for names that are a buy on BOTH horizons, THEN log
-  // today's picks to the ledger (accountability). Fire-and-forget: intraday reads.
-  const alignedKick = warmOne('/api/tracker?op=aligned')
-    .then(() => warmOne('/api/tracker?op=alignedlog'))
-    .catch(() => null);
-
-  // 💰 Options Moves — put-selling setups (full-market price-action scan + IV/earnings).
+  // ── SINGLE-DISPATCH KICKS ──────────────────────────────────────────────────
+  // These were never broken by the .then()-chain bug: one dispatch each, no ordering, so
+  // the request going out is the whole job. They stay here rather than becoming chains.
+  //
+  // 💰 Options Moves — put-selling setups (full-market scan + IV/earnings).
   const putsellKick = warmOne('/api/tracker?op=putsell').catch(() => null);
-
-  // 🌐 Expanded universe — self-completing: scan 2 cursor-paced batches/day (fills
-  // the free full-market candle cache over ~2 weeks, then refreshes continuously),
-  // then reassemble the cache from its shards.
-  const universeKick = warmOne('/api/tracker?op=universescan&cursor=1&limit=150')
-    .then(() => warmOne('/api/tracker?op=universescan&cursor=1&limit=150'))
-    .then(() => warmOne('/api/tracker?op=universecompile'))
-    .catch(() => null);
-
-  // 📡 Market Pulse — pre-build a refined snapshot so users hit the cache instantly:
-  // gather (Haiku search, forced) THEN refine (Fable) in its own chained invocation.
-  // Fire-and-forget off warm's critical path — each stage is its own 60s budget.
-  const pulseKick = warmOne('/api/tracker?op=pulse&force=1')
-    .then(() => warmOne('/api/tracker?op=pulserefine&force=1'))
-    .catch(() => null);
-
-  // Predict-tab feedback loop — recompute each class's live track-record grade (Wilson-
-  // bounded excess vs sector) so the cards auto-feature/demote classes as picks resolve.
-  // Fire-and-forget: it resolves only picks ≥1 week old, so it's independent of today's
-  // ticks above, and it's heavy enough (fetches history) to keep off warm's critical path.
+  // Predict-tab feedback loop — recompute each class's Wilson-bounded track-record grade
+  // so cards auto-feature/demote as picks resolve. Heavy (fetches history), own budget.
   const calibKick = warmOne('/api/tracker?op=calibration&force=1').catch(() => null);
-
-  // 🎯 Unified decision engine — build + log today's ranked snapshot (enables the
-  // Today tab's new/upgraded/downgraded/failed/expired lanes). Fire-and-forget: it
-  // self-fetches ~13 endpoints in its OWN 60s invocation, so it must NOT sit on the
-  // drain budget the tick chains share (doing so starved them). Self-heals next run.
-  const todayKick = warmOne('/api/tracker?op=today&log=1').catch(() => null);
-
   // 🧪 Baseline factor scan — refresh the point-in-time cross-section (rank-IC + top-
-  // quintile excess for momentum / 52-week / rel-volume) that the Baselines tab reads
-  // via op=baselines. Persists research/factors-large.json. Fire-and-forget: ~6s in
-  // its own invocation once candles are CDN-warm (the screener warm above populated
-  // them), so it must NOT sit on warm's critical path. The bearer (internalHeaders)
-  // exempts it from the op=research rate limit.
+  // quintile excess for momentum / 52-week / rel-volume) that the Baselines tab reads via
+  // op=baselines. The bearer (internalHeaders) exempts it from the op=research rate limit.
   const researchKick = warmOne('/api/tracker?op=research&scope=large').catch(() => null);
 
-  // 🧬 EVOLVE — after today's decision snapshot is fresh, (1) log EVOLVE predictions
-  // (feature snapshots + triple-barrier targets) for later resolution, then (2) resolve
-  // any matured past predictions → update specialist performance + the calibrator.
-  // Fire-and-forget in its own invocations (each self-fetches op=today + fetches its own
-  // candles), so it never sits on the shared drain budget. Both self-heal next run.
-  const evolveKick = todayKick
-    .then(() => warmOne('/api/tracker?op=evolvescore&log=1').catch(() => null))
-    .then(() => warmOne('/api/tracker?op=evolveresolve').catch(() => null))
-    .then(() => warmOne('/api/tracker?op=evolve').catch(() => null))   // prime the live tab's CDN cache
-    .catch(() => null);
-
-  // 🔥 Momentum Ignition — after today's merged signals are fresh, log the acceleration-
-  // ranked ignition picks (IGNITION/WATCH) to the Scoreboard ledger, then prime the tab.
-  const ignitionKick = todayKick
-    .then(() => warmOne('/api/tracker?op=ignitionlog').catch(() => null))
-    .then(() => warmOne('/api/tracker?op=ignition').catch(() => null))
-    .catch(() => null);
-
-  // 💠 OMEGA-SWING — after today's merged signals are fresh, log the 5–10 day continuation
-  // picks (Prime/Qualified/Watch) to the Scoreboard ledger, then prime the tab's CDN cache.
-  const omegaKick = todayKick
-    .then(() => warmOne('/api/tracker?op=omegalog').catch(() => null))
-    .then(() => warmOne('/api/tracker?op=omega').catch(() => null))
-    .catch(() => null);
-
-  // Measured redundancy (lib/redundancy.js) — REBUILD then RE-PRIME. Both halves matter:
-  //   • force=1 because runRedundancy serves its cached model otherwise, so without it the
-  //     credits would freeze at whatever day they were first built while the ledgers keep
-  //     growing — a stale model that still looks live.
-  //   • the op=today re-prime because the CDN copy primed by todayKick above was built
-  //     against the PREVIOUS model; without this the fresh credits wouldn't reach a reader
-  //     until that cache expired.
-  // Ordered after the op=track / op=ghostlog stages above (already awaited), so today's
-  // picks are in the ledger before the model reads them. Best-effort: if it doesn't land
-  // inside the budget, the live path keeps the last good model (or the static prior).
-  const redundancyKick = todayKick
-    .then(() => warmOne('/api/tracker?op=redundancy&force=1').catch(() => null))
-    .then(() => warmOne('/api/tracker?op=today').catch(() => null))
-    .catch(() => null);
-
-  // 🎯 OMEGA Ensemble — prime the composed board's CDN cache.
-  //
-  // Chained off redundancyKick, NOT todayKick: op=ensemble is a pure projection of
-  // op=today, so priming it before the redundancy rebuild re-primes op=today would cache
-  // a board scored on the PREVIOUS model — a stale projection of a fresh source, which is
-  // worse than no priming because it looks current.
-  //
-  // Fire-and-forget in its own invocation: it self-fetches op=today (~10s even CDN-warm)
-  // and must not sit on the drain budget the tick chains share. Without this the first
-  // visitor after each deploy pays ~21s cold (op=ensemble → op=today), since a deploy
-  // flushes the CDN and only this cron re-primes.
-  const ensembleKick = redundancyKick
-    .then(() => warmOne('/api/tracker?op=ensemble').catch(() => null))
-    .catch(() => null);
-
-  // ── DECOUPLED TICK CHAINS ──────────────────────────────────────────────────
-  // The resolve/learn/log ticks run as fire-and-forget CHAINS (not awaited on the
-  // critical path). Each chain runs its ops sequentially in their own invocations
-  // (own 60s budget each), so ORDERED ops stay ordered (timinglog→tune, dual-read
-  // log→tune, core build→log→drift, brief after predict/crowd). 3 chains = ~3× the
-  // throughput of the old sequential tail while bounding concurrent feed load. They
-  // progress during the bounded drain below; any tail op not reached self-heals next
-  // run (each tick re-resolves all still-open signals). Uses warmOne (not the
-  // budget-guarded stage()) so they're not skipped past the 50s soft budget.
-  const tickChain = ops => ops.reduce((prev, op) => prev.then(() => warmOne(op).catch(() => null)), Promise.resolve());
-  const tickChains = [
-    // screener + event ticks (order-independent)
-    tickChain(['/api/tracker?op=trendtick', '/api/tracker?op=daytradetick', '/api/tracker?op=confluencetick',
-      '/api/tracker?op=coiltick', '/api/tracker?op=gapgotick', '/api/tracker?op=downdaytick', '/api/tracker?op=gapdowntick']),
-    // timing + dual-read (ordered pairs) then the predict family (brief after predict+crowd)
-    tickChain(['/api/tracker?op=timinglog', '/api/tracker?op=timingtune', '/api/tracker?op=dualreadlog',
-      '/api/tracker?op=dualreadtune', '/api/tracker?op=predicttick', '/api/tracker?op=crowdtick', '/api/tracker?op=brieftick']),
-    // leaderboard (heavy) then core (ordered build→log→drift) then cheap attention/tone
-    tickChain(['/api/tracker?op=leaderboardtick&src=confluence', '/api/tracker?op=corebuild', '/api/tracker?op=corelog',
-      '/api/tracker?op=coredrift', '/api/tracker?op=attentiontick', '/api/tracker?op=tonetick&limit=6']),
-  ];
+  // The tick chains are now warmchain roots (ticks1/ticks2/ticks3 in lib/warm-chains.js).
+  // They were previously built HERE as `.then()` chains and drained for whatever was left
+  // of a 55s ceiling — which, past the 51.8s of awaited stages, was ~3s for all 20 ticks.
 
   const warmedExtra = await extraWarm;   // already resolved — ran during the tail above
 
-  // Drain the tick chains within the remaining budget, capped well under the 60s hard
-  // limit (a hard timeout is a 504). The critical logging above already committed; this
-  // is best-effort for the decoupled ticks. Whatever a chain doesn't reach self-heals
-  // next run — strictly better than the old behavior where the whole tail was deferred.
+  // Await the dispatched chains only to REPORT. Each is running in its own tracker
+  // invocation with its own 60s budget, so this deadline decides how much we get to SAY
+  // about them, not how much of them runs. That is the whole point of the fix: warm's
+  // death used to kill the work; now it only truncates the report.
   const DRAIN_CEIL_MS = 55000;
+  const chainReports = {};
   await Promise.race([
-    Promise.allSettled(tickChains),
+    Promise.all(chainKicks.map(async (k) => {
+      const r = await k.p;
+      chainReports[k.name] = r && r.error ? { dispatched: true, reportError: r.error }
+        : { dispatched: true, status: (r && r.status) || null };
+    })),
     new Promise(r => setTimeout(r, Math.max(0, DRAIN_CEIL_MS - (Date.now() - START)))),
   ]);
+  // A chain we didn't hear back from is STILL RUNNING — not failed, and not skipped.
+  // Saying "unknown" is the honest word: the old code called this "deferred, self-heals
+  // next run" and it was neither.
+  for (const k of chainKicks) if (!chainReports[k.name]) chainReports[k.name] = { dispatched: true, status: 'running-past-warm' };
 
-  // The 5 AI screener ticks were kicked fire-and-forget (not awaited) — they self-log to
-  // their own ledgers in their own invocations. `aiTicksKicked` just confirms the fetches
-  // were dispatched; we do NOT block warm's return on the ~30-50s AI calls (that caused the
-  // 504). void-reference so the array isn't dropped before the requests flush.
+  // The 6 AI screener ticks are kicked fire-and-forget — a single dispatch each, which is
+  // all they need (no ordering), so unlike the old .then() chains they were never broken.
   void aiTicks;
-  void calibKick; // fire-and-forget like the ticks — recomputes on its own invocation
-  void todayKick; // fire-and-forget: unified decision snapshot in its own 60s budget
-  void evolveKick; // fire-and-forget: EVOLVE log-predictions → resolve-labels chain
-  void ignitionKick; // fire-and-forget: Momentum Ignition log → prime tab
-  void omegaKick; // fire-and-forget: OMEGA-SWING log → prime tab
-  void redundancyKick; // fire-and-forget: rebuild the measured-redundancy model → re-prime op=today
-  void ensembleKick; // fire-and-forget: prime the OMEGA Ensemble board AFTER redundancy re-primes op=today
-  void researchKick; // fire-and-forget: refresh the baseline factor cross-section
-  void pulseKick; // fire-and-forget: gather→refine chain builds the refined Pulse snapshot
-  void optionsAssessKick; // fire-and-forget: Fable options-flow analysis in its own budget
-  void alignedKick; // fire-and-forget: Dual-Confirmed scan over the warm screener pool
-  void putsellKick; // fire-and-forget: put-selling setups scan
-  void universeKick; // fire-and-forget: reassemble the expanded candle cache
+  void calibKick;         // single dispatch: recomputes in its own invocation
+  void researchKick;      // single dispatch: refresh the baseline factor cross-section
+  void optionsAssessKick; // single dispatch: Fable options-flow analysis in its own budget
+  void putsellKick;       // single dispatch: put-selling setups scan
 
-  // The 20 resolve/learn/log ticks are decoupled (fire-and-forget chains, see above) —
-  // no longer awaited stage() results, so they're not per-step keys here. Each self-logs
-  // to its own ledger; ledger freshness is the source of truth for them now.
-  const ticksDecoupled = 20;
-  const result = { ok: true, host: HOST, warmed: out, warmedExtra, track, narrative, apexlog, ghostlog, archive, intracapture, cern, edgelog, alertsgrade, alertsassess, fadetick, ticksDecoupled, aiTicksKicked: 6, calibKicked: true, researchKicked: true, stageStatus, elapsedMs: Date.now() - START, at: new Date().toISOString() };
+  const chainsDispatched = chainKicks.length;
+  const result = {
+    ok: true, host: HOST, warmed: out, warmedExtra,
+    // Ordered work now lives in lib/warm-chains.js. Each root reports dispatched + its
+    // own per-step outcome in its OWN logs ([warmchain] <name>); a chain still running
+    // when warm returns is normal and no longer means the work was lost.
+    chains: chainReports, chainsDispatched, chainRoots: WC.ROOT_CHAINS,
+    aiTicksKicked: 6, calibKicked: true, researchKicked: true,
+    elapsedMs: Date.now() - START, at: new Date().toISOString(),
+  };
 
   // Structured run summary — survives in Vercel logs even if the health write fails.
-  const skipped = Object.keys(stageStatus).filter(k => stageStatus[k] === 'skipped:budget');
-  const failed = Object.keys(stageStatus).filter(k => stageStatus[k] === 'error' || String(stageStatus[k]).startsWith('http:'));
-  console.info('[warm] done', JSON.stringify({ elapsedMs: result.elapsedMs, stages: Object.keys(stageStatus).length, failed, skipped }));
+  // Per-STEP outcomes now live in each chain's own [warmchain] <name> log line; warm only
+  // knows what it dispatched and what reported back before its ceiling.
+  console.info('[warm] done', JSON.stringify({ elapsedMs: result.elapsedMs, chainsDispatched, chains: chainReports }));
 
   // Observability: persist a compact health record so failed ticks / stale data are visible (op=health).
   try { const { summarizeRun, writeHealthRun } = require('../lib/health'); await writeHealthRun(summarizeRun(result)); }
