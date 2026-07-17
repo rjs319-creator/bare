@@ -181,6 +181,21 @@ test('buildToday: emits an opportunity-density decision, and a bull tape alone d
   assert.ok(Number.isFinite(p.opportunity.score) && p.opportunity.maxExposurePct != null);
 });
 
+test('buildToday: attaches the adversarial failure model as SHADOW without reordering the board (#5)', () => {
+  const p = buildToday({ screener: SCREENER, gapgo: GAPGO, daytrade: DAYTRADE, coil: COIL, sectors: SECTORS, scoreboard: SCOREBOARD, ai: AI });
+  assert.equal(p.failureModel.shadow, true, 'model status is shadow');
+  // Every active signal carries a failure read with a bounded probability + size multiplier.
+  for (const sHz of Object.values(p.horizons)) for (const sig of sHz) {
+    assert.ok(sig.failure, `${sig.ticker} has a failure read`);
+    assert.equal(sig.failure.shadow, true);
+    assert.ok(sig.failure.failureProb >= 0 && sig.failure.failureProb <= 0.95);
+    assert.ok(sig.failure.sizeMult >= 0.25 && sig.failure.sizeMult <= 1);
+  }
+  // SHADOW-SAFETY: the board is still ordered by the winner score, NOT by the failure-adjusted
+  // score — the ranking is unchanged by the failure model.
+  for (let i = 1; i < p.top.length; i++) assert.ok(p.top[i - 1].score >= p.top[i].score, 'top ranked by winner score, not failure-adjusted');
+});
+
 test('classifyEarnings: binary inside window, scheduled beyond, passed if negative', () => {
   assert.equal(N.classifyEarnings(5, '2026-07-16', 'swing').kind, 'binary');   // 5d <= 21d window
   assert.equal(N.classifyEarnings(60, '2026-09-01', 'swing').kind, 'scheduled'); // 60d > 21d

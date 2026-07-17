@@ -7068,7 +7068,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       `<div class="sb-secgroup"><div class="sb-secgroup-h"${SB_SECTION_HELP[sec] ? ` title="${esc(SB_SECTION_HELP[sec])}"` : ''}>${SB_SECTIONS[sec] || esc(sec)}${secBadge(sec)}${SB_SECTION_HELP[sec] ? ' <span class="sb-help-i" title="' + esc(SB_SECTION_HELP[sec]) + '">ⓘ</span>' : ''}</div><div class="sb-grid">${bySec[sec].map(sbCard).join('')}</div></div>`
     ).join('');
 
-    scoreboardContainer.innerHTML = intro + allocationPanelHTML(data.allocation) + scoreDecilePanel(data.scoreQuality) + `<div id="sb-rankquality"></div><div id="sb-leadtime"></div>` + regimeBar + html;
+    scoreboardContainer.innerHTML = intro + allocationPanelHTML(data.allocation) + scoreDecilePanel(data.scoreQuality) + `<div id="sb-rankquality"></div><div id="sb-leadtime"></div><div id="sb-failure"></div>` + regimeBar + html;
     const regimeSel = document.getElementById('sb-regime-sel');
     if (regimeSel) regimeSel.addEventListener('change', e => setSbRegime(e.target.value));
     scoreboardContainer.querySelectorAll('[data-sig-toggle]').forEach(btn => {
@@ -7076,6 +7076,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     });
     loadRankQuality();  // #5 — does a higher score actually win? (lazy, own endpoint)
     loadLeadTime();     // §7 — does each algorithm find moves EARLY enough to be useful? (lazy)
+    loadFailureModel(); // §5 — does the shadow failure model actually predict failure? (lazy)
   }
 
   // ── 🎯 RANKING QUALITY (#5) — validate that higher scores produce better outcomes.
@@ -7263,6 +7264,55 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       leadTimeData = lt;
       host.innerHTML = leadTimePanel(lt);
     } catch { host.innerHTML = `<div class="sb-secgroup"><div class="dt-note" style="border-left-color:var(--red)">Couldn't load the early-detection check.</div></div>`; }
+  }
+
+  // ── 🛡 ADVERSARIAL FAILURE MODEL (§5) — a SHADOW model that flags likely-to-fail setups.
+  // Reads op=failuremodel: replays the candle-derivable failure features point-in-time over the
+  // resolved ledger and asks whether the names it REJECTS underperform the ones it APPROVES.
+  // Honest by construction — it stays shadow (never binds) unless 'predictive'.
+  const FMV = {
+    predictive: ['✅', 'var(--green)', 'Predictive — rejected names really did underperform (could bind)'],
+    'no-signal': ['⚪', 'var(--text-dim)', 'No signal — the failure split does not separate outcomes; stays shadow'],
+    inverted: ['🔻', 'var(--red)', 'Inverted — "failure" flags marked winners here; stays shadow'],
+    insufficient: ['⏳', 'var(--text-dim)', 'Not enough resolved picks in both buckets yet'],
+  };
+  function fmBucket(label, b, cls) {
+    if (!b || !b.n) return '';
+    const ret = b.meanReturn == null ? '—' : (b.meanReturn > 0 ? '+' : '') + b.meanReturn + '%';
+    return `<div class="lt-row"><span class="lt-nm ${cls}">${esc(label)}</span>`
+      + `<span class="lt-m" title="Mean forward return over the eval window">ret <b>${ret}</b></span>`
+      + `<span class="lt-m dt-dim">win ${b.winRate == null ? '—' : b.winRate + '%'}</span>`
+      + (b.meanExcess != null ? `<span class="lt-m dt-dim">vs mkt ${b.meanExcess > 0 ? '+' : ''}${b.meanExcess}%</span>` : '')
+      + `<span class="lt-n dt-dim">n=${b.n}</span></div>`;
+  }
+  function failureModelPanel(fm) {
+    if (!fm || !fm.ok) return `<div class="sb-secgroup"><div class="dt-note" style="border-left-color:var(--red)">Couldn't load the failure-model check.</div></div>`;
+    const [vi, vcol, vtxt] = FMV[fm.verdict] || FMV.insufficient;
+    const b = fm.buckets || {};
+    const gap = fm.predictiveGap == null ? '' : `<div class="dt-dim rq-cap">Approved − rejected forward-return gap: <b style="color:${fm.predictiveGap > 0 ? 'var(--green)' : 'var(--red)'}">${fm.predictiveGap > 0 ? '+' : ''}${fm.predictiveGap}%</b> (positive = the model's rejected names did worse).</div>`;
+    const modes = (fm.byMode || []).slice(0, 5).map(m => `<span class="lt-lead"><b>${esc(m.label)}</b> ${m.lossRate}% loss <span class="dt-dim">n${m.n}</span></span>`).join('');
+    return `<div class="sb-secgroup rq-panel lt-panel">`
+      + `<div class="sb-secgroup-h">🛡 Adversarial failure model <span class="dt-dim">— SHADOW: never changes the rank until it's proven</span></div>`
+      + `<div class="rq-verdict" style="border-left-color:${vcol}"><b style="color:${vcol}">${vi} ${esc(vtxt)}.</b> ${esc(fm.note || '')}</div>`
+      + gap
+      + `<div class="lt-rows">${fmBucket('🔴 Rejected (highest failure score)', b.rejected, 'td-neg')}${fmBucket('🟡 Near threshold', b.nearThreshold, '')}${fmBucket('🟢 Approved (lowest failure score)', b.approved, 'td-pos')}</div>`
+      + (modes ? `<div class="dt-dim rq-cap">Historical loss rate by failure mode:</div><div class="lt-leaders">${modes}</div>` : '')
+      + `<div class="dt-dim rq-foot">Rejected/approved are the top/bottom third by failure score. Replays only the candle-derivable failure features (earnings/single-factor/track aren't in the ledger). ${fm.coverage ? `Evaluated ${fm.coverage.evaluated} resolved picks.` : ''}</div>`
+      + `</div>`;
+  }
+  let failureLoaded = false, failureData = null;
+  async function loadFailureModel() {
+    const host = document.getElementById('sb-failure');
+    if (!host) return;
+    if (failureData) { host.innerHTML = failureModelPanel(failureData); return; }
+    if (failureLoaded) return;
+    failureLoaded = true;
+    host.innerHTML = `<div class="sb-secgroup"><div class="sb-secgroup-h">🛡 Adversarial failure model (shadow)</div><div class="mom-status"><div class="mom-spinner"></div><p>Testing whether flagged setups actually underperform…</p></div></div>`;
+    try {
+      const fm = await fetch('/api/tracker?op=failuremodel').then(r => r.json());
+      failureData = fm;
+      host.innerHTML = failureModelPanel(fm);
+    } catch { host.innerHTML = `<div class="sb-secgroup"><div class="dt-note" style="border-left-color:var(--red)">Couldn't load the failure-model check.</div></div>`; }
   }
 
   scoreboardRefreshBtn.addEventListener('click', fetchScoreboard);

@@ -170,6 +170,21 @@ function remainingLine(sig) {
     + `</div>`;
 }
 
+// Adversarial failure model (#5) — a SHADOW caution. Shown only when the failure read is
+// non-trivial, always labelled "shadow" so it's never mistaken for something that moved the
+// rank (it didn't — the model is unvalidated). Surfaces the expected failure mode + the
+// suggested size trim, so the reader sees the RISK the winner score is silent about.
+function failureLine(sig) {
+  const f = sig.failure;
+  if (!f || f.failureProb < 0.25) return '';
+  const drivers = (f.drivers || []).map(d => d.modeLabel).filter((v, i, a) => a.indexOf(v) === i).slice(0, 2).join(', ');
+  const sizePct = Math.round((f.sizeMult ?? 1) * 100);
+  const cls = f.failureProb >= 0.5 ? 're-late' : 're-part';
+  const title = `Adversarial failure model (SHADOW — does NOT affect this rank): ${Math.round(f.failureProb * 100)}% failure-risk from ${esc(drivers || 'multiple flags')}. It would trim size to ${sizePct}% if it were validated. Run op=failuremodel to test whether flagged names actually underperform.`;
+  return `<div class="td-remain ${cls}" title="${esc(title)}">⚠️ <b>shadow</b> failure risk ${Math.round(f.failureProb * 100)}%`
+    + (drivers ? ` — ${esc(drivers)}` : '') + ` <span class="td-dim">· suggests ${sizePct}% size (not applied)</span></div>`;
+}
+
 function levels(sig) {
   const parts = [];
   if (sig.entry > 0) {
@@ -203,6 +218,7 @@ function signalCard(sig, legend) {
     + evidenceLine(sig, legend)
     + `<div class="td-breadth-row">${breadthChip(sig)}</div>`
     + remainingLine(sig)
+    + failureLine(sig)
     + levels(sig)
     + `<div class="td-foot">${trackLine(sig)}${eventChip(sig.event)}${sig.catalyst ? `<span class="td-cat" title="${esc(sig.catalyst)}">📰 catalyst</span>` : ''}</div>`
     + `</div>`;

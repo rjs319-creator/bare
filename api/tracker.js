@@ -70,7 +70,7 @@ const PRIVILEGED_OPS = new Set([
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
-  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'redundancy', 'leadtime',
+  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'redundancy', 'leadtime', 'failuremodel',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -163,6 +163,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'pulse') return runPulse(req, res);
   if (req.query.op === 'pulserefine') return runPulseRefine(req, res);
   if (req.query.op === 'leadtime') return require('../lib/leadtime-routes').runLeadTime(req, res);
+  if (req.query.op === 'failuremodel') return require('../lib/failure-model-routes').runFailureModel(req, res);
   if (req.query.op === 'readthrough') return require('../lib/readthrough-routes').runReadThrough(req, res);
   if (req.query.op === 'readthroughtick') return require('../lib/readthrough-routes').runReadThroughTick(req, res);
   if (req.query.op === 'anomaly') return require('../lib/anomaly-routes').runAnomaly(req, res);
