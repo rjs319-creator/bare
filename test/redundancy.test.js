@@ -317,3 +317,69 @@ test('mergeSignals unions evidenceOrigins across sources', () => {
   assert.strictEqual(merged.length, 1);
   assert.deepStrictEqual(merged[0].evidenceOrigins, { priceTrend: 'screener', volumeAccum: 'ghost' });
 });
+
+// ── Tiebreaker: measured independence separates names tied at a saturated score ──
+
+test('at a saturated score, the genuinely independent name out-ranks the redundant one', () => {
+  const model = ghostScreenerModel(); // ghost x screener measured as near-duplicates
+  // A real Scoreboard with a long, market-beating record: this lifts sampleTrust and the
+  // expectancy tilt enough that BOTH names clamp at composite 100 — reproducing the live
+  // saturation (9/181 signals on prod) where only the tiebreaker can separate them.
+  const scoreboard = { groups: [{ section: 'screener', tier: 'Breakout', horizons: { '5d': { avgExcess: 4, winRate: 70, n: 400 } } }] };
+  const mk = (ticker, fams, origins) => D.makeSignal({
+    ticker, source: 'screener', sources: ['screener'], section: 'screener', tier: 'Breakout',
+    horizon: 'swing', side: 'long', rawConfidence: 100, price: 10, family: 'priceTrend',
+    evidenceFamilies: fams, evidenceOrigins: origins, liquidity: { dollarVol: 5e7 },
+  }).signal;
+  // REDUNDANT: 2 families, but both engines are the measured near-duplicate pair.
+  const redundant = mk('DUPE', ['priceTrend', 'volumeAccum'], { priceTrend: 'screener', volumeAccum: 'ghost' });
+  // INDEPENDENT: 2 families from engines with no measured redundancy between them.
+  const independent = mk('INDY', ['priceTrend', 'insider'], { priceTrend: 'screener', insider: 'insider' });
+
+  const ranked = D.rankSignals([redundant, independent], { regime: { riskOn: true }, scoreboard, redundancy: model });
+  // Both saturate, so ONLY the evidence tiebreaker can separate them.
+  assert.strictEqual(ranked[0].score, 100, 'test premise: both must clamp at 100');
+  assert.strictEqual(ranked[1].score, 100, 'test premise: both must clamp at 100');
+  assert.strictEqual(ranked[0].ticker, 'INDY', 'independent evidence must win the tiebreak at saturation');
+  assert.strictEqual(ranked[1].ticker, 'DUPE');
+  // Same declared family count — the ONLY thing separating them is measured independence.
+  assert.strictEqual(ranked[0].evidence.familyCount, ranked[1].evidence.familyCount,
+    'both declare 2 families; the old familyCount tiebreak could not tell them apart');
+});
+
+test('the OLD familyCount tiebreak could not separate the saturated pair (regression guard)', () => {
+  // Without the model both are unmeasured => identical familyCount => the tiebreak is blind
+  // and order falls through to rawConfidence. This is what the fix corrects.
+  const scoreboard = { groups: [{ section: 'screener', tier: 'Breakout', horizons: { '5d': { avgExcess: 4, winRate: 70, n: 400 } } }] };
+  const mk = (ticker, fams) => D.makeSignal({
+    ticker, source: 'screener', sources: ['screener'], section: 'screener', tier: 'Breakout',
+    horizon: 'swing', side: 'long', rawConfidence: 100, price: 10, family: 'priceTrend',
+    evidenceFamilies: fams, liquidity: { dollarVol: 5e7 },
+  }).signal;
+  const ranked = D.rankSignals([mk('DUPE', ['priceTrend', 'volumeAccum']), mk('INDY', ['priceTrend', 'insider'])],
+    { regime: { riskOn: true }, scoreboard });
+  assert.strictEqual(ranked[0].evidence.familyCount, ranked[1].evidence.familyCount, 'blind without measurement');
+});
+
+test('the tiebreaker is unchanged for unmeasured signals (falls back to familyCount)', () => {
+  const one = D.makeSignal({ ticker: 'ONE', source: 'screener', sources: ['screener'], horizon: 'swing',
+    side: 'long', rawConfidence: 100, price: 10, family: 'priceTrend',
+    evidenceFamilies: ['priceTrend'], liquidity: { dollarVol: 5e7 } }).signal;
+  const two = D.makeSignal({ ticker: 'TWO', source: 'screener', sources: ['screener'], horizon: 'swing',
+    side: 'long', rawConfidence: 100, price: 10, family: 'priceTrend',
+    evidenceFamilies: ['priceTrend', 'insider'], liquidity: { dollarVol: 5e7 } }).signal;
+  const ranked = D.rankSignals([one, two], { regime: { riskOn: true }, scoreboard: null });
+  assert.strictEqual(ranked[0].ticker, 'TWO', 'more families still wins when nothing is measured');
+});
+
+test('rankSignals ordering with redundancy:null stays byte-identical after the tiebreak change', () => {
+  const sigs = ['A', 'B', 'C'].map((t, i) => D.makeSignal({
+    ticker: t, source: 'screener', sources: ['screener'], horizon: 'swing', side: 'long',
+    rawConfidence: 100 - i, price: 10, family: 'priceTrend',
+    evidenceFamilies: i === 0 ? ['priceTrend'] : ['priceTrend', 'insider'],
+    liquidity: { dollarVol: 5e7 },
+  }).signal);
+  const a = D.rankSignals(sigs, { regime: { riskOn: true }, scoreboard: null });
+  const b = D.rankSignals(sigs, { regime: { riskOn: true }, scoreboard: null, redundancy: null });
+  assert.deepStrictEqual(b, a);
+});
