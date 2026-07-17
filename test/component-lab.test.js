@@ -7,17 +7,19 @@ const CL = require('../lib/component-lab');
 // with overlap across the whole range so matches exist. Outcome depends on priorReturn (+ an
 // optional TRUE treatment effect). noise is deterministic. All same regime/sector/liquidity so
 // matching is driven by priorReturn.
-function makeRecords(n, trueEffect) {
+function makeRecords(n, trueEffect, oneRegime = false) {
   const recs = [];
   for (let i = 0; i < n; i++) {
     const priorReturn = i % 21;                    // 0..20
     const treated = ((i * 29) % 100) < (30 + priorReturn * 2); // 30%→70% as priorReturn rises
     const noise = ((i * 13) % 11) - 5;             // -5..5, period 11 (coprime to priorReturn's 21)
     const ret = 10 + 0.5 * priorReturn + (treated ? trueEffect : 0) + noise;
+    // Two regimes by default so a real effect can be confirmed as regime-robust.
+    const regime = oneRegime ? 'on' : (i % 2 === 0 ? 'on' : 'off');
     recs.push({
       ticker: 'T' + i, date: '2026-0' + (1 + (i % 6)) + '-15', section: 'X', tier: 'A',
       ret, targetBeforeStop: ret > 0, mfe: Math.max(0, ret) + 2, mae: 3,
-      features: { priorReturn, logDollarVol: 18, regime: 'on', sector: 'Tech', flag: treated },
+      features: { priorReturn, logDollarVol: 18, regime, sector: 'Tech', flag: treated },
     });
   }
   return recs;
@@ -50,6 +52,16 @@ test('§2: a component with a TRUE negative effect → harmful / disable recomme
   assert.ok(c.incrementalReturn < -2);
   assert.equal(c.verdict, 'harmful');
   assert.equal(c.recommendation, 'disable'); // a recommendation, not an action
+});
+
+test('§2 discipline: a real effect on ONE regime is softened to "observe" (not confirmed out-of-regime)', () => {
+  const out = CL.runComponentLab(makeRecords(240, 4, true), { components: COMP });
+  const c = out.components[0];
+  assert.equal(c.verdict, 'additive');            // the in-sample statistical read stands
+  assert.equal(c.regimeRobust, false);
+  assert.equal(c.recommendation, 'observe');       // but the ACTION is held back
+  assert.equal(c.verdictRecommendation, 'retain'); // what it would have been if regime-robust
+  assert.ok(c.caveat);
 });
 
 test('§2: insufficient data is blocked honestly, never a fabricated verdict', () => {

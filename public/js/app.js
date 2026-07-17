@@ -7343,7 +7343,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + `<span class="lt-n dt-dim">${vlbl}${c.matchedPairs ? ' · ' + c.matchedPairs + ' pairs' : ''}</span>`
       + `</summary><div class="cl-body">`
       + (c.note ? `<div class="dt-dim rq-cap">${esc(c.note)}</div>` : '')
-      + (c.ci ? `<div class="dt-dim rq-cap">Incremental ${incr}${ci}${c.significant ? ' — statistically significant' : ' — not significant'}. Recommendation: <b>${esc((CLV[c.verdict] || [])[3] || 'observe')}</b> (evidence only — nothing is auto-removed).</div>` : '')
+      + (c.ci ? `<div class="dt-dim rq-cap">Incremental ${incr}${ci}${c.significant ? ' — statistically significant' : ' — not significant'}. Recommendation: <b>${esc(c.recommendation || 'observe')}</b> (evidence only — nothing is auto-removed).</div>` : '')
+      + (c.caveat ? `<div class="dt-dim rq-cap">⏳ ${esc(c.caveat)}</div>` : '')
       + (c.treatedGroup ? `<div class="dt-dim rq-cap">With: n${c.treatedGroup.n}, win ${c.treatedGroup.winRate}%, mean ${c.treatedGroup.meanReturn}% · Without: n${c.controlGroup.n}, win ${c.controlGroup.winRate}%, mean ${c.controlGroup.meanReturn}%</div>` : '')
       + (c.byRegime ? `<div class="dt-dim rq-cap">By regime: ${esc(Object.entries(c.byRegime).map(([k, v]) => `${k} ${v.incremental > 0 ? '+' : ''}${v.incremental}% (n${v.n})`).join(' · '))}</div>` : '')
       + (c.examples && c.examples.length ? `<div class="dt-dim rq-cap">Example matched pairs: ${esc(c.examples.map(e => `${e.treated.ticker} ${e.treated.date}(${e.treated.ret}%) ↔ ${e.control.ticker}(${e.control.ret}%)`).join(' · '))}</div>` : '')
