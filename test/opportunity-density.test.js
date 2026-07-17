@@ -68,6 +68,17 @@ test('empty board → no-trade, empty reasons handled', () => {
   assert.ok(Array.isArray(o.reasons) && o.reasons.length);
 });
 
+test('best-pick edge is the TOP-ranked qualifying name, not a moonshot buried down the list', () => {
+  // Signals arrive rank-ordered (upstream). The top pick has a modest 5% net move; a far-target
+  // moonshot sits lower with 90%. The headline must be the pick you would actually take (5%).
+  const board = [
+    sig({ ticker: 'TOP', cost: { known: true, netMovePct: 5 } }),
+    sig({ ticker: 'MOON', cost: { known: true, netMovePct: 90 } }),
+  ];
+  const o = OD.computeOpportunityDensity(board, { regime: { riskOn: true } });
+  assert.equal(o.expectedBestEdgeAfterCostsPct, 5, 'headline = top-ranked pick edge, not the moonshot');
+});
+
 test('netEdgeOf prefers remaining-edge over the cost fallback', () => {
   assert.equal(OD.netEdgeOf(sig({ remainingEdge: { rated: true, netRemainingPct: 3 }, cost: { known: true, netMovePct: 8 } })), 3);
   assert.equal(OD.netEdgeOf(sig({ remainingEdge: null })), 8); // falls back to cost
