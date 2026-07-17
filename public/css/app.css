@@ -2363,6 +2363,11 @@
     .lt-row .lt-nm { flex: 1 1 auto; font-weight: 600; min-width: 90px; }
     .lt-row .lt-m { flex: 0 0 auto; white-space: nowrap; }
     .lt-row .lt-n { flex: 0 0 auto; }
+    /* 🧪 Component laboratory collapsible rows */
+    .cl-item > summary { cursor: pointer; list-style: none; }
+    .cl-item > summary::-webkit-details-marker { display: none; }
+    .cl-body { padding: 4px 8px 8px 26px; }
+    .cl-body .rq-cap { margin: 3px 0; }
     /* Calibration curve (#4) + exclude-largest-winners line */
     .rq-cal { margin: 8px 0; font-size: 0.74rem; }
     .rq-cal > summary { cursor: pointer; }

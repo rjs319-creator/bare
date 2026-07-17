@@ -7068,7 +7068,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       `<div class="sb-secgroup"><div class="sb-secgroup-h"${SB_SECTION_HELP[sec] ? ` title="${esc(SB_SECTION_HELP[sec])}"` : ''}>${SB_SECTIONS[sec] || esc(sec)}${secBadge(sec)}${SB_SECTION_HELP[sec] ? ' <span class="sb-help-i" title="' + esc(SB_SECTION_HELP[sec]) + '">ⓘ</span>' : ''}</div><div class="sb-grid">${bySec[sec].map(sbCard).join('')}</div></div>`
     ).join('');
 
-    scoreboardContainer.innerHTML = intro + allocationPanelHTML(data.allocation) + scoreDecilePanel(data.scoreQuality) + `<div id="sb-rankquality"></div><div id="sb-leadtime"></div><div id="sb-failure"></div>` + regimeBar + html;
+    scoreboardContainer.innerHTML = intro + allocationPanelHTML(data.allocation) + scoreDecilePanel(data.scoreQuality) + `<div id="sb-rankquality"></div><div id="sb-leadtime"></div><div id="sb-failure"></div><div id="sb-complab"></div>` + regimeBar + html;
     const regimeSel = document.getElementById('sb-regime-sel');
     if (regimeSel) regimeSel.addEventListener('change', e => setSbRegime(e.target.value));
     scoreboardContainer.querySelectorAll('[data-sig-toggle]').forEach(btn => {
@@ -7077,6 +7077,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     loadRankQuality();  // #5 — does a higher score actually win? (lazy, own endpoint)
     loadLeadTime();     // §7 — does each algorithm find moves EARLY enough to be useful? (lazy)
     loadFailureModel(); // §5 — does the shadow failure model actually predict failure? (lazy)
+    loadComponentLab(); // §2 — which components ADD value after matching on confounders? (lazy)
   }
 
   // ── 🎯 RANKING QUALITY (#5) — validate that higher scores produce better outcomes.
@@ -7316,6 +7317,64 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       failureData = fm;
       host.innerHTML = failureModelPanel(fm);
     } catch { host.innerHTML = `<div class="sb-secgroup"><div class="dt-note" style="border-left-color:var(--red)">Couldn't load the failure-model check.</div></div>`; }
+  }
+
+  // ── 🧪 COMPONENT LABORATORY (§2) — does each algorithm component ADD value beyond the rest
+  // of the setup? Reads op=complab: a matched treated-vs-control study over the resolved ledger
+  // (each component's names compared to the most similar names WITHOUT it), so a component reads
+  // "additive" only if it beats comparable setups — not because component-present names did well.
+  const CLV = {
+    additive: ['✅', 'var(--green)', 'Additive', 'retain'],
+    redundant: ['🔁', 'var(--text-dim)', 'Redundant', 'reduce'],
+    harmful: ['🔻', 'var(--red)', 'Harmful', 'disable'],
+    inconclusive: ['⚪', 'var(--text-dim)', 'Inconclusive', 'observe'],
+    insufficient: ['⏳', 'var(--text-dim)', 'Insufficient data', 'observe'],
+  };
+  function clComponentRow(c) {
+    const [vi, vcol, vlbl] = CLV[c.verdict] || CLV.insufficient;
+    const incr = c.incrementalReturn == null ? '—' : (c.incrementalReturn > 0 ? '+' : '') + c.incrementalReturn + '%';
+    const ci = c.ci ? ` <span class="dt-dim">CI [${c.ci[0]}, ${c.ci[1]}]</span>` : '';
+    const naive = c.naiveDifference == null ? '' : `<span class="lt-m dt-dim" title="Raw with−without difference before matching. The gap vs the matched number is confounding the matching removed.">naive ${c.naiveDifference > 0 ? '+' : ''}${c.naiveDifference}%</span>`;
+    return `<details class="cl-item"><summary class="lt-row" title="${esc(c.blurb || '')}">`
+      + `<span class="lt-v" style="color:${vcol}">${vi}</span>`
+      + `<span class="lt-nm">${esc(c.label)}</span>`
+      + `<span class="lt-m" title="Matched incremental forward return (with − matched-without)">incr <b style="color:${vcol}">${incr}</b>${c.significant ? ' *' : ''}</span>`
+      + naive
+      + `<span class="lt-n dt-dim">${vlbl}${c.matchedPairs ? ' · ' + c.matchedPairs + ' pairs' : ''}</span>`
+      + `</summary><div class="cl-body">`
+      + (c.note ? `<div class="dt-dim rq-cap">${esc(c.note)}</div>` : '')
+      + (c.ci ? `<div class="dt-dim rq-cap">Incremental ${incr}${ci}${c.significant ? ' — statistically significant' : ' — not significant'}. Recommendation: <b>${esc((CLV[c.verdict] || [])[3] || 'observe')}</b> (evidence only — nothing is auto-removed).</div>` : '')
+      + (c.treatedGroup ? `<div class="dt-dim rq-cap">With: n${c.treatedGroup.n}, win ${c.treatedGroup.winRate}%, mean ${c.treatedGroup.meanReturn}% · Without: n${c.controlGroup.n}, win ${c.controlGroup.winRate}%, mean ${c.controlGroup.meanReturn}%</div>` : '')
+      + (c.byRegime ? `<div class="dt-dim rq-cap">By regime: ${esc(Object.entries(c.byRegime).map(([k, v]) => `${k} ${v.incremental > 0 ? '+' : ''}${v.incremental}% (n${v.n})`).join(' · '))}</div>` : '')
+      + (c.examples && c.examples.length ? `<div class="dt-dim rq-cap">Example matched pairs: ${esc(c.examples.map(e => `${e.treated.ticker} ${e.treated.date}(${e.treated.ret}%) ↔ ${e.control.ticker}(${e.control.ret}%)`).join(' · '))}</div>` : '')
+      + `</div></details>`;
+  }
+  function componentLabPanel(cl) {
+    if (!cl || !cl.ok) return `<div class="sb-secgroup"><div class="dt-note" style="border-left-color:var(--red)">Couldn't load the component laboratory.</div></div>`;
+    const comps = cl.components || [];
+    if (!comps.length) return `<div class="sb-secgroup rq-panel"><div class="sb-secgroup-h">🧪 Component laboratory</div><div class="dt-dim">No resolvable picks yet — fills in as the ledger matures.</div></div>`;
+    const order = { additive: 0, harmful: 1, redundant: 2, inconclusive: 3, insufficient: 4 };
+    const rows = comps.slice().sort((a, b) => (order[a.verdict] ?? 9) - (order[b.verdict] ?? 9)).map(clComponentRow).join('');
+    return `<div class="sb-secgroup rq-panel lt-panel">`
+      + `<div class="sb-secgroup-h">🧪 Component laboratory <span class="dt-dim">— does each component ADD value, after matching?</span></div>`
+      + `<div class="dt-dim rq-cap">Each component is measured against the most SIMILAR names without it (matched on regime, sector, prior return, liquidity). "Additive" = it beats comparable setups; "redundant" = the raw edge was really the confounders. ${cl.coverage ? `Over ${cl.coverage.records} resolved picks.` : ''} * = significant.</div>`
+      + `<div class="lt-rows">${rows}</div>`
+      + `<div class="dt-dim rq-foot">Nearest-neighbour matched treated-vs-control (${cl.window || 21}-bar forward return). Never auto-removes a feature — recommendations are evidence for a human decision.</div>`
+      + `</div>`;
+  }
+  let complabLoaded = false, complabData = null;
+  async function loadComponentLab() {
+    const host = document.getElementById('sb-complab');
+    if (!host) return;
+    if (complabData) { host.innerHTML = componentLabPanel(complabData); return; }
+    if (complabLoaded) return;
+    complabLoaded = true;
+    host.innerHTML = `<div class="sb-secgroup"><div class="sb-secgroup-h">🧪 Component laboratory</div><div class="mom-status"><div class="mom-spinner"></div><p>Matching treated vs control to isolate what each component adds…</p></div></div>`;
+    try {
+      const cl = await fetch('/api/tracker?op=complab').then(r => r.json());
+      complabData = cl;
+      host.innerHTML = componentLabPanel(cl);
+    } catch { host.innerHTML = `<div class="sb-secgroup"><div class="dt-note" style="border-left-color:var(--red)">Couldn't load the component laboratory.</div></div>`; }
   }
 
   scoreboardRefreshBtn.addEventListener('click', fetchScoreboard);
