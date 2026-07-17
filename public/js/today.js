@@ -56,7 +56,25 @@ function evidenceLine(sig, legend) {
   const names = (e.families || []).map(f => (legend && legend[f]) || f);
   const warn = e.singleFamily ? ` <span class="td-warn" title="Multiple screeners agree but they read the SAME factor — really one confirmation, not several.">⚠️ correlated</span>` : '';
   const src = (sig.sources || []).length > 1 ? ` <span class="td-dim">· ${sig.sources.length} screeners</span>` : '';
-  return `<div class="td-eviden">🧩 <b>${e.familyCount || 1}</b> independent ${e.familyCount === 1 ? 'family' : 'families'}: ${esc(names.join(' + '))}${src}${warn}</div>`;
+  return `<div class="td-eviden">🧩 <b>${e.familyCount || 1}</b> independent ${e.familyCount === 1 ? 'family' : 'families'}: ${esc(names.join(' + '))}${src}${warn}</div>${redundancyLine(sig)}`;
+}
+
+// The MEASURED redundancy discount for this name. Only rendered when the pair actually
+// earned a credit from the ledgers — an asserted prior says nothing worth showing, so a
+// name with no measurement stays silent rather than implying a measurement happened.
+function redundancyLine(sig) {
+  const e = sig.evidence || {};
+  if (!e.measured || !Number.isFinite(e.effectiveCount)) return '';
+  const declared = e.familyCount || 1;
+  const units = e.effectiveCount;
+  // Only interesting when measurement DISAGREES with the declared count.
+  if (units >= declared - 0.01) return '';
+  const discounted = (e.credits || []).filter(c => c.against && c.credit < 0.99);
+  const detail = discounted
+    .map(c => `${esc(c.source)} counts ${c.credit.toFixed(2)}× (overlaps ${esc(c.against)})`)
+    .join(' · ');
+  const title = `Measured from the live ledgers, not assumed: these engines overlap and their realized returns move together, so agreement between them is not ${declared} independent votes. ${detail || ''}`;
+  return `<div class="td-redun" title="${esc(title)}">⚖️ worth <b>${units.toFixed(2)}</b> of ${declared} — ${detail ? esc(detail) : 'overlapping evidence, measured'}</div>`;
 }
 
 // Signal-domain breadth (#2) — how many of the 8 distinct evidence DOMAINS (price,
@@ -209,10 +227,22 @@ export function renderCommandCenter(container, p) {
   // Freshness / system health (#10/#11) — error ≠ empty.
   const fr = p.freshness || {};
   if (fr.warnings && fr.warnings.length) html += `<div class="dt-note" style="border-left-color:var(--amber,#f59e0b)">🔧 ${esc(fr.warnings.join(' · '))}</div>`;
+  html += redundancyPanel(p.redundancy);
   html += dataTrustPanel(fr);
   html += `<div class="td-dim td-cc-foot">One ranked table across ${p.counts?.signals ?? 0} signals — ranked by validated track record × confidence × regime-fit × execution × <b>independent evidence</b> (not a sum of screener scores). Leads, not advice; always confirm and use a stop.</div>`;
   html += `</div>`;
   container.innerHTML = html;
+  const redunBtn = container.querySelector('[data-redun-load]');
+  if (redunBtn) redunBtn.addEventListener('click', async () => {
+    const host = container.querySelector('[data-redun-pairs]');
+    host.innerHTML = `<div class="td-dim">Measuring overlap and return correlation across the ledgers…</div>`;
+    try {
+      const m = await fetch('/api/tracker?op=redundancy').then(r => r.json());
+      renderPairs(host, m);
+    } catch {
+      host.innerHTML = `<div class="td-dim">Couldn't load the pair matrix right now — the ranking is unaffected.</div>`;
+    }
+  });
   container.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', (ev) => {
     if (ev.target.closest('[data-live]') && ev.target.hasAttribute('data-live')) return;
     if (typeof window.showTab === 'function') window.showTab(b.dataset.go);
@@ -237,6 +267,64 @@ function dataTrustPanel(fr) {
       <div class="dt-srcs">${rows}</div>
       <div class="dt-leg-h">What each output is grounded in:</div>${legend}
     </div></details>`;
+}
+
+// ── Measured-redundancy panel ────────────────────────────────────────────────
+// Answers "is the evidence behind these picks actually independent, or is the board
+// double-counting?" — from the ledgers, not from the hand-assigned family map. Collapsed
+// by default; the full pair matrix is fetched lazily on first open (op=redundancy is a
+// rate-limited heavy op, so it must never run on page load).
+function redundancyPanel(r) {
+  if (!r) return '';
+  if (r.method !== 'measured') {
+    return `<details class="td-redunp"><summary>⚖️ Evidence independence — <b>assumed</b>, not yet measured</summary>
+      <div class="td-redunp-body">
+        <div class="td-redunp-note">${esc(r.note || '')}</div>
+        <div class="td-dim">Until a pair of algorithms has enough shared history, a second agreeing screener in the same family is charged a flat <b>${r.priorCredit}</b> — a defensible default, but an assumption. Nothing here is measured yet.</div>
+      </div></details>`;
+  }
+  const pays = r.confirmationPays === false
+    ? `<div class="td-redunp-warn">⚠️ <b>Agreement is not paying.</b> When two algorithms pick the same name it has averaged <b>${r.avgConfirmationLift}%</b> versus names only one picked — so treating agreement as confirmation has been costing, not helping.</div>`
+    : r.confirmationPays === true
+      ? `<div class="td-redunp-ok">✓ Co-selected names have out-performed single-selected ones by ${r.avgConfirmationLift}% on average.</div>` : '';
+  const verdictLabel = { 'more-redundant-than-assumed': 'More redundant than the family map assumed', 'largely-independent': 'Largely independent', mixed: 'Mixed — wrong in both directions', insufficient: 'Not enough history yet' }[r.verdict] || esc(r.verdict);
+  return `<details class="td-redunp" data-redun><summary>⚖️ Evidence independence — <b>measured</b> from ${r.measurablePairs}/${r.totalPairs} algorithm pairs</summary>
+    <div class="td-redunp-body">
+      <div class="td-redunp-note"><b>${esc(verdictLabel)}.</b> How much a <i>second</i> agreeing screener is really worth is earned from the ledgers here — overlap in the names they pick, plus how much their realized returns move together — instead of being assumed at a flat ${r.priorCredit}.</div>
+      ${pays}
+      <div class="td-redunp-grid">
+        <div><span class="td-dim">Avg measured credit</span><b>${r.avgMeasuredCredit ?? '—'}</b></div>
+        <div><span class="td-dim">Static assumption</span><b>${r.priorCredit}</b></div>
+        <div><span class="td-dim">Pairs measured</span><b>${r.measurablePairs}/${r.totalPairs}</b></div>
+        <div><span class="td-dim">Model</span><b>${esc(r.version || '')}</b></div>
+      </div>
+      <div class="td-redunp-pairs" data-redun-pairs><button class="td-redunp-btn" data-redun-load>Show the pair-by-pair matrix</button></div>
+      <div class="td-dim td-redunp-foot">A credit of 1.00 = fully independent evidence. 0.30 = the old flat assumption. Below that = the two engines are close to the same signal, so their agreement is mostly double-counting.${r.asOf ? ` Measured ${esc(String(r.asOf).slice(0, 10))}.` : ''}</div>
+    </div></details>`;
+}
+
+// Render the fetched pair matrix. Kept dumb: the route already decided measured vs prior.
+function renderPairs(host, m) {
+  const pairs = (m && m.pairs) || [];
+  if (!pairs.length) { host.innerHTML = `<div class="td-dim">No algorithm pairs with shared history yet.</div>`; return; }
+  const cov = m.coverage || {};
+  const rows = pairs.slice().sort((a, b) => (a.credit ?? 1) - (b.credit ?? 1)).map(p => {
+    const measured = p.method === 'measured';
+    const cls = !measured ? 'pr-prior' : p.credit < 0.5 ? 'pr-dupe' : p.credit < 0.85 ? 'pr-part' : 'pr-indep';
+    const verdict = !measured ? 'assumed' : p.credit < 0.5 ? 'near-duplicate' : p.credit < 0.85 ? 'partly redundant' : 'independent';
+    const drift = measured && Math.abs(p.credit - p.priorCredit) >= 0.2
+      ? `<span class="td-redunp-drift" title="The static family map assumed ${p.priorCredit}; the ledgers say ${p.credit}.">map said ${p.priorCredit}</span>` : '';
+    return `<tr class="${cls}">
+      <td>${esc(p.a)} × ${esc(p.b)}</td>
+      <td>${p.overlapRate == null ? '—' : (p.overlapRate * 100).toFixed(0) + '%'}</td>
+      <td>${p.returnCorr == null ? '—' : p.returnCorr.toFixed(2)}</td>
+      <td><b>${p.credit == null ? '—' : p.credit.toFixed(2)}</b> ${drift}</td>
+      <td class="td-dim">${verdict}</td></tr>`;
+  }).join('');
+  host.innerHTML = `<table class="td-redunp-tbl">
+    <thead><tr><th>Algorithm pair</th><th title="How often they pick the same name on the same day">Overlap</th><th title="How much their realized excess returns move together">Return corr</th><th title="What the 2nd one's agreement is worth (1.00 = fully independent)">Credit</th><th>Read</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <div class="td-dim td-redunp-cov">${cov.resolved ?? 0} resolved picks across ${cov.tickers ?? 0} tickers${cov.span ? `, ${esc(cov.span.from)} → ${esc(cov.span.to)}` : ''}. Pairs below the sample gate show the assumed prior.</div>`;
 }
 
 const TODAY_CACHE_KEY = 'today.cc.v1';
