@@ -7068,13 +7068,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       `<div class="sb-secgroup"><div class="sb-secgroup-h"${SB_SECTION_HELP[sec] ? ` title="${esc(SB_SECTION_HELP[sec])}"` : ''}>${SB_SECTIONS[sec] || esc(sec)}${secBadge(sec)}${SB_SECTION_HELP[sec] ? ' <span class="sb-help-i" title="' + esc(SB_SECTION_HELP[sec]) + '">ⓘ</span>' : ''}</div><div class="sb-grid">${bySec[sec].map(sbCard).join('')}</div></div>`
     ).join('');
 
-    scoreboardContainer.innerHTML = intro + allocationPanelHTML(data.allocation) + scoreDecilePanel(data.scoreQuality) + `<div id="sb-rankquality"></div>` + regimeBar + html;
+    scoreboardContainer.innerHTML = intro + allocationPanelHTML(data.allocation) + scoreDecilePanel(data.scoreQuality) + `<div id="sb-rankquality"></div><div id="sb-leadtime"></div>` + regimeBar + html;
     const regimeSel = document.getElementById('sb-regime-sel');
     if (regimeSel) regimeSel.addEventListener('change', e => setSbRegime(e.target.value));
     scoreboardContainer.querySelectorAll('[data-sig-toggle]').forEach(btn => {
       btn.addEventListener('click', () => { const [s, t] = btn.dataset.sigToggle.split(':'); toggleSignal(s, t); });
     });
     loadRankQuality();  // #5 — does a higher score actually win? (lazy, own endpoint)
+    loadLeadTime();     // §7 — does each algorithm find moves EARLY enough to be useful? (lazy)
   }
 
   // ── 🎯 RANKING QUALITY (#5) — validate that higher scores produce better outcomes.
@@ -7200,6 +7201,68 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       rankQualityData = rq;
       host.innerHTML = rankQualityPanel(rq);
     } catch { host.innerHTML = `<div class="sb-secgroup"><div class="dt-note" style="border-left-color:var(--red)">Couldn't load the ranking-quality check.</div></div>`; }
+  }
+
+  // ── ⏱ EARLY DETECTION (§7) — does each algorithm find moves EARLY enough to be useful?
+  // Reads op=leadtime (days-before-breakout, share of the move captured before confirmation,
+  // false-early rate, capital efficiency) over the SAME first-appearance ledgers the Scoreboard
+  // resolves. Honest by construction: a screener is "early" ONLY if its signals also convert
+  // and the wait is tradeable — being first is not enough (the acceptance rule is in the model).
+  const LT_VERDICT = {
+    'genuinely-early': ['🟢', 'var(--green)', 'Genuinely early — finds moves before they break out AND they convert'],
+    'low-conversion': ['🔻', 'var(--red)', 'Fires early but few signals become real moves'],
+    'late-detector': ['🟡', 'var(--amber,#f59e0b)', 'By the time it fires the move is mostly done'],
+    'slow-to-pay': ['⏳', 'var(--amber,#f59e0b)', 'Converts, but the wait ties up capital too long'],
+    insufficient: ['⚪', 'var(--text-dim)', 'Not enough resolved picks yet'],
+  };
+  function ltAlgoRow(a) {
+    const [vi, vcol, vtxt] = LT_VERDICT[a.verdict] || LT_VERDICT.insufficient;
+    const wait = a.medianDaysToBreakout == null ? '—' : `${a.medianDaysToBreakout}d`;
+    const share = a.medianEarlyShare == null ? '—' : `${Math.round(a.medianEarlyShare * 100)}%`;
+    const conv = `${Math.round(a.breakoutRate * 100)}%`;
+    return `<div class="lt-row" title="${esc(vtxt)}">`
+      + `<span class="lt-v" style="color:${vcol}">${vi}</span>`
+      + `<span class="lt-nm">${esc(a.key)}</span>`
+      + `<span class="lt-m" title="Median trading days from detection to the +move breakout marker (among names that converted)">⏱ ${wait}</span>`
+      + `<span class="lt-m" title="Share of the eventual move captured BEFORE the breakout — the value of being early">🎯 ${share}</span>`
+      + `<span class="lt-m" title="Conversion: share of early signals that reached a real move (1 − false-early rate)">✅ ${conv}</span>`
+      + `<span class="lt-m dt-dim" title="Median forward return from detection to window end">${a.medianResolved == null ? '' : (a.medianResolved > 0 ? '+' : '') + a.medianResolved + '%'}</span>`
+      + `<span class="lt-n dt-dim">n=${a.n}</span></div>`;
+  }
+  function leadTimePanel(lt) {
+    if (!lt || !lt.ok) return `<div class="sb-secgroup"><div class="dt-note" style="border-left-color:var(--red)">Couldn't load the early-detection check.</div></div>`;
+    const algos = (lt.algorithms || []).filter(a => a.n > 0);
+    if (!algos.length) return `<div class="sb-secgroup rq-panel"><div class="sb-secgroup-h">⏱ Early detection — does each algorithm find moves early?</div><div class="dt-dim">No resolvable first-appearance picks yet — this fills in as the ledgers mature.</div></div>`;
+    const lb = lt.leaderboard || {};
+    const leaderLine = (icon, label, key) => key ? `<span class="lt-lead"><b>${icon} ${label}</b> ${esc(key)}</span>` : '';
+    const leaders = [
+      leaderLine('🥇', 'Earliest', lb.earliestDetector),
+      leaderLine('🎯', 'Most captured early', lb.bestMoveCaptured),
+      leaderLine('📈', 'Best post-entry', lb.bestPostEntryReturn),
+      leaderLine('⚡', 'Best capital efficiency', lb.bestCapitalEfficiency),
+      leaderLine('🛡', 'Lowest false-early', lb.lowestFalseEarly),
+    ].filter(Boolean).join('');
+    return `<div class="sb-secgroup rq-panel lt-panel">`
+      + `<div class="sb-secgroup-h">⏱ Early detection — does each algorithm find moves early <span class="dt-dim">enough to be useful?</span></div>`
+      + `<div class="dt-dim rq-cap">Earliness measured against an objective +${lt.config.BREAKOUT_PCT}% breakout marker within ${lt.config.WINDOW} bars. A screener is "early" only if its signals also CONVERT (✅) and the wait (⏱) is tradeable — being first is not enough.</div>`
+      + (leaders ? `<div class="lt-leaders">${leaders}</div>` : '')
+      + `<div class="lt-rows">${algos.map(ltAlgoRow).join('')}</div>`
+      + `<div class="dt-dim rq-foot">🎯 = share of the eventual move captured before confirmation (the payoff for earliness). ✅ = conversion rate. A high ⏱ with low ✅ is a screener that fires into names that never move. Same first-appearance ledgers and point-in-time candles as the Scoreboard above.</div>`
+      + `</div>`;
+  }
+  let leadTimeLoaded = false, leadTimeData = null;
+  async function loadLeadTime() {
+    const host = document.getElementById('sb-leadtime');
+    if (!host) return;
+    if (leadTimeData) { host.innerHTML = leadTimePanel(leadTimeData); return; }
+    if (leadTimeLoaded) return;
+    leadTimeLoaded = true;
+    host.innerHTML = `<div class="sb-secgroup"><div class="sb-secgroup-h">⏱ Early detection — does each algorithm find moves early?</div><div class="mom-status"><div class="mom-spinner"></div><p>Measuring how early each algorithm detects moves…</p></div></div>`;
+    try {
+      const lt = await fetch('/api/tracker?op=leadtime').then(r => r.json());
+      leadTimeData = lt;
+      host.innerHTML = leadTimePanel(lt);
+    } catch { host.innerHTML = `<div class="sb-secgroup"><div class="dt-note" style="border-left-color:var(--red)">Couldn't load the early-detection check.</div></div>`; }
   }
 
   scoreboardRefreshBtn.addEventListener('click', fetchScoreboard);

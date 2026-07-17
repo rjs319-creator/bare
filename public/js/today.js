@@ -122,6 +122,28 @@ function eventChip(ev) {
   return '';
 }
 
+// Remaining-edge line (#3) — how much of the advertised move is still ahead at the current
+// price. Only shown when the model actually rated the name AND it isn't perfectly fresh
+// (a fresh name has nothing to disclose; showing "0% consumed" on every card is noise).
+const FRESHNESS = {
+  fresh: ['🔋', 'Fresh', 're-fresh'], actionable: ['🔋', 'Actionable', 're-fresh'],
+  'partially-consumed': ['🪫', 'Partly consumed', 're-part'], late: ['🪫', 'Late', 're-late'],
+  expired: ['⏳', 'Edge spent', 're-late'], invalidated: ['❌', 'Invalidated', 're-late'],
+  unrated: ['', '', ''], new: ['', '', ''],
+};
+function remainingLine(sig) {
+  const r = sig.remainingEdge;
+  if (!r || !r.rated) return '';
+  if (r.freshness === 'fresh' && (r.consumedPct || 0) < 1) return ''; // nothing consumed → nothing to say
+  const [icon, label, cls] = FRESHNESS[r.freshness] || FRESHNESS.unrated;
+  if (!label) return '';
+  const title = `Remaining-edge (measured from this signal's immutable origin): advertised move ${pct(r.originalEdgePct)}, ${r.consumedPct}% already realized, ~${pct(r.netRemainingPct)} net upside left to target after costs from here. A name that has run is ranked below a fresh one with the same original score.`;
+  return `<div class="td-remain ${cls}" title="${esc(title)}">${icon} ${esc(label)} — `
+    + `<b>${r.consumedPct}%</b> of the move used, <b>${pct(r.netRemainingPct)}</b> left`
+    + (r.extensionR >= 1 ? ` <span class="td-dim">· ${r.extensionR}R past entry</span>` : '')
+    + `</div>`;
+}
+
 function levels(sig) {
   const parts = [];
   if (sig.entry > 0) {
@@ -154,6 +176,7 @@ function signalCard(sig, legend) {
     + (sig.sector ? `<span class="td-sect">${esc(sig.sector)}</span>` : '') + gradeChip(sig) + pctileChip(sig) + versionChip(sig) + exWarn + `</div>`
     + evidenceLine(sig, legend)
     + `<div class="td-breadth-row">${breadthChip(sig)}</div>`
+    + remainingLine(sig)
     + levels(sig)
     + `<div class="td-foot">${trackLine(sig)}${eventChip(sig.event)}${sig.catalyst ? `<span class="td-cat" title="${esc(sig.catalyst)}">📰 catalyst</span>` : ''}</div>`
     + `</div>`;

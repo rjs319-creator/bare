@@ -2353,6 +2353,16 @@
     .rq-val { flex: 0 0 46px; text-align: right; font-weight: 700; }
     .rq-wr { flex: 0 0 78px; text-align: right; color: var(--text-dim); }
     .rq-reg, .rq-foot { font-size: 0.72rem; line-height: 1.5; margin-top: 6px; }
+    /* ⏱ Early-detection / lead-time panel (§7) */
+    .lt-leaders { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0; font-size: 0.72rem; }
+    .lt-lead { white-space: nowrap; }
+    .lt-lead b { font-weight: 700; margin-right: 3px; }
+    .lt-rows { margin: 8px 0; }
+    .lt-row { display: flex; align-items: center; gap: 8px; font-size: 0.74rem; margin: 4px 0; padding: 3px 6px; border-radius: 6px; background: var(--surface); }
+    .lt-row .lt-v { flex: 0 0 16px; text-align: center; }
+    .lt-row .lt-nm { flex: 1 1 auto; font-weight: 600; min-width: 90px; }
+    .lt-row .lt-m { flex: 0 0 auto; white-space: nowrap; }
+    .lt-row .lt-n { flex: 0 0 auto; }
     /* Calibration curve (#4) + exclude-largest-winners line */
     .rq-cal { margin: 8px 0; font-size: 0.74rem; }
     .rq-cal > summary { cursor: pointer; }
@@ -2650,6 +2660,13 @@
 .td-redunp-cov, .td-redunp-foot { font-size:.68rem; margin-top:.45rem; line-height:1.4; }
 /* Per-card measured discount — only rendered when measurement DISAGREES with the map. */
 .td-redun { font-size:.7rem; color:var(--amber,#f59e0b); margin-top:.15rem; line-height:1.35; }
+
+/* Per-card remaining-edge (#3) — how much of the advertised move is still ahead. */
+.td-remain { font-size:.7rem; margin:.15rem 0; line-height:1.35; padding:.1em .5em; border-radius:6px; }
+.td-remain.re-fresh { color:var(--green); background:rgba(34,197,94,.10); }
+.td-remain.re-part { color:var(--amber,#f59e0b); background:rgba(245,158,11,.10); }
+.td-remain.re-late { color:var(--red); background:rgba(239,68,68,.10); }
+.td-remain b { font-weight:700; }
 
 /* ── 🎯 OMEGA ENSEMBLE (op=ensemble) ────────────────────────────────────────
    Renders the composed board: summary, portfolio caps, ranking, exclusions.

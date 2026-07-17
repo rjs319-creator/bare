@@ -144,6 +144,28 @@ test('buildToday: lanes diff against a previous snapshot', () => {
   assert.ok(second.lanes.upgraded.length >= 1);             // score rose ≥8 vs prev
 });
 
+test('buildToday: remaining-edge (§3) re-ranks a run-up name and emits the model meta', () => {
+  // A single name with a wide stop so it stays ACTIVE (triggered, <1R extended) while having
+  // consumed ~half its advertised move ($10 origin → $15 now, $10→$20 target).
+  const RUNUP = { regime: { riskOn: true, bearish: false, breadthPct: 60 }, results: [
+    { ticker: 'RUN', company: 'R', sector: 'Technology', status: 'Setup', price: 15,
+      levels: { entry: 10, stop: 4, target: 20, rr: 1.67 }, factors: { dollarVol: 5e8, mom63: 40 }, quant: { score: 80 } },
+  ] };
+  const base = buildToday({ screener: RUNUP, sectors: SECTORS, scoreboard: SCOREBOARD });
+  const runId = base.horizons.swing.find(x => x.ticker === 'RUN').id;
+  const origins = { [runId]: { firstPrice: 10, entry: 10, stop: 4, target: 20, side: 'long', horizon: 'swing', bars: 0 } };
+  const withOrigins = buildToday({ screener: RUNUP, sectors: SECTORS, scoreboard: SCOREBOARD }, null, null, origins);
+
+  const baseRun = base.horizons.swing.find(x => x.ticker === 'RUN');
+  const reRun = withOrigins.horizons.swing.find(x => x.ticker === 'RUN');
+  assert.equal(base.remainingEdge.active, false, 'no origins → model dormant');
+  assert.equal(withOrigins.remainingEdge.active, true, 'origins → model active');
+  assert.equal(baseRun.remainingEdge, null, 'no per-signal report without origins');
+  assert.ok(reRun.remainingEdge && reRun.remainingEdge.consumedPct >= 45 && reRun.remainingEdge.consumedPct <= 55);
+  assert.equal(reRun.remainingEdge.freshness, 'partially-consumed');
+  assert.ok(reRun.score < baseRun.score, `run-up name must be demoted: ${reRun.score} < ${baseRun.score}`);
+});
+
 test('classifyEarnings: binary inside window, scheduled beyond, passed if negative', () => {
   assert.equal(N.classifyEarnings(5, '2026-07-16', 'swing').kind, 'binary');   // 5d <= 21d window
   assert.equal(N.classifyEarnings(60, '2026-09-01', 'swing').kind, 'scheduled'); // 60d > 21d
