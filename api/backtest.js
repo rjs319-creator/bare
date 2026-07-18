@@ -16,27 +16,39 @@ const SM = require('../lib/security-master');
 // survivorship-unsafe (no late-listing/IPO feed, S&P-only delisting coverage), which the returned
 // `pit` block states explicitly. `asOf` is a coarse calendar boundary at the window start (the
 // master's delisting dates are calendar dates), not a purge — precision there is unnecessary.
-async function resolvePitUniverse(baseList, months, enabled) {
+async function resolvePitUniverse(baseList, months, enabled, scope) {
   const list = [...new Set(baseList)];
   if (!enabled) return { list, pit: { enabled: false } };
+  // The ONLY point-in-time delisting source is the S&P-500 removal scrape (all large-cap), and the
+  // security master carries no cap-tier field — so a died-since name cannot be attributed to a cap
+  // band. Augmenting small/micro would inject large-cap names that were never in the band, making
+  // the backtest LESS representative. Restrict de-survivorship to scope=large; other bands report
+  // honestly that no cap-appropriate delisting coverage exists (universe left as the static list).
+  if (scope !== 'large') {
+    return { list, pit: { enabled: true, applied: false, scope, survivorshipSafe: false,
+      note: `No point-in-time delisting coverage for the ${scope}-cap band — the only source is the `
+        + `S&P-500 (large-cap) removal scrape and the security master has no cap-tier field, so `
+        + `augmenting would inject large-cap names that were never ${scope}-cap. Universe left as the `
+        + `present-day static list (survivorship-unsafe).` } };
+  }
   const asOf = new Date(Date.now() - Math.round(months * 30.44 * 86400000)).toISOString().slice(0, 10);
   let master = null;
   try { master = await SM.loadMaster(); } catch { master = null; }
   if (!master || !master.records) {
-    return { list, pit: { enabled: true, built: false, asOf, survivorshipSafe: false,
+    return { list, pit: { enabled: true, applied: false, built: false, asOf, survivorshipSafe: false,
       note: 'security master not built — universe fell back to the present-day static list (survivorship-unsafe)' } };
   }
   const aug = SM.pointInTimeAugment(master.records, list, asOf);
   return {
     list: aug.universe,
     pit: {
-      enabled: true, built: true, asOf,
+      enabled: true, applied: true, built: true, asOf, scope,
       securityMasterVersion: master.v, builtAt: master.builtAt,
       staticCount: aug.staticCount, addedDelisted: aug.addedCount,
       added: aug.added.slice(0, 50), addedFull: aug.added,   // addedFull for coverage counting (stripped from response)
       survivorshipSafe: false,
       note: 'Added back delisted names the security master knows were active at the window start '
-        + '(S&P-500, ≤5yr). Does NOT correct late-listing survivorship or non-S&P delistings — result remains survivorship-unsafe.',
+        + '(S&P-500, large-cap, ≤5yr). Does NOT correct late-listing survivorship or non-S&P delistings — result remains survivorship-unsafe.',
     },
   };
 }
@@ -167,7 +179,7 @@ async function backtestMode(req, res) {
   // real delisted names surface. Default stays 6mo, so normal traffic is unchanged.
   const months = Math.min(54, Math.max(3, parseInt(req.query.months, 10) || 6));
   const baseList = scope === 'micro' ? MICRO_CAPS : scope === 'small' ? SMALL_CAPS : LARGE;
-  const { list, pit } = await resolvePitUniverse(baseList, months, req.query.pit === '1');
+  const { list, pit } = await resolvePitUniverse(baseList, months, req.query.pit === '1', scope);
   const opts = optsFor(scope);
 
   try {
@@ -276,7 +288,7 @@ async function backtestMode(req, res) {
     res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
     return res.json({
       scope, months, names, instances,
-      universe: { source: pit && pit.enabled ? 'point-in-time (augmented)' : 'present-day static', size: [...new Set(list)].length, survivorshipSafe: false },
+      universe: { source: pit && pit.applied ? 'point-in-time (augmented)' : 'present-day static', size: [...new Set(list)].length, survivorshipSafe: false },
       pit: pitOut,
       exits: { stopATR: STOP_ATR, targetATR: TGT_ATR, maxHold: MAX_HOLD },
       execution: { policy: POLICIES.NEXT_OPEN_PLUS_SLIPPAGE, entry: 'next-open+slippage', tier: tierForScope(scope), policyVersion: EXECUTION_POLICY_VERSION },
@@ -294,7 +306,7 @@ async function portfolioMode(req, res) {
   const scope = (req.query.scope || 'large').toLowerCase();
   const months = Math.min(54, Math.max(3, parseInt(req.query.months, 10) || 6));   // see backtestMode
   const baseList = scope === 'micro' ? MICRO_CAPS : scope === 'small' ? SMALL_CAPS : LARGE;
-  const { list, pit } = await resolvePitUniverse(baseList, months, req.query.pit === '1');
+  const { list, pit } = await resolvePitUniverse(baseList, months, req.query.pit === '1', scope);
   const opts = optsFor(scope);
   const maxPos = scope === 'large' ? 10 : 6;
   const TIER_RANK = { Breakout: 0, Setup: 1, Early: 2 };
@@ -364,7 +376,7 @@ async function portfolioMode(req, res) {
     res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
     return res.json({
       scope, months, maxPos, trades: accepted.length, signals: entries.length,
-      universe: { source: pit && pit.enabled ? 'point-in-time (augmented)' : 'present-day static', size: [...new Set(list)].length, survivorshipSafe: false },
+      universe: { source: pit && pit.applied ? 'point-in-time (augmented)' : 'present-day static', size: [...new Set(list)].length, survivorshipSafe: false },
       pit: pitOut,
       execution: { policy: POLICIES.NEXT_OPEN_PLUS_SLIPPAGE, entry: 'next-open+slippage', tier: tierForScope(scope), policyVersion: EXECUTION_POLICY_VERSION },
       version: BACKTEST_VERSION,
@@ -412,6 +424,7 @@ module.exports = function handler(req, res) {
 };
 // Exposed for tests — the next-open trade simulator and version marker.
 module.exports.simAtrTrade = simAtrTrade;
+module.exports.resolvePitUniverse = resolvePitUniverse;
 module.exports.BACKTEST_VERSION = BACKTEST_VERSION;
 module.exports.STOP_ATR = STOP_ATR;
 module.exports.TGT_ATR = TGT_ATR;
