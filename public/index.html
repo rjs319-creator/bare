@@ -117,7 +117,7 @@
         <ul>
           <li>Tracking is <b>forward-only</b> — it can't backfill picks from before it was switched on.</li>
           <li>1-Week fills after ~5 trading days, 1-Month after ~21, 3-Month after ~63. Until then a horizon reads "pending."</li>
-          <li>Picks are logged automatically each weekday. To force a snapshot now: <code>/api/tracker?op=track&force=1</code>.</li>
+          <li>Picks are logged automatically each weekday by the daily cron (the snapshot write is authenticated, so it isn't triggerable from the browser).</li>
         </ul>
       </div>
     </details>

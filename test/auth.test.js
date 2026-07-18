@@ -3,6 +3,7 @@ const assert = require('node:assert');
 const {
   isTrusted, requireTrusted, requireMethod, ingestAuthorized,
   internalHeaders, stripForceParams, isValidTicker, sanitizeTickers,
+  isProduction, safeEqual, validateAuthEnv,
 } = require('../lib/auth');
 
 // Minimal req/res doubles.
@@ -62,6 +63,91 @@ test('requireTrusted: allows the cron bearer once the secret is set', () => {
     const res = mkRes();
     assert.equal(requireTrusted(mkReq({ headers: { authorization: 'Bearer s3cr3t' } }), res), true);
   });
+});
+
+// Run `fn` with VERCEL_ENV forced to `env` (restored after). Used to exercise the
+// production fail-closed path deterministically regardless of the host environment.
+function withVercelEnv(env, fn) {
+  const prev = process.env.VERCEL_ENV;
+  if (env == null) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV = env;
+  try { fn(); } finally {
+    if (prev == null) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV = prev;
+  }
+}
+
+// ── production fail-closed (the Release-1 auth hardening) ────────────────────
+test('requireTrusted: PRODUCTION with a missing secret FAILS CLOSED (503), never world-open', () => {
+  withVercelEnv('production', () => {
+    withSecret(null, () => {
+      const res = mkRes();
+      assert.equal(requireTrusted(mkReq(), res), false);
+      assert.equal(res.statusCode, 503);
+      assert.equal(res.body && res.body.ok, false);
+    });
+  });
+});
+
+test('requireTrusted: PREVIEW/non-prod with a missing secret still fails OPEN (bootstrap)', () => {
+  withVercelEnv('preview', () => {
+    withSecret(null, () => {
+      const res = mkRes();
+      assert.equal(requireTrusted(mkReq(), res), true);
+      assert.equal(res.statusCode, 200);
+    });
+  });
+});
+
+test('requireTrusted: PRODUCTION with the secret set enforces the bearer (401 without it, allow with it)', () => {
+  withVercelEnv('production', () => {
+    withSecret('s3cr3t', () => {
+      const noAuth = mkRes();
+      assert.equal(requireTrusted(mkReq(), noAuth), false);
+      assert.equal(noAuth.statusCode, 401);
+      const good = mkRes();
+      assert.equal(requireTrusted(mkReq({ headers: { authorization: 'Bearer s3cr3t' } }), good), true);
+    });
+  });
+});
+
+test('ingestAuthorized: PRODUCTION with neither token nor secret fails CLOSED (no bootstrap in prod)', () => {
+  withVercelEnv('production', () => {
+    withSecret(null, () => {
+      const prev = process.env.ALERTS_INGEST_TOKEN; delete process.env.ALERTS_INGEST_TOKEN;
+      assert.equal(ingestAuthorized(mkReq(), 'ALERTS_INGEST_TOKEN'), false);
+      if (prev != null) process.env.ALERTS_INGEST_TOKEN = prev;
+    });
+  });
+});
+
+test('isProduction: true only for VERCEL_ENV=production', () => {
+  withVercelEnv('production', () => assert.equal(isProduction(), true));
+  withVercelEnv('preview', () => assert.equal(isProduction(), false));
+  withVercelEnv('development', () => assert.equal(isProduction(), false));
+});
+
+test('validateAuthEnv: flags a production deploy that is missing the secret', () => {
+  withVercelEnv('production', () => {
+    withSecret(null, () => {
+      const v = validateAuthEnv();
+      assert.equal(v.ok, false);
+      assert.equal(v.production, true);
+      assert.equal(v.secretConfigured, false);
+      assert.ok(v.warnings.length >= 1);
+    });
+    withSecret('s3cr3t', () => {
+      assert.equal(validateAuthEnv().ok, true);
+    });
+  });
+});
+
+// ── safeEqual (constant-time secret comparison) ─────────────────────────────
+test('safeEqual: matches identical non-empty strings, rejects mismatch and empties', () => {
+  assert.equal(safeEqual('s3cr3t', 's3cr3t'), true);
+  assert.equal(safeEqual('s3cr3t', 's3cr3T'), false);
+  assert.equal(safeEqual('short', 'a-much-longer-secret'), false); // no length-mismatch throw
+  assert.equal(safeEqual('', ''), false);       // empty never authorizes
+  assert.equal(safeEqual('x', ''), false);
+  assert.equal(safeEqual(null, null), false);
 });
 
 // ── requireMethod ───────────────────────────────────────────────────────────

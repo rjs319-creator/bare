@@ -1443,81 +1443,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     } catch { /* leave the panel as-is on error */ }
   }
 
-  function renderOptions(data) {
-    const { trades = [], sourceCount, articleCount, generatedAt } = data;
-    if (generatedAt) optionsGenTime.textContent = `Generated ${new Date(generatedAt).toLocaleTimeString()}`;
-    if (sourceCount) optionsMeta.textContent = `· ${articleCount || ''} articles · ${sourceCount} sources`;
-
-    const grid = document.createElement('div');
-    grid.className = 'opt-grid';
-
-    trades.forEach((t, idx) => {
-      const cls = t.sentiment === 'Bullish' ? 'bullish' : t.sentiment === 'Bearish' ? 'bearish' : 'neutral';
-      const sentIcon = t.sentiment === 'Bullish' ? '▲' : t.sentiment === 'Bearish' ? '▼' : '◆';
-
-      const card = document.createElement('div');
-      card.className = `opt-card ${cls} fade-in`;
-      card.dataset.ticker = t.ticker;
-      card.style.animationDelay = `${idx * 60}ms`;
-      card.innerHTML = `
-        <div class="opt-header">
-          <div class="opt-rank-badge">#${t.rank}</div>
-          <div class="opt-title">
-            <div class="opt-ticker">${esc(t.ticker)}</div>
-            <div class="opt-company">${esc(t.company)}</div>
-          </div>
-          <div class="opt-confidence">
-            <div class="opt-conf-num">${t.confidence}</div>
-            <div class="opt-conf-label">/10</div>
-          </div>
-        </div>
-
-        <div class="opt-badges">
-          <span class="opt-sentiment-badge ${cls}">${sentIcon} ${esc(t.sentiment)}</span>
-          <span class="opt-signal-badge">${esc(t.signalType)}</span>
-        </div>
-
-        <div style="margin: 10px 0;">
-          <div class="opt-activity">${esc(t.optionsActivity)}</div>
-        </div>
-
-        <div class="opt-trade-box">
-          <div class="opt-trade-label">Recommended Trade</div>
-          <div class="opt-trade-value">${esc(t.recommendedTrade)}</div>
-        </div>
-
-        <div class="opt-metrics">
-          <div class="opt-metric">
-            <div class="om-label">Price Target</div>
-            <div class="om-val target">${esc(t.priceTarget)}</div>
-          </div>
-          <div class="opt-metric">
-            <div class="om-label">Stop Loss</div>
-            <div class="om-val stop">${esc(t.stopLoss)}</div>
-          </div>
-          <div class="opt-metric">
-            <div class="om-label">Risk / Reward</div>
-            <div class="om-val rr">${esc(t.riskReward)}</div>
-          </div>
-        </div>
-
-        <div class="opt-meta-row">
-          <span class="opt-timeframe">${esc(t.timeframe)}</span>
-          ${t.currentPrice ? `<span style="font-size:0.7rem;color:var(--text-dim)">Current ~${esc(t.currentPrice)}</span>` : ''}
-        </div>
-
-        <div class="opt-basis">${esc(t.basis)}</div>
-        <div class="opt-risk"><span>⚠</span><span>${esc(t.keyRisk)}</span></div>
-        ${chartToggleMarkup()}
-      `;
-      wireChartToggle(card, t.ticker);
-      grid.appendChild(card);
-    });
-
-    optionsContainer.innerHTML = '';
-    optionsContainer.appendChild(grid);
-  }
-
   function showOptionsError(msg) {
     optionsContainer.innerHTML = `<div class="opt-status error"><p>${esc(msg)}</p></div>`;
   }
@@ -7043,7 +6968,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     }
     scoreboardMeta.textContent = `· ${data.totalPicks || 0} signals tracked (first appearance)${data.loggedRows ? ` · ${data.loggedRows} daily rows` : ''} · realized forward returns`;
     if (!data.groups || !data.groups.length) {
-      scoreboardContainer.innerHTML = `<div class="sb-empty">No picks logged yet. The daily cron snapshots Screener &amp; Momentum picks — check back after the next run, or trigger <code>/api/tracker?op=track&force=1</code> once.</div>`;
+      scoreboardContainer.innerHTML = `<div class="sb-empty">No picks logged yet. The daily cron snapshots Screener &amp; Momentum picks — check back after the next run.</div>`;
       return;
     }
 

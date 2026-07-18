@@ -1,7 +1,6 @@
 {
   "functions": {
     "api/picks.js":    { "maxDuration": 60 },
-    "api/options.js":  { "maxDuration": 60 },
     "api/momentum.js": { "maxDuration": 60 },
     "api/screener.js": { "maxDuration": 60 },
     "api/backtest.js": { "maxDuration": 60 },

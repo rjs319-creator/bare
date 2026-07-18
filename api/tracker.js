@@ -57,7 +57,10 @@ const PRIVILEGED_OPS = new Set([
   'crowdtick', 'daytradetick', 'downdaytick', 'dualreadlog', 'dualreadtune', 'edgelog',
   'fadetick', 'gapdowntick', 'gapgotick', 'ghostlog', 'intracapture', 'leaderboardtick',
   'narrative', 'optionsassess', 'predicttick', 'timinglog', 'timingtune', 'tonetick',
-  'trendtick', 'universecompile', 'universescan',
+  // 'track' snapshots the day's Screener+Momentum picks to Blob (a state-changing WRITE).
+  // The daily cron dispatches it with the internal bearer (warm-chains-routes.js), so gating
+  // it here blocks an anonymous public GET from mutating the ledger without breaking the cron.
+  'track', 'trendtick', 'universecompile', 'universescan',
   // EVOLVE writers — cron/manual-with-bearer only (persist predictions / resolve labels /
   // heavy historical backfill of specialist performance).
   'evolvescore', 'evolveresolve', 'evolvebackfill', 'ignitionlog', 'ignitionbackfill',
@@ -78,7 +81,7 @@ const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/
 const SHARED_FORCE_OPS = new Set([
   'aligned', 'anomalytick', 'biotechtick', 'calibration', 'coredrift', 'crossassettick',
   'optionsflow', 'pulse', 'pulserefine', 'putsell', 'readthroughtick', 'secondwavetick',
-  'toneshifttick', 'track',
+  'toneshifttick',
   // redundancy: the cached model is public (the UI panel reads it), but a force=1 rebuild
   // refetches candles for every ticker in the ledger history — trusted callers (the cron)
   // only. Rate-limiting alone wasn't enough: 6/min per IP of a 200+ ticker rebuild is still
