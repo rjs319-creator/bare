@@ -156,6 +156,31 @@ test('evolve-labels: a time-exit records labelEndDate and a POSITIVE timeout is 
   assert.ok(typeof r.labelEndDate === 'string' && r.labelEndDate.length === 10);
 });
 
+// ── Point-in-time de-survivorship universe (wiring security-master into backtest) ──
+test('secmaster: pointInTimeAugment adds back names delisted AFTER the as-of date, not before', () => {
+  const SM = require('../lib/security-master');
+  const records = {
+    AAA: { symbol: 'AAA', status: 'active', removedDate: null },              // survivor (in static)
+    DEAD: { symbol: 'DEAD', status: 'removed', removedDate: '2023-01-01' },   // active at asOf, delisted later → add back
+    OLD: { symbol: 'OLD', status: 'removed', removedDate: '2020-01-01' },     // already delisted before asOf → NOT tradeable then
+    EXP: { symbol: 'EXP', status: 'active', removedDate: null },              // present-day survivor not in static → NOT a died-since name
+  };
+  const aug = SM.pointInTimeAugment(records, ['AAA', 'BBB'], '2022-06-01');
+  assert.deepStrictEqual(aug.added, ['DEAD']);
+  assert.ok(aug.universe.includes('DEAD'));
+  assert.ok(!aug.universe.includes('OLD'));
+  assert.ok(!aug.universe.includes('EXP'));
+  assert.equal(aug.survivorshipSafe, false);         // ALWAYS unsafe — partial correction only
+});
+
+test('secmaster: augment preserves the full static list and never claims survivorship-safe', () => {
+  const SM = require('../lib/security-master');
+  const aug = SM.pointInTimeAugment({}, ['X', 'Y', 'X'], '2021-01-01');
+  assert.deepStrictEqual(aug.universe.sort(), ['X', 'Y']);   // deduped, nothing added from an empty master
+  assert.equal(aug.addedCount, 0);
+  assert.equal(aug.survivorshipSafe, false);
+});
+
 // ── Tie-corrected AUC (Part XVIII #5 regression) ──────────────────────────────
 test('backtest aucRank: tied predictions use averaged ranks (all-ties → 0.5)', () => {
   const { averageRanks } = require('../lib/rankquality');
