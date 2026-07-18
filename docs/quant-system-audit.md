@@ -114,7 +114,7 @@ Scores are **honestly labeled as ranks, not probabilities** (`lib/decision.js:39
 | 15 | Multiple specialists re-express one momentum factor | **CONFIRMED (P1)** | prior redundancy work; `lib/evolve.js` family map | correlated "confirmation" double-counts momentum | redundancy-discounted ensemble (links #10) | — (redesign) |
 | 16 | Repeated experimentation not deflated | **PARTIALLY CONFIRMED (P2)** | `lib/evolve-dsr.js` deflates a grid, but not app-wide search | optimistic significance across the whole app | manifest records `relatedExperimentsAttempted` | manifest field present |
 | 17 | Shadow systems shown near live ranks | **REFUTED/mitigated** | failure-model `shadow:true` + UI label (`today.js:183`); EVOLVE/omega separate tabs | — | keep separation | — |
-| 18 | Calibration evaluated without in-fold fit | **PARTIALLY CONFIRMED (P1)** | `lib/evolve.js:322-336` in-sample Brier; WF itself clean | surfaced calibration/Brier is optimistic | report out-of-fold (k-fold) Brier for the calibrator | — (redesign) |
+| 18 | Calibration evaluated without in-fold fit | **CONFIRMED (P1), FIXED** | `lib/evolve.js` `fitCalibrator` in-sample Brier | surfaced calibration/Brier was optimistic | **FIXED** — `fitCalibrator` now also reports k-fold `oofBrier` (calibrated, out-of-fold) + `oofBrierRaw` baseline + `calibrationHelpsOOS`; shared `binnedMap`/`oofCalibratorBrier` | OOF-Brier tests (calibration lowers OOF on overconfident data; no spurious gain when already calibrated) |
 
 ---
 
@@ -126,10 +126,10 @@ comparison harness + reproducible manifest, `evolve-labels` `labelEndDate`/`prof
 `aucRank`. See `docs/quant-redesign.md`.
 
 **Remains (needs data or larger refactor):** real PIT constituents/delisting-returns (external
-data), candidate-level ensemble strength (#9), out-of-fold calibrator Brier (#18),
-reconstructing/scoping AI-narrative features (#12/#14). (`universeAt` is now partially wired via
-`?pit=1` — see §6. Fixed since the initial audit: exact label-end purge (#11), portfolio fill-day
-P&L + reconciliation (#6), redundancy-discounted effective-N (#10).)
+data), candidate-level ensemble strength (#9), reconstructing/scoping AI-narrative features
+(#12/#14). (`universeAt` is now partially wired via `?pit=1` — see §6. Fixed since the initial
+audit: exact label-end purge (#11), portfolio fill-day P&L + reconciliation (#6),
+redundancy-discounted effective-N (#10), out-of-fold calibrator Brier (#18).)
 
 ---
 
