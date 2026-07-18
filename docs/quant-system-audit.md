@@ -108,9 +108,9 @@ Scores are **honestly labeled as ranks, not probabilities** (`lib/decision.js:39
 | 9 | Ensemble discards candidate raw strength | **CONFIRMED (P1), SHADOW FIX** | `lib/evolve.js` specialistProb = pooled base rate | two candidates → identical P regardless of setup strength | **SHADOW** — `candidateStrengthTilt` differentiates equal-context candidates by their own percentile (bounded log-odds tilt); exposed as `strengthAdjustedP`, **NOT** in the decision/rank until OOS-validated (coefficient is asserted, not fit) | strength-tilt tests |
 | 10 | Effective N summed across correlated specialists | **CONFIRMED (P1), FIXED** | `lib/evolve.js` `effN += c.effN`; gate `decideState` | inflated effective sample; passed the TRADE gate on ~1 source | **FIXED** — `ensembleProbability` discounts effN by measured effective independence (`redundancy.effectiveEvidence`); model built in `recomputePerf`, cached in perf, wired via ctx; reports `effSampleRaw` + `independenceRatio` | effN-discount + TRADE-gate tests |
 | 11 | Calendar-day purge mishandles holidays | **CONFIRMED (P1), FIXED & WIRED** | `lib/evolve-walkforward.js:31,45` `×1.4` | leak/over-purge near holidays + over-purges early-resolving labels | **`labelClearsTestBlockExact` is now the PRIMARY purge in the EVOLVE walk-forward** (real `labelEndDate`); ×1.4 only for the embargo buffer + legacy fallback; `purge.method` reported | exact-purge unit + walkForward tests |
-| 12 | Historical models reconstruct feature subset | **CONFIRMED (P1)** | `lib/ghost-backtest.js:250` narrative null vs live `lib/ghost.js:94` | WF validates a price-only subset of the live model | reconstruct or clearly scope BONUS/narrative claims | — (documented) |
+| 12 | Historical models reconstruct feature subset | **CONFIRMED (P1), SCOPED** | `lib/ghost-backtest.js` narrative null vs live `lib/ghost.js` | WF validates a price(+PIT insider/fundamental) subset, never the LLM narrative | **SCOPED** — WF output declares `featureScope` (reconstructed vs excluded); guard test pins `narrativeStrength:null` so live "as-of-today" narrative can't leak into a historical cohort | narrative-scope guard tests |
 | 13 | Fundamentals/insiders not PIT | **REFUTED (caveat)** | `lib/earnings.js:60`, `lib/edgar.js:121` are PIT | — (45-day lag is an approximation) | drive off actual filing dates | — (P2) |
-| 14 | AI signals not historically reconstructable | **CONFIRMED (P1)** | narrative null in backtest (`ghost-backtest.js:250`) | LLM features unvalidated historically | treat AI signals as live-only, exclude from historical claims | — (documented) |
+| 14 | AI signals not historically reconstructable | **CONFIRMED (P1), SCOPED** | narrative null in backtest; AI screeners forward-only | LLM features can't be validated historically (an LLM re-run "as of today" would leak) | **SCOPED** — `featureScope.excluded` names the LLM narrative + the 5 AI screeners (readthrough/stealth/secondwave/crossasset/toneshift) as live-only, accruing prospective (Scoreboard) evidence only | narrative-scope guard tests |
 | 15 | Multiple specialists re-express one momentum factor | **CONFIRMED (P1)** | prior redundancy work; `lib/evolve.js` family map | correlated "confirmation" double-counts momentum | redundancy-discounted ensemble (links #10) | — (redesign) |
 | 16 | Repeated experimentation not deflated | **PARTIALLY CONFIRMED (P2)** | `lib/evolve-dsr.js` deflates a grid, but not app-wide search | optimistic significance across the whole app | manifest records `relatedExperimentsAttempted` | manifest field present |
 | 17 | Shadow systems shown near live ranks | **REFUTED/mitigated** | failure-model `shadow:true` + UI label (`today.js:183`); EVOLVE/omega separate tabs | — | keep separation | — |
@@ -125,13 +125,14 @@ continuous feature interface with parity, date-grouped baseline rankers, purged 
 comparison harness + reproducible manifest, `evolve-labels` `labelEndDate`/`profitable`, tie-corrected
 `aucRank`. See `docs/quant-redesign.md`.
 
-**Remains (needs data or larger refactor):** real PIT constituents/delisting-returns (external
-data), reconstructing/scoping AI-narrative features (#12/#14), and PROMOTING the candidate-strength
-tilt (#9 — shipped as a shadow field, needs OOS evidence that within-context strength predicts the
-outcome before it may drive the gate). (`universeAt` is now partially wired via `?pit=1` — see §6.
-Fixed since the initial audit: exact label-end purge (#11), portfolio fill-day P&L + reconciliation
-(#6), redundancy-discounted effective-N (#10), out-of-fold calibrator Brier (#18); candidate-strength
-tilt (#9) shipped shadow-only.)
+**Remains:** real PIT constituents/delisting-returns (external data — the one hard blocker for a
+survivorship-safe backtest), and PROMOTING the candidate-strength tilt (#9 — shipped as a shadow
+field, needs OOS evidence that within-context strength predicts the outcome before it may drive the
+gate). (`universeAt` is now partially wired via `?pit=1` — see §6. Addressed since the initial audit:
+exact label-end purge (#11), portfolio fill-day P&L + reconciliation (#6), redundancy-discounted
+effective-N (#10), out-of-fold calibrator Brier (#18); candidate-strength tilt (#9) shipped
+shadow-only; AI-narrative features (#12/#14) scoped — explicitly declared live-only and guarded
+against historical leakage.)
 
 ---
 
