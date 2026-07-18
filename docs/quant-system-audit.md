@@ -179,3 +179,33 @@ scrape now returns 94 removed names (was 0).
 invisible delisted large-caps now trade in the backtest), but it **narrows and quantifies** the gap
 rather than closing it. Full closure still requires real point-in-time constituents + delisting
 returns across all cap bands.
+
+---
+
+## 7. Operational note — `CRON_SECRET` and activating cron-gated fixes
+
+Several fixes here are **data-recompute** fixes: the code ships, but the improved numbers only appear
+after a privileged recompute writes fresh state to Vercel Blob. Those recomputes are gated behind the
+`CRON_SECRET` bearer (`lib/auth.js requireTrusted`, fail-closed in production).
+
+| Activation | Privileged op | Writes | Fixes it activates |
+|---|---|---|---|
+| Rebuild PIT security master | `op=secmasterbuild` | `secmaster/master.json` | `?pit=1` de-survivorship (§6) |
+| Resolve + recompute perf/calibrator | `op=evolveresolve` | `evolve` perf + model blobs | #10 (`perf.redundancy`), #18 (`calibrator.oofBrier`) |
+
+Both also run automatically at the tail of the daily warm cron (`vercel.json` crons: `/api/warm` at
+`0 13 * * *` UTC → `lib/warm-chains.js`), so they self-activate within a day of deploy with no action.
+
+**`CRON_SECRET` is a Vercel "Sensitive" variable** — its value is write-only: it cannot be read back
+via `vercel env pull` (returns empty) or the dashboard. Confirm its type via the REST API
+`type` field, NOT `vercel env ls` (which labels both Encrypted and Sensitive vars "Encrypted"). To
+trigger a privileged op manually you therefore need the bearer, which means either holding the value
+out-of-band or **rotating** the secret to a known value (`vercel env rm/add CRON_SECRET production
+--sensitive` + a redeploy so the running function picks it up). The scheduled Vercel cron always uses
+the *current* project value, so rotation does not break the cron — but it **does** break any external
+caller still using an old value.
+
+> During this work `CRON_SECRET` was rotated to activate `op=secmasterbuild` and `op=evolveresolve`
+> and to keep the var Sensitive. If you maintain any out-of-band script that calls a privileged op,
+> update it to the current value (retrievable only if you saved it at rotation time). Prefer letting
+> the daily cron self-activate over manual rotation whenever timing allows.
