@@ -102,7 +102,7 @@ Scores are **honestly labeled as ranks, not probabilities** (`lib/decision.js:39
 | 3 | 5-day sampling, 20-day outcomes → dependent obs | **CONFIRMED (P1)** | `api/backtest.js:11,14` | autocorrelated samples overstate significance | uniqueness weighting + date-clustered stats | `uniquenessSummary` in harness |
 | 4 | Logistic target = positive SPY excess, not net utility | **CONFIRMED (P1)** | `api/backtest.js:205` `y: t.excess>0?1:0` | optimizes a gross-excess hit, not net expectancy | target net-of-cost residual return | harness outcome = residual return |
 | 5 | AUC mishandles tied predictions | **CONFIRMED (P2)** | `api/backtest.js:117` raw sort-position ranks | ties bias AUC (common with binary-flag models) | **FIXED** — reuse `rankquality.averageRanks` | aucRank tie test |
-| 6 | Portfolio omits fill-day open→close / barrier reconciliation | **CONFIRMED (P1)** | `api/backtest.js:287` `entryDate<D`, close-based MTM | equity misses fill-day move + realizes barriers at close | hold from fill-day open at modeled fill price; reconcile trade↔portfolio | documented (see redesign; not yet re-wired) |
+| 6 | Portfolio omits fill-day open→close / barrier reconciliation | **CONFIRMED (P1), FIXED** | `api/backtest.js` `entryDate<D`, close-based MTM | equity missed fill-day move + realized barriers at close | **FIXED** — `simulatePortfolio`/`positionDailyReturn`: fill-day open→close from the modeled fill price, barrier exits realized at the stop/target price; self-reconciles (each in-window trade's compounded daily path == its realized r), reported as `accounting.reconciliation.maxAbsError` | portfolio-reconciliation tests |
 | 7 | EVOLVE label entry inconsistent with next-open | **REFUTED** | `lib/evolve-backfill.js:133` uses `planFill(NEXT_OPEN)`; `labelEvent` is test-only | none — labels enter next-open | — | label entry == fill (research-slice generator) |
 | 8 | Profitable timeouts treated as losses | **PARTIALLY CONFIRMED (P2)** | `lib/evolve-labels.js:117` won:false on time; used in win-rate/cal (`evolve-walkforward.js:63,146`); IC uses `terminalReturn` (`:129`) | win-rate/Brier understate up-drifters (legit for triple-barrier) | **ADDED** honest `profitable` field | positive-timeout test |
 | 9 | Ensemble discards candidate raw strength | **CONFIRMED (P1)** | `lib/evolve.js:100-116,264` specialistProb = pooled base rate | two candidates → identical P regardless of setup strength | blend candidate-level feature/percentile into per-contrib P | — (P1, redesign) |
@@ -126,9 +126,10 @@ comparison harness + reproducible manifest, `evolve-labels` `labelEndDate`/`prof
 `aucRank`. See `docs/quant-redesign.md`.
 
 **Remains (needs data or larger refactor):** real PIT constituents/delisting-returns (external
-data), portfolio fill-day P&L + reconciliation, candidate-level ensemble strength (#9),
-redundancy-discounted effective-N (#10), out-of-fold calibrator Brier (#18), reconstructing/scoping
-AI-narrative features (#12/#14). (`universeAt` is now partially wired via `?pit=1` — see §6.)
+data), candidate-level ensemble strength (#9), redundancy-discounted effective-N (#10), out-of-fold
+calibrator Brier (#18), reconstructing/scoping AI-narrative features (#12/#14). (`universeAt` is now
+partially wired via `?pit=1` — see §6. Exact label-end purge (#11) and portfolio fill-day P&L +
+reconciliation (#6) are now fixed.)
 
 ---
 
