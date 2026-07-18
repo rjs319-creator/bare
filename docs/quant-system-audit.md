@@ -97,7 +97,7 @@ Scores are **honestly labeled as ranks, not probabilities** (`lib/decision.js:39
 
 | # | Claim | Verdict | Evidence | Consequence | Fix | Test added |
 |---|---|---|---|---|---|---|
-| 1 | Backtests replay present-day LARGE/SMALL/MICRO lists | **CONFIRMED (P0)** | `api/backtest.js:128,240`; secmaster unused by any backtest | survivorship bias inflates all backtest edges | wire `security-master.universeAt` into backtests; until real PIT data exists, stamp survivorship-unsafe | harness stamps `survivorshipSafe:false` (research-slice) |
+| 1 | Backtests replay present-day LARGE/SMALL/MICRO lists | **CONFIRMED (P0), PARTIALLY FIXED** | `api/backtest.js:128,240`; secmaster unused by any backtest | survivorship bias inflates all backtest edges | **`?pit=1` wires `pointInTimeAugment` into the backtest — LARGE-CAP ONLY (see §6)**; still survivorship-unsafe until real PIT data exists | pit gating tests; harness stamps `survivorshipSafe:false` |
 | 2 | 12mo max + single 60/40 split inadequate | **CONFIRMED (P1)** | `api/backtest.js:127,186` | one split over one regime, no purge → unstable, optimistic | use nested purged WF (already in `evolve-walkforward`/`harness`) | harness folds test |
 | 3 | 5-day sampling, 20-day outcomes → dependent obs | **CONFIRMED (P1)** | `api/backtest.js:11,14` | autocorrelated samples overstate significance | uniqueness weighting + date-clustered stats | `uniquenessSummary` in harness |
 | 4 | Logistic target = positive SPY excess, not net utility | **CONFIRMED (P1)** | `api/backtest.js:205` `y: t.excess>0?1:0` | optimizes a gross-excess hit, not net expectancy | target net-of-cost residual return | harness outcome = residual return |
@@ -126,6 +126,53 @@ comparison harness + reproducible manifest, `evolve-labels` `labelEndDate`/`prof
 `aucRank`. See `docs/quant-redesign.md`.
 
 **Remains (needs data or larger refactor):** real PIT constituents/delisting-returns (external
-data), wiring `universeAt` into the primary backtest, portfolio fill-day P&L + reconciliation,
-candidate-level ensemble strength (#9), redundancy-discounted effective-N (#10), out-of-fold
-calibrator Brier (#18), reconstructing/scoping AI-narrative features (#12/#14).
+data), portfolio fill-day P&L + reconciliation, candidate-level ensemble strength (#9),
+redundancy-discounted effective-N (#10), out-of-fold calibrator Brier (#18), reconstructing/scoping
+AI-narrative features (#12/#14). (`universeAt` is now partially wired via `?pit=1` — see §6.)
+
+---
+
+## 6. Point-in-time universe (`?pit=1`) — capability and its LARGE-CAP-ONLY limitation
+
+`api/backtest.js` gained an **opt-in** de-survivorship path (`?pit=1`, default off → legacy behavior
+byte-identical). `resolvePitUniverse` calls `security-master.pointInTimeAugment`, which adds back the
+"survivors that died" — securities active at the window's `asOf` date but delisted since
+(`universeAtFrom(asOf) \ universeAtFrom(today)`). It returns a `pit` block with `addedDelisted` and,
+critically, `addedWithData`/`addedNoData` so the gap is **quantified, not hidden**. It always stamps
+`survivorshipSafe:false`.
+
+**Live prod evidence (`months=54`, `asOf` 2022-01-17), after fixing the delisting scrape (see below):**
+
+| scope | `applied` | universe | delisted added | with data |
+|---|---|---|---|---|
+| large | `true` | 528 → 579 | 51 (ATVI, CERN, CTXS, ABMD, DISH…) | 27 |
+| small | `false` | 163 (static) | — | — |
+| micro | `false` | 79 (static) | — | — |
+
+**LIMITATION — de-survivorship is LARGE-CAP ONLY (P1).** The *only* delisting source is the S&P-500
+"changes" scrape (`lib/constituents.js`, all large-cap, ≤5yr), and the security master carries **no
+cap-tier field**, so a died-since name cannot be attributed to a cap band. An earlier version added
+the same 51 large-cap names to *small and micro* universes too — names that were never in those bands
+— making those backtests **less** representative. `resolvePitUniverse` now restricts augmentation to
+`scope=large`; **small/micro return `applied:false`** with an explicit note that no cap-appropriate
+delisting coverage exists (`api/backtest.js` `resolvePitUniverse`; tests in `test/research-slice.test.js`).
+
+**Other standing limits (why it is STILL not survivorship-safe, even for large-cap):**
+- **No late-listing/IPO feed** — a name listed after `asOf` is not excluded (`security-master.js:84`).
+- **Delisting coverage is shallow** — S&P-500 only, ≤5yr; small/micro delistings (the bulk of
+  survivorship risk) are entirely uncovered.
+- **`addedNoData` names are untradeable** — ~24/51 delisted names have no free candle data, so they
+  cannot be traded in the backtest even though they are correctly *counted*.
+- **Prerequisite: the security master must be rebuilt** (`op=secmasterbuild`, cron-gated) after the
+  scrape fix, or it holds zero removed records.
+
+**Related fix — the delisting source was silently empty (P0→fixed).** `fetchRemovedConstituents`
+parsed the Wikipedia table with a strict `/<tr>/` that matched **zero** rows once Wikipedia emitted
+`<tr class="...">`, so the master had **no** removed records and `?pit=1` added nothing regardless of
+`asOf`. Fixed to `/<tr[^>]*>/` (extracted pure `parseRemovedConstituents` + regression test); live
+scrape now returns 94 removed names (was 0).
+
+**Net:** `?pit=1` on `scope=large` is a real, measured *reduction* of survivorship bias (27 formerly-
+invisible delisted large-caps now trade in the backtest), but it **narrows and quantifies** the gap
+rather than closing it. Full closure still requires real point-in-time constituents + delisting
+returns across all cap bands.
