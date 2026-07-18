@@ -85,6 +85,53 @@ function simAtrTrade(c, closes, highs, lows, atr, i, tier) {
   return { fillDate: c[fi].date, entry, stop, target, r, exitDate, hold, won };
 }
 
+// One position's return on day D (prev day P), from close map cm. The fix for audit #6:
+//   • fill day  (D == entryDate): from the MODELED fill price (open+slippage) to that day's close —
+//     the fill-day open→close P&L the old close/prevClose MTM silently dropped.
+//   • exit day  (D == exitDate):  from the prior close to the BARRIER exit price (entry·(1+r)), not
+//     the day's close — so a stop/target that triggered intraday is realized at the barrier.
+//   • middle days: close→close.
+// These telescope: compounded over [entryDate, exitDate] they equal exactly the trade's realized r.
+function positionDailyReturn(p, D, P, cm) {
+  const cD = cm[D], cP = cm[P];
+  const exitPrice = p.entry * (1 + p.r);
+  const isEntry = D === p.entryDate, isExit = D === p.exitDate;
+  if (isEntry && isExit) return p.entry > 0 ? exitPrice / p.entry - 1 : 0;   // same-bar fill+exit → r
+  if (isEntry) return (p.entry > 0 && cD > 0) ? cD / p.entry - 1 : 0;        // fill open→close
+  if (isExit) return cP > 0 ? exitPrice / cP - 1 : 0;                        // prevClose→barrier
+  return (cD > 0 && cP > 0) ? cD / cP - 1 : 0;                               // close→close
+}
+
+// Daily-rebalanced equal-weight (1/maxPos) portfolio over accepted trades, with correct fill-day and
+// barrier-exit accounting. Also self-reconciles: each fully-in-window position's standalone
+// compounded daily path must equal its realized r (telescoping), reported as reconciliation.maxAbsError.
+function simulatePortfolio(accepted, axis, closeMaps, maxPos) {
+  let eq = 1, peak = 1, mdd = 0, exposSum = 0; const curve = [], dr = [];
+  for (let k = 1; k < axis.length; k++) {
+    const D = axis[k], P = axis[k - 1];
+    const held = accepted.filter(p => p.entryDate <= D && p.exitDate >= D);   // include the FILL day
+    let ret = 0;
+    held.forEach(p => { const cm = closeMaps[p.name]; if (cm) ret += (1 / maxPos) * positionDailyReturn(p, D, P, cm); });
+    eq *= (1 + ret); peak = Math.max(peak, eq); mdd = Math.min(mdd, (eq - peak) / peak);
+    curve.push({ date: D, v: +eq.toFixed(4) }); dr.push(ret); exposSum += held.length / maxPos;
+  }
+  // Reconciliation: for positions whose whole span sits inside the axis, the compounded per-day path
+  // must equal the trade-level realized r. Positions open past the window end are excluded (they are
+  // honestly marked to the last close, not a future barrier).
+  const axisSet = new Set(axis), first = axis[0];
+  let maxAbsError = 0, checked = 0;
+  for (const p of accepted) {
+    const cm = closeMaps[p.name];
+    if (!cm || !Number.isFinite(p.r) || p.entryDate === first || !axisSet.has(p.entryDate) || !axisSet.has(p.exitDate)) continue;
+    let pe = 1;
+    for (let k = 1; k < axis.length; k++) {
+      const D = axis[k]; if (p.entryDate <= D && p.exitDate >= D) pe *= (1 + positionDailyReturn(p, D, axis[k - 1], cm));
+    }
+    maxAbsError = Math.max(maxAbsError, Math.abs((pe - 1) - p.r)); checked++;
+  }
+  return { eq, mdd, curve, dr, exposSum, reconciliation: { checked, maxAbsError: +maxAbsError.toExponential(2) } };
+}
+
 async function mapLimit(items, limit, fn) {
   let i = 0;
   async function worker() { while (i < items.length) { const idx = i++; await fn(items[idx]); } }
@@ -342,7 +389,7 @@ async function portfolioMode(req, res) {
         // its exit date comes from the same ATR stop/target scan off the realistic entry.
         const sim = simAtrTrade(c, closes, highs, lows, atr, i, tierForScope(scope));
         if (!sim) continue;
-        entries.push({ name: t, entryDate: sim.fillDate, exitDate: sim.exitDate, tier: e.status });
+        entries.push({ name: t, entryDate: sim.fillDate, exitDate: sim.exitDate, tier: e.status, entry: sim.entry, r: sim.r });
       }
     });
 
@@ -350,15 +397,8 @@ async function portfolioMode(req, res) {
     const accepted = [];
     for (const e of entries) { if (accepted.filter(p => p.exitDate > e.entryDate).length < maxPos) accepted.push(e); }
 
-    let eq = 1, peak = 1, mdd = 0, exposSum = 0; const curve = [], dr = [];
-    for (let k = 1; k < axis.length; k++) {
-      const D = axis[k], P = axis[k - 1];
-      const held = accepted.filter(p => p.entryDate < D && p.exitDate >= D);
-      let ret = 0;
-      held.forEach(p => { const cm = closeMaps[p.name]; if (!cm) return; const cD = cm[D], cP = cm[P]; if (cD > 0 && cP > 0) ret += (1 / maxPos) * (cD / cP - 1); });
-      eq *= (1 + ret); peak = Math.max(peak, eq); mdd = Math.min(mdd, (eq - peak) / peak);
-      curve.push({ date: D, v: +eq.toFixed(4) }); dr.push(ret); exposSum += held.length / maxPos;
-    }
+    const port = simulatePortfolio(accepted, axis, closeMaps, maxPos);
+    const { eq, mdd, curve, dr, exposSum } = port;
     let seq = 1, speak = 1, smdd = 0; const scurve = [], sdr = [];
     for (let k = 1; k < axis.length; k++) {
       const D = axis[k], P = axis[k - 1], cD = spyClose[D], cP = spyClose[P];
@@ -384,6 +424,7 @@ async function portfolioMode(req, res) {
         totalReturn: +((eq - 1) * 100).toFixed(1), cagr: cagr(eq), sharpe: sharpe(dr), maxDD: +(mdd * 100).toFixed(1), exposure: +(exposSum / nDays * 100).toFixed(0),
         spyReturn: +((seq - 1) * 100).toFixed(1), spyCagr: cagr(seq), spySharpe: sharpe(sdr), spyMaxDD: +(smdd * 100).toFixed(1),
       },
+      accounting: { entry: 'fill-day open→close included; barrier exits realized at the stop/target price (not the close)', reconciliation: port.reconciliation },
       curve: sample(curve), spyCurve: sample(scurve),
       generatedAt: new Date().toISOString(),
     });
@@ -425,6 +466,8 @@ module.exports = function handler(req, res) {
 // Exposed for tests — the next-open trade simulator and version marker.
 module.exports.simAtrTrade = simAtrTrade;
 module.exports.resolvePitUniverse = resolvePitUniverse;
+module.exports.simulatePortfolio = simulatePortfolio;
+module.exports.positionDailyReturn = positionDailyReturn;
 module.exports.BACKTEST_VERSION = BACKTEST_VERSION;
 module.exports.STOP_ATR = STOP_ATR;
 module.exports.TGT_ATR = TGT_ATR;
