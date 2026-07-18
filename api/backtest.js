@@ -7,6 +7,7 @@ const { calcRSI, calcATR } = require('../lib/signal');
 const { LARGE, SMALL_CAPS, MICRO_CAPS } = require('../lib/universe');
 const { runGhostBacktest } = require('../lib/ghost-backtest');
 const { planFill, POLICIES, EXECUTION_POLICY_VERSION } = require('../lib/execution-policy');
+const { averageRanks } = require('../lib/rankquality');
 
 const STEP = 5;          // sample every 5 trading days
 const STOP_ATR = 1.5;    // stop = entry − 1.5·ATR
@@ -114,12 +115,17 @@ function trainLogistic(samples, { lr = 0.3, lam = 0.02, iters = 500 } = {}) {
   }
   return { w, b };
 }
+// AUC via the Mann-Whitney U statistic with TIE CORRECTION: tied predictions must share the
+// AVERAGE of their ranks, else many identical scores (common with binary-flag models) bias the
+// AUC. Reuses lib/rankquality.averageRanks so there is one tie-handling implementation.
 function aucRank(scored) {
-  const s = [...scored].sort((a, b) => a.p - b.p);
-  let rankSum = 0, np = 0;
-  for (let i = 0; i < s.length; i++) { if (s[i].y === 1) { rankSum += i + 1; np++; } }
-  const nn = s.length - np;
-  return (np && nn) ? +(((rankSum - np * (np + 1) / 2) / (np * nn))).toFixed(3) : 0.5;
+  const np = scored.filter(s => s.y === 1).length;
+  const nn = scored.length - np;
+  if (!np || !nn) return 0.5;
+  const ranks = averageRanks(scored.map(s => s.p));   // 1-based, tie-averaged
+  let rankSum = 0;
+  for (let i = 0; i < scored.length; i++) if (scored[i].y === 1) rankSum += ranks[i];
+  return +(((rankSum - np * (np + 1) / 2) / (np * nn))).toFixed(3);
 }
 
 async function backtestMode(req, res) {

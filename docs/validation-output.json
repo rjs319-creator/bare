@@ -1,0 +1,320 @@
+{
+  "__README__": "SYNTHETIC contract self-test. A weak momentum signal is PLANTED, so positive IC here validates the harness plumbing (purge/parity/discrimination), NOT market alpha. Not production-grade.",
+  "events": 2760,
+  "securities": 40,
+  "decisionDates": 69,
+  "version": "research-harness-v1",
+  "champion": {
+    "ranker": "residual-momentum",
+    "meanIC": 0.0359,
+    "ci90": [
+      0.0032,
+      0.0747
+    ]
+  },
+  "result": {
+    "version": "research-harness-v1",
+    "folds": 6,
+    "embargo": 3,
+    "distinctDates": 69,
+    "events": 2760,
+    "uniqueness": {
+      "rawN": 2760,
+      "effectiveN": 2760,
+      "uniquenessRatio": 1
+    },
+    "purge": {
+      "method": "exact-label-end",
+      "vs14xApprox": {
+        "exactKept": 6167,
+        "approxKept": 6040,
+        "leakedByApprox": 23,
+        "droppedByApprox": 150,
+        "n": 6840
+      }
+    },
+    "perRanker": {
+      "control-random": {
+        "dates": 58,
+        "meanIC": 0.0039,
+        "medianIC": 0.017,
+        "stdIC": 0.1644,
+        "icir": 0.024,
+        "tstat": 0.18,
+        "significant": false,
+        "fracPositive": 0.52,
+        "ci90": [
+          -0.0301,
+          0.0399
+        ]
+      },
+      "residual-momentum": {
+        "dates": 58,
+        "meanIC": 0.0359,
+        "medianIC": 0.009,
+        "stdIC": 0.1637,
+        "icir": 0.219,
+        "tstat": 1.67,
+        "significant": false,
+        "fracPositive": 0.53,
+        "ci90": [
+          0.0032,
+          0.0747
+        ]
+      },
+      "production-composite": {
+        "dates": 58,
+        "meanIC": 0.0059,
+        "medianIC": 0.009,
+        "stdIC": 0.1499,
+        "icir": 0.04,
+        "tstat": 0.3,
+        "significant": false,
+        "fracPositive": 0.52,
+        "ci90": [
+          -0.0252,
+          0.0386
+        ]
+      },
+      "ridge-linear": {
+        "dates": 58,
+        "meanIC": -0.0489,
+        "medianIC": -0.059,
+        "stdIC": 0.1191,
+        "icir": -0.41,
+        "tstat": -3.13,
+        "significant": true,
+        "fracPositive": 0.33,
+        "ci90": [
+          -0.0747,
+          -0.0242
+        ]
+      }
+    },
+    "foldReport": [
+      {
+        "fold": 1,
+        "from": "2019-07-10",
+        "to": "2019-09-25",
+        "trainN": 314,
+        "testN": 480,
+        "rankers": {
+          "control-random": {
+            "datedICs": 12,
+            "meanIC": -0.0897
+          },
+          "residual-momentum": {
+            "datedICs": 12,
+            "meanIC": 0.084
+          },
+          "production-composite": {
+            "datedICs": 12,
+            "meanIC": 0.1043
+          },
+          "ridge-linear": {
+            "datedICs": 12,
+            "meanIC": -0.0601
+          }
+        }
+      },
+      {
+        "fold": 2,
+        "from": "2019-10-02",
+        "to": "2019-12-11",
+        "trainN": 758,
+        "testN": 440,
+        "rankers": {
+          "control-random": {
+            "datedICs": 11,
+            "meanIC": 0.0675
+          },
+          "residual-momentum": {
+            "datedICs": 11,
+            "meanIC": 0.2218
+          },
+          "production-composite": {
+            "datedICs": 11,
+            "meanIC": -0.0163
+          },
+          "ridge-linear": {
+            "datedICs": 11,
+            "meanIC": -0.0875
+          }
+        }
+      },
+      {
+        "fold": 3,
+        "from": "2019-12-18",
+        "to": "2020-03-04",
+        "trainN": 1235,
+        "testN": 480,
+        "rankers": {
+          "control-random": {
+            "datedICs": 12,
+            "meanIC": 0.0236
+          },
+          "residual-momentum": {
+            "datedICs": 12,
+            "meanIC": -0.0946
+          },
+          "production-composite": {
+            "datedICs": 12,
+            "meanIC": 0.0224
+          },
+          "ridge-linear": {
+            "datedICs": 12,
+            "meanIC": -0.0808
+          }
+        }
+      },
+      {
+        "fold": 4,
+        "from": "2020-03-11",
+        "to": "2020-05-20",
+        "trainN": 1708,
+        "testN": 440,
+        "rankers": {
+          "control-random": {
+            "datedICs": 11,
+            "meanIC": -0.0006
+          },
+          "residual-momentum": {
+            "datedICs": 11,
+            "meanIC": 0.0063
+          },
+          "production-composite": {
+            "datedICs": 11,
+            "meanIC": -0.0434
+          },
+          "ridge-linear": {
+            "datedICs": 11,
+            "meanIC": -0.0208
+          }
+        }
+      },
+      {
+        "fold": 5,
+        "from": "2020-05-27",
+        "to": "2020-08-12",
+        "trainN": 2152,
+        "testN": 480,
+        "rankers": {
+          "control-random": {
+            "datedICs": 12,
+            "meanIC": 0.0237
+          },
+          "residual-momentum": {
+            "datedICs": 12,
+            "meanIC": -0.025
+          },
+          "production-composite": {
+            "datedICs": 12,
+            "meanIC": -0.0433
+          },
+          "ridge-linear": {
+            "datedICs": 12,
+            "meanIC": 0.0039
+          }
+        }
+      }
+    ]
+  },
+  "manifest": {
+    "schema": "ExperimentManifest",
+    "version": "research-schema-v1",
+    "experimentId": "vslice-synthetic-v1",
+    "experimentFamilyId": "quant-redesign-vertical-slice",
+    "datasetHash": "db3a4d2d",
+    "securityMasterVersion": null,
+    "universePolicy": "SYNTHETIC deterministic (no real securities)",
+    "featureManifest": [
+      "ret5",
+      "ret21",
+      "ret63",
+      "residMom21",
+      "trendSlope21",
+      "distSma50Atr",
+      "volSurprise",
+      "realizedVol21",
+      "drawdown63"
+    ],
+    "labelVersion": "evolve-labels-v1",
+    "foldDefinitions": [
+      {
+        "fold": 1,
+        "from": "2019-07-10",
+        "to": "2019-09-25",
+        "trainN": 314,
+        "testN": 480
+      },
+      {
+        "fold": 2,
+        "from": "2019-10-02",
+        "to": "2019-12-11",
+        "trainN": 758,
+        "testN": 440
+      },
+      {
+        "fold": 3,
+        "from": "2019-12-18",
+        "to": "2020-03-04",
+        "trainN": 1235,
+        "testN": 480
+      },
+      {
+        "fold": 4,
+        "from": "2020-03-11",
+        "to": "2020-05-20",
+        "trainN": 1708,
+        "testN": 440
+      },
+      {
+        "fold": 5,
+        "from": "2020-05-27",
+        "to": "2020-08-12",
+        "trainN": 2152,
+        "testN": 480
+      }
+    ],
+    "modelParams": {
+      "lambda": 0.1
+    },
+    "calibrationParams": {},
+    "costModel": null,
+    "codeCommit": null,
+    "randomSeed": 42,
+    "relatedExperimentsAttempted": 4,
+    "primaryMetric": "mean-daily-rank-IC (OOS, purged)",
+    "results": {
+      "control-random": 0.0039,
+      "residual-momentum": 0.0359,
+      "production-composite": 0.0059,
+      "ridge-linear": -0.0489
+    },
+    "confidenceIntervals": {
+      "control-random": [
+        -0.0301,
+        0.0399
+      ],
+      "residual-momentum": [
+        0.0032,
+        0.0747
+      ],
+      "production-composite": [
+        -0.0252,
+        0.0386
+      ],
+      "ridge-linear": [
+        -0.0747,
+        -0.0242
+      ]
+    },
+    "researchValidity": {
+      "productionGrade": false,
+      "survivorshipSafe": false,
+      "reason": "synthetic dataset; also the repo has no PIT constituents (see docs/quant-system-audit.md P0-1)"
+    },
+    "generatedAt": "2026-07-18T19:37:13.936Z"
+  },
+  "verdict": "PROVISIONAL — survivorship-unsafe data; cannot support production promotion"
+}
