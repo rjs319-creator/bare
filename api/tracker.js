@@ -72,12 +72,14 @@ const PRIVILEGED_OPS = new Set([
   // master. State-changing (append to the run ledger / overwrite the master doc),
   // dispatched by the daily cron with the internal bearer.
   'runmanifest', 'secmasterbuild',
+  // Challenger shadow ledger WRITES (log predictions PIT / append forward outcomes).
+  'challengerlog', 'challengerresolve',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
-  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'redundancy', 'leadtime', 'failuremodel', 'complab',
+  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'redundancy', 'leadtime', 'failuremodel', 'complab', 'challengereval',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -280,5 +282,11 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'omegamodel') return require('../lib/omega-swing-routes').runOmegaModel(req, res);
   if (req.query.op === 'omegawf') return require('../lib/omega-swing-routes').runOmegaWf(req, res);
   if (req.query.op === 'omegabackfill') return require('../lib/omega-swing-routes').runOmegaBackfillOp(req, res);
+  // 🧪 Challenger decision system (shadow-only, challenger-decision-v1). Read is public;
+  // log/resolve are cron-only WRITES; eval is a heavy recompute.
+  if (req.query.op === 'challenger') return require('../lib/challenger-routes').runChallenger(req, res);
+  if (req.query.op === 'challengerlog') return require('../lib/challenger-routes').runChallengerLog(req, res);
+  if (req.query.op === 'challengerresolve') return require('../lib/challenger-routes').runChallengerResolve(req, res);
+  if (req.query.op === 'challengereval') return require('../lib/challenger-routes').runChallengerEval(req, res);
   return runScoreboard(req, res);
 };
