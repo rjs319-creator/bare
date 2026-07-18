@@ -1,6 +1,6 @@
 # market-news-app — Full Source
 
-Generated 2026-07-18T15:58:39.274Z · 311 files · ~53,447 lines.
+Generated 2026-07-18T16:06:28.611Z · 311 files · ~53,447 lines.
 Excludes node_modules, tests-optional, research/, data dumps, and files >250KB.
 
 ## File index
