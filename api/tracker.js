@@ -68,6 +68,10 @@ const PRIVILEGED_OPS = new Set([
   // Expensive non-browser builders/computes — cron/external/manual only, so gating
   // them behind the CRON_SECRET bearer costs the UI nothing.
   'fundbuild', 'universebuild', 'emerging',
+  // Provenance WRITES — commit the immutable run manifest / rebuild the security
+  // master. State-changing (append to the run ledger / overwrite the master doc),
+  // dispatched by the daily cron with the internal bearer.
+  'runmanifest', 'secmasterbuild',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
@@ -233,6 +237,10 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'model') return runModel(req, res);
   if (req.query.op === 'narrative') return runNarrative(req, res);
   if (req.query.op === 'health') return runHealth(req, res);
+  // Provenance: run manifest + point-in-time security master + immutable-ledger verify.
+  if (req.query.op === 'runmanifest') return require('../lib/provenance-routes').runRunManifest(req, res);
+  if (req.query.op === 'secmasterbuild') return require('../lib/provenance-routes').runSecMasterBuild(req, res);
+  if (req.query.op === 'provenance') return require('../lib/provenance-routes').runProvenance(req, res);
   if (req.query.op === 'leaderboard') return runLeaderboard(req, res);
   if (req.query.op === 'leaderboardtick') return runLeaderboardTick(req, res);
   if (req.query.op === 'corebuild') return runCoreBuild(req, res);
