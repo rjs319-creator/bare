@@ -162,7 +162,10 @@ function aucRank(scored) {
 
 async function backtestMode(req, res) {
   const scope = (req.query.scope || 'large').toLowerCase();
-  const months = Math.min(12, Math.max(3, parseInt(req.query.months, 10) || 6));
+  // Up to 54mo (matches walkforwardMode) so the window spans multiple regimes (audit #2) AND the
+  // ?pit=1 as-of date reaches back into the security master's ≤5yr S&P delisting window, letting
+  // real delisted names surface. Default stays 6mo, so normal traffic is unchanged.
+  const months = Math.min(54, Math.max(3, parseInt(req.query.months, 10) || 6));
   const baseList = scope === 'micro' ? MICRO_CAPS : scope === 'small' ? SMALL_CAPS : LARGE;
   const { list, pit } = await resolvePitUniverse(baseList, months, req.query.pit === '1');
   const opts = optsFor(scope);
@@ -289,7 +292,7 @@ async function backtestMode(req, res) {
 // Portfolio simulation — top-N concurrent equal-weight positions, daily MTM, vs SPY.
 async function portfolioMode(req, res) {
   const scope = (req.query.scope || 'large').toLowerCase();
-  const months = Math.min(12, Math.max(3, parseInt(req.query.months, 10) || 6));
+  const months = Math.min(54, Math.max(3, parseInt(req.query.months, 10) || 6));   // see backtestMode
   const baseList = scope === 'micro' ? MICRO_CAPS : scope === 'small' ? SMALL_CAPS : LARGE;
   const { list, pit } = await resolvePitUniverse(baseList, months, req.query.pit === '1');
   const opts = optsFor(scope);
