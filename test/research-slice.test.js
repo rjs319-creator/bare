@@ -181,6 +181,26 @@ test('secmaster: augment preserves the full static list and never claims survivo
   assert.equal(aug.survivorshipSafe, false);
 });
 
+// ── pit restricted to large-cap (no cap-appropriate delisting source for small/micro) ──
+test('pit: small/micro scopes are NOT augmented — no cap-appropriate delisting coverage', async () => {
+  const BT = require('../api/backtest');
+  for (const scope of ['small', 'micro']) {
+    const { list, pit } = await BT.resolvePitUniverse(['AAA', 'BBB', 'AAA'], 54, true, scope);
+    assert.deepStrictEqual(list.slice().sort(), ['AAA', 'BBB']);   // static list, deduped, NOT augmented
+    assert.equal(pit.enabled, true);
+    assert.equal(pit.applied, false);                              // the fix: no large-cap injection
+    assert.match(pit.note, /No point-in-time delisting coverage/);
+    assert.equal(pit.survivorshipSafe, false);
+  }
+});
+
+test('pit: disabled returns the static list untouched', async () => {
+  const BT = require('../api/backtest');
+  const { list, pit } = await BT.resolvePitUniverse(['X', 'Y'], 12, false, 'large');
+  assert.deepStrictEqual(list, ['X', 'Y']);
+  assert.equal(pit.enabled, false);
+});
+
 // ── Tie-corrected AUC (Part XVIII #5 regression) ──────────────────────────────
 test('backtest aucRank: tied predictions use averaged ranks (all-ties → 0.5)', () => {
   const { averageRanks } = require('../lib/rankquality');
