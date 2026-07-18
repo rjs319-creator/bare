@@ -6,12 +6,39 @@ const { fetchDailyHistory, evalSetupAt, smaAt, rsHighArray } = require('../lib/s
 const { calcRSI, calcATR } = require('../lib/signal');
 const { LARGE, SMALL_CAPS, MICRO_CAPS } = require('../lib/universe');
 const { runGhostBacktest } = require('../lib/ghost-backtest');
+const { planFill, POLICIES, EXECUTION_POLICY_VERSION } = require('../lib/execution-policy');
 
 const STEP = 5;          // sample every 5 trading days
 const STOP_ATR = 1.5;    // stop = entry − 1.5·ATR
 const TGT_ATR = 3.0;     // target = entry + 3·ATR  (1:2 reward:risk)
 const MAX_HOLD = 20;     // time-stop after 20 trading days
 const TIERS = ['Breakout', 'Setup', 'Early'];
+// v2: entries fill at the NEXT session's open (+ entry-side slippage) instead of the
+// signal-day close — the signal is only known after that close. Reported numbers moved with
+// this bump; the execution policy is echoed in every response.
+const BACKTEST_VERSION = 'backtest-exec-v2';
+const tierForScope = (scope) => scope === 'micro' ? 'micro' : scope === 'small' ? 'small' : 'liquid';
+
+// Simulate one long ATR stop/target trade with a realistic NEXT-OPEN entry. The signal is
+// known at c[i].close; the fill is the next session's open (+ slippage). Barriers are scanned
+// from the fill bar's OWN range onward (you hold from that open), stop checked before target
+// on the same bar (conservative). Returns null when the trade cannot fill (e.g. the signal is
+// on the last available bar) — a real backtest drops it rather than inventing a same-close fill.
+function simAtrTrade(c, closes, highs, lows, atr, i, tier) {
+  const fill = planFill(c, c[i].date, { policy: POLICIES.NEXT_OPEN_PLUS_SLIPPAGE, side: 'long', tier });
+  if (!fill.filled || fill.fillIdx == null) return null;
+  const fi = fill.fillIdx, last = c.length - 1;
+  const entry = fill.fillPrice;
+  const stop = entry - STOP_ATR * atr, target = entry + TGT_ATR * atr;
+  let r = null, exitDate = null, hold = 0, won = false;
+  for (let h = 0; h < MAX_HOLD && fi + h <= last; h++) {
+    const j = fi + h; hold = h + 1;
+    if (lows[j] <= stop) { r = (stop - entry) / entry; exitDate = c[j].date; won = false; break; }   // stop first (conservative)
+    if (highs[j] >= target) { r = (target - entry) / entry; exitDate = c[j].date; won = true; break; }
+  }
+  if (r == null) { const j = Math.min(fi + MAX_HOLD - 1, last); r = (closes[j] - entry) / entry; exitDate = c[j].date; hold = j - fi + 1; won = r > 0; }
+  return { fillDate: c[fi].date, entry, stop, target, r, exitDate, hold, won };
+}
 
 async function mapLimit(items, limit, fn) {
   let i = 0;
@@ -126,23 +153,18 @@ async function backtestMode(req, res) {
         if (!e.status) continue;
         const atr = atrArr[i];
         if (!atr || atr <= 0 || closes[i] <= 0) continue;
+
+        // ── Simulate the trade with a realistic next-open entry (+ slippage) ──
+        const sim = simAtrTrade(c, closes, highs, lows, atr, i, tierForScope(scope));
+        if (!sim) continue;   // could not fill (signal on the last bar) — not a trade
         instances++; any = true;
+        const { r, exitDate, hold, won, fillDate } = sim;
 
-        // ── Simulate the trade: ATR stop / target, else time-stop ──
-        const entry = closes[i], stop = entry - STOP_ATR * atr, target = entry + TGT_ATR * atr;
-        let r = null, exitDate = null, hold = 0, won = false;
-        for (let h = 1; h <= MAX_HOLD && i + h <= last; h++) {
-          hold = h;
-          if (lows[i + h] <= stop) { r = (stop - entry) / entry; exitDate = c[i + h].date; won = false; break; }
-          if (highs[i + h] >= target) { r = (target - entry) / entry; exitDate = c[i + h].date; won = true; break; }
-        }
-        if (r == null) { const j = Math.min(i + MAX_HOLD, last); r = (closes[j] - entry) / entry; exitDate = c[j].date; hold = j - i; won = r > 0; }
-
-        // ── Benchmark (SPY over the same holding window) → alpha ──
+        // ── Benchmark (SPY from the FILL date over the holding window) → alpha ──
         let excess = r;
-        const sE = spy && spy.byDate[c[i].date], sX = spy && spy.byDate[exitDate];
+        const sE = spy && spy.byDate[fillDate], sX = spy && spy.byDate[exitDate];
         if (sE && sX && sE.close > 0) excess = r - (sX.close / sE.close - 1);
-        // ── Regime at entry (SPY above/below its 200-DMA) ──
+        // ── Regime at entry (SPY above/below its 200-DMA on the fill date) ──
         let regime = 'unknown';
         if (sE && sE.sma200 != null) regime = sE.close > sE.sma200 ? 'on' : 'off';
 
@@ -201,6 +223,8 @@ async function backtestMode(req, res) {
     return res.json({
       scope, months, names, instances,
       exits: { stopATR: STOP_ATR, targetATR: TGT_ATR, maxHold: MAX_HOLD },
+      execution: { policy: POLICIES.NEXT_OPEN_PLUS_SLIPPAGE, entry: 'next-open+slippage', tier: tierForScope(scope), policyVersion: EXECUTION_POLICY_VERSION },
+      version: BACKTEST_VERSION,
       summary, overall, regimeSplit, efficacy, model,
       generatedAt: new Date().toISOString(),
     });
@@ -245,11 +269,11 @@ async function portfolioMode(req, res) {
         if (!e.status) continue;
         const atr = atrArr[i];
         if (!atr || atr <= 0 || closes[i] <= 0) continue;
-        const entry = closes[i], stop = entry - STOP_ATR * atr, target = entry + TGT_ATR * atr;
-        let exitDate = null;
-        for (let h = 1; h <= MAX_HOLD && i + h <= nlast; h++) { if (lows[i + h] <= stop || highs[i + h] >= target) { exitDate = c[i + h].date; break; } }
-        if (!exitDate) exitDate = c[Math.min(i + MAX_HOLD, nlast)].date;
-        entries.push({ name: t, entryDate: c[i].date, exitDate, tier: e.status });
+        // Next-open entry: the position is HELD from the fill date (day after the signal), and
+        // its exit date comes from the same ATR stop/target scan off the realistic entry.
+        const sim = simAtrTrade(c, closes, highs, lows, atr, i, tierForScope(scope));
+        if (!sim) continue;
+        entries.push({ name: t, entryDate: sim.fillDate, exitDate: sim.exitDate, tier: e.status });
       }
     });
 
@@ -282,6 +306,8 @@ async function portfolioMode(req, res) {
     res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
     return res.json({
       scope, months, maxPos, trades: accepted.length, signals: entries.length,
+      execution: { policy: POLICIES.NEXT_OPEN_PLUS_SLIPPAGE, entry: 'next-open+slippage', tier: tierForScope(scope), policyVersion: EXECUTION_POLICY_VERSION },
+      version: BACKTEST_VERSION,
       stats: {
         totalReturn: +((eq - 1) * 100).toFixed(1), cagr: cagr(eq), sharpe: sharpe(dr), maxDD: +(mdd * 100).toFixed(1), exposure: +(exposSum / nDays * 100).toFixed(0),
         spyReturn: +((seq - 1) * 100).toFixed(1), spyCagr: cagr(seq), spySharpe: sharpe(sdr), spyMaxDD: +(smdd * 100).toFixed(1),
@@ -324,3 +350,8 @@ module.exports = function handler(req, res) {
   if (req.query.mode === 'walkforward') return walkforwardMode(req, res);
   return (req.query.mode === 'portfolio') ? portfolioMode(req, res) : backtestMode(req, res);
 };
+// Exposed for tests — the next-open trade simulator and version marker.
+module.exports.simAtrTrade = simAtrTrade;
+module.exports.BACKTEST_VERSION = BACKTEST_VERSION;
+module.exports.STOP_ATR = STOP_ATR;
+module.exports.TGT_ATR = TGT_ATR;
