@@ -1,58 +1,85 @@
-# Challenger Decision System (`challenger-decision-v1`) — Plan & Gap Analysis
+# Challenger Decision System (`challenger-decision-v1`)
 
 A **shadow-only** challenger that composes existing infrastructure into a cross-sectional
 residual-return ranker, a competing-risk survival/timing layer, a structured event-surprise
-engine, and one four-outcome decision function (TRADE / WAIT / AVOID / NO_TRADE).
+engine, and one four-outcome decision function (**TRADE / WAIT / AVOID / NO_TRADE**).
 
-It **never** alters production ranks, recommendations, allocation, or governance weight.
-It is registered through the existing maturity/governance machinery with status `paper`
+It **never** alters production ranks, recommendations, allocation, or governance weight. It is
+registered through the existing maturity/governance machinery with status `paper`
 (deployment weight `0`) and is promotable only after strict OOS + live-forward validation.
 
-## Gap analysis (inspected the full repo first)
+Shipped: merged to `main`, deployed to prod, and shadow-verified (read + write paths).
 
-| Requested capability | Already exists (reuse) | Genuinely new (build) |
+## What already existed vs. what this added
+
+~70% is reuse. The new work is the composition layer only.
+
+| Capability | Reused | Added by this system |
 |---|---|---|
-| PIT forward return / cross-sectional excess vs SPY & sector | `evolve-labels.labelEvent` (`spyRelReturn`,`sectorRelReturn`), `sliceForward` (strictly-after guard), `benchmarkReturn` | — |
-| Triple-barrier target/stop/timeout | `evolve-labels.tripleBarrier` (conservative same-bar=loss, pending vs timeout) | — |
-| Empirical-Bayes shrinkage | `evolve.pooledRate` | Hierarchical **competing-risk** table over horizon→family→regime→cap→stage→event |
-| Cross-sectional ranker | `decision.rankSignals` (multiplicative composite), `evolve.scoreCandidate` (P of barrier hit) | **Residual-return** cross-sectional percentile ranker with the required output schema |
+| PIT forward return / cross-sectional excess vs SPY & sector | `evolve-labels.labelEvent`, `sliceForward`, `benchmarkReturn` | — |
+| Triple-barrier target/stop/timeout | `evolve-labels.tripleBarrier` | — |
+| Empirical-Bayes shrinkage | `evolve.pooledRate` | Hierarchical **competing-risk** table (horizon→family→regime→cap→stage→event) |
+| Cross-sectional ranker | `decision.rankSignals`, `evolve.scoreCandidate` | **Residual-return** percentile ranker (`challenger-rank-v1`) |
 | Failure probability | `failure-model.assessSignal` (`shadow:true`) | — |
-| Remaining edge | `remaining-edge.computeRemainingEdge` + origins | — |
-| Execution / next-open+slippage | `execution-policy.planFill`, `costs.roundTripCostPct` | — |
+| Remaining edge / execution / costs | `remaining-edge`, `execution-policy`, `costs` | — |
 | Regime PIT | `evolve-regime.buildRegimeVector`, `macro.js` | — |
-| Board-level no-trade / density | `opportunity-density.computeOpportunityDensity` (`no-trade` cause+reasons) | Wire as the NO_TRADE cause |
-| Event awareness | `decision-normalizers.classifyEarnings`, news/tone/options/insider feeds | **Strict structured event-surprise schema + normalized score** (`event-surprise-v1`) |
-| Four-outcome decision | *none* — closest are EVOLVE `TRADE_CANDIDATE/WATCH/PROBE/ABSTAIN` and density `normal/…/no-trade` | **TRADE/WAIT/AVOID/NO_TRADE** canonical function with WAIT trigger/invalidation/expiry |
-| Validation harness | `evolve-walkforward` (purged+embargoed), `evolve-dsr` (deflated Sharpe), `evolve-uniqueness`, `rankquality` (IC/Brier/monotonicity/verdict) | Challenger-specific orchestration + baselines + leave-year/leave-winners-out + ridge trained-shadow |
-| Maturity / governance | `maturity.gradeStrategy`, `governance.governStrategy` (`paper` status = weight 0) | Register `challenger-decision`; it inherits shadow gating for free |
-| Immutable PIT storage | `immutable-ledger.append` (hash-chained, write-once), `store.readJSON/writeJSON`, daily-ledger + `resolved` map patterns, `run-manifest`, `security-master` | New `shadow/` daily ledger + `challenger` immutable stream + append-only resolution |
+| Board-level no-trade / density | `opportunity-density` | Wired as the NO_TRADE cause |
+| Event awareness | `decision-normalizers.classifyEarnings`, news/tone/options/insider feeds | **Strict structured event-surprise schema + score** (`event-surprise-v1`) |
+| Four-outcome decision | *none* | **TRADE/WAIT/AVOID/NO_TRADE** (`challenger-decision-v1`), WAIT trigger/invalidation/expiry |
+| Validation | `evolve-walkforward`, `evolve-dsr`, `evolve-uniqueness`, `rankquality` | Challenger orchestration + baselines + leave-year/leave-winners-out + ridge trained-shadow |
+| Maturity / governance | `maturity`, `governance` (`paper` = weight 0) | Registered `challenger-decision`; inherits shadow gating |
+| Immutable PIT storage | `immutable-ledger`, `store`, `run-manifest`, `security-master` | `shadow/` daily ledger + `challenger` immutable stream + append-only resolution |
 
-**Net:** ~70% is reuse. The genuinely new work is (1) the residual-return cross-sectional ranker,
-(2) the competing-risk survival/timing layer, (3) the structured event-surprise engine,
-(4) the four-outcome decision composition, (5) a thin challenger eval/promotion orchestration,
-(6) shadow storage + routes + an action-first UI section — all additive, none replacing production.
+## Files
 
-## New files
-- `lib/challenger-rank.js` — `challenger-rank-v1` residual-return cross-sectional ranker (pure).
-- `lib/challenger-survival.js` — `challenger-survival-v1` competing-risk timing (pure).
-- `lib/challenger-events.js` — `event-surprise-v1` structured event schema + score (pure; optional LLM w/ fallback).
-- `lib/challenger-decision.js` — `challenger-decision-v1` four-outcome composition (pure).
-- `lib/challenger-eval.js` — `challenger-eval-v1` validation + promotion check (pure over resolved events).
-- `lib/decision-sources.js` — `gatherRankedSignals(fetchImpl)` independent source gather+rank (testable, injected fetch).
-- `lib/challenger-routes.js` — `op=challenger` (read), `op=challengerlog` (privileged PIT log), `op=challengereval` (expensive), `op=challengerresolve` (privileged).
-- `test/challenger-*.test.js` — unit + integration.
+**Modules** — `lib/challenger-rank.js`, `challenger-survival.js`, `challenger-events.js`,
+`challenger-decision.js`, `challenger-eval.js`, `decision-sources.js`, `challenger-routes.js`.
+**Tests** — `test/challenger-core.test.js`, `test/challenger-integration.test.js`.
+**Touched (additive)** — `lib/store.js` (shadow ledger), `lib/strategy-registry.js`
+(`challenger-decision`, core:false), `api/tracker.js` (dispatch + privileged/expensive sets),
+`lib/warm-chains.js` (log in `reprime`, resolve in `ticks3`), `public/js/today.js` +
+`public/css/app.css` (action-first section).
 
-## Modified (additive only)
-- `lib/store.js` — `shadow/` daily ledger helpers + shadow resolved map.
-- `lib/strategy-registry.js` — register `challenger-decision` (core:false → Research Lab / paper until validated).
-- `api/tracker.js` — dispatch the four new ops (privileged/expensive sets).
-- `lib/warm-chains.js` — best-effort `op=challengerlog` tick after the board is scored.
-- `public/js/today.js` — action-first shadow section (guarded; renders `''` on old payload).
+## Architecture / data flow
+
+`op=challenger` → `decision-sources.gatherRankedSignals` self-fetches the same cached
+endpoints op=today uses → `rankSignals` → `challenger-decision.decideBoard`: enrich each
+signal with failure + event surprise → cross-sectional residual rank → competing-risk
+survival → four-outcome gate. Survival history comes from this challenger's **own** resolved
+barrier outcomes (`shadow/resolved.json`), so at cold start the table is empty ⇒ zero TRADE ⇒
+board NO_TRADE — by design, not a stall.
+
+## Endpoints
+
+- `op=challenger` — public cached read; the four-outcome board.
+- `op=challengerlog` — privileged (cron); logs TRADE+WAIT **point-in-time** to
+  `shadow/<date>.json` and appends the hash-chained `challenger` immutable ledger (with deploy SHA).
+- `op=challengerresolve` — privileged (cron); appends triple-barrier forward outcomes
+  (SPY-excess net of costs) to matured predictions; append-only, never overwrites.
+- `op=challengereval` — expensive; walk-forward validation + promotion check (cached).
 
 ## Shadow guarantees
-- `challenger-decision.js` returns a **new** structure; it never mutates input signals or production payloads.
-- Governance status `paper` ⇒ `weightFor==0`; TRADE cards are labeled "shadow — zero deployment weight".
-- Predictions are logged **point-in-time before outcome**; outcomes are **appended**, never overwritten.
-- Zero TRADE when evidence is insufficient; missing data is flagged, never fabricated.
+
+- Returns a **new** structure; never mutates inputs or production payloads.
+- Governs to `paper` ⇒ `weightFor == 0`; TRADE cards labeled "shadow — zero deployment weight".
+- Predictions logged **before** outcome; outcomes **appended**, never overwritten.
+- Zero TRADE when evidence is insufficient; missing data flagged, never fabricated.
+
+## Validation & promotion
+
+`op=challengereval` runs rank-IC, purged+embargoed walk-forward, net expectancy with bootstrap
+CI, Brier calibration, tier monotonicity, regime/cap/event splits, leave-best-year-out,
+leave-largest-winners-out, deflated Sharpe, a ridge trained-shadow compared OOS to the
+interpretable baseline, and baselines (production/OMEGA/momentum/random). `promotionCheck`
+reports 10 strict criteria (incl. positive live-forward), never auto-promotes, and caps its
+recommendation at `probation`.
+
+## Known limitations / deferrals
+
+- Residual is **SPY-excess net of estimated costs**; sector-residual is wired in `labelEvent`
+  but not yet in resolution.
+- EOD data ⇒ next-session positioning only (labeled `eod-next-session`); no intraday precision.
+- Event surprise uses mechanical proxies (flagged `degraded`) until a real
+  earnings-surprise/analyst-revision feed is connected; the LLM path is isolated and not
+  exercised by the offline suite.
 </content>
-</invoke>
