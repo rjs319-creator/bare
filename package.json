@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node --test",
     "test:watch": "node --test --watch",
-    "check": "node --check api/*.js && node --check lib/*.js"
+    "check": "node --check api/*.js && node --check lib/*.js",
+    "gen:source": "node scripts/gen-full-source.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
