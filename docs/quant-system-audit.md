@@ -105,7 +105,7 @@ Scores are **honestly labeled as ranks, not probabilities** (`lib/decision.js:39
 | 6 | Portfolio omits fill-day open→close / barrier reconciliation | **CONFIRMED (P1), FIXED** | `api/backtest.js` `entryDate<D`, close-based MTM | equity missed fill-day move + realized barriers at close | **FIXED** — `simulatePortfolio`/`positionDailyReturn`: fill-day open→close from the modeled fill price, barrier exits realized at the stop/target price; self-reconciles (each in-window trade's compounded daily path == its realized r), reported as `accounting.reconciliation.maxAbsError` | portfolio-reconciliation tests |
 | 7 | EVOLVE label entry inconsistent with next-open | **REFUTED** | `lib/evolve-backfill.js:133` uses `planFill(NEXT_OPEN)`; `labelEvent` is test-only | none — labels enter next-open | — | label entry == fill (research-slice generator) |
 | 8 | Profitable timeouts treated as losses | **PARTIALLY CONFIRMED (P2)** | `lib/evolve-labels.js:117` won:false on time; used in win-rate/cal (`evolve-walkforward.js:63,146`); IC uses `terminalReturn` (`:129`) | win-rate/Brier understate up-drifters (legit for triple-barrier) | **ADDED** honest `profitable` field | positive-timeout test |
-| 9 | Ensemble discards candidate raw strength | **CONFIRMED (P1)** | `lib/evolve.js:100-116,264` specialistProb = pooled base rate | two candidates → identical P regardless of setup strength | blend candidate-level feature/percentile into per-contrib P | — (P1, redesign) |
+| 9 | Ensemble discards candidate raw strength | **CONFIRMED (P1), SHADOW FIX** | `lib/evolve.js` specialistProb = pooled base rate | two candidates → identical P regardless of setup strength | **SHADOW** — `candidateStrengthTilt` differentiates equal-context candidates by their own percentile (bounded log-odds tilt); exposed as `strengthAdjustedP`, **NOT** in the decision/rank until OOS-validated (coefficient is asserted, not fit) | strength-tilt tests |
 | 10 | Effective N summed across correlated specialists | **CONFIRMED (P1), FIXED** | `lib/evolve.js` `effN += c.effN`; gate `decideState` | inflated effective sample; passed the TRADE gate on ~1 source | **FIXED** — `ensembleProbability` discounts effN by measured effective independence (`redundancy.effectiveEvidence`); model built in `recomputePerf`, cached in perf, wired via ctx; reports `effSampleRaw` + `independenceRatio` | effN-discount + TRADE-gate tests |
 | 11 | Calendar-day purge mishandles holidays | **CONFIRMED (P1), FIXED & WIRED** | `lib/evolve-walkforward.js:31,45` `×1.4` | leak/over-purge near holidays + over-purges early-resolving labels | **`labelClearsTestBlockExact` is now the PRIMARY purge in the EVOLVE walk-forward** (real `labelEndDate`); ×1.4 only for the embargo buffer + legacy fallback; `purge.method` reported | exact-purge unit + walkForward tests |
 | 12 | Historical models reconstruct feature subset | **CONFIRMED (P1)** | `lib/ghost-backtest.js:250` narrative null vs live `lib/ghost.js:94` | WF validates a price-only subset of the live model | reconstruct or clearly scope BONUS/narrative claims | — (documented) |
@@ -126,10 +126,12 @@ comparison harness + reproducible manifest, `evolve-labels` `labelEndDate`/`prof
 `aucRank`. See `docs/quant-redesign.md`.
 
 **Remains (needs data or larger refactor):** real PIT constituents/delisting-returns (external
-data), candidate-level ensemble strength (#9), reconstructing/scoping AI-narrative features
-(#12/#14). (`universeAt` is now partially wired via `?pit=1` — see §6. Fixed since the initial
-audit: exact label-end purge (#11), portfolio fill-day P&L + reconciliation (#6),
-redundancy-discounted effective-N (#10), out-of-fold calibrator Brier (#18).)
+data), reconstructing/scoping AI-narrative features (#12/#14), and PROMOTING the candidate-strength
+tilt (#9 — shipped as a shadow field, needs OOS evidence that within-context strength predicts the
+outcome before it may drive the gate). (`universeAt` is now partially wired via `?pit=1` — see §6.
+Fixed since the initial audit: exact label-end purge (#11), portfolio fill-day P&L + reconciliation
+(#6), redundancy-discounted effective-N (#10), out-of-fold calibrator Brier (#18); candidate-strength
+tilt (#9) shipped shadow-only.)
 
 ---
 
