@@ -25,6 +25,10 @@ const SRC_TAB = { screener: 'screener', gapgo: 'gapgo', daytrade: 'daytrade', co
 // every card carry the EARNED trust grade next to its raw score — the honest read
 // (a 0–100 score is a relative rank, the grade is what the track record supports).
 let GRADES = {};
+// The shadow challenger board (op=challenger). Optional — renders only when present, and is
+// clearly labeled SHADOW / zero-weight; it never affects the production ranks above it.
+let CHALLENGER = null;
+function applyChallenger(c) { CHALLENGER = c && c.ok ? c : null; }
 function gradeChip(sig) {
   const g = GRADES[sig.section];
   if (!g) return '';
@@ -230,6 +234,55 @@ function lane(title, arr, legend) {
     + arr.slice(0, 6).map(s => `<span class="td-lane-tk" data-go="${SRC_TAB[s.source] || 'screener'}" title="${esc(s.setup || '')} · score ${s.score}">${esc(s.ticker)}</span>`).join('') + `</div>`;
 }
 
+// ── Challenger action-first section (shadow) ─────────────────────────────────
+function chalNum(v, suf = '') { return (typeof v === 'number' && isFinite(v)) ? (Math.round(v * 100) / 100) + suf : '—'; }
+function chalCard(d) {
+  const sv = d.survival || {}; const ev = d.event || {};
+  const rows = [
+    ['Horizon', esc(d.horizon || '—')],
+    ['Expected hold', sv.expectedSessionsToResolution != null ? sv.expectedSessionsToResolution + ' sessions' : '—'],
+    ['Entry trigger', d.trigger ? esc(d.trigger) : (d.entry != null ? 'near ' + d.entry : '—')],
+    ['Stop / invalidation', d.invalidation ? esc(d.invalidation) : (d.stop != null ? String(d.stop) : '—')],
+    ['Target / exit', d.target != null ? String(d.target) : (sv.entryState ? esc(sv.entryState) : '—')],
+    ['Setup expiry', d.expiry ? ((d.expiry.sessionsRemaining != null ? d.expiry.sessionsRemaining : '?') + ' sessions left') : '—'],
+    ['Exp. net utility', chalNum(d.expectedNetUtilityPct, '%')],
+    ['Uncertainty', chalNum(d.uncertainty)],
+    ['Event', ev.category ? `${esc(ev.category)}${ev.score != null ? ` · surprise ${Math.round(ev.score)}` : ''}${ev.degraded ? ' (weak)' : ''}` : '—'],
+    ['Primary driver', d.primaryDriver ? esc(d.primaryDriver) : '—'],
+    ['Primary risk', d.primaryRisk ? esc(d.primaryRisk) : '—'],
+    ['Governance', `${esc(d.governanceStatus || 'paper')} · weight 0 (shadow)`],
+  ];
+  const internals = `<details class="td-action-more"><summary>internals</summary><div class="td-action-int">`
+    + `Residual score ${chalNum(d.residualScore)} · pctile ${chalNum(d.percentileRank)}<br>`
+    + `Survival: P(target) ${chalNum(sv.pTargetBeforeStop)} · P(stop) ${chalNum(sv.pStopBeforeTarget)} · P(neither) ${chalNum(sv.pNeither)} · effN ${sv.effN ?? 0}${sv.shrunkToPrior ? ' (prior)' : ''}<br>`
+    + `Entry state ${esc(sv.entryState || '—')} · edge now ${chalNum(sv.edgeNowPct, '%')} vs after-wait ${chalNum(sv.edgeAfterWaitPct, '%')} · basis ${esc(sv.basis || 'eod-next-session')}<br>`
+    + `Failure prob ${chalNum(d.failureProb)} · execution ${chalNum(d.executionQuality)} · regime-fit ${chalNum(d.regimeFit)}<br>`
+    + `Reasons: ${esc((d.reasons || []).join(' · '))}`
+    + `</div></details>`;
+  return `<div class="td-action-card ${esc(d.decision)}"><div class="td-action-tk"><b>${esc(d.ticker)}</b> <span class="td-action-dec">${esc(d.decision)}</span></div>`
+    + rows.map(([k, v]) => `<div class="td-action-row"><span>${k}</span><span>${v}</span></div>`).join('') + internals + `</div>`;
+}
+function chalAvoid(d) { return `<div class="td-action-avoid"><b>${esc(d.ticker)}</b> <span class="td-dim">${esc((d.reasons && d.reasons[0]) || '')}</span></div>`; }
+function actionSection() {
+  const c = CHALLENGER;
+  if (!c) return '';
+  const D = c.decisions || { TRADE: [], WAIT: [], AVOID: [] };
+  const nt = c.noTradeCause;
+  let h = `<div class="td-action"><div class="td-action-h">🧪 Challenger decision <span class="td-dim">— an independent, shadow-only four-outcome read</span> <span class="td-action-badge">SHADOW · 0 weight · not affecting ranks</span></div>`;
+  if (c.boardDecision === 'NO_TRADE') {
+    h += `<div class="td-action-notrade"><b>NO-TRADE</b> — ${esc(nt ? nt.label : 'no candidate qualifies to enter now')}${nt && nt.detail ? `<div class="td-dim">${esc(nt.detail)}</div>` : ''}</div>`;
+  }
+  const col = (title, arr, render, empty) => `<div class="td-action-col"><div class="td-action-col-h">${title} <span class="td-dim">${arr.length}</span></div>`
+    + (arr.length ? arr.map(render).join('') : `<div class="td-dim td-empty">${empty}</div>`) + `</div>`;
+  h += `<div class="td-action-grid">`
+    + col('✅ TRADE NOW', (D.TRADE || []).slice(0, 5), chalCard, 'None qualify to enter now.')
+    + col('⏳ WAIT FOR TRIGGER', (D.WAIT || []).slice(0, 6), chalCard, 'No setups waiting on a trigger.')
+    + col('⛔ AVOID', (D.AVOID || []).slice(0, 8), chalAvoid, 'Nothing flagged avoid.')
+    + `</div>`;
+  h += `<div class="td-dim td-action-foot">${esc(c.note || '')}</div></div>`;
+  return h;
+}
+
 export function renderCommandCenter(container, p) {
   if (!container) return;
   if (!p || !p.ok) { container.innerHTML = `<div class="dt-note" style="border-left-color:var(--red)">⚠️ The command center couldn't load its signals right now — a data source may be down. Try Refresh.</div>`; return; }
@@ -242,6 +295,7 @@ export function renderCommandCenter(container, p) {
   const secChip = (s, dir) => `<span class="td-sec-chip ${dir}">${esc(s.name)} <b>${pct(+(+s.changePct).toFixed(1))}</b></span>`;
   let html = `<div class="td-cc">`;
   html += opportunityBanner(p.opportunity);
+  html += actionSection(); // shadow challenger — first read, clearly labeled, never affects ranks below
   html += `<div class="td-head" style="border-left-color:${regCol}">`
     + `<div class="td-regime"><b>${esc(p.regime.label)}</b>${reg.breadthPct != null ? ` · breadth ${reg.breadthPct}%` : ''}${reg.condition ? ` · ${esc(reg.condition)} tape` : ''}</div>`
     + `<div class="td-sectors"><span class="td-dim">Leading</span> ${(p.sectors?.leading || []).map(s => secChip(s, 'lead')).join('')} `
@@ -419,20 +473,22 @@ export async function loadCommandCenter(container) {
   let painted = false;
   try {
     const c = JSON.parse(localStorage.getItem(TODAY_CACHE_KEY) || 'null');
-    if (c && c.p && c.p.ok) { applyGrades(c.mat); renderCommandCenter(container, c.p); markUpdating(container, true); painted = true; }
+    if (c && c.p && c.p.ok) { applyGrades(c.mat); applyChallenger(c.chal); renderCommandCenter(container, c.p); markUpdating(container, true); painted = true; }
   } catch { /* corrupt cache → ignore */ }
   if (!painted) container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Ranking every screener into one table…</p></div>`;
 
   // 2) Fetch fresh in the background; swap in when it arrives.
-  let p = null, mat = null;
-  try { [p, mat] = await Promise.all([
+  let p = null, mat = null, chal = null;
+  try { [p, mat, chal] = await Promise.all([
     fetch('/api/tracker?op=today').then(r => r.json()),
     fetch('/api/tracker?op=maturity').then(r => r.json()).catch(() => null),
+    fetch('/api/tracker?op=challenger').then(r => r.json()).catch(() => null), // shadow — optional
   ]); } catch { p = null; }
 
   if (p && p.ok) {
     applyGrades(mat);
-    try { localStorage.setItem(TODAY_CACHE_KEY, JSON.stringify({ p, mat, at: Date.now() })); } catch { /* quota → skip caching */ }
+    applyChallenger(chal);
+    try { localStorage.setItem(TODAY_CACHE_KEY, JSON.stringify({ p, mat, chal, at: Date.now() })); } catch { /* quota → skip caching */ }
     renderCommandCenter(container, p);          // replace stale with fresh
   } else if (!painted) {
     renderCommandCenter(container, p);          // nothing cached → show the empty/error state

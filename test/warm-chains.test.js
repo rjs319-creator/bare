@@ -137,7 +137,9 @@ test('reprime: the reprime chain re-fetches today BEFORE priming the ensemble', 
   const call = recorder();
   await WC.runChain('reprime', { call, now: clock().now });
   const real = call.calls.filter(p => !p.includes('warmchain'));
-  assert.deepStrictEqual(real, ['/api/tracker?op=today', '/api/tracker?op=ensemble']);
+  assert.deepStrictEqual(real, ['/api/tracker?op=today', '/api/tracker?op=ensemble', '/api/tracker?op=challengerlog']);
+  // invariant this test protects: today is re-fetched BEFORE the ensemble projection
+  assert.ok(real.indexOf('/api/tracker?op=today') < real.indexOf('/api/tracker?op=ensemble'));
 });
 
 test('decision: the ensemble is NOT behind the unknown-cost rebuild in one budget', async () => {
