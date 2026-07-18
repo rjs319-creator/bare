@@ -8,6 +8,38 @@ const { LARGE, SMALL_CAPS, MICRO_CAPS } = require('../lib/universe');
 const { runGhostBacktest } = require('../lib/ghost-backtest');
 const { planFill, POLICIES, EXECUTION_POLICY_VERSION } = require('../lib/execution-policy');
 const { averageRanks } = require('../lib/rankquality');
+const SM = require('../lib/security-master');
+
+// Resolve the backtest universe. Default (pit off) is byte-identical to the legacy static list.
+// With ?pit=1 the present-day list is AUGMENTED with delisted names the point-in-time security
+// master knows were active at the window start — a PARTIAL de-survivorship. The result is STILL
+// survivorship-unsafe (no late-listing/IPO feed, S&P-only delisting coverage), which the returned
+// `pit` block states explicitly. `asOf` is a coarse calendar boundary at the window start (the
+// master's delisting dates are calendar dates), not a purge — precision there is unnecessary.
+async function resolvePitUniverse(baseList, months, enabled) {
+  const list = [...new Set(baseList)];
+  if (!enabled) return { list, pit: { enabled: false } };
+  const asOf = new Date(Date.now() - Math.round(months * 30.44 * 86400000)).toISOString().slice(0, 10);
+  let master = null;
+  try { master = await SM.loadMaster(); } catch { master = null; }
+  if (!master || !master.records) {
+    return { list, pit: { enabled: true, built: false, asOf, survivorshipSafe: false,
+      note: 'security master not built — universe fell back to the present-day static list (survivorship-unsafe)' } };
+  }
+  const aug = SM.pointInTimeAugment(master.records, list, asOf);
+  return {
+    list: aug.universe,
+    pit: {
+      enabled: true, built: true, asOf,
+      securityMasterVersion: master.v, builtAt: master.builtAt,
+      staticCount: aug.staticCount, addedDelisted: aug.addedCount,
+      added: aug.added.slice(0, 50), addedFull: aug.added,   // addedFull for coverage counting (stripped from response)
+      survivorshipSafe: false,
+      note: 'Added back delisted names the security master knows were active at the window start '
+        + '(S&P-500, ≤5yr). Does NOT correct late-listing survivorship or non-S&P delistings — result remains survivorship-unsafe.',
+    },
+  };
+}
 
 const STEP = 5;          // sample every 5 trading days
 const STOP_ATR = 1.5;    // stop = entry − 1.5·ATR
@@ -131,7 +163,8 @@ function aucRank(scored) {
 async function backtestMode(req, res) {
   const scope = (req.query.scope || 'large').toLowerCase();
   const months = Math.min(12, Math.max(3, parseInt(req.query.months, 10) || 6));
-  const list = scope === 'micro' ? MICRO_CAPS : scope === 'small' ? SMALL_CAPS : LARGE;
+  const baseList = scope === 'micro' ? MICRO_CAPS : scope === 'small' ? SMALL_CAPS : LARGE;
+  const { list, pit } = await resolvePitUniverse(baseList, months, req.query.pit === '1');
   const opts = optsFor(scope);
 
   try {
@@ -139,9 +172,14 @@ async function backtestMode(req, res) {
     const spyClose = {}; if (spy) for (const d in spy.byDate) spyClose[d] = spy.byDate[d].close;
     const trades = [];   // { tier, date, r, excess, won, hold, regime, feat }
     let names = 0, instances = 0;
+    // Data coverage of the re-added delisted names — quantifies the survivorship gap honestly
+    // (a delisted name with no free candle data still cannot be traded, so we count it).
+    const addedSet = new Set((pit && pit.addedFull) || []);
+    let addedWithData = 0, addedNoData = 0;
 
     await mapLimit([...new Set(list)], 16, async (t) => {
       const data = await fetchDailyHistory(t);
+      if (addedSet.has(t)) { if (data && data.candles && data.candles.length) addedWithData++; else addedNoData++; }
       if (!data) return;
       const c = data.candles, n = c.length;
       if (n < 180) return;
@@ -225,9 +263,18 @@ async function backtestMode(req, res) {
       };
     }
 
+    // Finalize the point-in-time universe report with delisted-name data coverage.
+    let pitOut = pit;
+    if (pit && pit.enabled) {
+      const { addedFull, ...rest } = pit;   // strip the internal full list from the response
+      pitOut = pit.built ? { ...rest, addedWithData, addedNoData } : rest;
+    }
+
     res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
     return res.json({
       scope, months, names, instances,
+      universe: { source: pit && pit.enabled ? 'point-in-time (augmented)' : 'present-day static', size: [...new Set(list)].length, survivorshipSafe: false },
+      pit: pitOut,
       exits: { stopATR: STOP_ATR, targetATR: TGT_ATR, maxHold: MAX_HOLD },
       execution: { policy: POLICIES.NEXT_OPEN_PLUS_SLIPPAGE, entry: 'next-open+slippage', tier: tierForScope(scope), policyVersion: EXECUTION_POLICY_VERSION },
       version: BACKTEST_VERSION,
@@ -243,7 +290,8 @@ async function backtestMode(req, res) {
 async function portfolioMode(req, res) {
   const scope = (req.query.scope || 'large').toLowerCase();
   const months = Math.min(12, Math.max(3, parseInt(req.query.months, 10) || 6));
-  const list = scope === 'micro' ? MICRO_CAPS : scope === 'small' ? SMALL_CAPS : LARGE;
+  const baseList = scope === 'micro' ? MICRO_CAPS : scope === 'small' ? SMALL_CAPS : LARGE;
+  const { list, pit } = await resolvePitUniverse(baseList, months, req.query.pit === '1');
   const opts = optsFor(scope);
   const maxPos = scope === 'large' ? 10 : 6;
   const TIER_RANK = { Breakout: 0, Setup: 1, Early: 2 };
@@ -309,9 +357,12 @@ async function portfolioMode(req, res) {
     const cagr = eqv => +((Math.pow(Math.max(0.01, eqv), ann / nDays) - 1) * 100).toFixed(1);
     const sample = arr => { const step = Math.max(1, Math.ceil(arr.length / 120)); return arr.filter((_, i) => i % step === 0 || i === arr.length - 1); };
 
+    const pitOut = pit && pit.enabled ? (({ addedFull, ...rest }) => rest)(pit) : pit;
     res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
     return res.json({
       scope, months, maxPos, trades: accepted.length, signals: entries.length,
+      universe: { source: pit && pit.enabled ? 'point-in-time (augmented)' : 'present-day static', size: [...new Set(list)].length, survivorshipSafe: false },
+      pit: pitOut,
       execution: { policy: POLICIES.NEXT_OPEN_PLUS_SLIPPAGE, entry: 'next-open+slippage', tier: tierForScope(scope), policyVersion: EXECUTION_POLICY_VERSION },
       version: BACKTEST_VERSION,
       stats: {
