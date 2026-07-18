@@ -1829,6 +1829,8 @@
     .xa-conv-fill { height: 100%; }
     .xa-levels { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 9px; font-size: 0.68rem; color: var(--text-dim); }
     .xa-levels b { color: var(--text); }
+    .xa-ai-lb { font-size: 0.62rem; font-weight: 700; }   /* short label — safe to keep on one line */
+    .xa-caution { font-size: 0.64rem; line-height: 1.4; margin-top: 4px; overflow-wrap: anywhere; }   /* full-sentence flag — MUST wrap (xa-conv-lb is nowrap → grid blowout) */
     .cx-narr-str { color: var(--amber); font-weight: 700; }
 
     /* Model panel */
