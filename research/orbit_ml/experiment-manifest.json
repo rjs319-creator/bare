@@ -1,0 +1,55 @@
+{
+  "experimentFamilyId": "orbit-ml-specialist-v1",
+  "description": "ORBIT-ML multi-horizon cross-sectional residual-drift ranker, integrated as the shadow EVOLVE specialist idiosyncraticPersistence. Reuses the merged ORBIT engines; adds a date-grouped rank objective + EVOLVE framing + marginal-ensemble measurement.",
+  "codeCommit": "e491bed base (main, ORBIT merged); ORBIT-ML changes on feat/orbit-ml-specialist",
+  "generatedFrom": "research/orbit_ml/validate.js",
+  "reusedEngines": ["orbit-features", "orbit-factor-model", "orbit-state", "orbit-labels", "orbit-calibration", "orbit-walkforward", "orbit-backfill", "orbit-monitor", "orbit-model(scaler)"],
+  "versions": {
+    "features": "orbit-ml-features-v1",
+    "model": "orbit-ml-model-v1",
+    "evolveAdapter": "orbit-ml-evolve-v1",
+    "ensemble": "orbit-ml-ensemble-v1",
+    "monitor": "orbit-ml-monitor-v1",
+    "artifact": "orbit-ml-artifact-v1"
+  },
+  "universe": { "source": "lib/universe.js LARGE (current survivors)", "pointInTime": false, "delistedIncluded": false, "sectorPointInTime": false },
+  "model": {
+    "primary": "date-grouped pairwise RankNet (linear, dependency-free, deterministic)",
+    "objective": "future net residual-return rank within decision-date groups",
+    "features": "orbit FEATURE_SET + orbit-ml specialist evidence",
+    "preprocessing": "winsor(2/98) + standardise, fit in-fold (reused from orbit-model)",
+    "boostedChallenger": { "type": "LightGBM LambdaRank / CatBoost via JSON-tree adapter", "status": "not-installed", "reason": "no Python/LightGBM in environment; adapter + evaluator implemented and unit-tested; NO boosted result fabricated" }
+  },
+  "foldDefinitions": { "outerBlocks": 8, "purge": "training dropped unless labelEndDate + embargo < block start", "embargoDays": "ceil(horizonDays*1.5*7/5)", "grouping": "by decision date (per-date rank-IC → ICIR)" },
+  "calibration": { "reused": "orbit-calibration (evolve.fitCalibrator isotonic + Platt/beta select by held-out Brier)", "nullContract": true },
+  "costAssumptions": { "execution": "next-open + slippage (exec-v1)", "cost": "cost-v1 round-trip" },
+  "configurationsAttempted": 1,
+  "results": {
+    "run_24names_5y": {
+      "samples": 2616,
+      "rankIC_purged": { "days5": 0.0002, "days21": 0.0027, "days63": 0.0157 },
+      "icir": { "days5": 0.00, "days21": 0.01, "days63": 0.05 },
+      "marginalEnsembleContribution_21d": { "withIC": 0.018, "withoutIC": 0.034, "marginalDelta": -0.016, "verdict": "hurts-ensemble" },
+      "verdict": "No durable OOS rank quality; NEGATIVE incremental ensemble contribution → fails the incremental-value promotion gate."
+    }
+  },
+  "limitations": [
+    "Survivorship-biased current-survivor universe; delisted names absent.",
+    "Sector membership current, not point-in-time.",
+    "Boosted challenger not trained (no Python/LightGBM).",
+    "Bounded universe (24 names); full universe not run.",
+    "No prospective (live-forward) evidence yet."
+  ],
+  "promotionStatus": {
+    "grade": "C",
+    "incrementalValueGate": "FAILED (marginalDelta -0.016)",
+    "health": "INSUFFICIENT_DATA",
+    "shadow": true,
+    "affectsLiveRank": false,
+    "routerWeight": 0,
+    "sourceMapped": false,
+    "productionGrade": false,
+    "survivorshipSafe": false,
+    "pointInTimeSafe": false
+  }
+}
