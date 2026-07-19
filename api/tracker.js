@@ -76,12 +76,14 @@ const PRIVILEGED_OPS = new Set([
   'challengerlog', 'challengerresolve',
   // ORBIT shadow ledger WRITES (log PIT predictions / resolve forward labels).
   'orbitlog', 'orbitresolve',
+  // ORBIT-ML shadow ledger WRITES (log ranked cross-section / resolve forward labels).
+  'orbitmltick', 'orbitmlresolve',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
-  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'redundancy', 'leadtime', 'failuremodel', 'complab', 'challengereval', 'router', 'orbitwalkforward',
+  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'redundancy', 'leadtime', 'failuremodel', 'complab', 'challengereval', 'router', 'orbitwalkforward', 'orbitmlwalkforward',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -302,5 +304,12 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'orbitwalkforward') return require('../lib/orbit-routes').runOrbitWalkForward(req, res);
   if (req.query.op === 'orbithealth') return require('../lib/orbit-routes').runOrbitHealth(req, res);
   if (req.query.op === 'algorithmrouter') return require('../lib/orbit-routes').runAlgorithmRouter(req, res);
+  // 🛰️ ORBIT-ML (shadow EVOLVE specialist `idiosyncraticPersistence`). Read/health public;
+  // tick/resolve are cron-only WRITES; walkforward is a heavy backfill+train+eval recompute.
+  if (req.query.op === 'orbitml') return require('../lib/orbit-ml-routes').runOrbitMl(req, res);
+  if (req.query.op === 'orbitmltick') return require('../lib/orbit-ml-routes').runOrbitMlTick(req, res);
+  if (req.query.op === 'orbitmlresolve') return require('../lib/orbit-ml-routes').runOrbitMlResolve(req, res);
+  if (req.query.op === 'orbitmlwalkforward') return require('../lib/orbit-ml-routes').runOrbitMlWalkForward(req, res);
+  if (req.query.op === 'orbitmlhealth') return require('../lib/orbit-ml-routes').runOrbitMlHealth(req, res);
   return runScoreboard(req, res);
 };
