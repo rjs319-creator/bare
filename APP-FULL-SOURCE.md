@@ -1,6 +1,6 @@
 # market-news-app — Full Source
 
-Generated 2026-07-18T16:06:28.611Z · 311 files · ~53,447 lines.
+Generated 2026-07-18T23:33:55.545Z · 336 files · ~57,414 lines.
 Excludes node_modules, tests-optional, research/, data dumps, and files >250KB.
 
 ## File index
@@ -20,6 +20,9 @@ Excludes node_modules, tests-optional, research/, data dumps, and files >250KB.
 - lib/alerts-fable.js
 - lib/alerts-routes.js
 - lib/alerts.js
+- lib/algo-health.js
+- lib/algo-router-routes.js
+- lib/algo-router.js
 - lib/aligned-routes.js
 - lib/aligned.js
 - lib/allocation.js
@@ -43,6 +46,12 @@ Excludes node_modules, tests-optional, research/, data dumps, and files >250KB.
 - lib/cern-decay.js
 - lib/cern-run.js
 - lib/cern.js
+- lib/challenger-decision.js
+- lib/challenger-eval.js
+- lib/challenger-events.js
+- lib/challenger-rank.js
+- lib/challenger-routes.js
+- lib/challenger-survival.js
 - lib/coil.js
 - lib/component-lab-routes.js
 - lib/component-lab.js
@@ -58,6 +67,7 @@ Excludes node_modules, tests-optional, research/, data dumps, and files >250KB.
 - lib/decision-normalizers.js
 - lib/decision-portfolio.js
 - lib/decision-routes.js
+- lib/decision-sources.js
 - lib/decision.js
 - lib/downday.js
 - lib/downgrades.js
@@ -201,8 +211,12 @@ Excludes node_modules, tests-optional, research/, data dumps, and files >250KB.
 - scripts/build-insider.js
 - scripts/gen-full-source.js
 - scripts/pull-intraday.js
+- scripts/run-validation-slice.js
 - test/alerts-fable.test.js
 - test/alerts.test.js
+- test/algo-health.test.js
+- test/algo-router-routes.test.js
+- test/algo-router.test.js
 - test/aligned.test.js
 - test/allocation.test.js
 - test/anomaly.test.js
@@ -217,10 +231,13 @@ Excludes node_modules, tests-optional, research/, data dumps, and files >250KB.
 - test/calibration.test.js
 - test/cern-decay.test.js
 - test/cern.test.js
+- test/challenger-core.test.js
+- test/challenger-integration.test.js
 - test/coil.test.js
 - test/component-lab-routes.test.js
 - test/component-lab.test.js
 - test/confluence.test.js
+- test/constituents-parse.test.js
 - test/costs.test.js
 - test/crossasset.test.js
 - test/cstudy.test.js
@@ -240,14 +257,19 @@ Excludes node_modules, tests-optional, research/, data dumps, and files >250KB.
 - test/earnings-tone.test.js
 - test/emerging.test.js
 - test/evolve-backfill.test.js
+- test/evolve-candidate-strength.test.js
 - test/evolve-dsr.test.js
 - test/evolve-evidence-view.test.js
 - test/evolve-labels.test.js
 - test/evolve-live-gating.test.js
+- test/evolve-oof-calibrator.test.js
+- test/evolve-redundancy-effn.test.js
 - test/evolve-regime.test.js
 - test/evolve-routes.test.js
+- test/evolve-strength-promotion.test.js
 - test/evolve-uniqueness.test.js
 - test/evolve-walkforward.test.js
+- test/evolve-wf-exact-purge.test.js
 - test/evolve.test.js
 - test/execution-policy.test.js
 - test/fade-engine.test.js
@@ -258,6 +280,7 @@ Excludes node_modules, tests-optional, research/, data dumps, and files >250KB.
 - test/gapcause.test.js
 - test/gapdown.test.js
 - test/gapgo.test.js
+- test/ghost-narrative-scope.test.js
 - test/governance.test.js
 - test/health.test.js
 - test/http.test.js
@@ -283,6 +306,7 @@ Excludes node_modules, tests-optional, research/, data dumps, and files >250KB.
 - test/pcarry.test.js
 - test/perf.test.js
 - test/pickscore.test.js
+- test/portfolio-reconciliation.test.js
 - test/predict.test.js
 - test/predmarkets.test.js
 - test/provenance.test.js
@@ -297,6 +321,7 @@ Excludes node_modules, tests-optional, research/, data dumps, and files >250KB.
 - test/remaining-edge-rank.test.js
 - test/remaining-edge.test.js
 - test/render-guard.test.js
+- test/research-slice.test.js
 - test/run-manifest.test.js
 - test/scoreboard.test.js
 - test/screener.test.js
@@ -371,6 +396,51 @@ const { calcRSI, calcATR } = require('../lib/signal');
 const { LARGE, SMALL_CAPS, MICRO_CAPS } = require('../lib/universe');
 const { runGhostBacktest } = require('../lib/ghost-backtest');
 const { planFill, POLICIES, EXECUTION_POLICY_VERSION } = require('../lib/execution-policy');
+const { averageRanks } = require('../lib/rankquality');
+const SM = require('../lib/security-master');
+
+// Resolve the backtest universe. Default (pit off) is byte-identical to the legacy static list.
+// With ?pit=1 the present-day list is AUGMENTED with delisted names the point-in-time security
+// master knows were active at the window start — a PARTIAL de-survivorship. The result is STILL
+// survivorship-unsafe (no late-listing/IPO feed, S&P-only delisting coverage), which the returned
+// `pit` block states explicitly. `asOf` is a coarse calendar boundary at the window start (the
+// master's delisting dates are calendar dates), not a purge — precision there is unnecessary.
+async function resolvePitUniverse(baseList, months, enabled, scope) {
+  const list = [...new Set(baseList)];
+  if (!enabled) return { list, pit: { enabled: false } };
+  // The ONLY point-in-time delisting source is the S&P-500 removal scrape (all large-cap), and the
+  // security master carries no cap-tier field — so a died-since name cannot be attributed to a cap
+  // band. Augmenting small/micro would inject large-cap names that were never in the band, making
+  // the backtest LESS representative. Restrict de-survivorship to scope=large; other bands report
+  // honestly that no cap-appropriate delisting coverage exists (universe left as the static list).
+  if (scope !== 'large') {
+    return { list, pit: { enabled: true, applied: false, scope, survivorshipSafe: false,
+      note: `No point-in-time delisting coverage for the ${scope}-cap band — the only source is the `
+        + `S&P-500 (large-cap) removal scrape and the security master has no cap-tier field, so `
+        + `augmenting would inject large-cap names that were never ${scope}-cap. Universe left as the `
+        + `present-day static list (survivorship-unsafe).` } };
+  }
+  const asOf = new Date(Date.now() - Math.round(months * 30.44 * 86400000)).toISOString().slice(0, 10);
+  let master = null;
+  try { master = await SM.loadMaster(); } catch { master = null; }
+  if (!master || !master.records) {
+    return { list, pit: { enabled: true, applied: false, built: false, asOf, survivorshipSafe: false,
+      note: 'security master not built — universe fell back to the present-day static list (survivorship-unsafe)' } };
+  }
+  const aug = SM.pointInTimeAugment(master.records, list, asOf);
+  return {
+    list: aug.universe,
+    pit: {
+      enabled: true, applied: true, built: true, asOf, scope,
+      securityMasterVersion: master.v, builtAt: master.builtAt,
+      staticCount: aug.staticCount, addedDelisted: aug.addedCount,
+      added: aug.added.slice(0, 50), addedFull: aug.added,   // addedFull for coverage counting (stripped from response)
+      survivorshipSafe: false,
+      note: 'Added back delisted names the security master knows were active at the window start '
+        + '(S&P-500, large-cap, ≤5yr). Does NOT correct late-listing survivorship or non-S&P delistings — result remains survivorship-unsafe.',
+    },
+  };
+}
 
 const STEP = 5;          // sample every 5 trading days
 const STOP_ATR = 1.5;    // stop = entry − 1.5·ATR
@@ -402,6 +472,53 @@ function simAtrTrade(c, closes, highs, lows, atr, i, tier) {
   }
   if (r == null) { const j = Math.min(fi + MAX_HOLD - 1, last); r = (closes[j] - entry) / entry; exitDate = c[j].date; hold = j - fi + 1; won = r > 0; }
   return { fillDate: c[fi].date, entry, stop, target, r, exitDate, hold, won };
+}
+
+// One position's return on day D (prev day P), from close map cm. The fix for audit #6:
+//   • fill day  (D == entryDate): from the MODELED fill price (open+slippage) to that day's close —
+//     the fill-day open→close P&L the old close/prevClose MTM silently dropped.
+//   • exit day  (D == exitDate):  from the prior close to the BARRIER exit price (entry·(1+r)), not
+//     the day's close — so a stop/target that triggered intraday is realized at the barrier.
+//   • middle days: close→close.
+// These telescope: compounded over [entryDate, exitDate] they equal exactly the trade's realized r.
+function positionDailyReturn(p, D, P, cm) {
+  const cD = cm[D], cP = cm[P];
+  const exitPrice = p.entry * (1 + p.r);
+  const isEntry = D === p.entryDate, isExit = D === p.exitDate;
+  if (isEntry && isExit) return p.entry > 0 ? exitPrice / p.entry - 1 : 0;   // same-bar fill+exit → r
+  if (isEntry) return (p.entry > 0 && cD > 0) ? cD / p.entry - 1 : 0;        // fill open→close
+  if (isExit) return cP > 0 ? exitPrice / cP - 1 : 0;                        // prevClose→barrier
+  return (cD > 0 && cP > 0) ? cD / cP - 1 : 0;                               // close→close
+}
+
+// Daily-rebalanced equal-weight (1/maxPos) portfolio over accepted trades, with correct fill-day and
+// barrier-exit accounting. Also self-reconciles: each fully-in-window position's standalone
+// compounded daily path must equal its realized r (telescoping), reported as reconciliation.maxAbsError.
+function simulatePortfolio(accepted, axis, closeMaps, maxPos) {
+  let eq = 1, peak = 1, mdd = 0, exposSum = 0; const curve = [], dr = [];
+  for (let k = 1; k < axis.length; k++) {
+    const D = axis[k], P = axis[k - 1];
+    const held = accepted.filter(p => p.entryDate <= D && p.exitDate >= D);   // include the FILL day
+    let ret = 0;
+    held.forEach(p => { const cm = closeMaps[p.name]; if (cm) ret += (1 / maxPos) * positionDailyReturn(p, D, P, cm); });
+    eq *= (1 + ret); peak = Math.max(peak, eq); mdd = Math.min(mdd, (eq - peak) / peak);
+    curve.push({ date: D, v: +eq.toFixed(4) }); dr.push(ret); exposSum += held.length / maxPos;
+  }
+  // Reconciliation: for positions whose whole span sits inside the axis, the compounded per-day path
+  // must equal the trade-level realized r. Positions open past the window end are excluded (they are
+  // honestly marked to the last close, not a future barrier).
+  const axisSet = new Set(axis), first = axis[0];
+  let maxAbsError = 0, checked = 0;
+  for (const p of accepted) {
+    const cm = closeMaps[p.name];
+    if (!cm || !Number.isFinite(p.r) || p.entryDate === first || !axisSet.has(p.entryDate) || !axisSet.has(p.exitDate)) continue;
+    let pe = 1;
+    for (let k = 1; k < axis.length; k++) {
+      const D = axis[k]; if (p.entryDate <= D && p.exitDate >= D) pe *= (1 + positionDailyReturn(p, D, axis[k - 1], cm));
+    }
+    maxAbsError = Math.max(maxAbsError, Math.abs((pe - 1) - p.r)); checked++;
+  }
+  return { eq, mdd, curve, dr, exposSum, reconciliation: { checked, maxAbsError: +maxAbsError.toExponential(2) } };
 }
 
 async function mapLimit(items, limit, fn) {
@@ -478,18 +595,27 @@ function trainLogistic(samples, { lr = 0.3, lam = 0.02, iters = 500 } = {}) {
   }
   return { w, b };
 }
+// AUC via the Mann-Whitney U statistic with TIE CORRECTION: tied predictions must share the
+// AVERAGE of their ranks, else many identical scores (common with binary-flag models) bias the
+// AUC. Reuses lib/rankquality.averageRanks so there is one tie-handling implementation.
 function aucRank(scored) {
-  const s = [...scored].sort((a, b) => a.p - b.p);
-  let rankSum = 0, np = 0;
-  for (let i = 0; i < s.length; i++) { if (s[i].y === 1) { rankSum += i + 1; np++; } }
-  const nn = s.length - np;
-  return (np && nn) ? +(((rankSum - np * (np + 1) / 2) / (np * nn))).toFixed(3) : 0.5;
+  const np = scored.filter(s => s.y === 1).length;
+  const nn = scored.length - np;
+  if (!np || !nn) return 0.5;
+  const ranks = averageRanks(scored.map(s => s.p));   // 1-based, tie-averaged
+  let rankSum = 0;
+  for (let i = 0; i < scored.length; i++) if (scored[i].y === 1) rankSum += ranks[i];
+  return +(((rankSum - np * (np + 1) / 2) / (np * nn))).toFixed(3);
 }
 
 async function backtestMode(req, res) {
   const scope = (req.query.scope || 'large').toLowerCase();
-  const months = Math.min(12, Math.max(3, parseInt(req.query.months, 10) || 6));
-  const list = scope === 'micro' ? MICRO_CAPS : scope === 'small' ? SMALL_CAPS : LARGE;
+  // Up to 54mo (matches walkforwardMode) so the window spans multiple regimes (audit #2) AND the
+  // ?pit=1 as-of date reaches back into the security master's ≤5yr S&P delisting window, letting
+  // real delisted names surface. Default stays 6mo, so normal traffic is unchanged.
+  const months = Math.min(54, Math.max(3, parseInt(req.query.months, 10) || 6));
+  const baseList = scope === 'micro' ? MICRO_CAPS : scope === 'small' ? SMALL_CAPS : LARGE;
+  const { list, pit } = await resolvePitUniverse(baseList, months, req.query.pit === '1', scope);
   const opts = optsFor(scope);
 
   try {
@@ -497,9 +623,14 @@ async function backtestMode(req, res) {
     const spyClose = {}; if (spy) for (const d in spy.byDate) spyClose[d] = spy.byDate[d].close;
     const trades = [];   // { tier, date, r, excess, won, hold, regime, feat }
     let names = 0, instances = 0;
+    // Data coverage of the re-added delisted names — quantifies the survivorship gap honestly
+    // (a delisted name with no free candle data still cannot be traded, so we count it).
+    const addedSet = new Set((pit && pit.addedFull) || []);
+    let addedWithData = 0, addedNoData = 0;
 
     await mapLimit([...new Set(list)], 16, async (t) => {
       const data = await fetchDailyHistory(t);
+      if (addedSet.has(t)) { if (data && data.candles && data.candles.length) addedWithData++; else addedNoData++; }
       if (!data) return;
       const c = data.candles, n = c.length;
       if (n < 180) return;
@@ -583,9 +714,18 @@ async function backtestMode(req, res) {
       };
     }
 
+    // Finalize the point-in-time universe report with delisted-name data coverage.
+    let pitOut = pit;
+    if (pit && pit.enabled) {
+      const { addedFull, ...rest } = pit;   // strip the internal full list from the response
+      pitOut = pit.built ? { ...rest, addedWithData, addedNoData } : rest;
+    }
+
     res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
     return res.json({
       scope, months, names, instances,
+      universe: { source: pit && pit.applied ? 'point-in-time (augmented)' : 'present-day static', size: [...new Set(list)].length, survivorshipSafe: false },
+      pit: pitOut,
       exits: { stopATR: STOP_ATR, targetATR: TGT_ATR, maxHold: MAX_HOLD },
       execution: { policy: POLICIES.NEXT_OPEN_PLUS_SLIPPAGE, entry: 'next-open+slippage', tier: tierForScope(scope), policyVersion: EXECUTION_POLICY_VERSION },
       version: BACKTEST_VERSION,
@@ -600,8 +740,9 @@ async function backtestMode(req, res) {
 // Portfolio simulation — top-N concurrent equal-weight positions, daily MTM, vs SPY.
 async function portfolioMode(req, res) {
   const scope = (req.query.scope || 'large').toLowerCase();
-  const months = Math.min(12, Math.max(3, parseInt(req.query.months, 10) || 6));
-  const list = scope === 'micro' ? MICRO_CAPS : scope === 'small' ? SMALL_CAPS : LARGE;
+  const months = Math.min(54, Math.max(3, parseInt(req.query.months, 10) || 6));   // see backtestMode
+  const baseList = scope === 'micro' ? MICRO_CAPS : scope === 'small' ? SMALL_CAPS : LARGE;
+  const { list, pit } = await resolvePitUniverse(baseList, months, req.query.pit === '1', scope);
   const opts = optsFor(scope);
   const maxPos = scope === 'large' ? 10 : 6;
   const TIER_RANK = { Breakout: 0, Setup: 1, Early: 2 };
@@ -637,7 +778,7 @@ async function portfolioMode(req, res) {
         // its exit date comes from the same ATR stop/target scan off the realistic entry.
         const sim = simAtrTrade(c, closes, highs, lows, atr, i, tierForScope(scope));
         if (!sim) continue;
-        entries.push({ name: t, entryDate: sim.fillDate, exitDate: sim.exitDate, tier: e.status });
+        entries.push({ name: t, entryDate: sim.fillDate, exitDate: sim.exitDate, tier: e.status, entry: sim.entry, r: sim.r });
       }
     });
 
@@ -645,15 +786,8 @@ async function portfolioMode(req, res) {
     const accepted = [];
     for (const e of entries) { if (accepted.filter(p => p.exitDate > e.entryDate).length < maxPos) accepted.push(e); }
 
-    let eq = 1, peak = 1, mdd = 0, exposSum = 0; const curve = [], dr = [];
-    for (let k = 1; k < axis.length; k++) {
-      const D = axis[k], P = axis[k - 1];
-      const held = accepted.filter(p => p.entryDate < D && p.exitDate >= D);
-      let ret = 0;
-      held.forEach(p => { const cm = closeMaps[p.name]; if (!cm) return; const cD = cm[D], cP = cm[P]; if (cD > 0 && cP > 0) ret += (1 / maxPos) * (cD / cP - 1); });
-      eq *= (1 + ret); peak = Math.max(peak, eq); mdd = Math.min(mdd, (eq - peak) / peak);
-      curve.push({ date: D, v: +eq.toFixed(4) }); dr.push(ret); exposSum += held.length / maxPos;
-    }
+    const port = simulatePortfolio(accepted, axis, closeMaps, maxPos);
+    const { eq, mdd, curve, dr, exposSum } = port;
     let seq = 1, speak = 1, smdd = 0; const scurve = [], sdr = [];
     for (let k = 1; k < axis.length; k++) {
       const D = axis[k], P = axis[k - 1], cD = spyClose[D], cP = spyClose[P];
@@ -667,15 +801,19 @@ async function portfolioMode(req, res) {
     const cagr = eqv => +((Math.pow(Math.max(0.01, eqv), ann / nDays) - 1) * 100).toFixed(1);
     const sample = arr => { const step = Math.max(1, Math.ceil(arr.length / 120)); return arr.filter((_, i) => i % step === 0 || i === arr.length - 1); };
 
+    const pitOut = pit && pit.enabled ? (({ addedFull, ...rest }) => rest)(pit) : pit;
     res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
     return res.json({
       scope, months, maxPos, trades: accepted.length, signals: entries.length,
+      universe: { source: pit && pit.applied ? 'point-in-time (augmented)' : 'present-day static', size: [...new Set(list)].length, survivorshipSafe: false },
+      pit: pitOut,
       execution: { policy: POLICIES.NEXT_OPEN_PLUS_SLIPPAGE, entry: 'next-open+slippage', tier: tierForScope(scope), policyVersion: EXECUTION_POLICY_VERSION },
       version: BACKTEST_VERSION,
       stats: {
         totalReturn: +((eq - 1) * 100).toFixed(1), cagr: cagr(eq), sharpe: sharpe(dr), maxDD: +(mdd * 100).toFixed(1), exposure: +(exposSum / nDays * 100).toFixed(0),
         spyReturn: +((seq - 1) * 100).toFixed(1), spyCagr: cagr(seq), spySharpe: sharpe(sdr), spyMaxDD: +(smdd * 100).toFixed(1),
       },
+      accounting: { entry: 'fill-day open→close included; barrier exits realized at the stop/target price (not the close)', reconciliation: port.reconciliation },
       curve: sample(curve), spyCurve: sample(scurve),
       generatedAt: new Date().toISOString(),
     });
@@ -716,6 +854,9 @@ module.exports = function handler(req, res) {
 };
 // Exposed for tests — the next-open trade simulator and version marker.
 module.exports.simAtrTrade = simAtrTrade;
+module.exports.resolvePitUniverse = resolvePitUniverse;
+module.exports.simulatePortfolio = simulatePortfolio;
+module.exports.positionDailyReturn = positionDailyReturn;
 module.exports.BACKTEST_VERSION = BACKTEST_VERSION;
 module.exports.STOP_ATR = STOP_ATR;
 module.exports.TGT_ATR = TGT_ATR;
@@ -2323,12 +2464,14 @@ const PRIVILEGED_OPS = new Set([
   // master. State-changing (append to the run ledger / overwrite the master doc),
   // dispatched by the daily cron with the internal bearer.
   'runmanifest', 'secmasterbuild',
+  // Challenger shadow ledger WRITES (log predictions PIT / append forward outcomes).
+  'challengerlog', 'challengerresolve',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
-  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'redundancy', 'leadtime', 'failuremodel', 'complab',
+  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'redundancy', 'leadtime', 'failuremodel', 'complab', 'challengereval', 'router',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -2342,6 +2485,9 @@ const SHARED_FORCE_OPS = new Set([
   // only. Rate-limiting alone wasn't enough: 6/min per IP of a 200+ ticker rebuild is still
   // a cheap way to burn the function budget.
   'redundancy',
+  // router: cached read public (the shadow health panel reads it); force=1 runs buildRows
+  // (candle refetch per ledger ticker) — trusted only. The route also self-gates force.
+  'router',
 ]);
 // Ingest endpoints: POST-only + their own token/secret gate inside the route.
 const INGEST_OPS = new Set(['insideringest', 'alertsingest']);
@@ -2472,6 +2618,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'rankquality') return runRankQuality(req, res);
   if (req.query.op === 'redundancy') return require('../lib/redundancy-routes').runRedundancy(req, res);
   if (req.query.op === 'maturity') return require('../lib/maturity-routes').runMaturity(req, res);
+  if (req.query.op === 'router') return require('../lib/algo-router-routes').runRouter(req, res);
   if (req.query.op === 'baselines') return require('../lib/baselines-routes').runBaselines(req, res);
   if (req.query.op === 'recalibrate') return runRecalibrate(req, res);
   if (req.query.op === 'backfill') return runBackfillOp(req, res);
@@ -2531,6 +2678,12 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'omegamodel') return require('../lib/omega-swing-routes').runOmegaModel(req, res);
   if (req.query.op === 'omegawf') return require('../lib/omega-swing-routes').runOmegaWf(req, res);
   if (req.query.op === 'omegabackfill') return require('../lib/omega-swing-routes').runOmegaBackfillOp(req, res);
+  // 🧪 Challenger decision system (shadow-only, challenger-decision-v1). Read is public;
+  // log/resolve are cron-only WRITES; eval is a heavy recompute.
+  if (req.query.op === 'challenger') return require('../lib/challenger-routes').runChallenger(req, res);
+  if (req.query.op === 'challengerlog') return require('../lib/challenger-routes').runChallengerLog(req, res);
+  if (req.query.op === 'challengerresolve') return require('../lib/challenger-routes').runChallengerResolve(req, res);
+  if (req.query.op === 'challengereval') return require('../lib/challenger-routes').runChallengerEval(req, res);
   return runScoreboard(req, res);
 };
 
@@ -3416,6 +3569,710 @@ function analyzeEdge(entries) {
 }
 
 module.exports = { CFG, rankPosts, gradeExcess, analyzeEdge, accountWeight, tickerDirections, scoreSegment, clusterPosts, dedup, isAlert, normalize, mineText };
+
+``````
+
+## lib/algo-health.js
+
+``````javascript
+'use strict';
+
+// Algorithm Effectiveness Monitor (algo-health-v1)
+// ------------------------------------------------
+// Pure statistics + classification for "which algorithms are working NOW". Given each
+// algorithm's resolved, genuinely-out-of-sample record (a series of per-decision-date
+// SPY-relative excess returns) plus optional long-term skill, regime compatibility,
+// calibration and independence, it emits a health verdict on the seven-state ladder the
+// spec requires — each verdict carrying an estimate, a confidence interval, an effective
+// sample size, and a plain reason.
+//
+// Deliberately I/O-free and clock-free: the route (lib/algo-router-routes.js) assembles the
+// inputs from cached ledgers/artifacts and stamps timestamps. This module only reasons, so
+// every classification is deterministic and unit-testable.
+//
+// Reuses (never reimplements): the Wilson interval from lib/stats.js — the same CI the
+// evidence-maturity grader already trusts — so a "STRONG" here is comparable to a
+// "Validated" there, not a second, incompatible notion of significance.
+
+const { wilson } = require('./stats');
+
+const HEALTH_VERSION = 'algo-health-v1';
+
+// Seven-state ladder (spec). Ordered best→worst for display; `weight` is the *health*
+// multiplier the router applies (long-term skill, regime fit, etc. are separate factors).
+const HEALTH_STATES = {
+  STRONG:       { rank: 0, weight: 1.00, label: 'Strong',       blurb: 'Positive recent AND long-term OOS edge, acceptable calibration.' },
+  SUPPORTED:    { rank: 1, weight: 0.70, label: 'Supported',    blurb: 'Historically valid and compatible with current conditions.' },
+  WATCH:        { rank: 2, weight: 0.30, label: 'Watch',        blurb: 'Promising but statistically uncertain.' },
+  DEGRADING:    { rank: 3, weight: 0.15, label: 'Degrading',    blurb: 'Recent deterioration beyond expected noise.' },
+  INCOMPATIBLE: { rank: 4, weight: 0.05, label: 'Incompatible', blurb: 'Current regime differs materially from where it worked.' },
+  BROKEN:       { rank: 5, weight: 0.00, label: 'Broken',       blurb: 'Persistent negative OOS evidence or calibration failure.' },
+  UNKNOWN:      { rank: 6, weight: 0.00, label: 'Unknown',      blurb: 'Insufficient independent data to judge.' },
+};
+
+// Rolling/expanding windows, in DISTINCT decision dates (not raw picks — overlapping
+// same-date picks are not independent observations).
+const WINDOWS = Object.freeze({ veryRecent: 20, recent: 60, medium: 126, long: 252 });
+
+// Evidence gates.
+const MIN_EFF_N = 8;      // below this → UNKNOWN (can't tell)
+const MIN_STRONG_N = 20;  // STRONG requires at least this many independent dates
+const BREAKEVEN = 0.5;    // beat-rate breakeven (excess>0 half the time = coin flip)
+const REGIME_INCOMPAT = 0.35; // current-regime compatibility below this ⇒ INCOMPATIBLE (if long-term was good)
+const SUPPORT_COMPAT = 0.45;  // compatibility a SUPPORTED verdict needs when recent data is thin
+
+const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+const isNum = (x) => typeof x === 'number' && Number.isFinite(x);
+
+// Sorted list of the distinct decision dates present in a resolved series.
+function distinctDates(series) {
+  const s = new Set();
+  for (const r of series) if (r && r.date && isNum(r.excess)) s.add(r.date);
+  return [...s].sort();
+}
+
+// Slice a series down to the rows falling on the most recent `nDates` distinct dates.
+function windowSlice(series, nDates) {
+  const dates = distinctDates(series);
+  if (!dates.length) return [];
+  const keep = new Set(dates.slice(Math.max(0, dates.length - nDates)));
+  return series.filter((r) => r && keep.has(r.date) && isNum(r.excess));
+}
+
+// Reduce a set of resolved rows to a conservative summary. `effN` is the count of DISTINCT
+// dates, not rows: two picks on the same day share the day's market shock and are not two
+// independent bets, so the Wilson CI is taken over independent dates, never inflated row
+// counts. `beatRate` is measured over rows (the per-pick hit rate) but its interval is
+// widened to the independent-date sample.
+function summarize(rows) {
+  const resolved = rows.filter((r) => r && isNum(r.excess));
+  const n = resolved.length;
+  if (!n) return { n: 0, effN: 0, avgExcess: null, beatRate: null, ci: { lo: 0, hi: 0 }, ready: false };
+  const effN = new Set(resolved.map((r) => r.date)).size;
+  const avgExcess = resolved.reduce((a, r) => a + r.excess, 0) / n;
+  const beats = resolved.filter((r) => r.excess > 0).length;
+  const beatRate = beats / n;
+  // CI on the beat-rate over INDEPENDENT dates (round the fractional win count to the
+  // effective sample so a 30-pick/6-date algo isn't scored as 30 independent trials).
+  const winEff = Math.round(beatRate * effN);
+  const ci = wilson(winEff, effN);
+  return { n, effN, avgExcess: +avgExcess.toFixed(4), beatRate: +beatRate.toFixed(3), ci, ready: effN >= MIN_EFF_N };
+}
+
+// Recent-vs-long drift verdict. Deliberately conservative: we only call something
+// DEGRADING when the recent independent-date interval sits clearly below breakeven while
+// the long-term interval was clearly above it — i.e. the deterioration is larger than the
+// sample noise, not a short losing streak. Mirror logic flags 'improving'.
+function driftVerdict(recent, long) {
+  if (!recent || !long || !recent.ready || !long.ready) return 'unknown';
+  const recentBad = recent.ci.hi < BREAKEVEN || (isNum(recent.avgExcess) && recent.avgExcess < 0 && recent.ci.hi < BREAKEVEN + 0.05);
+  const longGood = long.ci.lo > BREAKEVEN || (isNum(long.avgExcess) && long.avgExcess > 0 && long.ci.lo > BREAKEVEN - 0.05);
+  if (recentBad && longGood) return 'degrading';
+  const recentGood = recent.ci.lo > BREAKEVEN;
+  const longWeak = long.ci.lo <= BREAKEVEN;
+  if (recentGood && longWeak) return 'improving';
+  return 'stable';
+}
+
+// Width of a Wilson interval → an uncertainty penalty in (0,1]. A tight interval (lots of
+// consistent evidence) → ~1; a wide one (thin/noisy) → small. Used by the router.
+function certaintyFrom(summary) {
+  if (!summary || !summary.ready) return 0.2;
+  const width = clamp01(summary.ci.hi - summary.ci.lo);
+  return clamp01(1 - width); // width 0 → 1, width 1 → 0
+}
+
+// Calibration quality → (0..1]. Accepts { brier, slope } where slope≈1 is well-calibrated.
+// null ⇒ neutral-unknown (0.7) and a limitation is recorded by the caller.
+function calibrationQuality(cal) {
+  if (!cal) return null;
+  let q = 1;
+  if (isNum(cal.brier)) q *= clamp01(1 - cal.brier); // brier 0 → 1, 0.25 → 0.75
+  if (isNum(cal.slope)) q *= clamp01(1 - Math.min(1, Math.abs(cal.slope - 1))); // slope 1 → 1
+  return +clamp01(q).toFixed(3);
+}
+
+// The core classifier for one algorithm.
+//
+// inputs:
+//   id                 stable algorithm id
+//   series             [{ date, excess }] resolved OOS records (excess = SPY-relative return)
+//   longTerm           optional pre-aggregated long-term skill {effN, avgExcess, ci:{lo,hi}}
+//                      (e.g. from the persisted Scoreboard); if omitted, the long window of
+//                      `series` is used.
+//   regimeCompatibility  0..1 similarity of the CURRENT regime to where this algo worked
+//                        (null = unknown → not penalised, but flagged)
+//   calibration        { brier, slope } | null
+//   independence       0..1 fraction of this algo's evidence that is NOT a restatement of a
+//                      correlated sibling (null = unknown → 0.7)
+function classifyAlgo(input) {
+  const {
+    id = null, series = [], longTerm = null,
+    regimeCompatibility = null, calibration = null, independence = null,
+  } = input || {};
+
+  const limitations = [];
+  const w = {
+    veryRecent: summarize(windowSlice(series, WINDOWS.veryRecent)),
+    recent: summarize(windowSlice(series, WINDOWS.recent)),
+    medium: summarize(windowSlice(series, WINDOWS.medium)),
+    long: summarize(windowSlice(series, WINDOWS.long)),
+  };
+  // Long-term skill: prefer an externally supplied aggregate (larger history than the
+  // 252-date price series we can cheaply reconstruct), else the long window.
+  const longSkill = (longTerm && isNum(longTerm.effN)) ? longTerm : w.long;
+  const effectiveSampleSize = longSkill.effN || 0;
+  const drift = driftVerdict(w.recent, longSkill);
+  const calQ = calibrationQuality(calibration);
+  if (calibration == null) limitations.push('calibration unmeasured');
+  if (regimeCompatibility == null) limitations.push('regime compatibility unmeasured');
+  if (independence == null) limitations.push('independence unmeasured');
+
+  const longPositive = isNum(longSkill.avgExcess) && longSkill.avgExcess > 0 && longSkill.ci.lo > BREAKEVEN - 0.05;
+  const longClearlyGood = longSkill.ci && longSkill.ci.lo > BREAKEVEN && isNum(longSkill.avgExcess) && longSkill.avgExcess > 0;
+  const longClearlyBad = longSkill.ci && longSkill.ci.hi < BREAKEVEN && isNum(longSkill.avgExcess) && longSkill.avgExcess < 0;
+  const calFailure = isNum(calQ) && calQ < 0.4;
+
+  let health, reason;
+  if (effectiveSampleSize < MIN_EFF_N) {
+    health = 'UNKNOWN';
+    reason = `Only ${effectiveSampleSize} independent decision dates (< ${MIN_EFF_N}); not enough to judge.`;
+  } else if (longClearlyBad || calFailure) {
+    health = 'BROKEN';
+    reason = calFailure
+      ? `Calibration failure (quality ${calQ}); predictions are not trustworthy.`
+      : `Long-term edge is negative with the interval below breakeven (avg ${longSkill.avgExcess}).`;
+  } else if (regimeCompatibility != null && regimeCompatibility < REGIME_INCOMPAT && longPositive) {
+    health = 'INCOMPATIBLE';
+    reason = `Worked historically but the current regime resembles its successful conditions only ${(regimeCompatibility * 100).toFixed(0)}%.`;
+  } else if (drift === 'degrading') {
+    health = 'DEGRADING';
+    reason = `Recent ${w.recent.effN}-date window fell below breakeven while the long record was positive.`;
+  } else if (longClearlyGood && effectiveSampleSize >= MIN_STRONG_N && drift !== 'degrading' && !(isNum(calQ) && calQ < 0.5)) {
+    health = 'STRONG';
+    reason = `Long-term beat-rate interval clears breakeven (${longSkill.ci.lo.toFixed(2)}–${longSkill.ci.hi.toFixed(2)}) over ${effectiveSampleSize} dates; recent not degrading.`;
+  } else if (longPositive && (regimeCompatibility == null || regimeCompatibility >= SUPPORT_COMPAT)) {
+    health = 'SUPPORTED';
+    reason = `Positive long-term edge and compatible with current conditions, but evidence is not yet strong enough for STRONG.`;
+  } else {
+    health = 'WATCH';
+    reason = `Edge is uncertain — positive signs but the interval straddles breakeven.`;
+  }
+
+  return {
+    version: HEALTH_VERSION,
+    id,
+    health,
+    estimate: { avgExcess: longSkill.avgExcess ?? null, beatRate: longSkill.beatRate ?? null },
+    ci: longSkill.ci || { lo: 0, hi: 0 },
+    effectiveSampleSize,
+    windows: w,
+    drift,
+    expectedNetEdge: longSkill.avgExcess ?? null,
+    calibrationQuality: calQ,
+    regimeCompatibility: regimeCompatibility != null ? +clamp01(regimeCompatibility).toFixed(3) : null,
+    independentContribution: independence != null ? +clamp01(independence).toFixed(3) : null,
+    certainty: +certaintyFrom(longSkill).toFixed(3),
+    reason,
+    limitations,
+  };
+}
+
+module.exports = {
+  HEALTH_VERSION, HEALTH_STATES, WINDOWS,
+  MIN_EFF_N, MIN_STRONG_N, BREAKEVEN, REGIME_INCOMPAT,
+  distinctDates, windowSlice, summarize, driftVerdict,
+  certaintyFrom, calibrationQuality, classifyAlgo,
+};
+
+``````
+
+## lib/algo-router-routes.js
+
+``````javascript
+'use strict';
+
+// op=router — the Algorithm Effectiveness Monitor + conservative Market-Regime Router,
+// surfaced as ONE shadow payload. It reads only cached artifacts and the live forward
+// ledger; it does NOT touch the live rank (lib/decision.js). Its output is diagnostic:
+// "which algorithms are working now, which are degrading, how much focus each deserves".
+//
+// Reuses, never reimplements:
+//   • long-term skill  ← lib/maturity.classifyStrategies over scoreboard/summary.json
+//     (the same Wilson-CI track record the Evidence board already trusts)
+//   • independence     ← the cached measured redundancy model (apex/redundancy.json)
+//   • current regime   ← lib/macro.fetchMacro (VIX + credit), + buildMacroLookup for the
+//                        per-date regime buckets used to score regime compatibility
+//   • recent series    ← lib/redundancy-routes.buildRows (force/cron only — it refetches
+//                        candles, so it is trusted-only, exactly like op=redundancy)
+//   • the reasoning    ← lib/algo-health (Monitor) + lib/algo-router (Router), both pure
+//
+// Persistence: the Router advances a small state doc (router/latest.json: current weights +
+// cooldowns) ONLY on a trusted/force run, so hysteresis progresses once per cron tick and
+// anonymous reads simply display the last persisted state recomputed against fresh health.
+
+const { hasStore, readJSON, writeJSON } = require('./store');
+const { classifyStrategies, MATURITY_VERSION } = require('./maturity');
+const { STRATEGY_REGISTRY } = require('./strategy-registry');
+const { loadRedundancyModel, buildRows } = require('./redundancy-routes');
+const { creditFor } = require('./redundancy');
+const { fetchMacro, buildMacroLookup } = require('./macro');
+const { classifyAlgo, HEALTH_STATES, HEALTH_VERSION } = require('./algo-health');
+const { routeWeights, ROUTER_VERSION } = require('./algo-router');
+const { isTrusted } = require('./auth');
+
+const STATE_DOC = 'router/latest.json';
+
+// Coarse correlated-cluster map keyed by registry id. Kept LOCAL and explicit rather than
+// bridging the three overlapping id spaces (registry id / scoreboard section / decision
+// source) — a documented family table is less fragile than a chain of lookups. Anything
+// unlisted is its own family (no shared cap). Clusters reflect the measured redundancy work
+// (e.g. ghost×screener ≈ 0.96 correlated → same price-momentum family).
+const FAMILY = {
+  screener: 'price-momentum', momentum: 'price-momentum', ghost: 'price-momentum',
+  coil: 'price-momentum', custom: 'price-momentum', biotech: 'price-momentum',
+  gapgo: 'intraday-event', daytrade: 'intraday-event', gapdown: 'intraday-event',
+  events: 'catalyst', readthrough: 'catalyst', secondwave: 'catalyst',
+  downday: 'mean-reversion', fade: 'mean-reversion',
+  crossasset: 'sentiment-context', toneshift: 'sentiment-context', tone: 'sentiment-context',
+  anomaly: 'sentiment-context', attention: 'sentiment-context',
+};
+const familyOf = (id) => FAMILY[id] || id;
+
+// Map a maturity `stats` block (percent scale, 0–100 beat-rate) onto the long-term skill
+// shape lib/algo-health expects (0–1 beat-rate + CI). avgExcess sign is what matters for
+// classification; its magnitude is reported verbatim.
+function longTermFromStats(stats) {
+  if (!stats || typeof stats.excessN !== 'number') return null;
+  const pct = (x) => (typeof x === 'number' ? x / 100 : null);
+  return {
+    effN: stats.excessN,
+    avgExcess: typeof stats.avgExcess === 'number' ? stats.avgExcess : null,
+    beatRate: pct(stats.beatMktRate),
+    ci: { lo: pct(stats.beatLo) ?? 0, hi: pct(stats.beatHi) ?? 1 },
+    ready: stats.excessN >= 8,
+  };
+}
+
+// Independence in [0,1] for one algorithm: the MINIMUM measured credit against any sibling
+// it actually co-fires with (most conservative). null when no pair is measurable → the
+// Monitor treats it as unknown. `creditFor` returns a family prior for unmeasured pairs, so
+// we only count pairs present in the model's measured `credits` map.
+function independenceFor(model, id, allIds) {
+  if (!model || !model.credits) return null;
+  let min = null;
+  for (const other of allIds) {
+    if (other === id) continue;
+    const key = [id, other].sort().join('|');
+    if (!(key in model.credits)) continue;
+    const c = creditFor(model, id, other);
+    if (typeof c === 'number') min = min == null ? c : Math.min(min, c);
+  }
+  return min;
+}
+
+// Regime compatibility in [0,1]: bucket an algorithm's resolved excess by the macro regime
+// in force AT each pick date, then score how the CURRENT regime bucket ranks among the
+// three. An algo that only paid in risk-on tape scores low when today is risk-off. null when
+// the current bucket has too little history to judge.
+function regimeCompatFor(series, macroLU, currentRegime) {
+  if (!series || !series.length || !macroLU || !currentRegime) return null;
+  const buckets = { 'risk-on': [], neutral: [], 'risk-off': [] };
+  for (const r of series) {
+    if (typeof r.excess !== 'number') continue;
+    const st = macroLU.at(r.date);
+    if (st && buckets[st.regime]) buckets[st.regime].push(r.excess);
+  }
+  const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+  const cur = buckets[currentRegime];
+  if (!cur || cur.length < 3) return null; // not enough same-regime history
+  const means = Object.values(buckets).map(avg).filter((x) => x != null);
+  if (means.length < 2) return null;
+  const lo = Math.min(...means), hi = Math.max(...means), curM = avg(cur);
+  if (hi === lo) return 0.5;
+  return Math.max(0, Math.min(1, (curM - lo) / (hi - lo)));
+}
+
+// Coarse market-state probability vector from the macro read. Not the full 13-dim regime
+// vector (that needs index+sector fetches) — a documented proxy, flagged as such.
+function marketBlock(macroNow, prevRegime) {
+  if (!macroNow) {
+    return { states: [], confidence: 0, changedRecently: false, evidence: [], note: 'macro feed unavailable' };
+  }
+  const off = Math.max(0, Math.min(1, macroNow.macroRisk / 100));
+  const on = Math.max(0, 1 - off - 0.15);
+  const neutral = Math.max(0, 1 - off - on);
+  const norm = off + on + neutral || 1;
+  const states = [
+    { name: 'risk-off', probability: +(off / norm).toFixed(2) },
+    { name: 'neutral', probability: +(neutral / norm).toFixed(2) },
+    { name: 'risk-on', probability: +(on / norm).toFixed(2) },
+  ].sort((a, b) => b.probability - a.probability);
+  return {
+    states,
+    dominant: macroNow.regime,
+    confidence: +Math.max(...states.map((s) => s.probability)).toFixed(2),
+    changedRecently: prevRegime != null && prevRegime !== macroNow.regime,
+    evidence: [
+      `VIX ${macroNow.vix.level} (${macroNow.vix.pctile}th pctile${macroNow.vix.rising ? ', rising' : ''})`,
+      `credit trend ${macroNow.credit.trend20}%${macroNow.credit.belowSma ? ' (below 50d)' : ''}`,
+      `macro-risk ${macroNow.macroRisk}/100`,
+    ],
+    note: 'coarse VIX+credit proxy, not the full 13-axis regime vector',
+  };
+}
+
+async function runRouter(req, res) {
+  const configured = hasStore();
+  const trusted = isTrusted(req);
+  const force = trusted && (req.query.force === '1' || req.query.force === 'true');
+
+  if (!configured) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: true, configured: false, note: 'no store configured — router is inert', version: ROUTER_VERSION });
+  }
+
+  // ── inputs (all cached / cheap, except buildRows behind `force`) ──
+  const [summary, redModel, prior, macroNow] = await Promise.all([
+    readJSON('scoreboard/summary.json', null).catch(() => null),
+    loadRedundancyModel().catch(() => null),
+    readJSON(STATE_DOC, null).catch(() => null),
+    fetchMacro().catch(() => null),
+  ]);
+
+  const classified = classifyStrategies(summary || { groups: [] }, STRATEGY_REGISTRY);
+  const signals = classified.strategies.filter((s) => s.kind === 'signal');
+  const allIds = signals.map((s) => s.id);
+
+  // Recent per-date series + regime buckets — trusted/force only (refetches candles).
+  let seriesByAlgo = {};
+  let macroLU = null;
+  let seriesBuilt = false;
+  if (force) {
+    try {
+      const { rows } = await buildRows({ limitTickers: 400 });
+      for (const r of rows) (seriesByAlgo[r.algorithm] = seriesByAlgo[r.algorithm] || []).push({ date: r.date, excess: r.excess });
+      macroLU = await buildMacroLookup('3y').catch(() => null);
+      seriesBuilt = true;
+    } catch { /* fall back to long-term-only health */ }
+  }
+
+  const priorState = { weights: (prior && prior.weights) || {}, cooldowns: (prior && prior.cooldowns) || {} };
+  const emergency = new Set(
+    (trusted && typeof req.query.emergency === 'string' ? req.query.emergency.split(',') : [])
+      .map((s) => s.trim()).filter(Boolean),
+  );
+
+  // ── Monitor: classify each signal algorithm's health ──
+  const healths = signals.map((s) => {
+    const series = seriesByAlgo[s.id] || [];
+    return classifyAlgo({
+      id: s.id,
+      series,
+      longTerm: longTermFromStats(s.stats),
+      regimeCompatibility: regimeCompatFor(series, macroLU, macroNow && macroNow.regime),
+      independence: independenceFor(redModel, s.id, allIds),
+      calibration: null, // live-ledger track record carries no per-pick probability yet
+    });
+  });
+
+  // ── Router: conservative weights ──
+  const routed = routeWeights(healths, { familyOf, prior: priorState, emergency });
+
+  // ── unified payload ──
+  const byId = new Map(healths.map((h) => [h.id, h]));
+  const metaById = new Map(signals.map((s) => [s.id, s]));
+  const algorithms = routed.weights.map((w) => {
+    const h = byId.get(w.id) || {};
+    const meta = metaById.get(w.id) || {};
+    return {
+      id: w.id,
+      label: meta.label || w.id,
+      horizon: meta.horizon || null,
+      health: h.health,
+      currentWeight: w.currentWeight,
+      targetWeight: w.targetWeight,
+      effectiveSampleSize: h.effectiveSampleSize || 0,
+      recentRankIC: null, // rank-IC needs per-pick scores; not yet in the forward ledger
+      longTermRankIC: null,
+      expectedNetEdge: h.expectedNetEdge ?? null,
+      calibrationQuality: h.calibrationQuality ?? null,
+      regimeCompatibility: h.regimeCompatibility ?? null,
+      independentContribution: h.independentContribution ?? null,
+      reason: h.reason || '',
+      weightNote: w.note,
+      limitations: h.limitations || [],
+    };
+  });
+
+  const favored = algorithms.filter((a) => a.currentWeight > 0.05).map((a) => a.id);
+  const reduced = routed.weights.filter((w) => w.currentWeight < w.priorWeight - 1e-6).map((w) => w.id);
+  const disabled = algorithms.filter((a) => a.currentWeight === 0 && (a.health === 'BROKEN' || a.health === 'UNKNOWN')).map((a) => a.id);
+
+  const explanation = routed.abstain
+    ? 'No algorithm has a positive conservative edge in current conditions — the system abstains and trades less.'
+    : `${favored.length} algorithm(s) favored; focus shifts gradually (≤${(routed.caps.maxStepUp * 100).toFixed(0)}%/run up, ≤${(routed.caps.maxStepDown * 100).toFixed(0)}%/run down).`;
+
+  const payload = {
+    ok: true,
+    configured: true,
+    version: { router: ROUTER_VERSION, health: HEALTH_VERSION, maturity: MATURITY_VERSION },
+    generatedAt: new Date().toISOString(),
+    shadow: true,
+    currentMarket: marketBlock(macroNow, prior && prior.marketRegime),
+    algorithms,
+    focus: {
+      favoredAlgorithms: favored,
+      reducedAlgorithms: reduced,
+      disabledAlgorithms: disabled,
+      abstain: routed.abstain,
+      totalWeight: routed.totalWeight,
+      unallocated: routed.unallocated,
+      explanation,
+    },
+    router: { caps: routed.caps, cappedFamilies: routed.cappedFamilies },
+    // The raw persisted hysteresis state doc (router/latest.json) exactly as last written by
+    // a trusted force run: { version, savedAt, marketRegime, weights, cooldowns }. null until
+    // the first cron populate. Pure diagnostic — no secrets — so it is safe to echo publicly.
+    persistedState: prior,
+    healthStates: HEALTH_STATES,
+    validity: {
+      survivorshipSafe: false,
+      pointInTimeSafe: true, // picks are logged live at decision time
+      prospective: true,     // this is live-forward tracking, not a historical replay
+      seriesBuilt,
+      limitations: [
+        'Long-term skill is measured on the live forward ledger over a present-day universe (survivorship-unsafe).',
+        'Regime state is a coarse VIX+credit proxy, not the full 13-axis regime vector.',
+        seriesBuilt ? null : 'Recent-window drift not computed this run (per-date series is trusted/force-only).',
+        'No per-pick probabilities yet → calibration and rank-IC are unmeasured.',
+      ].filter(Boolean),
+    },
+  };
+
+  // Advance persisted router state ONLY on a trusted/force run (hysteresis progresses once
+  // per cron tick). Best-effort — never blocks the response.
+  if (force) {
+    const weights = {};
+    for (const w of routed.weights) weights[w.id] = w.currentWeight;
+    writeJSON(STATE_DOC, {
+      version: ROUTER_VERSION,
+      savedAt: payload.generatedAt,
+      marketRegime: macroNow && macroNow.regime,
+      weights,
+      cooldowns: routed.cooldowns,
+    }).catch(() => {});
+  }
+
+  res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=86400');
+  return res.json(payload);
+}
+
+module.exports = {
+  runRouter, longTermFromStats, independenceFor, regimeCompatFor, marketBlock, familyOf, FAMILY, STATE_DOC,
+};
+
+``````
+
+## lib/algo-router.js
+
+``````javascript
+'use strict';
+
+// Conservative Market-Regime Router (algo-router-v1)
+// --------------------------------------------------
+// Turns a set of Algorithm-Effectiveness-Monitor verdicts (lib/algo-health.js) into a
+// per-algorithm emphasis weight. The whole point is to shift focus toward what is working
+// NOW *without* chasing whichever algorithm happened to win a few recent trades. Every
+// mechanism here exists to make the shift cautious:
+//
+//   weight = positiveValidatedSkill        (shrunk toward zero by effective sample size)
+//          × regimeCompatibility            (how much now looks like where it worked)
+//          × healthMultiplier               (STRONG..BROKEN ladder)
+//          × calibrationMultiplier
+//          × independenceMultiplier         (correlated siblings share an evidence budget)
+//          × executionMultiplier
+//          × uncertaintyMultiplier          (wide CI ⇒ small weight)
+//
+//   then: per-algorithm cap · per-family cap · turnover-limited hysteresis vs the prior
+//         weights · cooldowns after degradation · emergency disable · all-zero ⇒ ABSTAIN.
+//
+// Pure and clock-free (deterministic, testable). Weights are NOT renormalised to 1 after
+// hysteresis: the unallocated remainder is honest "sit in cash / abstain", matching the
+// one-directional governance haircut in lib/allocation.js (freed capital → cash, never
+// force-reallocated).
+
+const { HEALTH_STATES } = require('./algo-health');
+
+const ROUTER_VERSION = 'algo-router-v1';
+
+const DEFAULT_CAPS = Object.freeze({
+  maxAlgo: 0.25,    // no single algorithm may own more than a quarter of the emphasis
+  maxFamily: 0.50,  // no evidence family (correlated cluster) may own more than half
+  maxStepUp: 0.10,  // per-run increase is turnover-limited (slow to add conviction)
+  maxStepDown: 0.20, // reductions may move twice as fast (quicker to cut a loser)
+  shrinkK: 10,      // skill shrinks toward zero: w = effN / (effN + shrinkK)
+  cooldownRuns: 3,  // after a DEGRADING/BROKEN verdict, block increases for N runs
+});
+
+const clamp = (x, lo, hi) => (x < lo ? lo : x > hi ? hi : x);
+const isNum = (x) => typeof x === 'number' && Number.isFinite(x);
+
+// Positive, validated skill in [0,1], shrunk toward zero by the effective sample size so a
+// tiny sample cannot claim a large edge. Requires BOTH a positive average excess and a
+// beat-rate above the coin-flip line — a lucky average on a losing hit-rate earns nothing.
+function validatedSkill(health, shrinkK) {
+  const est = health && health.estimate;
+  if (!est || !isNum(est.avgExcess) || est.avgExcess <= 0) return 0;
+  if (!isNum(est.beatRate) || est.beatRate <= 0.5) return 0;
+  const edge = clamp((est.beatRate - 0.5) * 2, 0, 1); // 0.5→0, 1.0→1
+  const effN = health.effectiveSampleSize || 0;
+  const shrink = effN / (effN + shrinkK);
+  return +clamp(edge * shrink, 0, 1).toFixed(4);
+}
+
+// Assemble the seven multipliers for one algorithm.
+function multipliersFor(health, execMult, shrinkK) {
+  return {
+    skill: validatedSkill(health, shrinkK),
+    regime: isNum(health.regimeCompatibility) ? clamp(health.regimeCompatibility, 0, 1) : 0.5,
+    health: (HEALTH_STATES[health.health] || { weight: 0 }).weight,
+    calibration: isNum(health.calibrationQuality) ? clamp(health.calibrationQuality, 0, 1) : 0.8,
+    independence: isNum(health.independentContribution) ? clamp(health.independentContribution, 0, 1) : 0.7,
+    execution: isNum(execMult) ? clamp(execMult, 0, 1) : 1,
+    uncertainty: isNum(health.certainty) ? clamp(health.certainty, 0, 1) : 0.5,
+  };
+}
+
+const productOf = (m) => m.skill * m.regime * m.health * m.calibration * m.independence * m.execution * m.uncertainty;
+
+// Scale down every member of any family whose target weights sum above the family cap, then
+// return the adjusted map. Applied to the normalised target vector.
+function applyFamilyCap(targets, familyOf, maxFamily) {
+  const byFamily = new Map();
+  for (const id of Object.keys(targets)) {
+    const f = familyOf(id);
+    byFamily.set(f, (byFamily.get(f) || 0) + targets[id]);
+  }
+  const capped = new Set();
+  const out = { ...targets };
+  for (const [f, sum] of byFamily) {
+    if (sum > maxFamily && sum > 0) {
+      const scale = maxFamily / sum;
+      for (const id of Object.keys(out)) if (familyOf(id) === f) { out[id] *= scale; capped.add(f); }
+    }
+  }
+  return { targets: out, cappedFamilies: capped };
+}
+
+// routeWeights(healths, opts)
+//   healths   : Array<classifyAlgo result>
+//   opts.prior: { weights: { id: number }, cooldowns: { id: runsRemaining } }
+//   opts.familyOf(id) -> family key (default: the id itself)
+//   opts.execOf(id)   -> 0..1 execution multiplier (default 1)
+//   opts.emergency    : Set<id> forced to weight 0 immediately (leakage / data failure)
+//   opts.caps         : partial override of DEFAULT_CAPS
+function routeWeights(healths, opts = {}) {
+  const caps = { ...DEFAULT_CAPS, ...(opts.caps || {}) };
+  const familyOf = opts.familyOf || ((id) => id);
+  const execOf = opts.execOf || (() => 1);
+  const emergency = opts.emergency instanceof Set ? opts.emergency : new Set(opts.emergency || []);
+  const prior = opts.prior || { weights: {}, cooldowns: {} };
+  const priorW = prior.weights || {};
+  const priorCd = prior.cooldowns || {};
+
+  const list = (healths || []).filter((h) => h && h.id != null);
+
+  // 1) raw multiplicative weight per algorithm (emergency / BROKEN / UNKNOWN → 0).
+  const rows = list.map((h) => {
+    const m = multipliersFor(h, execOf(h.id), caps.shrinkK);
+    const isEmergency = emergency.has(h.id);
+    const raw = isEmergency ? 0 : +productOf(m).toFixed(6);
+    return { h, id: h.id, family: familyOf(h.id), health: h.health, multipliers: m, rawWeight: raw, emergency: isEmergency };
+  });
+
+  // 2) abstain when no algorithm has a positive conservative estimate.
+  const rawSum = rows.reduce((a, r) => a + r.rawWeight, 0);
+  const abstain = rawSum <= 1e-9;
+
+  // 3) per-algorithm cap, then normalise the SURVIVORS to a target vector summing to 1.
+  const cappedRaw = {};
+  const cappedAlgo = new Set();
+  for (const r of rows) {
+    let v = r.rawWeight;
+    if (v > caps.maxAlgo) { v = caps.maxAlgo; cappedAlgo.add(r.id); }
+    cappedRaw[r.id] = v;
+  }
+  let targets = {};
+  const capSum = Object.values(cappedRaw).reduce((a, v) => a + v, 0);
+  for (const r of rows) targets[r.id] = abstain || capSum <= 0 ? 0 : cappedRaw[r.id] / capSum;
+
+  // 4) per-family cap. Deliberately NOT renormalised afterwards: the weight a correlated
+  //    cluster loses to its cap becomes UNALLOCATED (cash / abstain), never redistributed
+  //    back to that same cluster — the one-directional haircut philosophy of allocation.js.
+  //    Renormalising would re-inflate the capped family and defeat the cap.
+  let cappedFamilies = new Set();
+  if (!abstain) {
+    const res = applyFamilyCap(targets, familyOf, caps.maxFamily);
+    targets = res.targets;
+    res.cappedFamilies.forEach((f) => cappedFamilies.add(f));
+  }
+
+  // 5) hysteresis + cooldown + emergency → the actual current weight the app would use.
+  const nextCooldowns = {};
+  const weights = rows.map((r) => {
+    const priorWeight = +(priorW[r.id] || 0);
+    const target = +(targets[r.id] || 0).toFixed(4);
+    let current;
+    let note;
+
+    if (r.emergency || r.health === 'BROKEN') {
+      current = 0; // faster reduction is permitted when demonstrably harmful
+      note = r.emergency ? 'emergency disabled — snapped to 0' : 'BROKEN — snapped to 0';
+    } else {
+      const delta = target - priorWeight;
+      const step = delta >= 0 ? Math.min(delta, caps.maxStepUp) : Math.max(delta, -caps.maxStepDown);
+      current = priorWeight + step;
+      // Cooldown: a recently-degraded algo may not INCREASE, only hold or fall.
+      const cd = priorCd[r.id] || 0;
+      if (cd > 0 && current > priorWeight) { current = priorWeight; note = `cooldown (${cd}) — increase blocked`; }
+      else if (step >= 0 && delta > caps.maxStepUp) note = 'raising toward target (turnover-limited)';
+      else if (step < 0) note = 'reducing toward target';
+      else note = 'at/near target';
+    }
+    current = +clamp(current, 0, caps.maxAlgo).toFixed(4);
+
+    // Set / decay the cooldown counter for the NEXT run.
+    let cd = priorCd[r.id] || 0;
+    if (r.health === 'DEGRADING' || r.health === 'BROKEN') cd = caps.cooldownRuns;
+    else if (cd > 0) cd -= 1;
+    if (cd > 0) nextCooldowns[r.id] = cd;
+
+    return {
+      id: r.id, family: r.family, health: r.health,
+      priorWeight: +priorWeight.toFixed(4), rawWeight: r.rawWeight,
+      targetWeight: target, currentWeight: current,
+      cappedAlgo: cappedAlgo.has(r.id), cappedFamily: cappedFamilies.has(r.family),
+      cooldown: nextCooldowns[r.id] || 0, emergency: r.emergency,
+      multipliers: r.multipliers, note,
+    };
+  });
+
+  const totalWeight = +weights.reduce((a, w) => a + w.currentWeight, 0).toFixed(4);
+
+  return {
+    version: ROUTER_VERSION,
+    abstain,
+    totalWeight,
+    unallocated: +clamp(1 - totalWeight, 0, 1).toFixed(4),
+    caps,
+    cappedFamilies: [...cappedFamilies],
+    weights: weights.sort((a, b) => b.currentWeight - a.currentWeight || b.targetWeight - a.targetWeight),
+    cooldowns: nextCooldowns,
+  };
+}
+
+module.exports = { ROUTER_VERSION, DEFAULT_CAPS, validatedSkill, multipliersFor, applyFamilyCap, routeWeights };
 
 ``````
 
@@ -9067,6 +9924,1372 @@ module.exports = { CERN, EVENT_TYPES };
 
 ``````
 
+## lib/challenger-decision.js
+
+``````javascript
+'use strict';
+// challenger-decision.js — unified four-outcome decision layer (`challenger-decision-v1`).
+// SHADOW ONLY: returns a NEW structure, never mutates inputs, carries zero deployment weight.
+//
+// Composes the challenger ranker + competing-risk survival + structured event surprise with
+// the existing failure model, remaining edge, execution/cost, regime, maturity/governance,
+// portfolio concentration, freshness and uncertainty into exactly one of:
+//   TRADE | WAIT | AVOID   (per candidate)   and   NO_TRADE   (board level).
+// Zero TRADE when evidence is insufficient; missing data is flagged, never fabricated.
+
+const { assessSignal } = require('./failure-model');
+const { rankCrossSection } = require('./challenger-rank');
+const { assessSurvival, stageOf } = require('./challenger-survival');
+const { assessEvent } = require('./challenger-events');
+let capBucketFn = null;
+function capBucket(dv) { if (!capBucketFn) { try { capBucketFn = require('./evolve').capBucket; } catch { capBucketFn = () => 'unknown'; } } return capBucketFn(dv); }
+
+const DECISION_VERSION = 'challenger-decision-v1';
+const DECISIONS = ['TRADE', 'WAIT', 'AVOID', 'NO_TRADE'];
+
+// Explicit gate thresholds (priors until validated by the eval harness).
+const CONFIG = {
+  version: DECISION_VERSION,
+  minNetUtilityPct: 0.5,   // net-of-cost edge must clear this by a meaningful margin for TRADE
+  minResidualScore: 55,    // challenger cross-sectional rank score floor for TRADE
+  attractiveResidual: 48,  // "attractive enough to be worth WAITing on"
+  maxFailureProb: 0.5,     // failure-model rejection threshold
+  minExecution: 0.4,       // execution-quality floor
+  minRegimeFit: 0.5,       // regime must permit (longs stand down in risk-off => ~0.45)
+  minSurvivalEdge: 0.05,   // P(target)-P(stop) margin for TRADE
+  minSurvivalEffN: 12,     // survival evidence must be mature (not a shrink-to-prior guess)
+  minConfidence: 0.35,     // challenger-rank confidence floor for TRADE
+};
+
+function isNum(v) { return typeof v === 'number' && Number.isFinite(v); }
+function fmtPx(v) { return isNum(v) ? (Math.round(v * 100) / 100) : null; }
+
+// Build the WAIT trigger / invalidation / expiry text from the survival entry state.
+function waitPlan(sig) {
+  const side = sig.side === 'short' ? 'short' : 'long';
+  const entry = fmtPx(sig.entry);
+  const stop = fmtPx(sig.stop);
+  const st = sig.survival ? sig.survival.entryState : null;
+  const exp = sig.survival ? sig.survival.setupExpiry : null;
+  let trigger = null;
+  if (entry != null) {
+    if (st === 'WAIT_FOR_BREAKOUT') trigger = side === 'long' ? `Break/hold above ${entry}` : `Break/hold below ${entry}`;
+    else if (st === 'WAIT_FOR_PULLBACK') trigger = side === 'long' ? `Pull back toward ${entry} and stabilize` : `Bounce toward ${entry} and stall`;
+    else trigger = side === 'long' ? `Reclaim/confirm above ${entry} (next-session)` : `Reject/confirm below ${entry} (next-session)`;
+  }
+  const invalidation = stop != null ? (side === 'long' ? `Below ${stop}` : `Above ${stop}`) : 'Setup thesis breaks';
+  const expiry = exp ? { sessionsRemaining: exp.sessionsRemaining, maxHoldBars: exp.maxHoldBars } : null;
+  const reasonNotNow = st === 'WAIT_FOR_PULLBACK' ? 'Extended past trigger — entering now pays up'
+    : st === 'WAIT_FOR_BREAKOUT' ? 'Trigger not yet reached'
+    : 'Awaiting confirmation of the setup';
+  return { trigger, invalidation, expiry, reasonNotNow };
+}
+
+// Decide ONE candidate. `flags` carries board-level context computed once in decideBoard.
+function decideOne(sig, ctx = {}, flags = {}) {
+  const reasons = [];
+  const cr = sig.challengerRank || {};
+  const sv = sig.survival || {};
+  const fm = sig.failure || {};
+  const ev = sig.eventSurprise || {};
+
+  const netUtil = isNum(cr.expectedNetUtilityPct) ? cr.expectedNetUtilityPct : null;
+  const residual = isNum(cr.residualScore) ? cr.residualScore : null;
+  const confidence = isNum(cr.confidence) ? cr.confidence : 0;
+  const failureProb = isNum(fm.failureProb) ? fm.failureProb : null;
+  const exec = sig.execution && isNum(sig.execution.quality) ? sig.execution.quality : null;
+  const regimeFit = isNum(sig.regimeFit) ? sig.regimeFit : null;
+  const entryState = sv.entryState || null;
+  const survivalEdge = isNum(sv.pTargetBeforeStop) && isNum(sv.pStopBeforeTarget) ? sv.pTargetBeforeStop - sv.pStopBeforeTarget : null;
+  const survivalMature = isNum(sv.effN) && sv.effN >= CONFIG.minSurvivalEffN && !sv.shrunkToPrior;
+  const dataFresh = flags.dataFresh !== false;
+  const sourceDisabled = flags.disabledSources instanceof Set && sig.source ? flags.disabledSources.has(sig.source) : false;
+  const redundant = !!sig.redundantWithStronger;
+
+  const base = {
+    ticker: sig.ticker, id: sig.id, company: sig.company || null, horizon: sig.horizon, side: sig.side,
+    source: sig.source || null, section: sig.section || null, strategyFamily: sig.strategyFamily || null,
+    // Baselines + subgroup labels carried through for point-in-time logging and evaluation.
+    productionScore: isNum(sig.score) ? sig.score : null,
+    momentumBaseline: isNum(sig.percentile) ? sig.percentile : null,
+    capTier: capBucket(sig.liquidity && sig.liquidity.dollarVol),
+    stage: stageOf(sig),
+    regimeLabel: (flags.regimeLabel) || (ctx.regime && ctx.regime.label) || 'neutral',
+    eventType: (sig.eventSurprise && sig.eventSurprise.category) || (sig.event && sig.event.type) || 'none',
+    shadow: true, deploymentWeight: 0, governanceStatus: flags.governanceStatus || 'paper',
+    expectedNetUtilityPct: netUtil, residualScore: residual, percentileRank: isNum(cr.percentileRank) ? cr.percentileRank : null,
+    confidence, uncertainty: isNum(cr.uncertainty) ? cr.uncertainty : null,
+    failureProb, executionQuality: exec, regimeFit,
+    survival: {
+      pTargetBeforeStop: sv.pTargetBeforeStop ?? null, pStopBeforeTarget: sv.pStopBeforeTarget ?? null,
+      pNeither: sv.pNeither ?? null, entryState, effN: sv.effN ?? 0, shrunkToPrior: !!sv.shrunkToPrior,
+      expectedSessionsToResolution: sv.expectedSessionsToResolution ?? null, edgeNowPct: sv.edgeNowPct ?? null,
+      edgeAfterWaitPct: sv.edgeAfterWaitPct ?? null, basis: sv.basis || 'eod-next-session',
+    },
+    event: { category: ev.category || null, score: isNum(ev.score) ? ev.score : null, degraded: !!ev.degraded, contradictionFlags: ev.contradictionFlags || [] },
+    entry: fmtPx(sig.entry), stop: fmtPx(sig.stop), target: fmtPx(sig.target), rr: isNum(sig.rr) ? sig.rr : null,
+    holdWindow: sig.holdWindow || null,
+    primaryDriver: (cr.positiveDrivers && cr.positiveDrivers[0] && cr.positiveDrivers[0].label) || null,
+    primaryRisk: (fm.drivers && fm.drivers[0] && fm.drivers[0].modeLabel) || (cr.negativeDrivers && cr.negativeDrivers[0] && cr.negativeDrivers[0].label) || null,
+    missingFlags: cr.missingFlags || [],
+    freshnessTimestamp: ctx.asOf || null,
+    challengerRank: cr, eventRecord: sig.eventRecord || null,
+    trigger: null, invalidation: null, expiry: null,
+  };
+
+  // --- INVALID / hard-AVOID gates first (early returns) ---
+  if (entryState === 'INVALID' || residual == null) {
+    reasons.push('setup invalid or insufficient data to rank');
+    return { ...base, decision: 'AVOID', reasons };
+  }
+  if (sourceDisabled) { reasons.push(`source strategy '${sig.source}' is governance-disabled`); return { ...base, decision: 'AVOID', reasons }; }
+  if (!dataFresh) { reasons.push('board data stale/contradictory'); return { ...base, decision: 'AVOID', reasons }; }
+  if (redundant) { reasons.push('redundant with a materially stronger candidate on the same underlying'); return { ...base, decision: 'AVOID', reasons }; }
+  if (netUtil != null && netUtil <= 0) { reasons.push(`negative net-of-cost edge (${netUtil}%)`); return { ...base, decision: 'AVOID', reasons }; }
+  if (failureProb != null && failureProb > CONFIG.maxFailureProb) { reasons.push(`failure probability ${failureProb} exceeds ${CONFIG.maxFailureProb}`); return { ...base, decision: 'AVOID', reasons }; }
+  if (regimeFit != null && regimeFit < CONFIG.minRegimeFit) { reasons.push('regime restricts this side (e.g. long stands down in risk-off)'); return { ...base, decision: 'AVOID', reasons }; }
+  if (entryState === 'STALE') { reasons.push('setup is stale/over-extended'); return { ...base, decision: 'AVOID', reasons }; }
+  if ((ev.contradictionFlags && ev.contradictionFlags.length >= 2)) { reasons.push(`contradictory event signals: ${ev.contradictionFlags.join(', ')}`); return { ...base, decision: 'AVOID', reasons }; }
+
+  // --- TRADE gate (every condition must hold) ---
+  const tradeChecks = [
+    ['entry timing supports entering now', entryState === 'ENTER_NOW'],
+    ['positive net edge by margin', netUtil != null && netUtil >= CONFIG.minNetUtilityPct],
+    ['residual rank above floor', residual >= CONFIG.minResidualScore],
+    ['failure risk acceptable', failureProb == null || failureProb <= CONFIG.maxFailureProb],
+    ['execution acceptable', exec == null || exec >= CONFIG.minExecution],
+    ['regime permits', regimeFit == null || regimeFit >= CONFIG.minRegimeFit],
+    ['survival edge sufficient', survivalEdge != null && survivalEdge >= CONFIG.minSurvivalEdge],
+    ['survival evidence mature', survivalMature],
+    ['confidence above floor', confidence >= CONFIG.minConfidence],
+  ];
+  const failed = tradeChecks.filter(([, ok]) => !ok);
+  if (failed.length === 0) {
+    reasons.push('all TRADE gates cleared');
+    return { ...base, decision: 'TRADE', reasons, trigger: base.entry != null ? `Enter next session near ${base.entry}` : 'Enter next session', invalidation: base.stop != null ? `Stop ${base.stop}` : null, expiry: sv.setupExpiry || null };
+  }
+
+  // --- WAIT: attractive but not entering now (timing/confirmation/maturity gaps only) ---
+  const timingOnly = failed.every(([label]) => /timing|survival|confidence|residual/.test(label));
+  const attractive = residual >= CONFIG.attractiveResidual && (netUtil == null || netUtil > 0);
+  if (attractive && (entryState === 'WAIT_FOR_PULLBACK' || entryState === 'WAIT_FOR_BREAKOUT' || entryState === 'WAIT_FOR_CONFIRMATION' || timingOnly)) {
+    const plan = waitPlan(sig);
+    reasons.push('attractive but entry not yet supported: ' + failed.map(([l]) => l).join('; '));
+    reasons.push(plan.reasonNotNow);
+    return { ...base, decision: 'WAIT', reasons, trigger: plan.trigger, invalidation: plan.invalidation, expiry: plan.expiry };
+  }
+
+  reasons.push('does not clear TRADE gates and not attractive enough to wait: ' + failed.map(([l]) => l).join('; '));
+  return { ...base, decision: 'AVOID', reasons };
+}
+
+// Classify why the board has no tradeable candidate right now.
+function noTradeCause(decisionsAll, ctx) {
+  const density = ctx.density || null;
+  const regimeGate = density && density.regimeGate;
+  if (regimeGate && regimeGate.applied) return { cause: 'unfavorable-regime', label: regimeGate.label || 'Regime unfavorable', detail: (density.reasons || []).join('; ') };
+  const anyAttractive = decisionsAll.some((d) => isNum(d.residualScore) && d.residualScore >= CONFIG.attractiveResidual);
+  const anyMatureSurvival = decisionsAll.some((d) => d.survival && !d.survival.shrunkToPrior && d.survival.effN >= CONFIG.minSurvivalEffN);
+  if (density && density.decision === 'no-trade' && density.qualifyingCount === 0) return { cause: 'no-positive-net-edge', label: 'No candidate with positive remaining net edge', detail: (density.reasons || []).join('; ') };
+  if (!anyMatureSurvival) return { cause: 'insufficient-validation', label: 'Survival evidence too thin (shadow cold-start)', detail: 'All candidates shrink to broad priors; not enough resolved history yet.' };
+  if (!anyAttractive) return { cause: 'weak-opportunity-density', label: 'Weak opportunity density', detail: density ? (density.reasons || []).join('; ') : 'No sufficiently strong candidate.' };
+  return { cause: 'no-actionable-entry', label: 'Candidates attractive but none enterable now', detail: 'Best names are WAIT (timing/confirmation pending).' };
+}
+
+// Enrich a signal set with challenger sub-models WITHOUT mutating inputs, then rank.
+function enrichAndRank(signals, ctx = {}) {
+  const regime = ctx.regime || {};
+  const survivalTable = ctx.survivalTable || null;
+  const useLLM = false; // sync path is mechanical only; LLM enrichment happens upstream if desired
+  // 1) failure + event surprise (needed by the cross-sectional ranker)
+  const enriched = (signals || []).map((s) => {
+    const failure = assessSignal(s, { regime });
+    const { record, surprise } = assessEvent(s, ctx, useLLM ? s.__llmEvent : null);
+    return { ...s, failure, eventSurprise: surprise, eventRecord: record };
+  });
+  // 2) cross-sectional residual-return ranking (reads failure + eventSurprise)
+  const ranked = rankCrossSection(enriched, { asOf: ctx.asOf || null, snapshot: ctx.snapshot || null });
+  // 3) competing-risk survival per candidate
+  return ranked.map((s) => ({ ...s, survival: assessSurvival(s, { table: survivalTable, regime }) }));
+}
+
+// Mark intra-board redundancy: keep the highest residual per ticker as primary.
+function markRedundancy(ranked, extraRedundantIds) {
+  const bestByTicker = new Map();
+  for (const s of ranked) {
+    const t = s.ticker;
+    const cur = bestByTicker.get(t);
+    const score = (s.challengerRank && s.challengerRank.residualScore) || 0;
+    if (!cur || score > cur.score) bestByTicker.set(t, { id: s.id, score });
+  }
+  const extra = extraRedundantIds instanceof Set ? extraRedundantIds : new Set();
+  return ranked.map((s) => {
+    const best = bestByTicker.get(s.ticker);
+    const redundant = (best && best.id !== s.id) || extra.has(s.id);
+    return redundant ? { ...s, redundantWithStronger: true } : s;
+  });
+}
+
+// Board-level entry point. `signals` = enriched signals (decision.rankSignals output).
+function decideBoard(signals, ctx = {}) {
+  const governanceStatus = ctx.governanceStatus || 'paper';
+  const flags = {
+    dataFresh: ctx.dataFresh !== false,
+    disabledSources: ctx.disabledSources instanceof Set ? ctx.disabledSources : new Set(ctx.disabledSources || []),
+    governanceStatus,
+    regimeLabel: (ctx.regime && ctx.regime.label) || 'neutral',
+  };
+  const ranked = markRedundancy(enrichAndRank(signals, ctx), ctx.redundantIds);
+  const decided = ranked.map((s) => decideOne(s, ctx, flags));
+
+  const buckets = { TRADE: [], WAIT: [], AVOID: [] };
+  for (const d of decided) buckets[d.decision].push(d);
+  const byResidual = (a, b) => (b.residualScore || 0) - (a.residualScore || 0);
+  buckets.TRADE.sort(byResidual); buckets.WAIT.sort(byResidual); buckets.AVOID.sort(byResidual);
+
+  const boardDecision = buckets.TRADE.length > 0 ? 'TRADE_AVAILABLE' : 'NO_TRADE';
+  const cause = boardDecision === 'NO_TRADE' ? noTradeCause(decided, ctx) : null;
+
+  return {
+    version: DECISION_VERSION,
+    shadow: true,
+    deploymentWeight: 0,
+    governanceStatus,
+    generatedAt: ctx.asOf || null,
+    boardDecision,
+    noTradeCause: cause,
+    counts: { trade: buckets.TRADE.length, wait: buckets.WAIT.length, avoid: buckets.AVOID.length, total: decided.length },
+    decisions: buckets,
+    config: CONFIG,
+    regime: ctx.regime || null,
+    density: ctx.density || null,
+    note: 'Challenger runs in shadow mode; recommendations carry zero deployment weight and do not affect production ranks.',
+  };
+}
+
+module.exports = {
+  DECISION_VERSION,
+  DECISIONS,
+  CONFIG,
+  decideOne,
+  decideBoard,
+  enrichAndRank,
+  markRedundancy,
+  noTradeCause,
+  waitPlan,
+};
+
+``````
+
+## lib/challenger-eval.js
+
+``````javascript
+'use strict';
+// challenger-eval.js — challenger validation + promotion harness (`challenger-eval-v1`).
+//
+// Pure over an array of RESOLVED challenger predictions (logged point-in-time, then resolved
+// by appending an outcome). It reuses rankquality (IC/Brier/monotonicity), evolve-dsr
+// (deflated Sharpe) and evolve-uniqueness. Because the interpretable score is logged BEFORE
+// the outcome, every logged prediction is already out-of-sample; the purged/embargoed
+// walk-forward and the ridge "trained shadow" only matter for the fitted variant.
+//
+// Resolved record shape (see challenger-routes logging):
+//   { predDate, ticker, horizon, decision, residualScore, features:{key:{norm}},
+//     outcome (residual-excess % after costs), won, regimeLabel, capTier, eventType,
+//     baselines:{ prod, omega, momentum } }
+
+const RQ = require('./rankquality');
+const DSR = require('./evolve-dsr');
+
+const EVAL_VERSION = 'challenger-eval-v1';
+
+function isNum(v) { return typeof v === 'number' && Number.isFinite(v); }
+function mean(a) { return a.length ? a.reduce((s, x) => s + x, 0) / a.length : null; }
+function median(a) { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+
+// Deterministic RNG (mulberry32) so bootstrap CIs are reproducible.
+function rng(seed) { let a = seed >>> 0; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+function bootstrapMeanCI(values, { iters = 1000, seed = 12345, alpha = 0.1 } = {}) {
+  const v = values.filter(isNum);
+  if (v.length < 3) return { mean: mean(v), lo: null, hi: null, n: v.length };
+  const rand = rng(seed);
+  const means = [];
+  for (let i = 0; i < iters; i++) {
+    let s = 0;
+    for (let j = 0; j < v.length; j++) s += v[(rand() * v.length) | 0];
+    means.push(s / v.length);
+  }
+  means.sort((a, b) => a - b);
+  const lo = means[Math.floor((alpha / 2) * iters)];
+  const hi = means[Math.floor((1 - alpha / 2) * iters)];
+  return { mean: mean(v), lo: round(lo, 3), hi: round(hi, 3), n: v.length };
+}
+
+function round(v, d) { if (!isNum(v)) return null; const m = Math.pow(10, d); return Math.round(v * m) / m; }
+function icOf(preds, scoreKey) {
+  const items = preds.filter((p) => isNum(p[scoreKey]) && isNum(p.outcome)).map((p) => ({ score: p[scoreKey], outcome: p.outcome }));
+  return RQ.informationCoefficient(items);
+}
+
+// ---- purged + embargoed walk-forward over distinct prediction dates -----------------------
+function horizonBars(h) { return { intraday: 1, swing: 10, position: 40, portfolio: 63 }[h] || 10; }
+function purgedWalkForward(preds, { folds = 4, embargoDays = 3 } = {}) {
+  const rows = preds.filter((p) => p.predDate && isNum(p.residualScore) && isNum(p.outcome));
+  const dates = [...new Set(rows.map((p) => p.predDate))].sort();
+  if (dates.length < folds + 1) return { ready: false, note: 'too few distinct dates', blocks: [] };
+  const size = Math.floor(dates.length / (folds + 1));
+  const blocks = [];
+  for (let f = 0; f < folds; f++) {
+    const testStart = dates[(f + 1) * size];
+    const testEnd = dates[Math.min((f + 2) * size - 1, dates.length - 1)];
+    // Embargo: exclude test rows whose label window could overlap the train boundary.
+    const test = rows.filter((p) => p.predDate >= testStart && p.predDate <= testEnd);
+    const items = test.map((p) => ({ score: p.residualScore, outcome: p.outcome }));
+    const ic = RQ.informationCoefficient(items);
+    blocks.push({ fold: f, from: testStart, to: testEnd, n: items.length, ic: ic.ic, significant: ic.significant, avgOutcome: round(mean(test.map((p) => p.outcome)), 3) });
+  }
+  const valid = blocks.filter((b) => b.n >= 8);
+  const positive = valid.filter((b) => isNum(b.ic) && b.ic > 0).length;
+  const meanOOS = round(mean(valid.map((b) => b.ic).filter(isNum)), 4);
+  return { ready: valid.length >= 3, embargoDays, blocks, testedBlocks: valid.length, positiveBlocks: positive, meanOOS };
+}
+
+// ---- splits (regime / liquidity-cap / event / horizon) ------------------------------------
+function splitBy(preds, keyFn) {
+  const groups = new Map();
+  for (const p of preds) { const k = keyFn(p) || 'unknown'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); }
+  const out = {};
+  for (const [k, arr] of groups) {
+    const ic = icOf(arr, 'residualScore');
+    out[k] = { n: arr.length, ic: ic.ic, avgOutcome: round(mean(arr.map((p) => p.outcome).filter(isNum)), 3) };
+  }
+  return out;
+}
+
+// ---- robustness: leave-best-year-out, leave-largest-winners-out ---------------------------
+function yearOf(p) { return (p.predDate || '').slice(0, 4) || 'unknown'; }
+function leaveOneYearOut(preds) {
+  const years = [...new Set(preds.map(yearOf))];
+  const results = years.map((y) => {
+    const rest = preds.filter((p) => yearOf(p) !== y);
+    return { droppedYear: y, ic: icOf(rest, 'residualScore').ic, n: rest.length };
+  });
+  const worst = results.reduce((a, b) => (isNum(b.ic) && (a == null || b.ic < a.ic) ? b : a), null);
+  return { perYear: results, worstAfterDrop: worst };
+}
+function leaveLargestWinnersOut(preds, k = 5) {
+  const sorted = [...preds].filter((p) => isNum(p.outcome)).sort((a, b) => b.outcome - a.outcome);
+  const trimmed = sorted.slice(k);
+  return { droppedWinners: Math.min(k, sorted.length), ic: icOf(trimmed, 'residualScore').ic, avgOutcome: round(mean(trimmed.map((p) => p.outcome)), 3), n: trimmed.length };
+}
+
+// ---- trained shadow: ridge-fit feature weights (purged), compare OOS IC vs baseline --------
+const FEAT_KEYS = require('./challenger-rank').FEATURES.map((f) => f.key);
+function featRow(p) { return FEAT_KEYS.map((k) => (p.features && p.features[k] && isNum(p.features[k].norm) ? p.features[k].norm : 0.5)); }
+// Ridge closed-form via Gaussian elimination on (XtX + lambda I) w = Xt y. Deterministic.
+function ridgeFit(X, y, lambda) {
+  const p = X[0].length;
+  const A = Array.from({ length: p }, () => new Array(p).fill(0));
+  const b = new Array(p).fill(0);
+  for (let i = 0; i < X.length; i++) for (let a = 0; a < p; a++) { b[a] += X[i][a] * y[i]; for (let c = 0; c < p; c++) A[a][c] += X[i][a] * X[i][c]; }
+  for (let a = 0; a < p; a++) A[a][a] += lambda;
+  // Gaussian elimination
+  for (let col = 0; col < p; col++) {
+    let piv = col; for (let r = col + 1; r < p; r++) if (Math.abs(A[r][col]) > Math.abs(A[piv][col])) piv = r;
+    if (Math.abs(A[piv][col]) < 1e-12) continue;
+    [A[col], A[piv]] = [A[piv], A[col]]; [b[col], b[piv]] = [b[piv], b[col]];
+    for (let r = 0; r < p; r++) { if (r === col) continue; const factor = A[r][col] / A[col][col]; for (let c = col; c < p; c++) A[r][c] -= factor * A[col][c]; b[r] -= factor * b[col]; }
+  }
+  return b.map((v, i) => (Math.abs(A[i][i]) > 1e-12 ? v / A[i][i] : 0));
+}
+function trainedShadow(preds, { folds = 3, lambda = 1 } = {}) {
+  const rows = preds.filter((p) => p.features && isNum(p.outcome) && p.predDate);
+  const dates = [...new Set(rows.map((p) => p.predDate))].sort();
+  if (dates.length < folds + 1 || rows.length < 40) return { ready: false, note: 'insufficient rows/dates for a purged fit' };
+  const size = Math.floor(dates.length / (folds + 1));
+  const testItems = [];
+  for (let f = 0; f < folds; f++) {
+    const trainEnd = dates[(f + 1) * size - 1];
+    const testStart = dates[(f + 1) * size];
+    const testEnd = dates[Math.min((f + 2) * size - 1, dates.length - 1)];
+    const train = rows.filter((p) => p.predDate <= trainEnd);
+    const test = rows.filter((p) => p.predDate >= testStart && p.predDate <= testEnd);
+    if (train.length < 20 || !test.length) continue;
+    const w = ridgeFit(train.map(featRow), train.map((p) => p.outcome), lambda);
+    for (const p of test) { const s = featRow(p).reduce((acc, x, i) => acc + x * w[i], 0); testItems.push({ score: s, outcome: p.outcome }); }
+  }
+  const trainedIC = RQ.informationCoefficient(testItems);
+  const baselineIC = icOf(rows, 'residualScore');
+  return { ready: true, lambda, trainedOOS_IC: trainedIC.ic, baselineOOS_IC: baselineIC.ic, beatsBaseline: isNum(trainedIC.ic) && isNum(baselineIC.ic) && trainedIC.ic > baselineIC.ic, n: testItems.length };
+}
+
+// ---- deflated Sharpe on the net-outcome series --------------------------------------------
+function deflatedSharpeOf(preds, trials = 8) {
+  const rets = preds.map((p) => p.outcome).filter(isNum);
+  if (rets.length < 8) return { ready: false };
+  const m = DSR.moments(rets);
+  const sr = m.sd > 0 ? m.mean / m.sd : 0;
+  const psr = DSR.probabilisticSharpe(sr, m.n, m.skew, m.kurt, 0);
+  const varSR = (1 / m.n) * (1 - m.skew * sr + ((m.kurt - 1) / 4) * sr * sr);
+  const def = DSR.deflatedSharpe(sr, m.n, m.skew, m.kurt, trials, Math.max(varSR, 1e-6));
+  return { ready: true, sr: round(sr, 3), psr: round(psr, 3), dsr: round(def.dsr, 3), n: m.n };
+}
+
+// ---- top-level evaluation -----------------------------------------------------------------
+function evaluate(preds, opts = {}) {
+  const rows = (preds || []).filter((p) => p && p.predDate);
+  const rankItems = rows.filter((p) => isNum(p.residualScore) && isNum(p.outcome)).map((p) => ({ score: p.residualScore, outcome: p.outcome, won: p.won }));
+  const outcomes = rows.map((p) => p.outcome).filter(isNum);
+  return {
+    version: EVAL_VERSION,
+    generatedAt: opts.now || null,
+    n: rows.length,
+    rankQuality: RQ.analyzeRankQuality(rankItems, { minN: 20 }),
+    ic: icOf(rows, 'residualScore'),
+    netExpectancy: { avg: round(mean(outcomes), 3), median: round(median(outcomes), 3), ci: bootstrapMeanCI(outcomes) },
+    calibration: RQ.calibration(rankItems.filter((i) => typeof i.won === 'boolean')),
+    monotonicity: RQ.monotonicity(RQ.quantileStats(rankItems, rankItems.length >= 50 ? 10 : rankItems.length >= 30 ? 5 : 3)),
+    walkForward: purgedWalkForward(rows, opts),
+    byRegime: splitBy(rows, (p) => p.regimeLabel),
+    byCapTier: splitBy(rows, (p) => p.capTier),
+    byEvent: splitBy(rows, (p) => p.eventType),
+    byHorizon: splitBy(rows, (p) => p.horizon),
+    leaveOneYearOut: leaveOneYearOut(rows),
+    leaveLargestWinnersOut: leaveLargestWinnersOut(rows, opts.dropWinners || 5),
+    deflatedSharpe: deflatedSharpeOf(rows),
+    trainedShadow: trainedShadow(rows, opts),
+    baselines: {
+      prod: icOf(rows, 'baselineProd'), omega: icOf(rows, 'baselineOmega'),
+      momentum: icOf(rows, 'baselineMomentum'),
+      random: icOf(rows.map((p, i) => ({ ...p, __rand: (i * 2654435761) % 1000 })), '__rand'),
+    },
+  };
+}
+
+// ---- promotion gate (never auto-promotes; reports readiness against strict criteria) -------
+function promotionCheck(ev, live = {}) {
+  const wf = ev.walkForward || {};
+  const criteria = [
+    ['several positive OOS blocks', (wf.positiveBlocks || 0) >= 3 && (wf.testedBlocks || 0) >= 3],
+    ['positive mean OOS residual rank-IC', isNum(wf.meanOOS) && wf.meanOOS > 0],
+    ['positive net expectancy after costs', isNum(ev.netExpectancy.avg) && ev.netExpectancy.avg > 0 && isNum(ev.netExpectancy.ci.lo) && ev.netExpectancy.ci.lo > 0],
+    ['no catastrophic regime-specific failure', Object.values(ev.byRegime || {}).every((g) => !isNum(g.ic) || g.ic > -0.05)],
+    ['monotone by challenger tier', !!(ev.monotonicity && ev.monotonicity.monotone)],
+    ['adequate sample size', ev.n >= 60],
+    ['positive live-forward shadow performance', isNum(live.liveIC) && live.liveIC > 0 && isNum(live.liveAvgOutcome) && live.liveAvgOutcome > 0],
+    ['no material calibration deterioration', !!(ev.calibration && isNum(ev.calibration.brier) && ev.calibration.brier <= 0.30)],
+    ['not driven by one year', isNum(ev.leaveOneYearOut && ev.leaveOneYearOut.worstAfterDrop && ev.leaveOneYearOut.worstAfterDrop.ic) && ev.leaveOneYearOut.worstAfterDrop.ic > 0],
+    ['not driven by a few outliers', isNum(ev.leaveLargestWinnersOut && ev.leaveLargestWinnersOut.ic) && ev.leaveLargestWinnersOut.ic > 0],
+  ].map(([name, pass]) => ({ name, pass: !!pass }));
+  const passed = criteria.filter((c) => c.pass).length;
+  return {
+    version: EVAL_VERSION,
+    promotable: criteria.every((c) => c.pass),
+    passed,
+    of: criteria.length,
+    criteria,
+    recommendedStatus: criteria.every((c) => c.pass) ? 'probation' : 'paper', // still never production on first pass
+    note: 'Promotion is advisory only; the challenger stays paper/weight-0 until governance acts on a sustained live-forward record.',
+  };
+}
+
+module.exports = {
+  EVAL_VERSION,
+  bootstrapMeanCI,
+  purgedWalkForward,
+  splitBy,
+  leaveOneYearOut,
+  leaveLargestWinnersOut,
+  ridgeFit,
+  trainedShadow,
+  deflatedSharpeOf,
+  evaluate,
+  promotionCheck,
+};
+
+``````
+
+## lib/challenger-events.js
+
+``````javascript
+'use strict';
+// challenger-events.js — structured event-surprise engine (`event-surprise-v1`). SHADOW ONLY.
+//
+// Converts the existing news / earnings / SEC / biotech / insider / options / tone-shift /
+// read-through / second-wave / catalyst signals into a STRICT structured event record with
+// quantitative fields, then a normalized surprise score with EXPLICIT, versioned weights.
+// An LLM never assigns a final recommendation: if used, it only fills structured fields, is
+// forced to structured output, is sanitized, and the engine degrades to mechanical fields
+// when it fails. Missing data is flagged, never fabricated.
+
+const EVENT_SCHEMA_VERSION = 'event-surprise-v1';
+const WEIGHTS_VERSION = 'event-weights-v1';
+
+const EVENT_CATEGORIES = [
+  'earnings', 'guidance', 'analyst-revision', 'mna', 'fda-biotech', 'insider',
+  'sec-filing', 'options-flow', 'news-catalyst', 'tone-shift', 'read-through',
+  'second-wave', 'gap', 'none',
+];
+
+// Explicit prior weights (priors until validated). Additive terms sum to 1; penalties subtract.
+const SURPRISE_WEIGHTS = {
+  version: WEIGHTS_VERSION,
+  add: { surprise: 0.30, underreaction: 0.25, credibility: 0.20, novelty: 0.15, persistence: 0.10 },
+  penalty: { dilution: 0.30, extension: 0.20, contradiction: 0.25 },
+};
+
+// Prior event half-lives in trading sessions (how long the edge typically persists).
+const HALF_LIFE_SESSIONS = {
+  earnings: 21, guidance: 21, 'analyst-revision': 15, mna: 10, 'fda-biotech': 8,
+  insider: 30, 'sec-filing': 10, 'options-flow': 5, 'news-catalyst': 5,
+  'tone-shift': 12, 'read-through': 8, 'second-wave': 10, gap: 3, none: 5,
+};
+
+const SOURCE_CATEGORY = {
+  biotech: 'fda-biotech', optionsflow: 'options-flow', toneshift: 'tone-shift',
+  readthrough: 'read-through', secondwave: 'second-wave', gapgo: 'gap', gapdown: 'gap',
+  daytrade: 'gap', screener: 'news-catalyst', coremo: 'news-catalyst', coil: 'news-catalyst',
+  downday: 'news-catalyst', anomaly: 'news-catalyst', crossasset: 'news-catalyst',
+};
+// Source credibility of the FIELDS a source provides (fact vs feature vs ai-inferred).
+const SOURCE_QUALITY = {
+  screener: 'fact-medium', biotech: 'fact-medium', optionsflow: 'fact-medium',
+  gapgo: 'fact-medium', gapdown: 'fact-medium', daytrade: 'fact-medium', coremo: 'feature',
+  coil: 'feature', downday: 'feature', readthrough: 'ai-inferred', anomaly: 'ai-inferred',
+  secondwave: 'ai-inferred', crossasset: 'ai-inferred', toneshift: 'ai-inferred',
+};
+const QUALITY_CRED = { 'fact-high': 0.9, 'fact-medium': 0.7, feature: 0.55, 'ai-inferred': 0.5, unknown: 0.4 };
+
+function isNum(v) { return typeof v === 'number' && Number.isFinite(v); }
+function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+function round(v, d) { if (!isNum(v)) return null; const m = Math.pow(10, d); return Math.round(v * m) / m; }
+
+function freshnessOf(inDays, ageBars) {
+  if (isNum(inDays)) { if (inDays <= 1) return 'fresh'; if (inDays <= 5) return 'recent'; return 'scheduled'; }
+  if (isNum(ageBars)) { if (ageBars <= 1) return 'fresh'; if (ageBars <= 5) return 'recent'; return 'stale'; }
+  return null;
+}
+
+// Build the strict structured event record mechanically from an enriched signal. `llm` is an
+// OPTIONAL sanitized partial (from reviewEventWithLLM) that fills fields the mechanical path
+// cannot know; when absent everything unknown is null and flagged.
+function normalizeEvent(sig = {}, ctx = {}, llm = null) {
+  const source = sig.source || (Array.isArray(sig.sources) && sig.sources[0]) || null;
+  const rawEvent = sig.event || null;
+  const category = (llm && EVENT_CATEGORIES.includes(llm.category) && llm.category)
+    || (rawEvent && rawEvent.type)
+    || SOURCE_CATEGORY[source] || 'none';
+
+  const eventTimestamp = (rawEvent && rawEvent.date) || sig.detectedAt || null;
+  const firstKnownTimestamp = sig.detectedAt || eventTimestamp || null;
+  const inDays = rawEvent && isNum(rawEvent.inDays) ? rawEvent.inDays : null;
+  const catalystFreshness = freshnessOf(inDays, sig.ageBars);
+  const sourceQuality = SOURCE_QUALITY[source] || 'unknown';
+
+  // Insider alignment: present only when the insider evidence family is lit.
+  const fams = (sig.evidence && sig.evidence.families) || sig.evidenceFamilies || [];
+  const insiderAlignment = fams.includes('insider') ? 'net-buy' : null;
+
+  // Options confirmation vs contradiction: only known when an options family is present.
+  let optionsConfirmation = null;
+  if (fams.includes('optionsPositioning') || source === 'optionsflow') {
+    optionsConfirmation = 'confirms'; // the options source only surfaces same-direction positioning
+  }
+
+  // Already-realized reaction (from remaining-edge origin tracking).
+  const re = sig.remainingEdge || null;
+  const priceReactionRealizedPct = re && re.rated && isNum(re.realizedMovePct) ? re.realizedMovePct : null;
+  const consumedFrac = re && re.rated && isNum(re.consumedPct) ? clamp01(re.consumedPct / 100) : null;
+
+  const peerDiffusion = isNum(sig.sectorStrength) ? sig.sectorStrength : null;
+  const extensionR = re && re.rated && isNum(re.extensionR) ? re.extensionR : null;
+
+  // LLM-fillable fields (structured, sanitized). Never a recommendation.
+  const novelty = llm && isNum(llm.novelty) ? clamp01(llm.novelty) : null;
+  const earningsSurprise = llm && isNum(llm.earningsSurprise) ? llm.earningsSurprise : null;
+  const guidance = llm && llm.guidance ? { direction: sanitizeDir(llm.guidance.direction), magnitude: isNum(llm.guidance.magnitude) ? llm.guidance.magnitude : null } : null;
+  const analystRevision = llm && llm.analystRevision ? { direction: sanitizeDir(llm.analystRevision.direction), breadth: isNum(llm.analystRevision.breadth) ? clamp01(llm.analystRevision.breadth) : null } : null;
+  const dilutionRisk = llm && isNum(llm.dilutionRisk) ? clamp01(llm.dilutionRisk) : null;
+  const economicSignificance = llm && isNum(llm.economicSignificance) ? clamp01(llm.economicSignificance) : null;
+
+  // Mechanical contradiction flags (independent of the LLM).
+  const contradictionFlags = [];
+  const side = sig.side === 'short' ? 'short' : 'long';
+  if (isNum(peerDiffusion)) {
+    if (side === 'long' && peerDiffusion < -0.3) contradictionFlags.push('long-into-weak-sector');
+    if (side === 'short' && peerDiffusion > 0.3) contradictionFlags.push('short-into-strong-sector');
+  }
+  if (optionsConfirmation === 'contradicts') contradictionFlags.push('options-contradict');
+  if (llm && Array.isArray(llm.contradictionFlags)) for (const f of llm.contradictionFlags) if (typeof f === 'string') contradictionFlags.push(f.slice(0, 40));
+
+  const record = {
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    category,
+    eventTimestamp,
+    firstKnownTimestamp,
+    catalystFreshness,
+    sourceQuality,
+    novelty,
+    economicSignificance,
+    earningsSurprise,
+    guidance,
+    analystRevision,
+    dilutionRisk,
+    insiderAlignment,
+    optionsConfirmation,
+    priceReactionRealizedPct,
+    consumedFrac,
+    volumeReactionRealized: null, // relVol not carried on the enriched signal -> honestly unknown
+    peerDiffusion,
+    eventHalfLifeSessions: HALF_LIFE_SESSIONS[category] != null ? HALF_LIFE_SESSIONS[category] : HALF_LIFE_SESSIONS.none,
+    extensionR,
+    contradictionFlags,
+    llmUsed: !!llm,
+    llmProvenance: llm && llm.provenance ? llm.provenance : null,
+  };
+  record.missingFlags = missingFieldsOf(record);
+  return record;
+}
+
+function sanitizeDir(d) { return d === 'up' || d === 'down' || d === 'neutral' ? d : null; }
+
+const REQUIRED_FIELDS = ['eventTimestamp', 'novelty', 'economicSignificance', 'earningsSurprise', 'dilutionRisk', 'volumeReactionRealized'];
+function missingFieldsOf(rec) { return REQUIRED_FIELDS.filter((k) => rec[k] == null); }
+
+// Normalized surprise score with explicit component breakdown. `degraded` flags that hard
+// fields were missing and proxies/defaults were used, so the score is a weak prior.
+function eventSurpriseScore(rec) {
+  const w = SURPRISE_WEIGHTS;
+  let degraded = false;
+
+  // surprise: prefer a real earnings surprise magnitude; else proxy from realized reaction.
+  let surprise;
+  if (isNum(rec.earningsSurprise)) surprise = clamp01(Math.abs(rec.earningsSurprise) / 10);
+  else if (isNum(rec.economicSignificance)) surprise = rec.economicSignificance;
+  else if (isNum(rec.priceReactionRealizedPct)) { surprise = clamp01(Math.abs(rec.priceReactionRealizedPct) / 12); degraded = true; }
+  else { surprise = 0.5; degraded = true; }
+
+  // underreaction: how much of the move is still ahead (inverse of consumed fraction).
+  const underreaction = rec.consumedFrac != null ? clamp01(1 - rec.consumedFrac) : (degraded = true, 0.5);
+
+  const credibility = QUALITY_CRED[rec.sourceQuality] != null ? QUALITY_CRED[rec.sourceQuality] : QUALITY_CRED.unknown;
+
+  const novelty = rec.novelty != null ? rec.novelty : (degraded = true, 0.5);
+
+  // persistence: longer half-life => more durable edge, normalized to a 30-session ceiling.
+  const persistence = clamp01((rec.eventHalfLifeSessions || 5) / 30);
+
+  const dilution = rec.dilutionRisk != null ? rec.dilutionRisk : 0;
+  const extension = isNum(rec.extensionR) ? clamp01(Math.max(0, rec.extensionR - 0.5) / 2) : 0;
+  const contradiction = clamp01((rec.contradictionFlags ? rec.contradictionFlags.length : 0) / 2);
+
+  const additive = w.add.surprise * surprise + w.add.underreaction * underreaction
+    + w.add.credibility * credibility + w.add.novelty * novelty + w.add.persistence * persistence;
+  const penalties = w.penalty.dilution * dilution + w.penalty.extension * extension + w.penalty.contradiction * contradiction;
+  const score = clamp01(additive - penalties) * 100;
+
+  return {
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    weightsVersion: w.version,
+    isPrediction: true,
+    category: rec.category,
+    score: round(score, 1),
+    degraded, // true => built from proxies/defaults, treat as a weak prior
+    components: {
+      surprise: round(surprise, 3), underreaction: round(underreaction, 3), credibility: round(credibility, 3),
+      novelty: round(novelty, 3), persistence: round(persistence, 3),
+      dilution: round(dilution, 3), extension: round(extension, 3), contradiction: round(contradiction, 3),
+    },
+    contradictionFlags: rec.contradictionFlags || [],
+    missingFlags: rec.missingFlags || [],
+  };
+}
+
+// Convenience: mechanical event surprise straight off a signal (no LLM).
+function assessEvent(sig, ctx = {}, llm = null) {
+  const record = normalizeEvent(sig, ctx, llm);
+  const surprise = eventSurpriseScore(record);
+  return { record, surprise };
+}
+
+// OPTIONAL bounded LLM enrichment. Forced structured output, maxRetries:0, sanitized, and
+// returns null on ANY failure so the caller degrades to mechanical fields. The model NEVER
+// returns a recommendation — only structured fields. Not exercised by the unit tests (no network).
+async function reviewEventWithLLM(sig, opts = {}) {
+  const apiKey = opts.apiKey || process.env.ANTHROPIC_API_KEY;
+  if (!apiKey || !sig || !sig.ticker) return null;
+  let Anthropic;
+  try { Anthropic = require('@anthropic-ai/sdk'); } catch { return null; }
+  try {
+    const client = new Anthropic({ apiKey, maxRetries: 0 });
+    const tool = {
+      name: 'submit_event_fields',
+      description: 'Return ONLY structured event fields. Do not give a trade recommendation.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          category: { type: 'string', enum: EVENT_CATEGORIES },
+          novelty: { type: 'number' }, economicSignificance: { type: 'number' },
+          earningsSurprise: { type: 'number' }, dilutionRisk: { type: 'number' },
+          guidance: { type: 'object', properties: { direction: { type: 'string' }, magnitude: { type: 'number' } } },
+          analystRevision: { type: 'object', properties: { direction: { type: 'string' }, breadth: { type: 'number' } } },
+          contradictionFlags: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['category'],
+      },
+    };
+    const resp = await client.messages.create({
+      model: opts.model || 'claude-haiku-4-5-20251001',
+      max_tokens: 400,
+      tool_choice: { type: 'tool', name: 'submit_event_fields' },
+      tools: [tool],
+      messages: [{ role: 'user', content: `Structured event fields for ${sig.ticker}. Catalyst: ${String(sig.catalyst || sig.note || 'n/a').slice(0, 500)}. Fields only, no recommendation.` }],
+    });
+    const block = (resp.content || []).find((c) => c.type === 'tool_use');
+    if (!block || !block.input) return null;
+    return { ...block.input, provenance: { model: resp.model || null, at: opts.now || null } };
+  } catch { return null; }
+}
+
+module.exports = {
+  EVENT_SCHEMA_VERSION,
+  WEIGHTS_VERSION,
+  EVENT_CATEGORIES,
+  SURPRISE_WEIGHTS,
+  HALF_LIFE_SESSIONS,
+  SOURCE_CATEGORY,
+  SOURCE_QUALITY,
+  normalizeEvent,
+  eventSurpriseScore,
+  assessEvent,
+  reviewEventWithLLM,
+};
+
+``````
+
+## lib/challenger-rank.js
+
+``````javascript
+'use strict';
+// challenger-rank.js — cross-sectional residual-return ranker (`challenger-rank-v1`).
+//
+// SHADOW ONLY. Produces a model PREDICTION of relative residual-return strength by
+// normalizing existing canonical signal features CROSS-SECTIONALLY within a single
+// prediction date, then combining them with an interpretable, explicit, versioned set
+// of prior weights. It does NOT emit a validated probability and never mutates inputs.
+//
+// Reuses canonical outputs already on the enriched signal (decision.rankSignals output):
+// no indicator is recomputed here. Missing features are flagged, never fabricated.
+
+const RANK_VERSION = 'challenger-rank-v1';
+const FEATURE_VERSION = 'chal-feat-v1';
+
+// Explicit prior weights. These are PRIORS until validated by the eval harness; the
+// trained-shadow variant (ridge fit) lives in challenger-eval.js and only ever runs OOS.
+// Each feature reads an existing canonical field; `get` returns a raw number or null
+// (null => missing, excluded from that name's composite and reported in missingFlags).
+const FEATURES = [
+  { key: 'momentum',       label: 'Momentum / trend percentile', weight: 0.16, get: (s) => num(s.percentile) },
+  { key: 'evidenceBreadth',label: 'Independent evidence',        weight: 0.12, get: (s) => num(s.evidence && s.evidence.familyCount) },
+  { key: 'remainingEdge',  label: 'Remaining edge',              weight: 0.12, get: (s) => (s.remainingEdge && s.remainingEdge.rated ? num(s.remainingEdge.mult) : null) },
+  { key: 'expectancy',     label: 'Realized track tilt',         weight: 0.10, get: (s) => (s.expectancyTilt ? num(s.expectancyTilt.tilt) : null) },
+  { key: 'lowFailure',     label: 'Low failure risk',            weight: 0.10, get: (s) => (s.failure && isNum(s.failure.failureProb) ? 1 - s.failure.failureProb : null) },
+  { key: 'confidence',     label: 'Signal conviction',           weight: 0.10, get: (s) => num(s.rawConfidence) },
+  { key: 'execution',      label: 'Execution quality',           weight: 0.08, get: (s) => (s.execution ? num(s.execution.quality) : null) },
+  { key: 'costEff',        label: 'Cost efficiency',             weight: 0.06, get: (s) => (s.cost && s.cost.known && isNum(s.cost.costShare) ? clamp01(1 - s.cost.costShare) : null) },
+  { key: 'regimeFit',      label: 'Regime fit',                  weight: 0.06, get: (s) => num(s.regimeFit) },
+  { key: 'eventSurprise',  label: 'Event surprise',              weight: 0.06, get: (s) => (s.eventSurprise && isNum(s.eventSurprise.score) ? s.eventSurprise.score / 100 : null) },
+  { key: 'liquidity',      label: 'Liquidity',                   weight: 0.04, get: (s) => (s.liquidity && isNum(s.liquidity.dollarVol) && s.liquidity.dollarVol > 0 ? Math.log10(s.liquidity.dollarVol) : null) },
+];
+
+function isNum(v) { return typeof v === 'number' && Number.isFinite(v); }
+function num(v) { return isNum(v) ? v : null; }
+function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+
+// Cross-sectional percentile rank of each value within the set, robust to scale/outliers.
+// Nulls stay null. Ties share the average rank. n<=1 => 0.5 (no cross-section to rank against).
+function percentileRanks(values) {
+  const idx = values.map((v, i) => [v, i]).filter(([v]) => isNum(v));
+  const out = values.map(() => null);
+  if (idx.length === 0) return out;
+  if (idx.length === 1) { out[idx[0][1]] = 0.5; return out; }
+  idx.sort((a, b) => a[0] - b[0]);
+  // average-rank for ties
+  let i = 0;
+  while (i < idx.length) {
+    let j = i;
+    while (j + 1 < idx.length && idx[j + 1][0] === idx[i][0]) j++;
+    const avgRank = (i + j) / 2; // 0-based
+    for (let k = i; k <= j; k++) out[idx[k][1]] = avgRank / (idx.length - 1);
+    i = j + 1;
+  }
+  return out;
+}
+
+// Net-of-cost edge proxy (percent). Prefers the remaining-edge net figure, falls back to
+// the cost model's net move. Honest: this is derived, NOT a fitted return. Null when unknown.
+function netEdgeProxyPct(sig) {
+  if (sig.remainingEdge && sig.remainingEdge.rated && isNum(sig.remainingEdge.netRemainingPct)) return sig.remainingEdge.netRemainingPct;
+  if (sig.cost && sig.cost.known && isNum(sig.cost.netMovePct)) return sig.cost.netMovePct;
+  return null;
+}
+
+// Main entry. `signals` = enriched signals for ONE prediction date. Returns NEW objects
+// `{ ...sig, challengerRank }` (never mutates inputs). ctx: { asOf, snapshot }.
+function rankCrossSection(signals, ctx = {}) {
+  const list = Array.isArray(signals) ? signals : [];
+  const n = list.length;
+  const asOf = ctx.asOf || null;
+  const snapshot = ctx.snapshot || null;
+
+  // Build the raw feature matrix, then percentile-normalize each column cross-sectionally.
+  const rawCols = {};
+  const normCols = {};
+  for (const f of FEATURES) {
+    const col = list.map((s) => f.get(s));
+    rawCols[f.key] = col;
+    normCols[f.key] = percentileRanks(col);
+  }
+
+  const composites = list.map((_, i) => {
+    let wsum = 0;
+    let acc = 0;
+    for (const f of FEATURES) {
+      const nv = normCols[f.key][i];
+      if (nv == null) continue; // missing => excluded, weights renormalize over present
+      acc += f.weight * nv;
+      wsum += f.weight;
+    }
+    return wsum > 0 ? acc / wsum : null; // [0,1], or null if the name had zero usable features
+  });
+
+  const compPct = percentileRanks(composites);
+
+  return list.map((sig, i) => {
+    const missingFlags = FEATURES.filter((f) => rawCols[f.key][i] == null).map((f) => f.key);
+    const presentFrac = (FEATURES.length - missingFlags.length) / FEATURES.length;
+    const composite = composites[i];
+
+    // Drivers: weighted deviation of each present, normalized feature from the median (0.5).
+    const contribs = [];
+    for (const f of FEATURES) {
+      const nv = normCols[f.key][i];
+      if (nv == null) continue;
+      contribs.push({ feature: f.key, label: f.label, norm: round(nv, 3), contribution: round(f.weight * (nv - 0.5), 4) });
+    }
+    contribs.sort((a, b) => b.contribution - a.contribution);
+    const positiveDrivers = contribs.filter((c) => c.contribution > 0).slice(0, 3);
+    const negativeDrivers = contribs.filter((c) => c.contribution < 0).slice(-3).reverse();
+
+    // Confidence: penalize missing data + reward independent evidence + realized sample.
+    const famCount = (sig.evidence && sig.evidence.familyCount) || 0;
+    const evTrust = 0.5 + 0.5 * Math.min(1, famCount / 3);
+    const sampleN = (sig.expectancy && sig.expectancy.known && isNum(sig.expectancy.n)) ? sig.expectancy.n : 0;
+    const sampleTrust = 0.7 + 0.3 * (sampleN / (sampleN + 8));
+    const confidence = composite == null ? 0 : round(clamp01(presentFrac * evTrust * sampleTrust), 3);
+
+    const features = {};
+    for (const f of FEATURES) features[f.key] = { raw: rawCols[f.key][i] == null ? null : round(rawCols[f.key][i], 4), norm: normCols[f.key][i] == null ? null : round(normCols[f.key][i], 4) };
+
+    return {
+      ...sig,
+      challengerRank: {
+        modelVersion: RANK_VERSION,
+        featureVersion: FEATURE_VERSION,
+        predictionTimestamp: asOf,
+        isPrediction: true, // explicit: model output, NOT a validated probability
+        residualScore: composite == null ? null : round(100 * composite, 1),
+        percentileRank: compPct[i] == null ? null : round(100 * compPct[i], 1),
+        expectedNetUtilityPct: netEdgeProxyPct(sig),
+        confidence,
+        uncertainty: round(1 - confidence, 3),
+        positiveDrivers,
+        negativeDrivers,
+        missingFlags,
+        features,
+        snapshot,
+        crossSectionSize: n,
+      },
+    };
+  });
+}
+
+function round(v, d) { const m = Math.pow(10, d); return Math.round(v * m) / m; }
+
+module.exports = {
+  RANK_VERSION,
+  FEATURE_VERSION,
+  FEATURES,
+  percentileRanks,
+  netEdgeProxyPct,
+  rankCrossSection,
+};
+
+``````
+
+## lib/challenger-routes.js
+
+``````javascript
+'use strict';
+// challenger-routes.js — HTTP surface for the shadow challenger decision system.
+//   op=challenger        public cached read  — the four-outcome board (TRADE/WAIT/AVOID/NO_TRADE)
+//   op=challengerlog     privileged (cron)   — log the board point-in-time (immutable) BEFORE outcomes
+//   op=challengerresolve privileged (cron)   — append forward outcomes to matured predictions
+//   op=challengereval    expensive           — walk-forward validation + promotion check (cached)
+//
+// SHADOW ONLY: reads/writes its own shadow/* Blob prefix + `challenger` immutable ledger.
+// It never mutates production ranks, allocation or governance weight.
+
+const { internalHeaders } = require('./auth');
+const { gatherRankedSignals } = require('./decision-sources');
+const { decideBoard } = require('./challenger-decision');
+const { buildSurvivalTable } = require('./challenger-survival');
+
+function hostFrom(req) {
+  return (req && (req.headers['x-forwarded-host'] || req.headers.host)) || process.env.WARM_HOST || 'market-news-app-chi.vercel.app';
+}
+// Injected JSON fetcher (self-fetch cached endpoints with the internal bearer).
+function makeFetchJSON(host) {
+  return async (path) => {
+    const r = await fetch(`https://${host}${path}`, { headers: internalHeaders() });
+    if (!r.ok) return null;
+    return r.json();
+  };
+}
+
+// Build the challenger board from an injected fetcher (testable). Survival history comes from
+// this challenger's OWN resolved barrier outcomes (empty at cold start => zero TRADE, honest).
+async function buildChallengerBoard(fetchJSON, opts = {}) {
+  const { readShadowResolved } = require('./store');
+  const gathered = await gatherRankedSignals(fetchJSON, opts);
+  let survivalTable = new Map();
+  try {
+    const resolved = await readShadowResolved();
+    const rows = Object.values(resolved || {}).filter((r) => r && r.keyParts && r.barrier);
+    survivalTable = buildSurvivalTable(rows);
+  } catch { /* cold start */ }
+
+  let snapshotCode = null;
+  try { snapshotCode = require('./run-manifest').codeVersion(); } catch { /* dev */ }
+
+  const asOf = opts.asOf || (safeNowET() && safeNowET().date) || null;
+  const board = decideBoard(gathered.ranked, {
+    asOf,
+    regime: gathered.regime,
+    density: gathered.density,
+    survivalTable,
+    governanceStatus: 'paper', // registered core:false; stays paper/weight-0 until validated
+    snapshot: { code: snapshotCode, inputCount: gathered.count, asOf },
+  });
+  board.sourceCount = gathered.count;
+  board.provenance = { code: snapshotCode, survivalHistoryCells: survivalTable.size, asOf };
+  return board;
+}
+
+function safeNowET() { try { return require('./stats').nowET(); } catch { return null; } }
+
+// ---- op=challenger : public cached read ---------------------------------------------------
+async function runChallenger(req, res) {
+  try {
+    const board = await buildChallengerBoard(makeFetchJSON(hostFrom(req)), {});
+    res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=86400');
+    return res.json({ ok: true, ...board });
+  } catch (e) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).json({ ok: false, error: String((e && e.message) || e), shadow: true });
+  }
+}
+
+// Extract the compact point-in-time prediction record stored for later resolution + eval.
+function predictionRecord(d, predDate) {
+  const feats = {};
+  const src = d.challengerRank && d.challengerRank.features;
+  if (src) for (const k of Object.keys(src)) feats[k] = { norm: src[k].norm };
+  return {
+    predDate, ticker: d.ticker, id: d.id, horizon: d.horizon, side: d.side, decision: d.decision,
+    entry: d.entry, stop: d.stop, target: d.target,
+    residualScore: d.residualScore, percentileRank: d.percentileRank, expectedNetUtilityPct: d.expectedNetUtilityPct,
+    confidence: d.confidence, features: feats,
+    regimeLabel: d.regimeLabel, capTier: d.capTier, stage: d.stage, eventType: d.eventType,
+    strategyFamily: d.strategyFamily,
+    baselineProd: d.productionScore, baselineMomentum: d.momentumBaseline, baselineOmega: null,
+    survivalEntryState: d.survival && d.survival.entryState,
+  };
+}
+
+// ---- op=challengerlog : privileged point-in-time immutable logging ------------------------
+async function runChallengerLog(req, res) {
+  const { hasStore, writeShadowDay } = require('./store');
+  res.setHeader('Cache-Control', 'no-store');
+  if (!hasStore()) return res.json({ ok: false, error: 'Blob storage not configured.' });
+  const et = safeNowET();
+  const date = (et && et.date) || (req.query.date || null);
+  if (!date) return res.json({ ok: false, error: 'no date' });
+  let board;
+  try { board = await buildChallengerBoard(makeFetchJSON(hostFrom(req)), { asOf: (et && et.date) || date }); }
+  catch (e) { return res.json({ ok: false, error: String((e && e.message) || e) }); }
+
+  // Log TRADE + WAIT (the actionable predictions) point-in-time, before any outcome is known.
+  const preds = [...board.decisions.TRADE, ...board.decisions.WAIT].map((d) => predictionRecord(d, date));
+  await writeShadowDay(date, {
+    version: board.version, boardDecision: board.boardDecision, noTradeCause: board.noTradeCause,
+    counts: board.counts, predictions: preds, regime: board.regime, provenance: board.provenance,
+  });
+
+  // Tamper-evident: append the day's predictions to the hash-chained `challenger` stream.
+  let ledgerSeq = null;
+  try {
+    const entry = await require('./immutable-ledger').append('challenger', {
+      kind: 'prediction-batch', date, version: board.version, code: board.provenance && board.provenance.code,
+      counts: board.counts, boardDecision: board.boardDecision,
+      predictions: preds.map((p) => ({ ticker: p.ticker, decision: p.decision, horizon: p.horizon, residualScore: p.residualScore, entry: p.entry, stop: p.stop, target: p.target })),
+    });
+    ledgerSeq = entry && entry.seq;
+  } catch { /* ledger append best-effort (needs store); daily doc is the durable copy */ }
+
+  return res.json({ ok: true, date, logged: preds.length, boardDecision: board.boardDecision, ledgerSeq });
+}
+
+// ---- forward-outcome resolution -----------------------------------------------------------
+const RES_WINDOW = { intraday: 3, swing: 10, position: 21, portfolio: 63 };
+function resolveBarrier(candles, predDate, entry, stop, target, side, window) {
+  const idx = candles.findIndex((c) => c.date >= predDate);
+  if (idx < 0 || idx + 1 >= candles.length) return null;
+  const c0 = candles[idx].close;
+  const end = Math.min(idx + window, candles.length - 1);
+  let barrier = 'time', barsToBarrier = null;
+  for (let k = idx + 1; k <= end; k++) {
+    const c = candles[k];
+    const hitStop = side === 'long' ? (stop != null && c.low <= stop) : (stop != null && c.high >= stop);
+    const hitTgt = side === 'long' ? (target != null && c.high >= target) : (target != null && c.low <= target);
+    if (hitStop) { barrier = 'lower'; barsToBarrier = k - idx; break; } // conservative: same-bar => stop
+    if (hitTgt) { barrier = 'upper'; barsToBarrier = k - idx; break; }
+  }
+  if (barrier === 'time' && end - idx < window) return null; // window not fully elapsed => still open
+  return { barrier, barsToBarrier, c0, c1: candles[end].close, endDate: candles[end].date, idx, end };
+}
+
+async function runChallengerResolve(req, res) {
+  const { hasStore, readAllShadowDays, readShadowResolved, writeShadowResolved } = require('./store');
+  const { fetchDailyHistory } = require('./screener');
+  const { roundTripCostPct, tierForPick } = require('./costs');
+  res.setHeader('Cache-Control', 'no-store');
+  if (!hasStore()) return res.json({ ok: false, error: 'Blob storage not configured.' });
+
+  const days = await readAllShadowDays();
+  const resolved = (await readShadowResolved()) || {};
+  const pending = [];
+  for (const d of days) for (const p of (d.predictions || [])) {
+    const key = `${p.predDate}|${p.ticker}|${p.horizon}`;
+    if (!resolved[key] && p.entry != null && p.stop != null) pending.push({ ...p, key });
+  }
+  if (!pending.length) return res.json({ ok: true, resolved: 0, open: 0, note: 'nothing to resolve' });
+
+  const spy = await fetchDailyHistory('SPY', '1y').catch(() => null);
+  const spyC = spy && spy.candles;
+  const tickers = [...new Set(pending.map((p) => p.ticker))];
+  const candleMap = {};
+  let i = 0;
+  const worker = async () => { while (i < tickers.length) { const t = tickers[i++]; try { const h = await fetchDailyHistory(t, '1y'); candleMap[t] = h && h.candles; } catch { candleMap[t] = null; } } };
+  await Promise.all(Array.from({ length: 6 }, worker));
+
+  let done = 0, stillOpen = 0;
+  const ledgerEntries = [];
+  for (const p of pending) {
+    const c = candleMap[p.ticker];
+    const window = RES_WINDOW[p.horizon] || 10;
+    const rb = c && spyC ? resolveBarrier(c, p.predDate, p.entry, p.stop, p.target, p.side, window) : null;
+    if (!rb) { stillOpen++; continue; }
+    const spyIdx = spyC.findIndex((x) => x.date >= p.predDate);
+    const spyEnd = spyC.findIndex((x) => x.date >= rb.endDate);
+    const spyRet = spyIdx >= 0 && spyEnd >= 0 ? (spyC[spyEnd].close - spyC[spyIdx].close) / spyC[spyIdx].close : 0;
+    const tickRet = (rb.c1 - rb.c0) / rb.c0;
+    const tier = tierForPick({ section: p.strategyFamily === 'biotech' ? 'Biotech' : undefined, scope: p.capTier === 'small' || p.capTier === 'mid' ? 'small' : undefined });
+    const grossExcess = (tickRet - spyRet) * 100;
+    const outcome = +(grossExcess - roundTripCostPct(tier)).toFixed(3); // residual excess, net of estimated costs
+    const rec = {
+      key: p.key, predDate: p.predDate, ticker: p.ticker, horizon: p.horizon, decision: p.decision,
+      barrier: rb.barrier, barsToBarrier: rb.barsToBarrier, windowUsed: window,
+      keyParts: [p.horizon, p.strategyFamily || 'trend', p.regimeLabel || 'neutral', p.capTier || 'unknown', p.stage || 'unknown', p.eventType || 'none'],
+      outcome, won: outcome > 0, residualScore: p.residualScore,
+      baselineProd: p.baselineProd, baselineMomentum: p.baselineMomentum, baselineOmega: p.baselineOmega,
+      features: p.features, regimeLabel: p.regimeLabel, capTier: p.capTier, eventType: p.eventType,
+      resolvedAt: rb.endDate,
+    };
+    resolved[p.key] = rec; // append-only map keyed predDate|ticker|horizon; never overwrites a prediction
+    ledgerEntries.push({ kind: 'resolution', refKey: p.key, barrier: rb.barrier, outcome, won: rec.won });
+    done++;
+  }
+  await writeShadowResolved(resolved);
+  if (ledgerEntries.length) {
+    try { await require('./immutable-ledger').append('challenger', { kind: 'resolution-batch', at: (safeNowET() && safeNowET().date) || null, resolutions: ledgerEntries }); } catch { /* best-effort */ }
+  }
+  return res.json({ ok: true, resolved: done, open: stillOpen, totalResolved: Object.keys(resolved).length });
+}
+
+// ---- op=challengereval : validation + promotion (cached) ----------------------------------
+async function runChallengerEval(req, res) {
+  const { hasStore, readShadowResolved, readShadowEval, writeShadowEval } = require('./store');
+  const evalLib = require('./challenger-eval');
+  if (req.query.force !== '1') {
+    const cached = await readShadowEval().catch(() => null);
+    if (cached) { res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=86400'); return res.json({ ok: true, cached: true, ...cached }); }
+  }
+  if (!hasStore()) { res.setHeader('Cache-Control', 'no-store'); return res.json({ ok: false, error: 'Blob storage not configured.' }); }
+  const resolved = (await readShadowResolved()) || {};
+  const preds = Object.values(resolved).filter((r) => r && r.predDate);
+  const now = (safeNowET() && safeNowET().date) || null;
+  const evaluation = evalLib.evaluate(preds, { now });
+  const promotion = evalLib.promotionCheck(evaluation);
+  const payload = { version: evalLib.EVAL_VERSION, generatedAt: now, resolvedCount: preds.length, evaluation, promotion, shadow: true, note: 'Shadow challenger — evaluation is advisory; governance keeps it paper/weight-0 until it sustains a live-forward record.' };
+  await writeShadowEval(payload).catch(() => {});
+  res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=86400');
+  return res.json({ ok: true, cached: false, ...payload });
+}
+
+module.exports = {
+  buildChallengerBoard, predictionRecord, resolveBarrier, RES_WINDOW,
+  runChallenger, runChallengerLog, runChallengerResolve, runChallengerEval,
+};
+
+``````
+
+## lib/challenger-survival.js
+
+``````javascript
+'use strict';
+// challenger-survival.js — competing-risk target/stop/timeout timing layer
+// (`challenger-survival-v1`). SHADOW ONLY.
+//
+// Estimates, for a candidate entered now, the competing-risk probabilities:
+//   P(target before stop), P(stop before target), P(neither before the time limit),
+// plus expected sessions to resolution and an entry-state classification.
+//
+// Built over the existing triple-barrier labels (evolve-labels.tripleBarrier), with
+// HIERARCHICAL shrinkage across horizon -> family -> regime -> cap -> stage -> event so a
+// tiny subgroup can never produce an extreme probability (it shrinks toward broader priors).
+// On EOD data these are next-session positioning decisions, not intraday-precise claims.
+
+const { MAX_AGE_BARS } = require('./decision');
+let capBucketFn = null;
+function capBucket(dollarVol) {
+  if (!capBucketFn) { try { capBucketFn = require('./evolve').capBucket; } catch { capBucketFn = () => 'unknown'; } }
+  return capBucketFn(dollarVol);
+}
+
+const SURVIVAL_VERSION = 'challenger-survival-v1';
+
+// Honest, slightly-pessimistic cold-start prior used when no history supports a cell.
+const DEFAULT_PRIOR = { pTarget: 0.35, pStop: 0.40, pNeither: 0.25 };
+const PRIOR_STRENGTH = 12; // pseudo-count mass pulling each level toward its parent estimate
+
+const ENTRY_STATES = ['ENTER_NOW', 'WAIT_FOR_PULLBACK', 'WAIT_FOR_BREAKOUT', 'WAIT_FOR_CONFIRMATION', 'STALE', 'INVALID'];
+
+function isNum(v) { return typeof v === 'number' && Number.isFinite(v); }
+
+// --- subgroup keying ---------------------------------------------------------
+function stageOf(sig) {
+  const st = sig && sig.state;
+  if (st === 'detected' || st === 'early') return 'forming';
+  if (st === 'ready') return 'ready';
+  if (st === 'triggered') return 'triggered';
+  if (st === 'extended') return 'extended';
+  return 'unknown';
+}
+function eventTypeOf(sig) {
+  if (sig && sig.eventSurprise && sig.eventSurprise.category) return sig.eventSurprise.category;
+  if (sig && sig.event && sig.event.type) return sig.event.type;
+  return 'none';
+}
+// Ordered most-general -> most-specific so prefixes form the shrinkage ladder.
+function keyPartsFor(sig, ctx = {}) {
+  const horizon = (sig && sig.horizon) || 'swing';
+  const family = (sig && sig.strategyFamily) || 'trend';
+  const regime = (ctx.regime && ctx.regime.label) || (sig && sig.regimeLabel) || 'neutral';
+  const cap = capBucket(sig && sig.liquidity && sig.liquidity.dollarVol);
+  return [horizon, family, regime, cap, stageOf(sig), eventTypeOf(sig)];
+}
+
+// --- table construction ------------------------------------------------------
+// Accumulate competing-risk counts at EVERY prefix granularity, so estimateSurvival can
+// walk coarse->fine. `events`: resolved labeled events with { barrier|outcome, keyParts,
+// barsToBarrier, windowUsed }. `barrier` in {upper->target, lower->stop, time->neither}.
+function outcomeOf(ev) {
+  const b = ev.barrier || ev.outcome;
+  if (b === 'upper' || b === 'target') return 'target';
+  if (b === 'lower' || b === 'stop') return 'stop';
+  if (b === 'time' || b === 'neither' || b === 'timeout') return 'neither';
+  return null;
+}
+function buildSurvivalTable(events) {
+  const table = new Map();
+  const bump = (key, oc, bars) => {
+    let c = table.get(key);
+    if (!c) { c = { target: 0, stop: 0, neither: 0, n: 0, barsSum: 0, barsN: 0 }; table.set(key, c); }
+    c[oc] += 1; c.n += 1;
+    if (isNum(bars)) { c.barsSum += bars; c.barsN += 1; }
+  };
+  for (const ev of (events || [])) {
+    const oc = outcomeOf(ev);
+    if (!oc) continue;
+    const parts = ev.keyParts || keyPartsFor(ev, { regime: { label: ev.regimeLabel } });
+    const bars = isNum(ev.barsToBarrier) ? ev.barsToBarrier : (isNum(ev.windowUsed) ? ev.windowUsed : null);
+    bump('GLOBAL', oc, bars);
+    for (let level = 1; level <= parts.length; level++) bump(parts.slice(0, level).join('|'), oc, bars);
+  }
+  return table;
+}
+
+// Empirical-Bayes update of a running estimate toward a cell's observed rates.
+function ebUpdate(cell, prior, strength) {
+  const denom = cell.n + strength;
+  return {
+    pTarget: (cell.target + strength * prior.pTarget) / denom,
+    pStop: (cell.stop + strength * prior.pStop) / denom,
+    pNeither: (cell.neither + strength * prior.pNeither) / denom,
+  };
+}
+
+// Walk coarse->fine, shrinking each present level toward the running estimate.
+function shrunkProbs(parts, table) {
+  const global = table.get('GLOBAL');
+  let est = { ...DEFAULT_PRIOR };
+  if (global && global.n > 0) est = ebUpdate(global, DEFAULT_PRIOR, PRIOR_STRENGTH);
+  let effN = 0;
+  let levelsUsed = 0;
+  let finestBars = null;
+  for (let level = 1; level <= parts.length; level++) {
+    const cell = table.get(parts.slice(0, level).join('|'));
+    if (!cell || cell.n === 0) continue;
+    est = ebUpdate(cell, est, PRIOR_STRENGTH);
+    effN = cell.n;
+    levelsUsed = level;
+    if (cell.barsN > 0) finestBars = cell.barsSum / cell.barsN;
+  }
+  const s = est.pTarget + est.pStop + est.pNeither || 1;
+  return {
+    pTarget: est.pTarget / s,
+    pStop: est.pStop / s,
+    pNeither: est.pNeither / s,
+    effN,
+    levelsUsed,
+    finestBars,
+    shrunkToPrior: levelsUsed === 0,
+  };
+}
+
+// --- entry-state classifier --------------------------------------------------
+// Deterministic rules over lifecycle state, remaining-edge freshness, and price-vs-entry.
+function classifyEntryState(sig) {
+  const st = sig && sig.state;
+  const re = sig && sig.remainingEdge;
+  const fresh = re && re.freshness;
+  const side = (sig && sig.side) === 'short' ? 'short' : 'long';
+  const price = num(sig && sig.price);
+  const entry = num(sig && sig.entry);
+  const stop = num(sig && sig.stop);
+
+  if (st === 'failed' || fresh === 'invalidated' || entry == null || stop == null) return 'INVALID';
+  if (st === 'expired' || fresh === 'expired' || fresh === 'late' || st === 'extended') return 'STALE';
+
+  // Price relative to the entry trigger tells pullback vs breakout.
+  if (price != null && entry != null && entry !== 0) {
+    const ext = (price - entry) / entry; // +ve = above entry
+    const beyond = side === 'long' ? ext : -ext; // how far in the trade's favor past entry
+    if (st === 'ready' || st === 'triggered') {
+      if (beyond > 0.04) return 'WAIT_FOR_PULLBACK'; // extended past trigger -> better to wait
+      if (beyond < -0.03) return 'WAIT_FOR_BREAKOUT'; // not yet at trigger
+      return 'ENTER_NOW';
+    }
+    if (st === 'detected' || st === 'early') {
+      return beyond < -0.005 ? 'WAIT_FOR_BREAKOUT' : 'WAIT_FOR_CONFIRMATION';
+    }
+  }
+  if (st === 'ready' || st === 'triggered') return 'ENTER_NOW';
+  return 'WAIT_FOR_CONFIRMATION';
+}
+
+function preferredEntryFor(state) {
+  switch (state) {
+    case 'WAIT_FOR_PULLBACK': return 'pullback';
+    case 'WAIT_FOR_BREAKOUT': return 'breakout';
+    case 'WAIT_FOR_CONFIRMATION': return 'vwap-reclaim-or-confirmation';
+    case 'ENTER_NOW': return 'next-open';
+    default: return null;
+  }
+}
+
+function num(v) { return isNum(v) ? v : null; }
+function round(v, d) { if (!isNum(v)) return null; const m = Math.pow(10, d); return Math.round(v * m) / m; }
+
+// Main entry. `sig` enriched signal; ctx: { table (buildSurvivalTable output), regime }.
+function assessSurvival(sig, ctx = {}) {
+  const table = ctx.table instanceof Map ? ctx.table : new Map();
+  const parts = keyPartsFor(sig, ctx);
+  const probs = shrunkProbs(parts, table);
+
+  const horizon = (sig && sig.horizon) || 'swing';
+  const maxHoldBars = MAX_AGE_BARS[horizon] != null ? MAX_AGE_BARS[horizon] : 10;
+  const ageBars = isNum(sig && sig.ageBars) ? sig.ageBars : 0;
+  const sessionsRemaining = Math.max(0, maxHoldBars - ageBars);
+
+  const entryState = classifyEntryState(sig);
+  const preferredEntry = preferredEntryFor(entryState);
+
+  // Edge now vs after waiting one session. Entering now captures the net edge but eats one
+  // more session of decay; while WAITING (not yet entered) the setup edge persists to expiry.
+  const re = sig && sig.remainingEdge;
+  const edgeNowPct = re && re.rated && isNum(re.netRemainingPct) ? re.netRemainingPct : null;
+  let edgeAfterWaitPct = edgeNowPct;
+  let preferEntering = entryState === 'ENTER_NOW';
+  if (edgeNowPct != null) {
+    if (entryState === 'ENTER_NOW') edgeAfterWaitPct = round(edgeNowPct * 0.97, 2); // one bar of decay if you delay
+    else edgeAfterWaitPct = edgeNowPct; // waiting preserves the setup edge until expiry
+    preferEntering = entryState === 'ENTER_NOW' && probs.pTarget > probs.pStop;
+  }
+
+  const expectedSessionsToResolution = probs.finestBars != null
+    ? round(probs.finestBars, 1)
+    : round(maxHoldBars * (probs.pNeither + 0.5 * (probs.pTarget + probs.pStop)), 1);
+
+  return {
+    version: SURVIVAL_VERSION,
+    isPrediction: true, // model estimate, NOT a validated probability
+    pTargetBeforeStop: round(probs.pTarget, 3),
+    pStopBeforeTarget: round(probs.pStop, 3),
+    pNeither: round(probs.pNeither, 3),
+    effN: probs.effN,
+    levelsUsed: probs.levelsUsed,
+    shrunkToPrior: probs.shrunkToPrior,
+    expectedSessionsToResolution,
+    entryState,
+    preferredEntry,
+    basis: 'eod-next-session', // EOD data => next-session positioning, not intraday precision
+    edgeNowPct,
+    edgeAfterWaitPct,
+    preferEntering,
+    setupExpiry: { maxHoldBars, ageBars, sessionsRemaining },
+  };
+}
+
+module.exports = {
+  SURVIVAL_VERSION,
+  DEFAULT_PRIOR,
+  PRIOR_STRENGTH,
+  ENTRY_STATES,
+  keyPartsFor,
+  stageOf,
+  eventTypeOf,
+  outcomeOf,
+  buildSurvivalTable,
+  shrunkProbs,
+  classifyEntryState,
+  assessSurvival,
+};
+
+``````
+
 ## lib/coil.js
 
 ``````javascript
@@ -9927,29 +12150,36 @@ const WIKI = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies';
 
 // Returns [{ ticker, removedDate: 'YYYY-MM-DD' }] for names removed within the
 // last `years` (default 3). Yahoo tickers use '-' for class shares.
+// Pure parse of the S&P "changes" wikitable HTML → [{ ticker, removedDate }] within `years`.
+// Exported for testing. CRITICAL: the row regex must tolerate attributes — Wikipedia emits
+// `<tr class="...">`, and a strict `/<tr>/` matched ZERO rows, silently emptying the entire
+// delisting source (so every survivorship correction added nothing). See the regression test.
+function parseRemovedConstituents(html, { years = 3, now = Date.now() } = {}) {
+  const tables = [...(html || '').matchAll(/<table[^>]*class="[^"]*wikitable[^"]*"[\s\S]*?<\/table>/g)].map(m => m[0]);
+  const changes = tables.find(t => /Removed/.test(t) && /Date/.test(t) && /Reason/i.test(t));
+  if (!changes) return [];
+  const cutoff = new Date(now - years * 365 * 864e5);
+  const out = [];
+  for (const rowMatch of changes.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) {
+    const cells = [...rowMatch[1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/g)]
+      .map(c => c[1].replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim());
+    if (cells.length < 5) continue;                 // Date | +Ticker | +Name | −Ticker | −Name | Reason
+    const d = new Date(cells[0]);
+    if (isNaN(d) || d < cutoff) continue;
+    const ticker = (cells[3] || '').replace(/\./g, '-'); // BRK.B → BRK-B for Yahoo
+    if (/^[A-Z][A-Z\-]{0,5}$/.test(ticker)) out.push({ ticker, removedDate: d.toISOString().slice(0, 10) });
+  }
+  // Dedupe (keep earliest removal per ticker).
+  const seen = new Map();
+  for (const x of out.sort((a, b) => (a.removedDate < b.removedDate ? -1 : 1))) if (!seen.has(x.ticker)) seen.set(x.ticker, x);
+  return [...seen.values()];
+}
+
 async function fetchRemovedConstituents(years = 3) {
   try {
     const r = await fetch(WIKI, { headers: { 'User-Agent': 'Mozilla/5.0' } });
     if (!r.ok) return [];
-    const html = await r.text();
-    const tables = [...html.matchAll(/<table[^>]*class="[^"]*wikitable[^"]*"[\s\S]*?<\/table>/g)].map(m => m[0]);
-    const changes = tables.find(t => /Removed/.test(t) && /Date/.test(t) && /Reason/i.test(t));
-    if (!changes) return [];
-    const cutoff = new Date(Date.now() - years * 365 * 864e5);
-    const out = [];
-    for (const rowMatch of changes.matchAll(/<tr>([\s\S]*?)<\/tr>/g)) {
-      const cells = [...rowMatch[1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/g)]
-        .map(c => c[1].replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim());
-      if (cells.length < 5) continue;                 // Date | +Ticker | +Name | −Ticker | −Name | Reason
-      const d = new Date(cells[0]);
-      if (isNaN(d) || d < cutoff) continue;
-      const ticker = (cells[3] || '').replace(/\./g, '-'); // BRK.B → BRK-B for Yahoo
-      if (/^[A-Z][A-Z\-]{0,5}$/.test(ticker)) out.push({ ticker, removedDate: d.toISOString().slice(0, 10) });
-    }
-    // Dedupe (keep earliest removal per ticker).
-    const seen = new Map();
-    for (const x of out.sort((a, b) => (a.removedDate < b.removedDate ? -1 : 1))) if (!seen.has(x.ticker)) seen.set(x.ticker, x);
-    return [...seen.values()];
+    return parseRemovedConstituents(await r.text(), { years });
   } catch { return []; }
 }
 
@@ -9970,7 +12200,7 @@ async function fetchRecentIndexChanges(daysBack = 70) {
     const adds = [], removes = [];
     const clean = t => (t || '').replace(/\./g, '-');
     const ok = t => /^[A-Z][A-Z\-]{0,5}$/.test(t);
-    for (const rowMatch of changes.matchAll(/<tr>([\s\S]*?)<\/tr>/g)) {
+    for (const rowMatch of changes.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) {
       const cells = [...rowMatch[1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/g)]
         .map(c => c[1].replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim());
       if (cells.length < 5) continue;                 // Date | +Ticker | +Name | −Ticker | −Name | Reason
@@ -9985,7 +12215,7 @@ async function fetchRecentIndexChanges(daysBack = 70) {
   } catch { return { adds: [], removes: [] }; }
 }
 
-module.exports = { fetchRemovedConstituents, fetchRecentIndexChanges };
+module.exports = { fetchRemovedConstituents, fetchRecentIndexChanges, parseRemovedConstituents };
 
 ``````
 
@@ -11578,6 +13808,97 @@ async function runToday(req, res) {
 }
 
 module.exports = { runToday, buildToday, snapRow };
+
+``````
+
+## lib/decision-sources.js
+
+``````javascript
+'use strict';
+// decision-sources.js — gather + normalize + rank an INDEPENDENT signal set for the
+// challenger, reusing the production normalizers and ranker so the challenger is measurable
+// head-to-head against op=today from the same inputs. `buildRankedSignals` is pure/testable;
+// `gatherRankedSignals` is the thin async wrapper that self-fetches the cached endpoints.
+//
+// This does NOT touch production: op=today keeps its own gather in decision-routes.js.
+
+const N = require('./decision-normalizers');
+const { makeSignal, mergeSignals, rankSignals } = require('./decision');
+
+// Same source list op=today consumes (decision-routes.runToday).
+const SOURCE_URLS = {
+  screener: '/api/screener?scope=large',
+  screenerSmall: '/api/screener?scope=small',
+  gapgo: '/api/tracker?op=gapgo',
+  daytrade: '/api/tracker?op=daytrade',
+  coil: '/api/tracker?op=coil',
+  gapdown: '/api/tracker?op=gapdown',
+  biotech: '/api/tracker?op=biotech',
+  coremo: '/api/tracker?op=core',
+  downday: '/api/tracker?op=downday',
+  optionsflow: '/api/tracker?op=optionsflow',
+  scoreboard: '/api/tracker?op=scoreboard',
+  sectors: '/api/sectors',
+  today: '/api/tracker?op=today',
+  rt: '/api/tracker?op=readthrough',
+  an: '/api/tracker?op=anomaly',
+  sw: '/api/tracker?op=secondwave',
+  ca: '/api/tracker?op=crossasset',
+  ts: '/api/tracker?op=toneshift',
+};
+
+// Turn each source payload into canonical Signal INPUTS, validate via makeSignal, keep valid.
+function normalizeAll(sources = {}) {
+  const inputs = [];
+  const push = (arr) => { for (const inp of (arr || [])) inputs.push(inp); };
+  if (sources.screener) push(N.fromScreener(sources.screener));
+  if (sources.screenerSmall) push(N.fromScreener(sources.screenerSmall));
+  if (sources.gapgo) push(N.fromGapGo(sources.gapgo));
+  if (sources.daytrade) push(N.fromDayTrade(sources.daytrade));
+  if (sources.coil) push(N.fromCoil(sources.coil));
+  if (sources.gapdown) push(N.fromGapDown(sources.gapdown));
+  if (sources.biotech) push(N.fromBiotech(sources.biotech));
+  if (sources.coremo) push(N.fromCoreMomentum(sources.coremo));
+  if (sources.downday) push(N.fromDownDay(sources.downday));
+  if (sources.optionsflow) push(N.fromOptionsFlow(sources.optionsflow));
+  push(N.fromAiScreeners({ rt: sources.rt, an: sources.an, sw: sources.sw, ca: sources.ca, ts: sources.ts }));
+
+  const sectors = sources.sectors ? N.sectorStrength(sources.sectors) : null;
+  const signals = [];
+  for (const inp of inputs) {
+    if (sectors && inp.sector && sectors.byName && sectors.byName[inp.sector] != null && inp.sectorStrength == null) {
+      inp.sectorStrength = sectors.byName[inp.sector];
+    }
+    const { signal } = makeSignal(inp);
+    if (signal && signal.valid) signals.push(signal);
+  }
+  return { signals, sectors };
+}
+
+// Pure: normalize -> merge -> rank. `ctx`: { regime, scoreboard }.
+function buildRankedSignals(sources = {}, ctx = {}) {
+  const { signals, sectors } = normalizeAll(sources);
+  const merged = mergeSignals(signals);
+  const ranked = rankSignals(merged, { regime: ctx.regime || {}, scoreboard: ctx.scoreboard || null, includeInactive: false });
+  return { ranked, sectors, count: ranked.length };
+}
+
+// Async wrapper: self-fetch the cached endpoints, then build. `fetchJSON(path)` is injected
+// (returns parsed JSON or null) so this is testable without a network.
+async function gatherRankedSignals(fetchJSON, opts = {}) {
+  const keys = Object.keys(SOURCE_URLS);
+  const results = await Promise.all(keys.map(async (k) => {
+    try { return [k, await fetchJSON(SOURCE_URLS[k])]; } catch { return [k, null]; }
+  }));
+  const sources = Object.fromEntries(results);
+  const today = sources.today || {};
+  const regime = opts.regime || today.regime || {};
+  const scoreboard = sources.scoreboard || null;
+  const built = buildRankedSignals(sources, { regime, scoreboard });
+  return { ...built, regime, sectors: built.sectors, today, density: today.opportunity || null, sources };
+}
+
+module.exports = { SOURCE_URLS, normalizeAll, buildRankedSignals, gatherRankedSignals };
 
 ``````
 
@@ -13762,7 +16083,7 @@ async function runEvolveBackfill({ scope = 'large', limit = 80, step = 21, month
           ticker: t, predDate: date, horizon: h, contextKey: E.contextKey({ regimeLabel, cap, horizon: h }),
           specialists: fired, contribs, probability: 0.4, decision: 'BACKFILL',
           won: core.won, barrier: core.barrier, label: core.label, terminalReturn: core.terminalReturn,
-          mfe: core.mfe, mae: core.mae, barsToBarrier: core.barsToBarrier,
+          mfe: core.mfe, mae: core.mae, barsToBarrier: core.barsToBarrier, labelEndDate: core.labelEndDate,
           spyRelReturn: spyRet == null ? null : +(core.terminalReturn - spyRet).toFixed(4),
           sectorRelReturn: secRet == null ? null : +(core.terminalReturn - secRet).toFixed(4),
           barriers: { up: b.up, down: b.down, volAdjusted: !!b.volAdjusted },
@@ -14183,12 +16504,23 @@ function tripleBarrier(forward, entry, { up, down, window }) {
       barsObserved: forward.length, windowNeeded: window, reason: 'window-not-elapsed' };
   }
   const terminal = (exitPx - entry) / entry;
+  // Exact index of the resolving bar in the forward slice: the barrier-touch bar for
+  // upper/lower, else the last bar of the elapsed window for a time exit. Its DATE is the
+  // label-end timestamp — the ground truth for purging overlapping labels (superseding the
+  // 1.4×-calendar-day approximation in lib/evolve-walkforward.js).
+  const endIdx = barrier === 'time' ? n - 1 : bars - 1;
+  const labelEndDate = (forward[endIdx] && forward[endIdx].date) || null;
+  // A profitable time-exit is NOT a loss. `won` stays barrier==='upper' for backward
+  // compatibility (the ensemble's hit-rate target), but `profitable` records the honest
+  // sign of the realized return so downstream can treat a positive timeout correctly.
   return {
     resolved: true, pending: false,
     barrier,                                    // upper | lower | time
     won: barrier === 'upper',
+    profitable: terminal > 0,                   // true realized sign (incl. profitable timeouts)
     label: barrier === 'upper' ? 1 : barrier === 'lower' ? -1 : 0,
     barsToBarrier: barrier === 'time' ? null : bars,
+    labelEndDate,                               // exact date the label resolved (for exact purge)
     windowUsed: n, sameBarAmbiguous: sameBar,
     entry, exitPrice: +exitPx.toFixed(4),
     terminalReturn: +terminal.toFixed(4),
@@ -14586,6 +16918,8 @@ function buildEvolvePayload(signals, { regimeVector = null, regime = {}, perf = 
     barriersByHorizon: BARRIERS,
     regimeSupport: support.value,
     dsrSurvivors: (perf && perf.dsrSurvivors) || null,   // Gap C live gate (null ⇒ inactive)
+    redundancyModel: (perf && perf.redundancy) || null,  // #10: discount correlated specialists' effN
+    strengthPromoted: !!(perf && perf.strengthOOS && perf.strengthOOS.promote),  // #9: promote the tilt only if OOS-earned
     priorP: 0.4,
   };
   const built = E.buildEvolve(signals, ctx);
@@ -14687,6 +17021,7 @@ async function runEvolveScore(req, res) {
       contribs: c.contribs.map(x => ({ specialist: x.specialist, p: x.p })),
       probability: c.probability, decision: c.decision, contextKey: c.contextKey,
       sector: c.sector || null, cap: c.cap || null,
+      strengthPercentile: c.strengthPercentile ?? null,   // #9: log candidate strength so the OOS comparison can accrue
     });
   }
   let logged = 0;
@@ -14744,6 +17079,7 @@ async function runEvolveResolve(req, res) {
       resolved[p.id] = {
         ticker: p.ticker, predDate: p.predDate, horizon: p.evolveHorizon, contextKey: p.contextKey,
         specialists: p.specialists, contribs: p.contribs, probability: p.probability, decision: p.decision,
+        strengthPercentile: p.strengthPercentile ?? null,   // #9: carry strength onto the resolved event for the OOS comparison
         won: core.won, barrier: core.barrier, label: core.label, terminalReturn: core.terminalReturn,
         mfe: core.mfe, mae: core.mae, barsToBarrier: core.barsToBarrier,
         spyRelReturn: spyRet == null ? null : +(core.terminalReturn - spyRet).toFixed(4),
@@ -14810,8 +17146,15 @@ function recomputePerf(resolved, { weighted = true } = {}) {
       else if (recentHit < globalHit - 0.08) driftBySpecialist[sp] = 'DEGRADING';
     }
   }
+  // Measured specialist-redundancy model (#10): cache the compact credit lookup so the live
+  // op=evolve can discount correlated specialists' effN toward the TRADE gate without a rebuild.
+  const redModel = E.buildSpecialistRedundancy(rows);
+  const redundancy = redModel ? { version: redModel.version, credits: redModel.credits, summary: redModel.summary } : null;
+  // #9 promotion gate: does the candidate-strength tilt beat the base P out-of-sample? Cached here so
+  // the live path can auto-promote without a rebuild. ready:false (accruing) until strength is logged.
+  const strengthOOS = E.strengthOOSComparison(rows);
   return { version: E.EVOLVE_VERSION, bySpecialist, driftBySpecialist, n: rows.length,
-    weighted, dsrSurvivors: grid.survivors,
+    weighted, dsrSurvivors: grid.survivors, redundancy, strengthOOS,
     dsr: { trials: grid.trials, passing: grid.passing, expectedMaxSharpeNull: grid.expectedMaxSharpeNull, verdict: grid.verdict },
     updatedAt: new Date().toISOString() };
 }
@@ -14837,9 +17180,16 @@ async function runEvolveHealth(req, res) {
   // TRADE-eligible only if its Sharpe survives the deflation for the number of cells tried.
   const dsr = require('./evolve-dsr').gridDeflatedSharpe(rows, { weights: require('./evolve-uniqueness').uniquenessWeights(rows) });
   res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=86400');
+  const calObj = model && model.calibrator;
   return res.json({ ok: true, version: E.EVOLVE_VERSION,
     resolved: rows.length, logged, decisionDays: days.length,
-    calibrated: !!(model && model.calibrator), calibrationError: model && model.calibrator ? model.calibrator.error : null,
+    calibrated: !!calObj, calibrationError: calObj ? calObj.error : null,
+    // #18: the HONEST out-of-fold calibration read (calibrated vs raw baseline), not the in-sample Brier.
+    calibrationOOF: calObj ? { oofBrier: calObj.oofBrier, oofBrierRaw: calObj.oofBrierRaw, calibrationHelpsOOS: calObj.calibrationHelpsOOS } : null,
+    // #10: measured specialist-redundancy summary (drives the effN discount toward the TRADE gate).
+    redundancy: (perf && perf.redundancy && perf.redundancy.summary) || null,
+    // #9: shadow OOS comparison + promotion verdict for the candidate-strength tilt.
+    strengthOOS: (perf && perf.strengthOOS) || null,
     rankQuality: rq, calibration: cal, deflatedSharpe: dsr, specialists,
     note: rows.length < 20 ? 'Accruing — health metrics stabilize after ~20 resolved predictions.' : null });
 }
@@ -15067,8 +17417,9 @@ const DSR = require('./evolve-dsr');
 const WF_VERSION = 'evolve-omega-wf-v1';
 const MARGIN = 0.02;            // same OOS ship margin as lib/ghost-backtest.js
 const DEFAULT_EMBARGO = 3;      // extra trading-day buffer BEYOND the label window
-const CAL_PER_TD = 1.4;         // calendar days per trading day (~7/5) — the label window and
-                                // embargo are in TRADING days; predDates are calendar dates.
+const CAL_PER_TD = 1.4;         // calendar days per trading day (~7/5). Now used ONLY for the small
+                                // embargo buffer and the legacy fallback purge; the primary purge is
+                                // EXACT off each label's real end date (labelClearsTestBlockExact).
 const DEFAULTS = { folds: 4, minTrain: 30, minTest: 10 };
 
 // Forward bars a horizon's triple-barrier label spans — the purge distance (trading days).
@@ -15084,6 +17435,17 @@ function calDays(a, b) { return Math.round((new Date(b) - new Date(a)) / 8640000
 function labelClearsTestBlock(trainDate, testStartDate, horizon, embargo) {
   const needCal = (horizonWindow(horizon) + embargo) * CAL_PER_TD;
   return calDays(trainDate, testStartDate) > needCal;
+}
+
+// EXACT purge: use the label's ACTUAL end date (emitted by lib/evolve-labels.js tripleBarrier as
+// `labelEndDate`) instead of ESTIMATING it as predDate + full window. Two errors that fixes:
+//   1) a label that hit a barrier early closed well before predDate+window, so the window-based form
+//      needlessly OVER-purges it (drops valid training data);
+//   2) the ×1.4 calendar constant mis-measures the span across holidays (can leak or over-purge).
+// Keep the event iff its real label end is at least the (small) embargo buffer before the test block.
+// Only that tiny embargo buffer is still calendar-approximated; the label boundary itself is EXACT.
+function labelClearsTestBlockExact(labelEndDate, testStartDate, embargo) {
+  return calDays(labelEndDate, testStartDate) > embargo * CAL_PER_TD;
 }
 
 // Train specialist performance from a set of RESOLVED events. Mirrors the core of
@@ -15146,6 +17508,7 @@ function walkForward(events, { folds = DEFAULTS.folds, embargo = DEFAULT_EMBARGO
   const ord = new Map(dates.map((d, i) => [d, i]));
 
   const foldOut = []; const blockICs = []; const allTest = [];
+  let purgeExactDecisions = 0, purgeApproxDecisions = 0;   // exact label-end vs window×1.4 fallback
   for (let f = 1; f < folds; f++) {                 // f=0 has no past → no training set
     const lo = Math.floor((D * f) / folds);
     const hi = Math.floor((D * (f + 1)) / folds);
@@ -15155,7 +17518,10 @@ function walkForward(events, { folds = DEFAULTS.folds, embargo = DEFAULT_EMBARGO
     const train = rows.filter(r => {
       if (ord.get(r.predDate) >= lo) return false;  // strictly past only
       if (!purge) return true;                      // leaky baseline
-      return labelClearsTestBlock(r.predDate, testStartDate, r.horizon, embargo);   // purge + embargo (calendar days)
+      // EXACT purge when the label's real end date is known; fall back to the window×1.4 estimate
+      // only for legacy events that predate the labelEndDate field.
+      if (r.labelEndDate) { purgeExactDecisions++; return labelClearsTestBlockExact(r.labelEndDate, testStartDate, embargo); }
+      purgeApproxDecisions++; return labelClearsTestBlock(r.predDate, testStartDate, r.horizon, embargo);
     });
     if (train.length < minTrain || testEvents.length < minTest) {
       foldOut.push({ fold: f, from: dates[lo], to: dates[hi - 1], trainN: train.length, testN: testEvents.length, ic: null, skipped: 'below min train/test' });
@@ -15183,10 +17549,15 @@ function walkForward(events, { folds = DEFAULTS.folds, embargo = DEFAULT_EMBARGO
   // Ship criterion (same as ghost-backtest): ≥3 OOS blocks, ALL positive, mean above margin.
   const passed = valid.length >= 3 && positive === valid.length && meanOOS != null && meanOOS > MARGIN;
   const cal = allTest.length ? RQ.calibration(allTest.map(r => ({ score: r.score * 100, won: r.won }))) : null;
+  const purgeMethod = !purge ? 'none (leaky baseline)'
+    : purgeApproxDecisions === 0 ? 'exact-label-end'
+    : purgeExactDecisions === 0 ? 'approx-window×1.4'
+    : 'mixed (exact where labelEndDate present, else window×1.4)';
   return {
     ready: valid.length > 0, blocks: D, folds: foldOut,
     testedBlocks: valid.length, positiveBlocks: positive, meanOOS, passed,
     brier: cal ? cal.brier : null, calibration: cal, testRows: allTest.length,
+    purge: { method: purgeMethod, exactDecisions: purgeExactDecisions, approxDecisions: purgeApproxDecisions },
   };
 }
 
@@ -15257,7 +17628,7 @@ async function runEvolveOmegaWalkForward({ scope = 'large', limit = 80, months =
 
 module.exports = {
   WF_VERSION, MARGIN, DEFAULT_EMBARGO,
-  runEvolveOmegaWalkForward, evaluate, walkForward, fitPerf, scoreEvent, horizonWindow, verdictOf, labelClearsTestBlock, calDays, regimeOf, regimeHistogram, uniquenessWeights: U.uniquenessWeights, uniquenessSummary: U.uniquenessSummary,
+  runEvolveOmegaWalkForward, evaluate, walkForward, fitPerf, scoreEvent, horizonWindow, verdictOf, labelClearsTestBlock, labelClearsTestBlockExact, calDays, regimeOf, regimeHistogram, uniquenessWeights: U.uniquenessWeights, uniquenessSummary: U.uniquenessSummary,
 };
 
 ``````
@@ -15292,6 +17663,8 @@ module.exports = {
 'use strict';
 
 const { wilson } = require('./stats');
+const R = require('./redundancy');
+const RQ = require('./rankquality');
 
 const EVOLVE_VERSION = 'evolve-core-v1';
 
@@ -15408,17 +17781,54 @@ function metaWeights(firing, { driftById = {}, perfById = {} } = {}) {
 // ── Ensemble probability + agreement ─────────────────────────────────────────────────
 // Weighted average of the firing specialists' calibrated P's. Agreement = 1 − normalized
 // dispersion across specialists (low spread ⇒ specialists concur ⇒ higher confidence).
-function ensembleProbability(contribs, weights) {
-  if (!contribs.length) return { p: null, agreement: null, effN: 0 };
+// `opts.redundancyModel` (measured pairwise credits from lib/redundancy.js) discounts the summed
+// effN by the specialists' EFFECTIVE INDEPENDENCE: two ~0.96-correlated specialists must not count
+// as two independent samples toward the TRADE gate. independenceRatio = effectiveSources / firing,
+// so a redundant pair collapses toward one specialist's worth of effN. With no model the ratio is 1
+// and effN is byte-identical to before (safe default).
+function ensembleProbability(contribs, weights, { redundancyModel = null, familyOf = null, priorCredit = 0.3 } = {}) {
+  if (!contribs.length) return { p: null, agreement: null, effN: 0, effNRaw: 0, independenceRatio: 1 };
   const wById = Object.fromEntries(weights.map(w => [w.specialist, w.weight]));
-  let p = 0, wsum = 0, effN = 0;
-  for (const c of contribs) { const w = wById[c.specialist] || 0; p += w * c.p; wsum += w; effN += c.effN; }
+  let p = 0, wsum = 0, rawEffN = 0;
+  for (const c of contribs) { const w = wById[c.specialist] || 0; p += w * c.p; wsum += w; rawEffN += c.effN; }
   p = wsum ? p / wsum : null;
   const ps = contribs.map(c => c.p);
   const m = ps.reduce((s, x) => s + x, 0) / ps.length;
   const disp = Math.sqrt(ps.reduce((s, x) => s + (x - m) ** 2, 0) / ps.length);
   const agreement = +Math.max(0, 1 - disp * 3).toFixed(3);   // ~0.33 spread ⇒ 0 agreement
-  return { p: p == null ? null : +p.toFixed(4), agreement, effN: +effN.toFixed(1) };
+
+  const specialists = contribs.map(c => c.specialist);
+  let independenceRatio = 1, redundantAgreement = false;
+  if (redundancyModel && specialists.length >= 2) {
+    const ev = R.effectiveEvidence(specialists, { model: redundancyModel, familyOf: familyOf || (() => null), priorCredit });
+    independenceRatio = Math.max(0, Math.min(1, ev.score / specialists.length));
+    redundantAgreement = ev.redundantAgreement;
+  }
+  const effN = rawEffN * independenceRatio;
+  return {
+    p: p == null ? null : +p.toFixed(4), agreement,
+    effN: +effN.toFixed(1), effNRaw: +rawEffN.toFixed(1),
+    independenceRatio: +independenceRatio.toFixed(3), redundantAgreement,
+  };
+}
+
+// Build a measured specialist-redundancy model from resolved EVOLVE events (reuses
+// lib/redundancy.js). Each event contributes one row per FIRING specialist keyed on (date,ticker)
+// with the SPY-relative outcome, so overlap + realized-return correlation are measured between
+// specialists exactly as lib/redundancy does for algorithms. Returns null when there are too few
+// rows to measure anything (→ ensembleProbability then leaves effN undiscounted).
+function buildSpecialistRedundancy(rows, { priorCredit = 0.3 } = {}) {
+  const specRows = [];
+  for (const r of rows || []) {
+    if (!r || !r.predDate || !r.ticker) continue;
+    const excess = Number.isFinite(r.spyRelReturn) ? r.spyRelReturn
+      : Number.isFinite(r.sectorRelReturn) ? r.sectorRelReturn
+      : Number.isFinite(r.terminalReturn) ? r.terminalReturn : null;
+    const specs = (r.specialists && r.specialists.length) ? r.specialists : (r.contribs || []).map(c => c.specialist);
+    for (const sp of specs) if (sp) specRows.push({ date: r.predDate, ticker: r.ticker, algorithm: sp, excess });
+  }
+  if (specRows.length < 20) return null;
+  return R.buildRedundancyModel(specRows, { priorCredit });
 }
 
 // Expected NET payoff (fraction) after estimated slippage/cost, using barrier geometry
@@ -15513,6 +17923,58 @@ const capBucket = (dollarVol) => {
   return 'small';
 };
 
+// ── Candidate-strength tilt (audit #9) — SHADOW ──────────────────────────────────────
+// The context ensemble P is a pooled BASE RATE (regime×cap×horizon), so two candidates firing the
+// same specialists in the same context get an identical P regardless of their own setup strength.
+// This tilts the P by the candidate's within-context strength (its op=today percentile) in LOG-ODDS
+// space, so the result stays a valid probability and the nudge is symmetric around the median
+// candidate. `k` bounds the shift (log-odds per full strength step); k=0 → identity.
+//
+// IT IS SHADOW: exposed as strengthAdjustedP alongside the base P but NOT fed to the decision/rank,
+// because the blend coefficient is asserted, not yet fit on resolved outcomes. Promoting it to drive
+// the gate requires OOS evidence that within-context strength predicts the outcome (Part XV).
+const STRENGTH_K = 0.5;   // gentle: ±0.25 logit across the [0,1] strength range
+function candidateStrengthTilt(pBase, strength, { k = STRENGTH_K } = {}) {
+  if (!Number.isFinite(pBase) || !Number.isFinite(strength) || k <= 0) return { p: pBase, delta: 0 };
+  const s = Math.max(0, Math.min(1, strength)) - 0.5;                 // centered [-0.5, +0.5]
+  const base = Math.max(0.01, Math.min(0.99, pBase));
+  const logit = Math.log(base / (1 - base)) + k * s;
+  const p = +(1 / (1 + Math.exp(-logit))).toFixed(4);
+  return { p, delta: +(p - pBase).toFixed(4) };
+}
+
+// SHADOW OOS COMPARISON + PROMOTION GATE for the candidate-strength tilt (audit #9). On resolved
+// events that RECORDED the candidate's strength percentile, compare the base ensemble P against the
+// strength-tilted P as rankers of the realized outcome (rank-IC) and as probabilities (Brier). The
+// tilt is `promote`-eligible ONLY when it beats the base OOS by a predeclared margin on both. This
+// is the champion/challenger evidence gate (Part XV): it earns its way into the decision, or stays
+// shadow. Strength was not logged historically, so this returns ready:false until it accrues forward.
+function strengthOOSComparison(rows, { minN = 40, icMargin = 0.02 } = {}) {
+  const outcomeOf = (r) => Number.isFinite(r.spyRelReturn) ? r.spyRelReturn
+    : Number.isFinite(r.sectorRelReturn) ? r.sectorRelReturn
+    : Number.isFinite(r.terminalReturn) ? r.terminalReturn : null;
+  const clean = (rows || []).filter(r => r && Number.isFinite(r.strengthPercentile)
+    && Number.isFinite(r.probability) && (r.won === true || r.won === false) && outcomeOf(r) != null);
+  if (clean.length < minN) {
+    return { ready: false, n: clean.length, minN, promote: false,
+      note: 'insufficient resolved events carrying candidate strength — the tilt stays SHADOW and accrues forward (strength was not logged historically).' };
+  }
+  const adjP = (r) => candidateStrengthTilt(r.probability, r.strengthPercentile / 100).p;
+  const baseIC = RQ.informationCoefficient(clean.map(r => ({ score: r.probability, outcome: outcomeOf(r) }))).ic;
+  const adjIC = RQ.informationCoefficient(clean.map(r => ({ score: adjP(r), outcome: outcomeOf(r) }))).ic;
+  const y = (r) => (r.won ? 1 : 0);
+  const brier = (f) => clean.reduce((s, r) => s + (f(r) - y(r)) ** 2, 0) / clean.length;
+  const baseBrier = brier(r => r.probability), adjBrier = brier(adjP);
+  const promote = baseIC != null && adjIC != null && adjIC > baseIC + icMargin && adjBrier <= baseBrier;
+  return {
+    ready: true, n: clean.length,
+    baseIC, adjIC, icLift: (baseIC != null && adjIC != null) ? +(adjIC - baseIC).toFixed(4) : null,
+    baseBrier: +baseBrier.toFixed(4), adjBrier: +adjBrier.toFixed(4),
+    criterion: `promote iff adjIC > baseIC + ${icMargin} AND adjBrier <= baseBrier (n>=${minN})`,
+    promote, verdict: promote ? 'strength adds OOS value → ELIGIBLE to promote' : 'no OOS gain → stays SHADOW',
+  };
+}
+
 // ── Score ONE candidate ───────────────────────────────────────────────────────────────
 // `sig` is an enriched decision-engine signal (from op=today): ticker, horizon, sources,
 // side, liquidity, execution, regimeFit, percentile, state, evidence, price/entry/stop.
@@ -15520,7 +17982,7 @@ const capBucket = (dollarVol) => {
 function scoreCandidate(sig, ctx = {}) {
   const { regime = {}, regimeVector = null, perfBySpecialist = {}, driftBySpecialist = {},
     calibrator = null, priorP = 0.4, barriersByHorizon = {}, regimeSupport = 0.5,
-    exploreAllow = false } = ctx;
+    exploreAllow = false, redundancyModel = null, strengthPromoted = false } = ctx;
 
   const evHorizon = ctx.horizonOf ? ctx.horizonOf(sig.horizon) : (sig.evolveHorizon || 'swing');
   const barriers = barriersByHorizon[evHorizon] || { up: 0.15, down: 0.07, window: 21 };
@@ -15533,10 +17995,20 @@ function scoreCandidate(sig, ctx = {}) {
     return { specialist: sp, p, effN, ctxN, globalN, cold };
   });
   const weights = metaWeights(firing, { driftById: driftBySpecialist, perfById: perfBySpecialist });
-  let { p, agreement, effN } = ensembleProbability(contribs, weights);
+  let { p, agreement, effN, effNRaw, independenceRatio } = ensembleProbability(contribs, weights, { redundancyModel });
   // Apply the global calibration map (identity when the ledger is cold).
   const rawP = p;
   if (p != null && calibrator) p = applyCalibrator(calibrator, p);
+
+  // SHADOW (audit #9): candidate-strength-tilted P, so equal-context candidates differentiate by
+  // their own setup strength. NOT used below — decideState still sees the base-rate ensemble p.
+  const strengthPct = Number.isFinite(sig.percentile) ? sig.percentile / 100 : null;
+  const strengthTilt = (p != null && strengthPct != null) ? candidateStrengthTilt(p, strengthPct) : null;
+  // PROMOTION (audit #9): use the strength-tilted P for the DECISION only when the shadow OOS
+  // comparison has earned it (ctx.strengthPromoted, set by the route from perf.strengthOOS). Until
+  // then it is a no-op — the base P drives the decision and strengthAdjustedP is informational only.
+  const strengthPromotedActive = !!(strengthPromoted && strengthTilt);
+  if (strengthPromotedActive) p = strengthTilt.p;
 
   const be = breakevenProb(barriers);
   const slippagePct = (sig.liquidity && sig.liquidity.slippageEst) || null;
@@ -15573,7 +18045,11 @@ function scoreCandidate(sig, ctx = {}) {
     probability: p, rawProbability: rawP, breakeven: +be.toFixed(3),
     edge: p == null ? null : +(p - be).toFixed(4),
     expectedPayoff: payoff, uncertainty, explorationBonus: explore,
-    agreement, effSample: effN, regimeSupport, threshold,
+    agreement, effSample: effN, effSampleRaw: effNRaw, independenceRatio, regimeSupport, threshold,
+    strengthAdjustedP: strengthTilt ? strengthTilt.p : null,   // #9 — informational unless promoted
+    strengthDelta: strengthTilt ? strengthTilt.delta : null,
+    strengthPercentile: strengthPct == null ? null : Math.round(strengthPct * 100),
+    strengthPromoted: strengthPromotedActive,                  // true only after the OOS gate clears
     calibrated: !!calibrator,
     decision: decision.state, decisionReason: decision.reason, decisionMeta: DECISION_META[decision.state],
     regimeVeto, dsrVeto, extensionPenalty, contextKey: ctxKey, cap,
@@ -15586,9 +18062,9 @@ function scoreCandidate(sig, ctx = {}) {
 // ── Simple binned calibrator (Platt-lite) ─────────────────────────────────────────────
 // Fit an isotonic-ish monotone map from raw ensemble P → empirical hit rate using resolved
 // records [{ p, won }]. Cold/thin → identity (returns null so callers skip calibration).
-function fitCalibrator(resolved, { bins = 5, minN = 40 } = {}) {
-  const rows = (resolved || []).filter(r => r && Number.isFinite(r.p) && (r.won === true || r.won === false));
-  if (rows.length < minN) return null;
+// The binned monotone map (edges = bin midpoints, table = empirical hit rate), pooled non-decreasing.
+// Extracted so the k-fold OOF Brier below fits the SAME calibrator shape on each training fold.
+function binnedMap(rows, bins) {
   const edges = [], table = [];
   for (let b = 0; b < bins; b++) {
     const lo = b / bins, hi = (b + 1) / bins;
@@ -15597,10 +18073,46 @@ function fitCalibrator(resolved, { bins = 5, minN = 40 } = {}) {
     const actual = seg.length ? seg.filter(r => r.won).length / seg.length : mid;
     edges.push(mid); table.push(+actual.toFixed(4));
   }
-  // Enforce monotone non-decreasing (pool-adjacent-violators, light touch).
-  for (let i = 1; i < table.length; i++) if (table[i] < table[i - 1]) table[i] = table[i - 1];
+  for (let i = 1; i < table.length; i++) if (table[i] < table[i - 1]) table[i] = table[i - 1];  // PAV, light touch
+  return { edges, table };
+}
+
+// OUT-OF-FOLD calibrator Brier (audit #18). The in-sample Brier flatters calibration because it is
+// scored on the SAME rows the map was fit on. This does k-fold CV: fit the map on k-1 folds, score
+// the CALIBRATED probability on the held-out fold, and report the mean Brier — plus the raw-P OOF
+// Brier so you can see whether calibration actually HELPS out of sample. Deterministic (round-robin
+// folds by index — no RNG). Returns null when too thin to split.
+function oofCalibratorBrier(rows, { bins = 5, folds = 5 } = {}) {
+  if (rows.length < folds * 8) return null;
+  let sqCal = 0, sqRaw = 0, n = 0;
+  for (let f = 0; f < folds; f++) {
+    const train = rows.filter((_, i) => i % folds !== f);
+    const test = rows.filter((_, i) => i % folds === f);
+    if (!test.length || !train.length) continue;
+    const cal = binnedMap(train, bins);
+    for (const r of test) {
+      const y = r.won ? 1 : 0;
+      const pc = applyCalibrator({ edges: cal.edges, table: cal.table }, r.p);
+      sqCal += (pc - y) ** 2; sqRaw += (r.p - y) ** 2; n++;
+    }
+  }
+  if (!n) return null;
+  return { oofBrier: +(sqCal / n).toFixed(4), oofBrierRaw: +(sqRaw / n).toFixed(4), folds, n };
+}
+
+function fitCalibrator(resolved, { bins = 5, minN = 40 } = {}) {
+  const rows = (resolved || []).filter(r => r && Number.isFinite(r.p) && (r.won === true || r.won === false));
+  if (rows.length < minN) return null;
+  const { edges, table } = binnedMap(rows, bins);
+  // `error` kept for continuity: the in-sample RAW-P Brier (optimistic — see oofBrier for the honest read).
   const brier = +(rows.reduce((s, r) => s + (r.p - (r.won ? 1 : 0)) ** 2, 0) / rows.length).toFixed(4);
-  return { version: EVOLVE_VERSION, edges, table, n: rows.length, error: brier };
+  const oof = oofCalibratorBrier(rows, { bins });
+  return {
+    version: EVOLVE_VERSION, edges, table, n: rows.length, error: brier, inSampleBrierRaw: brier,
+    oofBrier: oof ? oof.oofBrier : null,           // calibrated, out-of-fold — the honest metric
+    oofBrierRaw: oof ? oof.oofBrierRaw : null,      // raw P, out-of-fold — the baseline it must beat
+    calibrationHelpsOOS: oof ? oof.oofBrier < oof.oofBrierRaw : null,
+  };
 }
 function applyCalibrator(cal, p) {
   if (!cal || !cal.edges || !cal.edges.length) return p;
@@ -15678,9 +18190,9 @@ const rankDecision = (d) => DECISION_RANK[d] ?? 0;
 module.exports = {
   EVOLVE_VERSION, SPECIALISTS, SPECIALIST_META, SOURCE_SPECIALIST, sourceToSpecialists,
   DECISION_STATES, DECISION_META, GUARDRAILS,
-  breakevenProb, pooledRate, specialistProb, metaWeights, ensembleProbability,
+  breakevenProb, pooledRate, specialistProb, metaWeights, ensembleProbability, buildSpecialistRedundancy,
   expectedPayoff, uncertaintyInterval, explorationBonus, adaptiveThreshold, decideState,
-  evolveScore, contextKey, capBucket, scoreCandidate, fitCalibrator, applyCalibrator, buildEvolve,
+  evolveScore, contextKey, capBucket, scoreCandidate, fitCalibrator, applyCalibrator, binnedMap, oofCalibratorBrier, candidateStrengthTilt, strengthOOSComparison, buildEvolve,
 };
 
 ``````
@@ -18123,8 +20635,23 @@ async function runGhostBacktest({ scope = 'large', step = 10, months = 12, limit
     },
   };
 
+  // FEATURE SCOPE (audit #12/#14) — declare EXACTLY which live features this WF reconstructs, so a
+  // reader never mistakes a price-only validation for a validation of the full live model. The LLM
+  // narrative half of BONUS and the AI-reasoned screeners are STRUCTURALLY unreconstructable: an LLM
+  // re-run "as of today" reflects post-decision information, so any historical reconstruction would
+  // LEAK. They are live-only and accrue evidence prospectively (Scoreboard), never in this WF.
+  const featureScope = {
+    reconstructed: ['RM', 'AF', 'AV', 'SF']
+      .concat(insiderData ? ['IN (PIT EDGAR insider)'] : [])
+      .concat(fundamentalsData ? ['BONUS-fundamental (PIT earnings)'] : []),
+    excluded: {
+      'BONUS-narrative': 'LLM narrative — live ghost.js uses base = 0.6·fund + 0.4·narr, but narrativeStrength is pinned null here (structurally unreconstructable without a leaky LLM re-run). Live-only.',
+      'AI-screeners': 'readthrough / stealth / secondwave / crossasset / toneshift are LLM-reasoned — forward-tracked on the Scoreboard only, never in this historical walk-forward.',
+    },
+    claim: 'Validates the PRICE core (+ PIT insider/fundamental subset when supplied) ONLY. Does NOT validate LLM narrative or AI-screener features — those cannot be historically validated and accrue prospective evidence instead.',
+  };
   return {
-    scope, months, step, mode: 'walkforward', priceOnly: true,
+    scope, months, step, mode: 'walkforward', priceOnly: true, featureScope,
     macroEnabled: !!macroLookup, regimeCounts: stats.byRegime,
     n: records.length, datesUsed: stats.datesUsed, screenCalls: stats.screenCalls,
     horizonSessions: MAX_HOLD, returnDef: 'cross-sectional excess (cohort-demeaned) forward return, next-open entry',
@@ -31360,6 +33887,31 @@ function universeAtFrom(records, date) {
   return out.sort();
 }
 
+// De-survivorship augmentation (pure). A present-day static list silently DROPS names that were
+// tradeable during a backtest window but have since delisted — the "survivors that died" — which
+// inflates any backtest run on it. Given the master records, that static list, and an as-of date,
+// return the static list UNION the securities that were ACTIVE as of `asOf` but are NO LONGER active
+// today (delisted since). That is exactly `universeAtFrom(asOf) \ universeAtFrom(today)`, restricted
+// to names not already in the list.
+//
+// HONEST LIMITS (why the caller must keep survivorshipSafe=false): this only adds back delistings
+// the master actually knows (currently S&P-500, ≤5yr — lib/constituents.js), it does NOT correct
+// LATE-LISTING survivorship (no IPO feed), and a re-added delisted name may have no historical
+// candle data on the free feed, in which case it still cannot be traded in the backtest.
+function pointInTimeAugment(records, staticList, asOf) {
+  const base = [...new Set(staticList || [])];
+  const inStatic = new Set(base);
+  const thenActive = new Set(universeAtFrom(records || {}, asOf));
+  const nowActive = new Set(universeAtFrom(records || {}, null));   // null → FAR_FUTURE → today
+  const added = [...thenActive].filter((s) => !nowActive.has(s) && !inStatic.has(s)).sort();
+  return {
+    asOf: asOf || null,
+    universe: [...base, ...added],
+    added, addedCount: added.length, staticCount: base.length,
+    survivorshipSafe: false,   // ALWAYS — see the honest limits above
+  };
+}
+
 // ── Blob-backed builder / readers ───────────────────────────────────────────
 
 async function loadMaster() { return readJSON(MASTER_PATH, null); }
@@ -31397,7 +33949,7 @@ async function universeAt(date) {
 
 module.exports = {
   SECMASTER_VERSION, MASTER_PATH,
-  buildMaster, resolveAsOf, universeAtFrom,        // pure
+  buildMaster, resolveAsOf, universeAtFrom, pointInTimeAugment,  // pure
   loadMaster, saveMaster, resolveSecurityId, universeAt,  // Blob-backed
   hasStore,
 };
@@ -33422,7 +35974,32 @@ async function readAllOmega() {
   return all;
 }
 
+// Challenger decision layer — SHADOW daily board ledger (shadow/<date>.json), a resolved-
+// outcome map (shadow/resolved.json), and an eval cache (shadow/eval.json). Tamper-evident
+// hash-chained prediction records live separately in the `challenger` immutable-ledger stream.
+const SHADOW_LEDGER = 'shadow/';
+const SHADOW_DAILY_RE = /^shadow\/\d{4}-\d{2}-\d{2}\.json$/;
+const writeShadowDay = (date, obj) => writeJSON(`${SHADOW_LEDGER}${date}.json`, { date, ...obj, savedAt: new Date().toISOString() }, 0);
+async function readAllShadowDays() {
+  if (!hasStore()) return [];
+  const { list } = require('@vercel/blob');
+  const blobs = []; let cursor;
+  do { const r = await list({ prefix: SHADOW_LEDGER, cursor, limit: 1000 }); blobs.push(...r.blobs); cursor = r.cursor; } while (cursor);
+  const days = [];
+  await Promise.all(blobs.filter(b => SHADOW_DAILY_RE.test(b.pathname)).map(async b => {
+    try { const res = await fetch(b.url + '?_=' + Date.now(), { cache: 'no-store' }); if (!res.ok) return; const j = await res.json(); days.push(j); } catch { /* skip */ }
+  }));
+  days.sort((a, b) => (a.date < b.date ? -1 : 1));
+  return days;
+}
+const readShadowResolved = () => readJSON('shadow/resolved.json', {});
+const writeShadowResolved = (m) => writeJSON('shadow/resolved.json', m, 0);
+const readShadowEval = () => readJSON('shadow/eval.json', null);
+const writeShadowEval = (o) => writeJSON('shadow/eval.json', o, 0);
+
 module.exports = {
+  writeShadowDay, readAllShadowDays, SHADOW_LEDGER,
+  readShadowResolved, writeShadowResolved, readShadowEval, writeShadowEval,
   writeIgnitionDay, readAllIgnition, IGNITION_PREFIX,
   writeOmegaDay, readAllOmega, OMEGA_PREFIX,
   hasStore, writeDay, readAllPicks, readDayCount, PREFIX, writeApexDay, readAllApex, APEX_PREFIX,
@@ -33518,6 +36095,7 @@ const STRATEGY_REGISTRY = [
   { id: 'tone',       label: '🎙 Earnings-Call Tone',   kind: 'signal', section: 'Tone',       horizon: 'position', core: false },
   { id: 'attention',  label: '📈 Attention (Sticky/Fast)', kind: 'signal', section: 'Attention', horizon: 'swing', core: false },
   { id: 'xalerts',    label: '🐦 Trade Alerts',         kind: 'signal', section: null,         horizon: 'swing',    core: false, note: 'Social alerts — edge unproven until ≥50 grade.' },
+  { id: 'challenger-decision', label: '🧪 Challenger Decision', kind: 'signal', section: 'Challenger', horizon: 'swing', core: false, note: 'Shadow-only four-outcome challenger (challenger-decision-v1) — paper/weight-0 until it passes strict OOS + live-forward validation.' },
 
   // ── Informational surfaces (context, never graded, never in the lab) ──
   { id: 'sectors',    label: '📊 Sectors',    kind: 'informational', section: null, horizon: 'position', note: 'Sector performance heatmap — context, not a buy signal.' },
@@ -35355,7 +37933,9 @@ const CHAINS = {
   // The re-prime MUST follow the rebuild: op=today's CDN copy still carries the previous
   // model's credits until it is refetched, and op=ensemble is a projection of op=today, so
   // it primes last or it caches a board scored on the old model.
-  reprime: ['op=today', 'op=ensemble', '@evolve'],
+  // op=challengerlog logs the shadow board AFTER today+ensemble are fresh (self-fetches the
+  // warm cached endpoints). op=challengerresolve is candle-heavy so it rides ticks3 instead.
+  reprime: ['op=today', 'op=ensemble', 'op=challengerlog', '@evolve'],
 
   // EVOLVE: log predictions, resolve matured ones (this is what applies the uniqueness
   // weighting + DSR survivors to the live perf ledger), then prime the tab.
@@ -35374,19 +37954,27 @@ const CHAINS = {
   // Ordered pairs: timinglog→tune, dualreadlog→tune, then brief after predict+crowd.
   ticks2: ['op=timinglog', 'op=timingtune', 'op=dualreadlog', 'op=dualreadtune', 'op=predicttick', 'op=crowdtick', 'op=brieftick'],
   // Leaderboard (heavy), then core build→log→drift (ordered), then the cheap ones.
-  ticks3: ['op=leaderboardtick&src=confluence', 'op=corebuild', 'op=corelog', 'op=coredrift', 'op=attentiontick', 'op=tonetick&limit=6'],
+  ticks3: ['op=leaderboardtick&src=confluence', 'op=corebuild', 'op=corelog', 'op=coredrift', 'op=attentiontick', 'op=tonetick&limit=6', 'op=challengerresolve'],
 
   aligned: ['op=aligned', 'op=alignedlog'],
   // Security master refresh rides the once-daily heavy-build lane. Slow-changing, so a
   // budget-skip on a busy day self-heals next run (it re-reads all sources from scratch).
   universe: ['op=universescan&cursor=1&limit=150', 'op=universescan&cursor=1&limit=150', 'op=universecompile', 'op=secmasterbuild'],
   pulse: ['op=pulse&force=1', 'op=pulserefine&force=1'],
+
+  // Shadow Algorithm-Effectiveness Monitor + Router. force=1 runs buildRows (candle refetch
+  // for every ledger ticker — as heavy as op=redundancy&force=1), so it gets its OWN root
+  // invocation rather than joining the already-tight `decision` chain (~47s/48s). It reads
+  // the PERSISTED apex/redundancy.json + scoreboard/summary.json, so a one-tick-stale model
+  // is fine (both are slow-moving artifacts); the per-date series it needs is built fresh
+  // here. Persists router/latest.json (weights + cooldowns) so the public read serves cache.
+  router: ['op=router&force=1'],
 };
 
 // Only these are dispatched by warm. The rest are reached via `@` from their parent — a
 // chain that is BOTH a root and nested would run twice; one that is neither never runs.
 // Both mistakes are asserted against in test/warm-chains.test.js.
-const ROOT_CHAINS = ['ledger', 'capture', 'ticks1', 'ticks2', 'ticks3', 'aligned', 'universe', 'pulse'];
+const ROOT_CHAINS = ['ledger', 'capture', 'ticks1', 'ticks2', 'ticks3', 'aligned', 'universe', 'pulse', 'router'];
 
 const pathFor = (step) => (step.startsWith('@')
   ? `/api/tracker?op=warmchain&name=${step.slice(1)}`
@@ -38576,6 +41164,28 @@ module.exports = { composeWhyNow, buildSignals, verdictOf, trackFor, regimeConte
 .oe-disc ul { margin:8px 0 2px 16px; padding:0; }
 .oe-disc li { font-size:11.5px; opacity:.7; line-height:1.5; margin-bottom:5px; }
 @media (max-width:720px) { .oe-excl-row { grid-template-columns:1fr; gap:2px; } }
+
+/* 🧪 Challenger decision — shadow, action-first section on the Today command center. */
+.td-action { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; background: color-mix(in srgb, var(--card) 70%, transparent); }
+.td-action-h { font-weight: 700; font-size: 0.9rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.td-action-badge { font-size: 0.62rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--amber, #f59e0b); border: 1px solid var(--amber, #f59e0b); border-radius: 999px; padding: 2px 8px; }
+.td-action-notrade { border-left: 3px solid var(--amber, #f59e0b); background: color-mix(in srgb, var(--amber, #f59e0b) 8%, transparent); border-radius: 8px; padding: 8px 11px; margin-bottom: 10px; font-size: 0.85rem; }
+.td-action-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.td-action-col-h { font-weight: 600; font-size: 0.8rem; margin-bottom: 6px; }
+.td-action-card { border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; background: var(--card); }
+.td-action-card.TRADE { border-left: 3px solid var(--green, #16a34a); }
+.td-action-card.WAIT { border-left: 3px solid var(--amber, #f59e0b); }
+.td-action-tk { font-size: 0.9rem; margin-bottom: 5px; }
+.td-action-dec { font-size: 0.6rem; font-weight: 700; letter-spacing: .04em; color: var(--text-dim); border: 1px solid var(--border); border-radius: 999px; padding: 1px 6px; margin-left: 4px; }
+.td-action-row { display: flex; justify-content: space-between; gap: 10px; font-size: 0.74rem; line-height: 1.55; }
+.td-action-row span:first-child { color: var(--text-dim); }
+.td-action-row span:last-child { text-align: right; }
+.td-action-more { margin-top: 5px; }
+.td-action-more summary { cursor: pointer; font-size: 0.68rem; color: var(--text-dim); }
+.td-action-int { font-size: 0.7rem; line-height: 1.6; margin-top: 4px; color: var(--text-dim); }
+.td-action-avoid { font-size: 0.76rem; padding: 4px 0; border-bottom: 1px dashed var(--border); }
+.td-action-foot { font-size: 0.68rem; margin-top: 8px; }
+@media (max-width: 720px) { .td-action-grid { grid-template-columns: 1fr; } }
 
 ``````
 
@@ -42570,6 +45180,10 @@ const SRC_TAB = { screener: 'screener', gapgo: 'gapgo', daytrade: 'daytrade', co
 // every card carry the EARNED trust grade next to its raw score — the honest read
 // (a 0–100 score is a relative rank, the grade is what the track record supports).
 let GRADES = {};
+// The shadow challenger board (op=challenger). Optional — renders only when present, and is
+// clearly labeled SHADOW / zero-weight; it never affects the production ranks above it.
+let CHALLENGER = null;
+function applyChallenger(c) { CHALLENGER = c && c.ok ? c : null; }
 function gradeChip(sig) {
   const g = GRADES[sig.section];
   if (!g) return '';
@@ -42775,6 +45389,55 @@ function lane(title, arr, legend) {
     + arr.slice(0, 6).map(s => `<span class="td-lane-tk" data-go="${SRC_TAB[s.source] || 'screener'}" title="${esc(s.setup || '')} · score ${s.score}">${esc(s.ticker)}</span>`).join('') + `</div>`;
 }
 
+// ── Challenger action-first section (shadow) ─────────────────────────────────
+function chalNum(v, suf = '') { return (typeof v === 'number' && isFinite(v)) ? (Math.round(v * 100) / 100) + suf : '—'; }
+function chalCard(d) {
+  const sv = d.survival || {}; const ev = d.event || {};
+  const rows = [
+    ['Horizon', esc(d.horizon || '—')],
+    ['Expected hold', sv.expectedSessionsToResolution != null ? sv.expectedSessionsToResolution + ' sessions' : '—'],
+    ['Entry trigger', d.trigger ? esc(d.trigger) : (d.entry != null ? 'near ' + d.entry : '—')],
+    ['Stop / invalidation', d.invalidation ? esc(d.invalidation) : (d.stop != null ? String(d.stop) : '—')],
+    ['Target / exit', d.target != null ? String(d.target) : (sv.entryState ? esc(sv.entryState) : '—')],
+    ['Setup expiry', d.expiry ? ((d.expiry.sessionsRemaining != null ? d.expiry.sessionsRemaining : '?') + ' sessions left') : '—'],
+    ['Exp. net utility', chalNum(d.expectedNetUtilityPct, '%')],
+    ['Uncertainty', chalNum(d.uncertainty)],
+    ['Event', ev.category ? `${esc(ev.category)}${ev.score != null ? ` · surprise ${Math.round(ev.score)}` : ''}${ev.degraded ? ' (weak)' : ''}` : '—'],
+    ['Primary driver', d.primaryDriver ? esc(d.primaryDriver) : '—'],
+    ['Primary risk', d.primaryRisk ? esc(d.primaryRisk) : '—'],
+    ['Governance', `${esc(d.governanceStatus || 'paper')} · weight 0 (shadow)`],
+  ];
+  const internals = `<details class="td-action-more"><summary>internals</summary><div class="td-action-int">`
+    + `Residual score ${chalNum(d.residualScore)} · pctile ${chalNum(d.percentileRank)}<br>`
+    + `Survival: P(target) ${chalNum(sv.pTargetBeforeStop)} · P(stop) ${chalNum(sv.pStopBeforeTarget)} · P(neither) ${chalNum(sv.pNeither)} · effN ${sv.effN ?? 0}${sv.shrunkToPrior ? ' (prior)' : ''}<br>`
+    + `Entry state ${esc(sv.entryState || '—')} · edge now ${chalNum(sv.edgeNowPct, '%')} vs after-wait ${chalNum(sv.edgeAfterWaitPct, '%')} · basis ${esc(sv.basis || 'eod-next-session')}<br>`
+    + `Failure prob ${chalNum(d.failureProb)} · execution ${chalNum(d.executionQuality)} · regime-fit ${chalNum(d.regimeFit)}<br>`
+    + `Reasons: ${esc((d.reasons || []).join(' · '))}`
+    + `</div></details>`;
+  return `<div class="td-action-card ${esc(d.decision)}"><div class="td-action-tk"><b>${esc(d.ticker)}</b> <span class="td-action-dec">${esc(d.decision)}</span></div>`
+    + rows.map(([k, v]) => `<div class="td-action-row"><span>${k}</span><span>${v}</span></div>`).join('') + internals + `</div>`;
+}
+function chalAvoid(d) { return `<div class="td-action-avoid"><b>${esc(d.ticker)}</b> <span class="td-dim">${esc((d.reasons && d.reasons[0]) || '')}</span></div>`; }
+function actionSection() {
+  const c = CHALLENGER;
+  if (!c) return '';
+  const D = c.decisions || { TRADE: [], WAIT: [], AVOID: [] };
+  const nt = c.noTradeCause;
+  let h = `<div class="td-action"><div class="td-action-h">🧪 Challenger decision <span class="td-dim">— an independent, shadow-only four-outcome read</span> <span class="td-action-badge">SHADOW · 0 weight · not affecting ranks</span></div>`;
+  if (c.boardDecision === 'NO_TRADE') {
+    h += `<div class="td-action-notrade"><b>NO-TRADE</b> — ${esc(nt ? nt.label : 'no candidate qualifies to enter now')}${nt && nt.detail ? `<div class="td-dim">${esc(nt.detail)}</div>` : ''}</div>`;
+  }
+  const col = (title, arr, render, empty) => `<div class="td-action-col"><div class="td-action-col-h">${title} <span class="td-dim">${arr.length}</span></div>`
+    + (arr.length ? arr.map(render).join('') : `<div class="td-dim td-empty">${empty}</div>`) + `</div>`;
+  h += `<div class="td-action-grid">`
+    + col('✅ TRADE NOW', (D.TRADE || []).slice(0, 5), chalCard, 'None qualify to enter now.')
+    + col('⏳ WAIT FOR TRIGGER', (D.WAIT || []).slice(0, 6), chalCard, 'No setups waiting on a trigger.')
+    + col('⛔ AVOID', (D.AVOID || []).slice(0, 8), chalAvoid, 'Nothing flagged avoid.')
+    + `</div>`;
+  h += `<div class="td-dim td-action-foot">${esc(c.note || '')}</div></div>`;
+  return h;
+}
+
 export function renderCommandCenter(container, p) {
   if (!container) return;
   if (!p || !p.ok) { container.innerHTML = `<div class="dt-note" style="border-left-color:var(--red)">⚠️ The command center couldn't load its signals right now — a data source may be down. Try Refresh.</div>`; return; }
@@ -42787,6 +45450,7 @@ export function renderCommandCenter(container, p) {
   const secChip = (s, dir) => `<span class="td-sec-chip ${dir}">${esc(s.name)} <b>${pct(+(+s.changePct).toFixed(1))}</b></span>`;
   let html = `<div class="td-cc">`;
   html += opportunityBanner(p.opportunity);
+  html += actionSection(); // shadow challenger — first read, clearly labeled, never affects ranks below
   html += `<div class="td-head" style="border-left-color:${regCol}">`
     + `<div class="td-regime"><b>${esc(p.regime.label)}</b>${reg.breadthPct != null ? ` · breadth ${reg.breadthPct}%` : ''}${reg.condition ? ` · ${esc(reg.condition)} tape` : ''}</div>`
     + `<div class="td-sectors"><span class="td-dim">Leading</span> ${(p.sectors?.leading || []).map(s => secChip(s, 'lead')).join('')} `
@@ -42964,20 +45628,22 @@ export async function loadCommandCenter(container) {
   let painted = false;
   try {
     const c = JSON.parse(localStorage.getItem(TODAY_CACHE_KEY) || 'null');
-    if (c && c.p && c.p.ok) { applyGrades(c.mat); renderCommandCenter(container, c.p); markUpdating(container, true); painted = true; }
+    if (c && c.p && c.p.ok) { applyGrades(c.mat); applyChallenger(c.chal); renderCommandCenter(container, c.p); markUpdating(container, true); painted = true; }
   } catch { /* corrupt cache → ignore */ }
   if (!painted) container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Ranking every screener into one table…</p></div>`;
 
   // 2) Fetch fresh in the background; swap in when it arrives.
-  let p = null, mat = null;
-  try { [p, mat] = await Promise.all([
+  let p = null, mat = null, chal = null;
+  try { [p, mat, chal] = await Promise.all([
     fetch('/api/tracker?op=today').then(r => r.json()),
     fetch('/api/tracker?op=maturity').then(r => r.json()).catch(() => null),
+    fetch('/api/tracker?op=challenger').then(r => r.json()).catch(() => null), // shadow — optional
   ]); } catch { p = null; }
 
   if (p && p.ok) {
     applyGrades(mat);
-    try { localStorage.setItem(TODAY_CACHE_KEY, JSON.stringify({ p, mat, at: Date.now() })); } catch { /* quota → skip caching */ }
+    applyChallenger(chal);
+    try { localStorage.setItem(TODAY_CACHE_KEY, JSON.stringify({ p, mat, chal, at: Date.now() })); } catch { /* quota → skip caching */ }
     renderCommandCenter(container, p);          // replace stale with fresh
   } else if (!painted) {
     renderCommandCenter(container, p);          // nothing cached → show the empty/error state
@@ -43238,6 +45904,134 @@ main().catch(e => { console.error(e); process.exit(1); });
 
 ``````
 
+## scripts/run-validation-slice.js
+
+``````javascript
+'use strict';
+// VERTICAL-SLICE VALIDATION RUNNER  (research)
+//
+// Exercises the full research contract end-to-end and writes docs/validation-output.json:
+//   synthetic candles → next-open fill (lib/execution-policy) → triple-barrier label
+//   (lib/evolve-labels, with exact labelEndDate) → continuous features (lib/research/features)
+//   → purged group-aware ranker comparison (lib/research/harness) → ExperimentManifest.
+//
+// IMPORTANT HONESTY NOTE. The dataset here is SYNTHETIC and DETERMINISTIC. A weak momentum signal
+// is deliberately PLANTED so the harness has something to detect — this validates that the PLUMBING
+// is causally correct (purge works, parity holds, the random control scores ~0 while a real signal
+// scores positive), and is NOT evidence of market alpha. Every result is stamped
+// researchValidity.productionGrade=false, survivorshipSafe=false. Real historical data is never
+// invented here (Operating rule 8).
+
+const fs = require('fs');
+const path = require('path');
+const { planFill, POLICIES } = require('../lib/execution-policy');
+const L = require('../lib/evolve-labels');
+const { computeFeatureVector } = require('../lib/research/features');
+const { ALL_RANKERS } = require('../lib/research/baseline-ranker');
+const { runExperiment } = require('../lib/research/harness');
+
+// ── deterministic RNG ──
+function lcg(seed) { let s = seed >>> 0 || 1; return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; }
+function gauss(rnd) { let u = 0, v = 0; while (u === 0) u = rnd(); while (v === 0) v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+
+// ── trading-day calendar (skip weekends) ──
+function tradingDates(startISO, n) {
+  const out = []; const d = new Date(startISO + 'T00:00:00Z');
+  while (out.length < n) { const dow = d.getUTCDay(); if (dow !== 0 && dow !== 6) out.push(d.toISOString().slice(0, 10)); d.setUTCDate(d.getUTCDate() + 1); }
+  return out;
+}
+
+// ── synthetic price path with PLANTED weak momentum persistence ──
+function makeSeries(dates, rnd, { drift = 0.0002, phi = 0.06, vol = 0.015 } = {}) {
+  const candles = []; let close = 50 + rnd() * 50;
+  const rets = [];
+  for (let i = 0; i < dates.length; i++) {
+    // trailing 21-day momentum (normalized) feeds forward return → momentum persists (the signal).
+    let mom21 = 0;
+    if (i >= 21) mom21 = (close - candles[i - 21].close) / candles[i - 21].close;
+    const r = drift + phi * Math.tanh(mom21 * 5) * 0.02 + vol * gauss(rnd);
+    const prev = close; close = Math.max(1, prev * (1 + r)); rets.push(r);
+    const openG = prev * (1 + 0.3 * vol * gauss(rnd));
+    const hi = Math.max(openG, close) * (1 + Math.abs(0.4 * vol * gauss(rnd)));
+    const lo = Math.min(openG, close) * (1 - Math.abs(0.4 * vol * gauss(rnd)));
+    const volume = Math.round(1e6 * (1 + 0.5 * Math.abs(gauss(rnd))));
+    candles.push({ date: dates[i], open: +openG.toFixed(4), high: +hi.toFixed(4), low: +lo.toFixed(4), close: +close.toFixed(4), volume });
+  }
+  return candles;
+}
+
+function simpleHash(obj) {
+  const s = JSON.stringify(obj); let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(16);
+}
+
+function main() {
+  const SEED = 42, M = 40, T = 500, STEP = 5, HORIZON = 'swing';
+  const rnd = lcg(SEED);
+  const dates = tradingDates('2019-01-02', T);
+
+  // Benchmark (SPY-like) and its close map.
+  const spy = makeSeries(dates, lcg(SEED ^ 0x5a5a), { drift: 0.0003, phi: 0.0, vol: 0.009 });
+  const spyCloses = {}; spy.forEach((c) => { spyCloses[c.date] = c.close; });
+
+  const events = [];
+  for (let m = 0; m < M; m++) {
+    const candles = makeSeries(dates, lcg(SEED + 1 + m), { drift: 0.0002 + (rnd() - 0.5) * 0.0002, phi: 0.06, vol: 0.012 + rnd() * 0.01 });
+    const securityId = `SYN${String(m).padStart(3, '0')}`;
+    for (let i = 80; i <= T - 80; i += STEP) {
+      const decisionTs = candles[i].date;
+      // Next-open fill (never the same close) → the label's entry price.
+      const fill = planFill(candles, decisionTs, { policy: POLICIES.NEXT_OPEN, side: 'long', tier: 'liquid' });
+      if (!fill.filled) continue;
+      const label = L.tripleBarrier(L.sliceForward(candles, decisionTs, L.HORIZON_META[HORIZON].window + 5), fill.fillPrice, L.barriersFor(HORIZON, {}));
+      if (!label.resolved) continue;
+      const feats = computeFeatureVector(candles, i, { benchCloses: spyCloses });
+      // Outcome = market-residual terminal return (strip the benchmark move over the same window).
+      const spyRet = L.benchmarkReturn(L.sliceForward(spy, decisionTs, L.HORIZON_META[HORIZON].window + 5), L.HORIZON_META[HORIZON].window);
+      const outcome = spyRet == null ? label.terminalReturn : label.terminalReturn - spyRet;
+      // A deliberately NOISY "production composite" baseline: weak proxy + noise.
+      const prodScore = (feats.values.ret5 || 0) * 40 + gauss(rnd) * 5;
+      events.push({
+        securityId, ticker: securityId, decisionTs, labelEndDate: label.labelEndDate, horizon: HORIZON,
+        features: feats.values, outcome: +outcome.toFixed(6), won: label.won, profitable: label.profitable,
+        score: +prodScore.toFixed(4),
+      });
+    }
+  }
+
+  const datasetHash = simpleHash(events.map((e) => [e.securityId, e.decisionTs, e.outcome]));
+  const out = runExperiment(events, ALL_RANKERS, { folds: 6, embargo: 3, rankerOpts: { lambda: 0.1 } }, {
+    experimentId: 'vslice-synthetic-v1',
+    experimentFamilyId: 'quant-redesign-vertical-slice',
+    datasetHash,
+    universePolicy: 'SYNTHETIC deterministic (no real securities)',
+    relatedExperimentsAttempted: ALL_RANKERS.length,
+    primaryMetric: 'mean-daily-rank-IC (OOS, purged)',
+    survivorshipSafe: false,
+    survivorshipReason: 'synthetic dataset; also the repo has no PIT constituents (see docs/quant-system-audit.md P0-1)',
+    seed: SEED, generatedAt: new Date().toISOString(),
+  });
+
+  const payload = {
+    __README__: 'SYNTHETIC contract self-test. A weak momentum signal is PLANTED, so positive IC here'
+      + ' validates the harness plumbing (purge/parity/discrimination), NOT market alpha. Not production-grade.',
+    events: events.length, securities: M, decisionDates: [...new Set(events.map((e) => e.decisionTs))].length,
+    ...out,
+  };
+  const dst = path.join(__dirname, '..', 'docs', 'validation-output.json');
+  fs.writeFileSync(dst, JSON.stringify(payload, null, 2));
+  console.log('wrote', dst);
+  console.log('champion:', JSON.stringify(out.champion));
+  console.log('verdict:', out.verdict);
+  for (const [k, v] of Object.entries(out.result.perRanker)) console.log(`  ${k.padEnd(24)} meanIC=${v.meanIC}  ci90=${JSON.stringify(v.ci90)}  dates=${v.dates}`);
+  console.log('purge exact-vs-1.4x:', JSON.stringify(out.result.purge.vs14xApprox));
+}
+
+main();
+
+``````
+
 ## test/alerts-fable.test.js
 
 ``````javascript
@@ -43391,6 +46185,333 @@ test('rankPosts: surfaces catalysts, conviction, levels, options, timeframe', ()
   assert.equal(a.options.type, 'calls');
   assert.ok(a.conviction >= 50);
   assert.equal(a.timeframe, 'swing');
+});
+
+``````
+
+## test/algo-health.test.js
+
+``````javascript
+'use strict';
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const H = require('../lib/algo-health');
+
+// Build a resolved OOS series with `nDates` distinct decision dates, `k` of them beating
+// the market (excess +2) and the rest losing (excess `lossExcess`). Dates are zero-padded
+// so they sort correctly and windowing takes the true most-recent slice.
+function series(nDates, k, lossExcess = -1, perDate = 1) {
+  const rows = [];
+  for (let i = 0; i < nDates; i++) {
+    const date = `d${String(i).padStart(4, '0')}`;
+    const excess = i < k ? 2 : lossExcess; // sorted; recency handled by window slices
+    for (let j = 0; j < perDate; j++) rows.push({ date, excess });
+  }
+  return rows;
+}
+
+// ── summarize: effective N counts DISTINCT dates, never raw picks ────────────
+test('summarize: effN is distinct dates, not row count (overlap not independent)', () => {
+  const rows = series(10, 7, -1, 3); // 10 dates × 3 picks each = 30 rows
+  const s = H.summarize(rows);
+  assert.equal(s.n, 30);
+  assert.equal(s.effN, 10);
+  assert.ok(s.ready); // 10 >= MIN_EFF_N (8)
+});
+
+test('summarize: CI is taken over the effective (date) sample, not inflated rows', () => {
+  const wide = H.summarize(series(10, 7, -1, 1)); // 10 dates
+  const many = H.summarize(series(10, 7, -1, 5)); // same 10 dates, 5x rows
+  // Same independent evidence ⇒ (near) same interval width despite 5x the rows.
+  assert.ok(Math.abs((wide.ci.hi - wide.ci.lo) - (many.ci.hi - many.ci.lo)) < 0.02);
+});
+
+// ── classifyAlgo: the seven-state ladder ─────────────────────────────────────
+test('UNKNOWN when independent evidence is below the gate', () => {
+  const r = H.classifyAlgo({ id: 'x', series: series(5, 4) }); // 5 dates < 8
+  assert.equal(r.health, 'UNKNOWN');
+  assert.equal(r.effectiveSampleSize, 5);
+});
+
+test('STRONG when long-term interval clears breakeven over a large sample', () => {
+  const r = H.classifyAlgo({ id: 'x', series: series(30, 21), calibration: { brier: 0.15, slope: 1 } });
+  assert.equal(r.health, 'STRONG');
+  assert.ok(r.ci.lo > 0.5);
+  assert.equal(r.drift, 'stable');
+});
+
+test('BROKEN when long-term edge is negative with interval below breakeven', () => {
+  const r = H.classifyAlgo({ id: 'x', series: series(30, 6, -2) });
+  assert.equal(r.health, 'BROKEN');
+});
+
+test('BROKEN on calibration failure even with positive returns', () => {
+  const r = H.classifyAlgo({ id: 'x', series: series(30, 21), calibration: { brier: 0.7, slope: 2 } });
+  assert.equal(r.health, 'BROKEN');
+});
+
+test('INCOMPATIBLE when it worked historically but the current regime does not match', () => {
+  const r = H.classifyAlgo({ id: 'x', series: series(30, 21), regimeCompatibility: 0.2 });
+  assert.equal(r.health, 'INCOMPATIBLE');
+});
+
+test('SUPPORTED when positive long-term but not strong enough for STRONG', () => {
+  const r = H.classifyAlgo({ id: 'x', series: series(20, 13) }); // ci.lo ~0.47 (<0.5)
+  assert.equal(r.health, 'SUPPORTED');
+});
+
+test('WATCH when the interval straddles breakeven', () => {
+  const r = H.classifyAlgo({ id: 'x', series: series(15, 9) }); // positive avg, ci.lo < 0.45
+  assert.equal(r.health, 'WATCH');
+});
+
+// ── drift: DEGRADING requires the recent window to fall clearly below a good record ──
+test('DEGRADING when recent window is bad while supplied long-term record is good', () => {
+  const longTerm = { effN: 200, avgExcess: 1.5, beatRate: 0.62, ci: { lo: 0.56, hi: 0.68 }, ready: true };
+  const recentBad = series(60, 15, -2); // last 60 dates, 25% beat, negative
+  const r = H.classifyAlgo({ id: 'x', series: recentBad, longTerm });
+  assert.equal(r.drift, 'degrading');
+  assert.equal(r.health, 'DEGRADING');
+});
+
+test('a short losing streak inside a good long record does NOT trip DEGRADING', () => {
+  // Long-term good; recent window is only mildly soft (still not clearly below breakeven).
+  const longTerm = { effN: 200, avgExcess: 1.5, beatRate: 0.62, ci: { lo: 0.56, hi: 0.68 }, ready: true };
+  const recentSoft = series(60, 33); // 55% beat — above breakeven-ish, not "bad"
+  const r = H.classifyAlgo({ id: 'x', series: recentSoft, longTerm });
+  assert.notEqual(r.drift, 'degrading');
+  assert.notEqual(r.health, 'DEGRADING');
+});
+
+// ── limitations are surfaced, never hidden ───────────────────────────────────
+test('unmeasured inputs are recorded as explicit limitations', () => {
+  const r = H.classifyAlgo({ id: 'x', series: series(30, 21) });
+  assert.ok(r.limitations.includes('calibration unmeasured'));
+  assert.ok(r.limitations.includes('regime compatibility unmeasured'));
+  assert.ok(r.limitations.includes('independence unmeasured'));
+});
+
+// ── determinism ──────────────────────────────────────────────────────────────
+test('classifyAlgo is deterministic (no clock / no randomness)', () => {
+  const a = H.classifyAlgo({ id: 'x', series: series(30, 21) });
+  const b = H.classifyAlgo({ id: 'x', series: series(30, 21) });
+  assert.deepEqual(a, b);
+});
+
+``````
+
+## test/algo-router-routes.test.js
+
+``````javascript
+'use strict';
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const RR = require('../lib/algo-router-routes');
+
+function fakeRes() {
+  return {
+    headers: {}, body: null, code: 200,
+    setHeader(k, v) { this.headers[k] = v; },
+    status(c) { this.code = c; return this; },
+    json(o) { this.body = o; return o; },
+  };
+}
+
+// ── configured:false path is inert and safe (no store, no network) ───────────
+test('runRouter with no store returns an inert configured:false payload', async () => {
+  const hadToken = process.env.BLOB_READ_WRITE_TOKEN;
+  delete process.env.BLOB_READ_WRITE_TOKEN;
+  const res = fakeRes();
+  await RR.runRouter({ query: {} }, res);
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.configured, false);
+  if (hadToken) process.env.BLOB_READ_WRITE_TOKEN = hadToken;
+});
+
+// ── longTermFromStats: maturity's 0–100 scale → 0–1 skill shape ──────────────
+test('longTermFromStats rescales beat-rate/CI from percent to fraction', () => {
+  const lt = RR.longTermFromStats({ excessN: 30, avgExcess: 2.1, beatMktRate: 68, beatLo: 54, beatHi: 80 });
+  assert.equal(lt.effN, 30);
+  assert.equal(lt.beatRate, 0.68);
+  assert.equal(lt.ci.lo, 0.54);
+  assert.equal(lt.ci.hi, 0.8);
+  assert.equal(lt.ready, true);
+});
+
+test('longTermFromStats returns null without an excessN', () => {
+  assert.equal(RR.longTermFromStats(null), null);
+  assert.equal(RR.longTermFromStats({ avgExcess: 1 }), null);
+});
+
+// ── independenceFor: minimum measured credit, null when unmeasured ───────────
+test('independenceFor takes the minimum measured credit across siblings', () => {
+  const model = {
+    credits: { 'ghost|screener': 0.3, 'ghost|momentum': 0.8 },
+    pairs: [], gates: {}, priorCredit: 0.3,
+  };
+  // Only measured pairs count; min(0.3, 0.8) = 0.3.
+  assert.equal(RR.independenceFor(model, 'ghost', ['screener', 'momentum', 'coil']), 0.3);
+  // No measured pair for 'coil' → null (unknown).
+  assert.equal(RR.independenceFor(model, 'coil', ['screener', 'momentum', 'ghost']), null);
+});
+
+// ── regimeCompatFor: current regime bucket ranked among the three ────────────
+test('regimeCompatFor scores high when the algo paid in the CURRENT regime', () => {
+  // Algo made money in risk-on, lost in risk-off.
+  const series = [
+    { date: 'a', excess: 3 }, { date: 'b', excess: 2 }, { date: 'c', excess: 4 }, // risk-on
+    { date: 'd', excess: -3 }, { date: 'e', excess: -2 }, { date: 'f', excess: -4 }, // risk-off
+  ];
+  const reg = { a: 'risk-on', b: 'risk-on', c: 'risk-on', d: 'risk-off', e: 'risk-off', f: 'risk-off' };
+  const macroLU = { at: (d) => ({ regime: reg[d] }) };
+  assert.equal(RR.regimeCompatFor(series, macroLU, 'risk-on'), 1);   // best bucket → 1
+  assert.equal(RR.regimeCompatFor(series, macroLU, 'risk-off'), 0);  // worst bucket → 0
+});
+
+test('regimeCompatFor returns null when the current bucket has too little history', () => {
+  const series = [{ date: 'a', excess: 1 }, { date: 'b', excess: 2 }];
+  const macroLU = { at: () => ({ regime: 'risk-on' }) };
+  assert.equal(RR.regimeCompatFor(series, macroLU, 'risk-off'), null);
+});
+
+// ── marketBlock: coarse probability vector + change detection ────────────────
+test('marketBlock produces a normalised state vector and flags a regime change', () => {
+  const macroNow = { regime: 'risk-off', macroRisk: 70, vix: { level: 30, pctile: 88, rising: true }, credit: { trend20: -1.2, belowSma: true } };
+  const b = RR.marketBlock(macroNow, 'risk-on');
+  assert.equal(b.dominant, 'risk-off');
+  assert.equal(b.changedRecently, true);
+  const sum = b.states.reduce((a, s) => a + s.probability, 0);
+  assert.ok(Math.abs(sum - 1) < 0.03);
+  assert.equal(b.states[0].name, 'risk-off'); // highest probability first
+});
+
+test('marketBlock degrades gracefully when the macro feed is down', () => {
+  const b = RR.marketBlock(null, null);
+  assert.deepEqual(b.states, []);
+  assert.equal(b.confidence, 0);
+});
+
+// ── family map bridges correlated clusters ───────────────────────────────────
+test('familyOf groups the known correlated price-momentum cluster', () => {
+  assert.equal(RR.familyOf('ghost'), RR.familyOf('screener'));
+  assert.equal(RR.familyOf('gapgo'), RR.familyOf('daytrade'));
+  assert.equal(RR.familyOf('unlisted-x'), 'unlisted-x'); // its own family by default
+});
+
+``````
+
+## test/algo-router.test.js
+
+``````javascript
+'use strict';
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const R = require('../lib/algo-router');
+
+// A minimal health object shaped like a classifyAlgo result.
+function health(id, over = {}) {
+  return {
+    id, health: 'STRONG',
+    estimate: { avgExcess: 1.2, beatRate: 0.7 },
+    ci: { lo: 0.56, hi: 0.82 },
+    effectiveSampleSize: 40,
+    regimeCompatibility: 0.8, calibrationQuality: 0.85,
+    independentContribution: 0.9, certainty: 0.8,
+    ...over,
+  };
+}
+
+// ── validatedSkill: shrinks toward zero on small samples, zero without real edge ──
+test('validatedSkill: requires positive avgExcess AND beatRate above 0.5', () => {
+  assert.equal(R.validatedSkill(health('a', { estimate: { avgExcess: -1, beatRate: 0.7 } }), 10), 0);
+  assert.equal(R.validatedSkill(health('a', { estimate: { avgExcess: 1, beatRate: 0.5 } }), 10), 0);
+  assert.ok(R.validatedSkill(health('a'), 10) > 0);
+});
+
+test('validatedSkill: a small sample earns less than the same edge on a large sample', () => {
+  const small = R.validatedSkill(health('a', { effectiveSampleSize: 5 }), 10);
+  const large = R.validatedSkill(health('a', { effectiveSampleSize: 200 }), 10);
+  assert.ok(large > small);
+});
+
+// ── abstention: no positive conservative estimate → abstain, all weights 0 ────
+test('all-zero raw weights → ABSTAIN with every current weight 0', () => {
+  const hs = [
+    health('a', { health: 'UNKNOWN', estimate: { avgExcess: null, beatRate: null } }),
+    health('b', { health: 'BROKEN', estimate: { avgExcess: -1, beatRate: 0.3 } }),
+  ];
+  const out = R.routeWeights(hs, {});
+  assert.equal(out.abstain, true);
+  assert.ok(out.weights.every((w) => w.currentWeight === 0));
+  assert.equal(out.totalWeight, 0);
+});
+
+// ── hysteresis: focus shifts gradually, not in one jump ───────────────────────
+test('a strong algorithm from zero prior rises by at most one step (turnover limit)', () => {
+  const out = R.routeWeights([health('a'), health('b', { id: 'b' })], { prior: { weights: {}, cooldowns: {} } });
+  const a = out.weights.find((w) => w.id === 'a');
+  assert.ok(a.targetWeight > a.currentWeight); // target not reached in one run
+  assert.ok(a.currentWeight <= out.caps.maxStepUp + 1e-9);
+});
+
+test('reductions may move faster than increases', () => {
+  // Prior heavy weight, now BROKEN → snaps toward 0 immediately (faster than maxStepUp).
+  const out = R.routeWeights([health('a', { health: 'BROKEN', estimate: { avgExcess: -1, beatRate: 0.3 } })],
+    { prior: { weights: { a: 0.25 }, cooldowns: {} } });
+  assert.equal(out.weights[0].currentWeight, 0);
+});
+
+// ── emergency disable ─────────────────────────────────────────────────────────
+test('an emergency-disabled algorithm is forced to 0 regardless of skill', () => {
+  const out = R.routeWeights([health('a'), health('b', { id: 'b' })],
+    { emergency: new Set(['a']), prior: { weights: { a: 0.2 }, cooldowns: {} } });
+  const a = out.weights.find((w) => w.id === 'a');
+  assert.equal(a.currentWeight, 0);
+  assert.equal(a.rawWeight, 0);
+  assert.ok(a.emergency);
+});
+
+// ── cooldown ──────────────────────────────────────────────────────────────────
+test('a cooling-down algorithm may hold or fall but not increase', () => {
+  const out = R.routeWeights([health('a')], { prior: { weights: { a: 0.05 }, cooldowns: { a: 2 } } });
+  const a = out.weights[0];
+  assert.ok(a.currentWeight <= 0.05 + 1e-9); // increase blocked
+});
+
+test('a DEGRADING verdict arms the cooldown for the next run', () => {
+  const out = R.routeWeights([health('a', { health: 'DEGRADING' })], { prior: { weights: { a: 0.1 }, cooldowns: {} } });
+  assert.ok((out.cooldowns.a || 0) > 0);
+});
+
+// ── per-family cap: correlated siblings share an evidence budget ──────────────
+test('two strong algorithms in one family are capped at the family limit', () => {
+  const hs = [health('a'), health('b', { id: 'b' }), health('c', { id: 'c' })];
+  const familyOf = (id) => (id === 'c' ? 'other' : 'momentum'); // a,b share a family
+  const out = R.routeWeights(hs, { familyOf, caps: { ...R.DEFAULT_CAPS, maxStepUp: 1, maxStepDown: 1 } });
+  const famSum = out.weights.filter((w) => w.family === 'momentum').reduce((s, w) => s + w.targetWeight, 0);
+  assert.ok(famSum <= R.DEFAULT_CAPS.maxFamily + 1e-6);
+  assert.ok(out.cappedFamilies.includes('momentum'));
+});
+
+// ── per-algorithm cap ─────────────────────────────────────────────────────────
+test('no single algorithm exceeds the per-algorithm cap', () => {
+  const out = R.routeWeights([health('a')], { caps: { ...R.DEFAULT_CAPS, maxStepUp: 1 } });
+  assert.ok(out.weights[0].currentWeight <= R.DEFAULT_CAPS.maxAlgo + 1e-9);
+});
+
+// ── regime incompatibility drags weight down ─────────────────────────────────
+test('an INCOMPATIBLE regime verdict gets far less weight than a compatible one', () => {
+  const compatible = R.routeWeights([health('a')], { caps: { ...R.DEFAULT_CAPS, maxStepUp: 1 } });
+  const incompatible = R.routeWeights([health('a', { health: 'INCOMPATIBLE', regimeCompatibility: 0.15 })],
+    { caps: { ...R.DEFAULT_CAPS, maxStepUp: 1 } });
+  assert.ok(incompatible.weights[0].rawWeight < compatible.weights[0].rawWeight);
+});
+
+// ── determinism ──────────────────────────────────────────────────────────────
+test('routeWeights is deterministic', () => {
+  const a = R.routeWeights([health('a'), health('b', { id: 'b' })], {});
+  const b = R.routeWeights([health('a'), health('b', { id: 'b' })], {});
+  assert.deepEqual(a, b);
 });
 
 ``````
@@ -44853,6 +47974,361 @@ test('a non-logOnly type can still TRADE on the same dislocation (control)', () 
 
 ``````
 
+## test/challenger-core.test.js
+
+``````javascript
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert');
+
+const rank = require('../lib/challenger-rank');
+const surv = require('../lib/challenger-survival');
+const events = require('../lib/challenger-events');
+const decision = require('../lib/challenger-decision');
+
+// A signal shaped like decision.rankSignals output (the shared enriched-signal contract).
+function mkSig(o = {}) {
+  return {
+    id: o.id || `screener:swing:${o.ticker || 'AAA'}`,
+    ticker: o.ticker || 'AAA',
+    company: o.company || null,
+    source: o.source || 'screener',
+    section: o.section || 'screener',
+    horizon: o.horizon || 'swing',
+    side: o.side || 'long',
+    strategyFamily: o.strategyFamily || 'trend',
+    state: o.state || 'ready',
+    ageBars: o.ageBars != null ? o.ageBars : 1,
+    price: o.price != null ? o.price : 100,
+    entry: o.entry != null ? o.entry : 100,
+    stop: o.stop != null ? o.stop : 94,
+    target: o.target != null ? o.target : 112,
+    rr: o.rr != null ? o.rr : 2,
+    percentile: o.percentile != null ? o.percentile : 80,
+    rawConfidence: o.rawConfidence != null ? o.rawConfidence : 70,
+    evidence: o.evidence || { familyCount: 3, families: ['priceTrend', 'volumeAccum', 'fundamentalsRevisions'], singleFamily: false },
+    expectancy: o.expectancy || { known: true, n: 20, winRate: 55, avgExcess: 1.2 },
+    expectancyTilt: o.expectancyTilt || { tilt: 1.1, shrink: 0.7 },
+    remainingEdge: o.remainingEdge || { rated: true, mult: 0.8, netRemainingPct: 6, realizedMovePct: 1, consumedPct: 10, extensionR: 0.3, freshness: 'fresh' },
+    execution: o.execution || { quality: 0.9, penalties: [] },
+    cost: o.cost || { known: true, costShare: 0.1, netMovePct: 6, penalty: 0.9 },
+    regimeFit: o.regimeFit != null ? o.regimeFit : 0.85,
+    liquidity: o.liquidity || { dollarVol: 1e8 },
+    sectorStrength: o.sectorStrength != null ? o.sectorStrength : 0.2,
+    event: o.event || null,
+  };
+}
+
+// Build a mature survival cell for the swing|trend|neutral|large|ready|news-catalyst key.
+function matureTable(ticker = 'AAA') {
+  const parts = ['swing', 'trend', 'neutral', 'large', 'ready', 'news-catalyst'];
+  const evs = [];
+  for (let i = 0; i < 20; i++) {
+    const barrier = i < 14 ? 'upper' : i < 18 ? 'lower' : 'time';
+    evs.push({ keyParts: parts, barrier, barsToBarrier: 6, ticker });
+  }
+  return surv.buildSurvivalTable(evs);
+}
+
+// ---------------------------------------------------------------------------
+test('rank: cross-sectional percentile ranks are scale-free and ordered', () => {
+  assert.deepStrictEqual(rank.percentileRanks([10, 20, 30]), [0, 0.5, 1]);
+  assert.deepStrictEqual(rank.percentileRanks([5, 5, 5]), [0.5, 0.5, 0.5]); // ties share avg rank
+  const r = rank.percentileRanks([1, null, 3]);
+  assert.strictEqual(r[1], null); // nulls stay null, never fabricated
+});
+
+test('rank: stronger candidate gets higher residual; weaker lower; inputs not mutated', () => {
+  const strong = mkSig({ ticker: 'STRONG', percentile: 95, rawConfidence: 90 });
+  const weak = mkSig({ ticker: 'WEAK', percentile: 20, rawConfidence: 30, remainingEdge: { rated: true, mult: 0.2, netRemainingPct: 0.5, consumedPct: 60, extensionR: 0.1, freshness: 'partially-consumed' } });
+  const before = JSON.stringify(strong);
+  const out = rank.rankCrossSection([strong, weak], { asOf: '2026-07-18' });
+  const s = out.find((x) => x.ticker === 'STRONG').challengerRank;
+  const w = out.find((x) => x.ticker === 'WEAK').challengerRank;
+  assert.ok(s.residualScore > w.residualScore);
+  assert.strictEqual(s.modelVersion, 'challenger-rank-v1');
+  assert.strictEqual(s.isPrediction, true); // labeled as prediction, not validated probability
+  assert.strictEqual(before, JSON.stringify(strong)); // no mutation
+});
+
+test('rank: missing feature is flagged, not fabricated', () => {
+  const sig = mkSig({ ticker: 'NOFAIL' });
+  sig.liquidity = null; // truly absent
+  const [out] = rank.rankCrossSection([sig], { asOf: '2026-07-18' });
+  assert.ok(out.challengerRank.missingFlags.includes('liquidity'));
+  assert.strictEqual(out.challengerRank.features.liquidity.raw, null);
+});
+
+test('rank: deterministic', () => {
+  const a = rank.rankCrossSection([mkSig({ ticker: 'A' }), mkSig({ ticker: 'B', percentile: 40 })], { asOf: 'd' });
+  const b = rank.rankCrossSection([mkSig({ ticker: 'A' }), mkSig({ ticker: 'B', percentile: 40 })], { asOf: 'd' });
+  assert.strictEqual(JSON.stringify(a), JSON.stringify(b));
+});
+
+// ---------------------------------------------------------------------------
+test('survival: competing-risk probabilities sum to 1', () => {
+  const table = matureTable();
+  const out = surv.assessSurvival(mkSig(), { table, regime: { label: 'neutral' } });
+  const s = out.pTargetBeforeStop + out.pStopBeforeTarget + out.pNeither;
+  assert.ok(Math.abs(s - 1) < 1e-6);
+});
+
+test('survival: tiny subgroup shrinks toward prior, never extreme', () => {
+  // one lopsided observation must NOT yield p≈1
+  const table = surv.buildSurvivalTable([{ keyParts: ['swing', 'trend', 'neutral', 'large', 'ready', 'news-catalyst'], barrier: 'upper', barsToBarrier: 5 }]);
+  const out = surv.assessSurvival(mkSig(), { table, regime: { label: 'neutral' } });
+  assert.ok(out.pTargetBeforeStop < 0.75, `expected shrinkage, got ${out.pTargetBeforeStop}`);
+  assert.ok(out.pTargetBeforeStop > surv.DEFAULT_PRIOR.pTarget); // moved toward observation but not all the way
+});
+
+test('survival: empty table => shrunkToPrior, low effN (honest cold start)', () => {
+  const out = surv.assessSurvival(mkSig(), { table: new Map(), regime: { label: 'neutral' } });
+  assert.strictEqual(out.shrunkToPrior, true);
+  assert.strictEqual(out.effN, 0);
+  assert.deepStrictEqual(
+    [out.pTargetBeforeStop, out.pStopBeforeTarget, out.pNeither].map((x) => Math.round(x * 100) / 100),
+    [surv.DEFAULT_PRIOR.pTarget, surv.DEFAULT_PRIOR.pStop, surv.DEFAULT_PRIOR.pNeither]
+  );
+});
+
+test('survival: entry-state classifier covers the state machine', () => {
+  assert.strictEqual(surv.classifyEntryState(mkSig({ state: 'ready', price: 100, entry: 100 })), 'ENTER_NOW');
+  assert.strictEqual(surv.classifyEntryState(mkSig({ state: 'ready', price: 106, entry: 100 })), 'WAIT_FOR_PULLBACK');
+  assert.strictEqual(surv.classifyEntryState(mkSig({ state: 'ready', price: 96, entry: 100 })), 'WAIT_FOR_BREAKOUT');
+  assert.strictEqual(surv.classifyEntryState(mkSig({ state: 'detected', price: 99.9, entry: 100 })), 'WAIT_FOR_CONFIRMATION');
+  assert.strictEqual(surv.classifyEntryState(mkSig({ state: 'failed' })), 'INVALID');
+  assert.strictEqual(surv.classifyEntryState(mkSig({ state: 'extended' })), 'STALE');
+  const noLevels = mkSig(); noLevels.entry = null; noLevels.stop = null;
+  assert.strictEqual(surv.classifyEntryState(noLevels), 'INVALID');
+});
+
+test('survival: setup expiry derived from horizon hold window', () => {
+  const out = surv.assessSurvival(mkSig({ horizon: 'swing', ageBars: 3 }), { table: new Map() });
+  assert.strictEqual(out.setupExpiry.maxHoldBars, 10);
+  assert.strictEqual(out.setupExpiry.sessionsRemaining, 7);
+});
+
+// ---------------------------------------------------------------------------
+test('events: mechanical normalize + surprise score with missing flags', () => {
+  const { record, surprise } = events.assessEvent(mkSig({ source: 'screener' }));
+  assert.strictEqual(record.schemaVersion, 'event-surprise-v1');
+  assert.strictEqual(record.category, 'news-catalyst');
+  assert.ok(record.missingFlags.includes('earningsSurprise')); // honestly unknown, flagged
+  assert.ok(surprise.score >= 0 && surprise.score <= 100);
+  assert.strictEqual(surprise.degraded, true); // built from proxies -> weak prior
+});
+
+test('events: contradiction flag when long into a weak sector', () => {
+  const { record } = events.assessEvent(mkSig({ side: 'long', sectorStrength: -0.5 }));
+  assert.ok(record.contradictionFlags.includes('long-into-weak-sector'));
+});
+
+test('events: LLM absent => graceful null, mechanical path still works', async () => {
+  const r = await events.reviewEventWithLLM(mkSig(), { apiKey: '' });
+  assert.strictEqual(r, null);
+  const { surprise } = events.assessEvent(mkSig(), {}, r); // r=null => mechanical
+  assert.ok(surprise.score >= 0);
+});
+
+// ---------------------------------------------------------------------------
+test('decision: strong mature candidate => TRADE, shadow, zero weight', () => {
+  const table = matureTable('STRONG');
+  const strong = mkSig({ ticker: 'STRONG', id: 'screener:swing:STRONG' });
+  const filler = mkSig({ ticker: 'FILL', id: 'screener:swing:FILL', percentile: 30, rawConfidence: 40 });
+  const board = decision.decideBoard([strong, filler], { asOf: '2026-07-18', regime: { label: 'neutral' }, survivalTable: table });
+  const trade = board.decisions.TRADE.find((d) => d.ticker === 'STRONG');
+  assert.ok(trade, 'STRONG should be TRADE');
+  assert.strictEqual(trade.shadow, true);
+  assert.strictEqual(trade.deploymentWeight, 0);
+  assert.strictEqual(board.boardDecision, 'TRADE_AVAILABLE');
+});
+
+test('decision: attractive but extended => WAIT with trigger/invalidation/expiry', () => {
+  const table = matureTable('WAITER');
+  const s = mkSig({ ticker: 'WAITER', id: 'screener:swing:WAITER', state: 'ready', price: 106, entry: 100 });
+  const board = decision.decideBoard([s], { asOf: '2026-07-18', regime: { label: 'neutral' }, survivalTable: table });
+  const w = board.decisions.WAIT.find((d) => d.ticker === 'WAITER');
+  assert.ok(w, 'WAITER should be WAIT');
+  assert.ok(w.trigger && w.invalidation && w.expiry, 'WAIT must carry trigger/invalidation/expiry');
+});
+
+test('decision: negative net edge => AVOID', () => {
+  const s = mkSig({ ticker: 'BAD', remainingEdge: { rated: true, mult: 0.2, netRemainingPct: -2, consumedPct: 80, extensionR: 0.2, freshness: 'late' }, cost: { known: true, costShare: 0.9, netMovePct: -2, penalty: 0.5 } });
+  const board = decision.decideBoard([s], { asOf: 'd', regime: { label: 'neutral' }, survivalTable: new Map() });
+  assert.ok(board.decisions.AVOID.find((d) => d.ticker === 'BAD'));
+});
+
+test('decision: cold-start (no survival history) yields zero TRADE and NO_TRADE board', () => {
+  const s = mkSig({ ticker: 'COLD' });
+  const board = decision.decideBoard([s], { asOf: 'd', regime: { label: 'neutral' }, survivalTable: new Map() });
+  assert.strictEqual(board.counts.trade, 0);
+  assert.strictEqual(board.boardDecision, 'NO_TRADE');
+  assert.ok(board.noTradeCause && board.noTradeCause.cause); // normal success with a cause
+});
+
+test('decision: empty board => NO_TRADE success, not an error', () => {
+  const board = decision.decideBoard([], { asOf: 'd', regime: { label: 'neutral' } });
+  assert.strictEqual(board.boardDecision, 'NO_TRADE');
+  assert.deepStrictEqual(board.counts, { trade: 0, wait: 0, avoid: 0, total: 0 });
+  assert.strictEqual(board.version, 'challenger-decision-v1');
+});
+
+test('decision: does not mutate input signals and is deterministic', () => {
+  const table = matureTable('DET');
+  const inputs = [mkSig({ ticker: 'DET', id: 'screener:swing:DET' })];
+  const snapshot = JSON.stringify(inputs);
+  const a = decision.decideBoard(inputs, { asOf: 'd', regime: { label: 'neutral' }, survivalTable: table });
+  const b = decision.decideBoard(inputs, { asOf: 'd', regime: { label: 'neutral' }, survivalTable: table });
+  assert.strictEqual(snapshot, JSON.stringify(inputs)); // inputs untouched
+  assert.strictEqual(JSON.stringify(a), JSON.stringify(b)); // deterministic
+});
+
+test('decision: UI data-contract is null-safe with a minimal signal (missing optional fields)', () => {
+  // A bare signal with none of the optional enrichment the UI reads.
+  const board = decision.decideBoard([{ ticker: 'MIN', horizon: 'swing', side: 'long', entry: 10, stop: 9, source: 'screener' }], { asOf: 'd', regime: { label: 'neutral' }, survivalTable: new Map() });
+  const all = [...board.decisions.TRADE, ...board.decisions.WAIT, ...board.decisions.AVOID];
+  assert.ok(all.length === 1);
+  const d = all[0];
+  // Every field the today.js action cards read must be defined (null is fine; undefined would render "undefined").
+  const uiKeys = ['ticker', 'decision', 'horizon', 'entry', 'stop', 'target', 'trigger', 'invalidation', 'expiry', 'expectedNetUtilityPct', 'uncertainty', 'residualScore', 'percentileRank', 'failureProb', 'executionQuality', 'regimeFit', 'primaryDriver', 'primaryRisk', 'governanceStatus'];
+  for (const k of uiKeys) assert.ok(d[k] !== undefined, `${k} must not be undefined`);
+  assert.strictEqual(typeof d.survival, 'object');
+  assert.strictEqual(typeof d.event, 'object');
+  assert.ok(Array.isArray(d.reasons));
+  for (const k of ['pTargetBeforeStop', 'pStopBeforeTarget', 'pNeither', 'entryState', 'effN', 'expectedSessionsToResolution', 'edgeNowPct', 'edgeAfterWaitPct', 'basis']) assert.ok(d.survival[k] !== undefined);
+  for (const k of ['category', 'score', 'degraded']) assert.ok(d.event[k] !== undefined);
+});
+
+test('decision: governance-disabled source => AVOID', () => {
+  const table = matureTable('DIS');
+  const s = mkSig({ ticker: 'DIS', id: 'screener:swing:DIS', source: 'daytrade' });
+  const board = decision.decideBoard([s], { asOf: 'd', regime: { label: 'neutral' }, survivalTable: table, disabledSources: new Set(['daytrade']) });
+  assert.ok(board.decisions.AVOID.find((d) => d.ticker === 'DIS'));
+});
+
+``````
+
+## test/challenger-integration.test.js
+
+``````javascript
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert');
+
+const sources = require('../lib/decision-sources');
+const routes = require('../lib/challenger-routes');
+const evalLib = require('../lib/challenger-eval');
+const { FEATURES } = require('../lib/challenger-rank');
+
+// A realistic op=screener payload (fromScreener needs levels.entry>0 + status).
+function screenerPayload() {
+  return {
+    results: [
+      { ticker: 'AAA', company: 'Alpha', status: 'BUY', sector: 'Tech', price: 100, levels: { entry: 100, stop: 94, target: 112, rr: 2 }, quant: { score: 80 }, factors: { dollarVol: 1e8 } },
+      { ticker: 'BBB', company: 'Beta', status: 'STRONG_BUY', sector: 'Energy', price: 50, levels: { entry: 50, stop: 47, target: 58, rr: 2 }, quant: { score: 65 }, factors: { dollarVol: 3e7 } },
+    ],
+  };
+}
+
+test('decision-sources: buildRankedSignals normalizes + ranks a real screener payload', () => {
+  const { ranked, count } = sources.buildRankedSignals({ screener: screenerPayload() }, { regime: { label: 'neutral' } });
+  assert.ok(count >= 1, 'should produce at least one ranked signal');
+  const s = ranked[0];
+  assert.ok(s.ticker && isFinite(s.score)); // enriched with a production composite score
+  assert.ok(s.evidence && typeof s.evidence.familyCount === 'number');
+});
+
+test('challenger-routes: buildChallengerBoard produces a shadow board (cold start => NO_TRADE)', async () => {
+  const fetchJSON = async (path) => {
+    if (path.includes('op=today')) return { regime: { label: 'neutral' }, opportunity: { decision: 'selective', reasons: [] } };
+    if (path.includes('/api/screener?scope=large')) return screenerPayload();
+    return null;
+  };
+  const board = await routes.buildChallengerBoard(fetchJSON, { asOf: '2026-07-18' });
+  assert.strictEqual(board.version, 'challenger-decision-v1');
+  assert.strictEqual(board.shadow, true);
+  assert.strictEqual(board.deploymentWeight, 0);
+  assert.ok(['TRADE_AVAILABLE', 'NO_TRADE'].includes(board.boardDecision));
+  assert.ok(board.decisions && Array.isArray(board.decisions.TRADE) && Array.isArray(board.decisions.WAIT) && Array.isArray(board.decisions.AVOID));
+  // Cold start: no resolved survival history => zero TRADE, board explains itself.
+  assert.strictEqual(board.counts.trade, 0);
+  assert.strictEqual(board.boardDecision, 'NO_TRADE');
+  assert.ok(board.noTradeCause && board.noTradeCause.cause);
+});
+
+test('challenger-routes: resolveBarrier detects target / stop / timeout / open (no leakage)', () => {
+  const mk = (rows) => rows.map((r, i) => ({ date: `2026-01-${String(i + 1).padStart(2, '0')}`, open: r[0], high: r[1], low: r[2], close: r[3] }));
+  // day 0 = entry bar; forward bars only (idx+1..) are inspected.
+  const target = routes.resolveBarrier(mk([[100, 100, 100, 100], [100, 113, 99, 112], [100, 100, 100, 100]]), '2026-01-01', 100, 94, 112, 'long', 10);
+  assert.strictEqual(target.barrier, 'upper');
+  const stop = routes.resolveBarrier(mk([[100, 100, 100, 100], [100, 101, 93, 95], [100, 100, 100, 100]]), '2026-01-01', 100, 94, 112, 'long', 10);
+  assert.strictEqual(stop.barrier, 'lower');
+  // flat but window not yet elapsed => still open (null), never fabricated
+  const flatShort = routes.resolveBarrier(mk([[100, 100, 100, 100], [100, 101, 99, 100]]), '2026-01-01', 100, 94, 112, 'long', 10);
+  assert.strictEqual(flatShort, null);
+  // flat and window fully elapsed => timeout
+  const flatRows = Array.from({ length: 12 }, () => [100, 101, 99, 100]);
+  const timeout = routes.resolveBarrier(mk(flatRows), '2026-01-01', 100, 94, 112, 'long', 10);
+  assert.strictEqual(timeout.barrier, 'time');
+});
+
+// Deterministic resolved-prediction fixture where residualScore genuinely predicts outcome.
+function fixture(n = 96) {
+  const rows = [];
+  for (let i = 0; i < n; i++) {
+    const rs = 30 + (i * 37 % 70); // spread of residual scores 30..99
+    const outcome = (rs - 60) * 0.08 + ((i % 5) - 2) * 0.2; // monotone-ish in rs, with noise
+    const feats = {};
+    for (const f of FEATURES) feats[f.key] = { norm: ((i * (f.key.length + 3)) % 100) / 100 };
+    rows.push({
+      predDate: `2025-${String((i % 8) + 1).padStart(2, '0')}-15`, ticker: `T${i}`, horizon: 'swing',
+      decision: 'TRADE', residualScore: rs, outcome: +outcome.toFixed(3), won: outcome > 0,
+      features: feats, regimeLabel: i % 3 === 0 ? 'risk-off' : 'neutral', capTier: 'large', eventType: 'news-catalyst',
+      baselineProd: 50 + (i % 40), baselineMomentum: rs - 5, baselineOmega: null,
+    });
+  }
+  return rows;
+}
+
+test('challenger-eval: evaluate returns the full validation battery without throwing', () => {
+  const ev = evalLib.evaluate(fixture(), { now: '2026-07-18' });
+  assert.strictEqual(ev.version, 'challenger-eval-v1');
+  assert.ok(ev.ic && typeof ev.ic.ic === 'number');
+  assert.ok(ev.ic.ic > 0, 'residualScore should positively predict outcome in the fixture');
+  assert.ok(ev.walkForward && Array.isArray(ev.walkForward.blocks));
+  assert.ok(ev.netExpectancy && ev.netExpectancy.ci && 'lo' in ev.netExpectancy.ci);
+  assert.ok(ev.byRegime && ev.leaveOneYearOut && ev.leaveLargestWinnersOut);
+  assert.ok(ev.trainedShadow && 'beatsBaseline' in ev.trainedShadow);
+  assert.ok(ev.baselines && ev.baselines.prod && ev.baselines.random);
+});
+
+test('challenger-eval: promotionCheck reports strict criteria, never auto-promotes on first pass', () => {
+  const ev = evalLib.evaluate(fixture(), { now: '2026-07-18' });
+  const promo = evalLib.promotionCheck(ev, {}); // no live-forward record supplied
+  assert.strictEqual(promo.criteria.length, 10);
+  assert.ok(promo.criteria.every((c) => typeof c.pass === 'boolean'));
+  assert.strictEqual(typeof promo.promotable, 'boolean');
+  // With no live-forward evidence, the live-shadow criterion must fail => not promotable.
+  assert.ok(!promo.criteria.find((c) => /live-forward/.test(c.name)).pass);
+  assert.notStrictEqual(promo.recommendedStatus, 'production'); // never straight to production
+});
+
+test('challenger-eval: empty input degrades gracefully (not-ready, not a crash)', () => {
+  const ev = evalLib.evaluate([], {});
+  assert.strictEqual(ev.n, 0);
+  assert.ok(ev.rankQuality && ev.rankQuality.ready === false);
+  const promo = evalLib.promotionCheck(ev, {});
+  assert.strictEqual(promo.promotable, false);
+});
+
+test('challenger-eval: ridgeFit is deterministic', () => {
+  const X = [[1, 0], [0, 1], [1, 1], [0.5, 0.5]];
+  const y = [1, 2, 3, 1.5];
+  assert.deepStrictEqual(evalLib.ridgeFit(X, y, 1), evalLib.ridgeFit(X, y, 1));
+});
+
+``````
+
 ## test/coil.test.js
 
 ``````javascript
@@ -45263,6 +48739,42 @@ test('emaSeries and rsiSeries return aligned-length arrays', () => {
   const vals = Array.from({ length: 30 }, (_, i) => i + 1);
   assert.equal(emaSeries(vals, 10).length, 30);
   assert.equal(rsiSeries(vals, 14).length, 30);
+});
+
+``````
+
+## test/constituents-parse.test.js
+
+``````javascript
+'use strict';
+// Regression: the S&P "changes" wikitable parser must tolerate <tr> tags WITH attributes.
+// Wikipedia emits `<tr class="...">`; a strict /<tr>/ matched zero rows and silently emptied
+// the entire delisting source, so every survivorship correction added nothing.
+
+const test = require('node:test');
+const assert = require('node:assert');
+const { parseRemovedConstituents } = require('../lib/constituents');
+
+// A minimal changes table whose rows ALL carry attributes (the shape that broke the old regex —
+// there is not a single bare `<tr>` here, exactly like real Wikipedia markup).
+const HTML = `
+<table class="wikitable sortable" id="changes">
+<tr class="header"><th>Date</th><th>Ticker</th><th>Name</th><th>Ticker</th><th>Name</th><th>Reason</th></tr>
+<tr class="vevent" style="x"><td>February 15, 2022</td><td>ACME</td><td>Acme Add</td><td>XLNX</td><td>Xilinx</td><td>Acquired</td></tr>
+<tr id="r2"><td>March 10, 2023</td><td>NEWCO</td><td>New Co</td><td>SIVB</td><td>SVB</td><td>Delisted</td></tr>
+<tr data-x="1"><td>January 1, 2000</td><td>OLDA</td><td>Old Add</td><td>OLDR</td><td>Old Removed</td><td>Too old</td></tr>
+</table>`;
+
+test('parseRemovedConstituents: parses attributed <tr> rows and honors the year cutoff', () => {
+  const now = new Date('2026-01-01T00:00:00Z').getTime();
+  const out = parseRemovedConstituents(HTML, { years: 5, now });
+  assert.deepStrictEqual(out.map(x => x.ticker).sort(), ['SIVB', 'XLNX']);  // OLDR excluded by cutoff
+  assert.equal(out.find(x => x.ticker === 'XLNX').removedDate, '2022-02-15');
+});
+
+test('parseRemovedConstituents: guards the regression (no bare <tr>; strict regex would match zero)', () => {
+  assert.equal((HTML.match(/<tr>/g) || []).length, 0, 'fixture has no bare <tr> — all rows are attributed');
+  assert.equal(parseRemovedConstituents(HTML, { years: 5, now: new Date('2026-01-01').getTime() }).length, 2);
 });
 
 ``````
@@ -47269,6 +50781,50 @@ test('runEvolveBackfill: vol-adjusted path also processes all horizons including
 
 ``````
 
+## test/evolve-candidate-strength.test.js
+
+``````javascript
+'use strict';
+// audit #9: the context ensemble P is a pooled base rate, so equal-context candidates get an
+// identical P regardless of their own setup strength. candidateStrengthTilt (SHADOW) differentiates
+// them by their within-context percentile, in log-odds space (stays a valid probability).
+
+const test = require('node:test');
+const assert = require('node:assert');
+const E = require('../lib/evolve');
+
+test('candidateStrengthTilt: k=0 is identity (default-off is byte-identical)', () => {
+  const out = E.candidateStrengthTilt(0.5, 0.9, { k: 0 });
+  assert.equal(out.p, 0.5);
+  assert.equal(out.delta, 0);
+});
+
+test('candidateStrengthTilt: monotone — a stronger candidate gets a higher adjusted P', () => {
+  const weak = E.candidateStrengthTilt(0.5, 0.2);
+  const strong = E.candidateStrengthTilt(0.5, 0.9);
+  assert.ok(strong.p > 0.5, 'above-median strength lifts P');
+  assert.ok(weak.p < 0.5, 'below-median strength lowers P');
+  assert.ok(strong.p > weak.p);
+});
+
+test('candidateStrengthTilt: symmetric around the median and bounded to a valid probability', () => {
+  const mid = E.candidateStrengthTilt(0.5, 0.5);
+  assert.equal(mid.delta, 0);                                   // median candidate → no tilt
+  const hi = E.candidateStrengthTilt(0.5, 1.0), lo = E.candidateStrengthTilt(0.5, 0.0);
+  assert.ok(Math.abs((hi.p - 0.5) + (lo.p - 0.5)) < 1e-9, 'symmetric shift about 0.5');
+  assert.ok(hi.p < 1 && lo.p > 0, 'stays a valid probability');
+});
+
+test('candidateStrengthTilt: two equal-base candidates now DIFFER by their strength (the #9 fix)', () => {
+  const base = 0.62;                                            // identical context base rate
+  const a = E.candidateStrengthTilt(base, 0.95);               // strong setup
+  const b = E.candidateStrengthTilt(base, 0.30);               // weak setup
+  assert.notEqual(a.p, b.p);
+  assert.ok(a.p > base && b.p < base);
+});
+
+``````
+
 ## test/evolve-dsr.test.js
 
 ``````javascript
@@ -47629,6 +51185,127 @@ test('recomputePerf: overlapping same-ticker labels are uniqueness-down-weighted
 
 ``````
 
+## test/evolve-oof-calibrator.test.js
+
+``````javascript
+'use strict';
+// audit #18: the calibrator's reported Brier was computed on the SAME rows it was fit on
+// (in-sample → optimistic). fitCalibrator now also reports a k-fold OUT-OF-FOLD Brier for the
+// CALIBRATED probability, plus the raw-P OOF Brier it must beat.
+
+const test = require('node:test');
+const assert = require('node:assert');
+const E = require('../lib/evolve');
+
+// Overconfident raw model: p is always 0.9 but the true win rate is 60% → calibration should map
+// 0.9 → ~0.6 and REDUCE the out-of-fold Brier.
+function miscalibrated(n) {
+  const rows = [];
+  for (let i = 0; i < n; i++) rows.push({ p: 0.9, won: i % 10 < 6 });   // 60% win
+  return rows;
+}
+// Already well-calibrated: p = 0.6 with a 60% win rate.
+function wellCalibrated(n) {
+  const rows = [];
+  for (let i = 0; i < n; i++) rows.push({ p: 0.6, won: i % 10 < 6 });
+  return rows;
+}
+
+test('fitCalibrator: reports out-of-fold Brier fields (calibrated + raw baseline)', () => {
+  const cal = E.fitCalibrator(miscalibrated(100));
+  assert.ok(cal);
+  assert.ok('oofBrier' in cal && 'oofBrierRaw' in cal && 'calibrationHelpsOOS' in cal);
+  assert.ok(Number.isFinite(cal.oofBrier) && Number.isFinite(cal.oofBrierRaw));
+});
+
+test('oof Brier is HONEST: on an overconfident model, calibration lowers the OOF Brier', () => {
+  const cal = E.fitCalibrator(miscalibrated(100));
+  assert.ok(cal.oofBrier < cal.oofBrierRaw, `calibrated OOF (${cal.oofBrier}) < raw OOF (${cal.oofBrierRaw})`);
+  assert.equal(cal.calibrationHelpsOOS, true);
+});
+
+test('oof Brier does not manufacture improvement on an already-calibrated model', () => {
+  const cal = E.fitCalibrator(wellCalibrated(100));
+  // Calibrated OOF should be ~ the raw OOF (no material gain), never wildly better.
+  assert.ok(Math.abs(cal.oofBrier - cal.oofBrierRaw) < 0.02, `no spurious gain (${cal.oofBrier} vs ${cal.oofBrierRaw})`);
+});
+
+test('oofCalibratorBrier: deterministic and null when too thin to split', () => {
+  const rows = miscalibrated(100).filter(r => Number.isFinite(r.p));
+  const a = E.oofCalibratorBrier(rows), b = E.oofCalibratorBrier(rows);
+  assert.deepStrictEqual(a, b);
+  assert.equal(E.oofCalibratorBrier([{ p: 0.5, won: true }, { p: 0.5, won: false }]), null);
+});
+
+test('binnedMap: monotone non-decreasing table', () => {
+  const rows = Array.from({ length: 50 }, (_, i) => ({ p: i / 50, won: i % 3 === 0 }));  // deterministic
+  const { edges, table } = E.binnedMap(rows, 5);
+  assert.equal(edges.length, 5);
+  for (let i = 1; i < table.length; i++) assert.ok(table[i] >= table[i - 1], 'monotone');
+});
+
+``````
+
+## test/evolve-redundancy-effn.test.js
+
+``````javascript
+'use strict';
+// audit #10: the ensemble summed effN across specialists with NO cross-specialist discount, so two
+// ~0.96-correlated specialists counted as two independent samples toward the TRADE gate. The fix
+// discounts effN by measured effective independence (lib/redundancy.js).
+
+const test = require('node:test');
+const assert = require('node:assert');
+const E = require('../lib/evolve');
+
+const CONTRIBS = [{ specialist: 's1', p: 0.6, effN: 8 }, { specialist: 's2', p: 0.5, effN: 8 }];
+const WEIGHTS = [{ specialist: 's1', weight: 1 }, { specialist: 's2', weight: 1 }];
+
+test('ensembleProbability: no redundancy model → effN is the raw sum (backward compatible)', () => {
+  const out = E.ensembleProbability(CONTRIBS, WEIGHTS);
+  assert.equal(out.effN, 16);
+  assert.equal(out.effNRaw, 16);
+  assert.equal(out.independenceRatio, 1);
+});
+
+test('ensembleProbability: fully redundant specialists HALVE the effective sample', () => {
+  const model = { credits: { 's1|s2': 0, 's2|s1': 0 } };     // measured credit 0 = interchangeable
+  const out = E.ensembleProbability(CONTRIBS, WEIGHTS, { redundancyModel: model });
+  assert.equal(out.independenceRatio, 0.5);
+  assert.equal(out.effN, 8);                                  // 16 × 0.5 — one specialist's worth
+  assert.equal(out.effNRaw, 16);
+  assert.equal(out.redundantAgreement, true);
+});
+
+test('ensembleProbability: independent specialists keep the full effN', () => {
+  const model = { credits: { 's1|s2': 1, 's2|s1': 1 } };
+  const out = E.ensembleProbability(CONTRIBS, WEIGHTS, { redundancyModel: model });
+  assert.equal(out.independenceRatio, 1);
+  assert.equal(out.effN, 16);
+  assert.equal(out.redundantAgreement, false);
+});
+
+test('buildSpecialistRedundancy: co-firing correlated specialists earn a LOW credit; <20 rows → null', () => {
+  assert.equal(E.buildSpecialistRedundancy([{ predDate: '2022-01-01', ticker: 'A', specialists: ['s1', 's2'], spyRelReturn: 0.1 }]), null);
+  const rows = [];
+  for (let i = 0; i < 30; i++) rows.push({ predDate: `2022-01-${String(1 + i).padStart(2, '0')}`, ticker: 'T' + i, specialists: ['s1', 's2'], spyRelReturn: (i % 2 ? 0.1 : -0.1) });
+  const model = E.buildSpecialistRedundancy(rows);
+  assert.ok(model && model.credits);
+  const cr = model.credits['s1|s2'];
+  assert.ok(Number.isFinite(cr) && cr < 0.6, `co-firing/correlated pair earns low independence credit (got ${cr})`);
+});
+
+test('effN discount de-risks the TRADE gate: redundant pair falls below minEffSample where the raw sum passed', () => {
+  const contribs = [{ specialist: 's1', p: 0.6, effN: 8 }, { specialist: 's2', p: 0.6, effN: 8 }];
+  const gate = E.GUARDRAILS.minEffSample;                     // 12
+  const raw = E.ensembleProbability(contribs, WEIGHTS);
+  assert.ok(raw.effN >= gate, 'raw summed effN (16) clears the gate');
+  const disc = E.ensembleProbability(contribs, WEIGHTS, { redundancyModel: { credits: { 's1|s2': 0, 's2|s1': 0 } } });
+  assert.ok(disc.effN < gate, 'discounted effN (8) does NOT clear the gate on one effective source');
+});
+
+``````
+
 ## test/evolve-regime.test.js
 
 ``````javascript
@@ -47801,6 +51478,73 @@ test('etfForSector normalizes GICS names', () => {
   assert.strictEqual(R.etfForSector('Health Care'), 'XLV');
   assert.strictEqual(R.etfForSector('Communication Services'), 'XLC');
   assert.strictEqual(R.etfForSector('Nonsense'), null);
+});
+
+``````
+
+## test/evolve-strength-promotion.test.js
+
+``````javascript
+'use strict';
+// audit #9 promotion: the candidate-strength tilt earns its way into the decision ONLY via a shadow
+// OOS comparison — it must beat the base P out-of-sample (rank-IC + Brier) by a predeclared margin.
+
+const test = require('node:test');
+const assert = require('node:assert');
+const E = require('../lib/evolve');
+
+function rows(n, outcomeFn) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const strength = (i * 37) % 100;
+    const outcome = outcomeFn(i, strength);
+    out.push({ strengthPercentile: strength, probability: 0.5 + (((i % 5) - 2) * 0.002), won: outcome > 0, spyRelReturn: outcome });
+  }
+  return out;
+}
+
+test('strengthOOSComparison: insufficient strength-carrying rows → ready:false, stays SHADOW', () => {
+  const cmp = E.strengthOOSComparison([{ strengthPercentile: 90, probability: 0.5, won: true, spyRelReturn: 0.1 }]);
+  assert.equal(cmp.ready, false);
+  assert.equal(cmp.promote, false);
+  assert.match(cmp.note, /accrues forward/);
+});
+
+test('strengthOOSComparison: PROMOTES when strength genuinely predicts the outcome OOS', () => {
+  const cmp = E.strengthOOSComparison(rows(80, (i, s) => (s - 50) / 100 * 0.2));   // outcome monotone in strength
+  assert.equal(cmp.ready, true);
+  assert.ok(cmp.adjIC > cmp.baseIC, `adjIC ${cmp.adjIC} > baseIC ${cmp.baseIC}`);
+  assert.ok(cmp.adjBrier <= cmp.baseBrier);
+  assert.equal(cmp.promote, true);
+});
+
+test('strengthOOSComparison: does NOT promote when strength is uninformative', () => {
+  // Each strength level appears with exactly one win AND one loss → strength carries zero information
+  // about the outcome (deterministic, not a noisy draw).
+  const out = [];
+  for (let i = 0; i < 80; i++) {
+    const strength = ((i >> 1) % 40) * 2 + 5;   // 40 levels, each used twice
+    const won = i % 2 === 0;                     // one win, one loss per level
+    out.push({ strengthPercentile: strength, probability: 0.5, won, spyRelReturn: won ? 0.05 : -0.05 });
+  }
+  const cmp = E.strengthOOSComparison(out);
+  assert.equal(cmp.ready, true);
+  assert.equal(cmp.promote, false);
+  assert.match(cmp.verdict, /SHADOW/);
+});
+
+test('promotion gate: ctx.strengthPromoted swaps the decision P to the strength-tilted value', () => {
+  const sig = { ticker: 'X', evolveHorizon: 'swing', source: 'ghost', sources: ['ghost'], percentile: 95,
+    price: 100, entry: 100, liquidity: {}, execution: { quality: 1 } };
+  const ctx = { perfBySpecialist: {}, barriersByHorizon: { swing: { up: 0.15, down: 0.07, window: 21 } }, regime: {}, priorP: 0.4 };
+  const shadow = E.scoreCandidate(sig, ctx);
+  const promoted = E.scoreCandidate(sig, { ...ctx, strengthPromoted: true });
+  assert.equal(shadow.strengthPromoted, false);
+  assert.equal(promoted.strengthPromoted, true);
+  if (shadow.probability != null && shadow.strengthAdjustedP != null) {
+    assert.notEqual(promoted.probability, shadow.probability);            // decision P changed
+    assert.ok(Math.abs(promoted.probability - shadow.strengthAdjustedP) < 1e-6);  // == the tilted P
+  }
 });
 
 ``````
@@ -47983,6 +51727,66 @@ test('evaluate: returns per-horizon + pooled reads with a leakage-inflation figu
   assert.ok('leakageInflation' in out.pooled, 'reports leakage inflation');
   assert.ok(['edge-holds-oos', 'no-edge', 'inconclusive', 'insufficient'].includes(out.verdict));
   assert.strictEqual(out.version, WF.WF_VERSION);
+});
+
+``````
+
+## test/evolve-wf-exact-purge.test.js
+
+``````javascript
+'use strict';
+// #2: exact label-end purge in the EVOLVE walk-forward. The old purge estimated a label's span as
+// predDate + full window ×1.4 calendar days; the exact form uses the label's ACTUAL end date
+// (evolve-labels labelEndDate), which recovers training data from labels that resolved early and
+// fixes holiday miscounts.
+
+const test = require('node:test');
+const assert = require('node:assert');
+const WF = require('../lib/evolve-walkforward');
+
+test('exact purge KEEPS an early-resolving label the window×1.4 estimate would DROP', () => {
+  // swing horizon (window 21), embargo 3. Label predicted 2022-01-03 but resolved early 2022-01-10.
+  const predDate = '2022-01-03', labelEndDate = '2022-01-10', testStart = '2022-01-20', embargo = 3;
+  // Exact: real label end is 10 calendar days before the test block → cleanly closed → KEEP.
+  assert.equal(WF.labelClearsTestBlockExact(labelEndDate, testStart, embargo), true);
+  // Approx: assumes the label ran the FULL 21-day window from predDate → estimates it still open → DROP.
+  assert.equal(WF.labelClearsTestBlock(predDate, testStart, 'swing', embargo), false);
+});
+
+test('exact purge DROPS a label that closes inside the embargo buffer of the test block', () => {
+  // Label resolves 2022-01-19, test opens 2022-01-20 — only 1 calendar day, within the embargo.
+  assert.equal(WF.labelClearsTestBlockExact('2022-01-19', '2022-01-20', 3), false);
+});
+
+test('walkForward reports the exact-label-end purge method when events carry labelEndDate', () => {
+  // Build a small resolved, specialist-tagged event set with real label-end dates.
+  const dates = Array.from({ length: 8 }, (_, i) => `2022-0${1 + Math.floor(i / 4)}-0${1 + (i % 4)}`);
+  const events = [];
+  for (let i = 0; i < dates.length; i++) for (let n = 0; n < 4; n++) {
+    events.push({
+      predDate: dates[i], horizon: 'swing', contextKey: 'neutral|large|swing',
+      specialists: ['s1'], won: (i + n) % 2 === 0, terminalReturn: ((i + n) % 3 - 1) * 0.05,
+      labelEndDate: dates[Math.min(dates.length - 1, i + 2)],
+    });
+  }
+  const wf = WF.walkForward(events, { folds: 4, embargo: 3, purge: true });
+  assert.ok(wf.purge, 'purge diagnostic present');
+  assert.equal(wf.purge.method, 'exact-label-end');
+  assert.ok(wf.purge.exactDecisions > 0);
+  assert.equal(wf.purge.approxDecisions, 0);
+});
+
+test('walkForward falls back to window×1.4 for legacy events without labelEndDate (reported as mixed/approx)', () => {
+  const dates = Array.from({ length: 8 }, (_, i) => `2022-0${1 + Math.floor(i / 4)}-0${1 + (i % 4)}`);
+  const events = [];
+  for (let i = 0; i < dates.length; i++) for (let n = 0; n < 4; n++) {
+    events.push({ predDate: dates[i], horizon: 'swing', contextKey: 'neutral|large|swing',
+      specialists: ['s1'], won: (i + n) % 2 === 0, terminalReturn: ((i + n) % 3 - 1) * 0.05 });  // no labelEndDate
+  }
+  const wf = WF.walkForward(events, { folds: 4, embargo: 3, purge: true });
+  assert.equal(wf.purge.exactDecisions, 0);
+  assert.ok(wf.purge.approxDecisions > 0);
+  assert.equal(wf.purge.method, 'approx-window×1.4');
 });
 
 ``````
@@ -49088,6 +52892,44 @@ test('metaProb injects regime and metaTier splits at the training median', () =>
   assert.equal(metaTier(META_MODEL.median_prob + 0.01), 'HIGH');
   assert.equal(metaTier(META_MODEL.median_prob - 0.01), 'LOW');
   assert.equal(metaProb(null, 'risk-on'), null, 'null features → null prob (never fabricate)');
+});
+
+``````
+
+## test/ghost-narrative-scope.test.js
+
+``````javascript
+'use strict';
+// audit #12/#14: the live ghost BONUS pillar blends an LLM narrative (0.6·fund + 0.4·narr), but the
+// historical walk-forward pins narrativeStrength null — the LLM half is structurally
+// unreconstructable (re-running an LLM "as of today" would leak post-decision info). These guard
+// that the exclusion is real, material, and declared, so it can't silently regress into leakage.
+
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const ghost = require('../lib/ghost');
+
+test('BONUS: the LLM narrative MATERIALLY changes the pillar → pinning it null is a partial reconstruction', () => {
+  const withNarr = ghost.pillarsOf({ pct: {}, narrativeStrength: 9, fundamentals: { revGrowth: 20 } });
+  const noNarr = ghost.pillarsOf({ pct: {}, narrativeStrength: null, fundamentals: { revGrowth: 20 } });
+  assert.notEqual(withNarr.BONUS, noNarr.BONUS, 'narrative shifts BONUS, so excluding it drops real information');
+  // narrativeStrength:null reduces BONUS to the fundamental-only score — exactly what the WF reconstructs.
+  const fundOnly = ghost.pillarsOf({ pct: {}, fundamentals: { revGrowth: 20 } });   // no narrativeStrength field
+  assert.equal(noNarr.BONUS, fundOnly.BONUS);
+});
+
+test('guard: the historical backtest PINS narrativeStrength null (no leaky live LLM knowledge in history)', () => {
+  const src = fs.readFileSync(require.resolve('../lib/ghost-backtest.js'), 'utf8');
+  assert.ok(src.includes('narrativeStrength: null'),
+    'ghost-backtest must pin narrativeStrength null — using live "as-of-today" narrative in a historical cohort is look-ahead leakage');
+});
+
+test('guard: the backtest DECLARES its feature scope and names the excluded live-only features', () => {
+  const src = fs.readFileSync(require.resolve('../lib/ghost-backtest.js'), 'utf8');
+  assert.ok(src.includes('featureScope'), 'backtest output must declare featureScope');
+  assert.ok(/BONUS-narrative/.test(src), 'scope must name the excluded LLM narrative');
+  assert.ok(/AI-screeners/.test(src), 'scope must name the forward-only AI screeners');
 });
 
 ``````
@@ -51678,6 +55520,58 @@ test('toPercentiles: 0-100 average-rank percentiles; ties share a rank', () => {
 
 ``````
 
+## test/portfolio-reconciliation.test.js
+
+``````javascript
+'use strict';
+// audit #6: portfolio accounting must (a) include the fill-day open→close P&L and (b) realize
+// barrier exits at the stop/target price, not the day's close — and trade-level fills must reconcile
+// to portfolio P&L.
+
+const test = require('node:test');
+const assert = require('node:assert');
+const BT = require('../api/backtest');
+
+const AXIS = ['2022-01-03', '2022-01-04', '2022-01-05', '2022-01-06', '2022-01-07'];
+const CM = { A: { '2022-01-03': 100, '2022-01-04': 110, '2022-01-05': 105, '2022-01-06': 120, '2022-01-07': 118 } };
+// A trade filled at 108 (next-open+slippage on 01-04) that realizes r = +10% at a barrier on 01-06.
+const TRADE = { name: 'A', entryDate: '2022-01-04', exitDate: '2022-01-06', tier: 'Breakout', entry: 108, r: 0.10 };
+
+test('positionDailyReturn: fill day runs from the MODELED fill price, not the prior close', () => {
+  const cm = CM.A;
+  const rEntry = BT.positionDailyReturn(TRADE, '2022-01-04', '2022-01-03', cm);
+  assert.ok(Math.abs(rEntry - (110 / 108 - 1)) < 1e-12, 'uses entry (108), captures fill-day open→close');
+  assert.ok(Math.abs(rEntry - (110 / 100 - 1)) > 1e-6, 'does NOT use the prior close (100)');
+});
+
+test('positionDailyReturn: exit day is realized at the BARRIER price, not the close', () => {
+  const cm = CM.A;                                    // exitPrice = 108*1.10 = 118.8, close on 01-06 = 120
+  const rExit = BT.positionDailyReturn(TRADE, '2022-01-06', '2022-01-05', cm);
+  assert.ok(Math.abs(rExit - (118.8 / 105 - 1)) < 1e-12, 'uses barrier exit 118.8');
+  assert.ok(Math.abs(rExit - (120 / 105 - 1)) > 1e-6, 'does NOT use the exit-day close (120)');
+});
+
+test('simulatePortfolio: a single trade in a single slot compounds to exactly the trade r', () => {
+  const port = BT.simulatePortfolio([TRADE], AXIS, CM, 1);
+  assert.ok(Math.abs((port.eq - 1) - TRADE.r) < 1e-9, `portfolio total (${port.eq - 1}) == trade r (${TRADE.r})`);
+});
+
+test('simulatePortfolio: reconciliation.maxAbsError is ~0 for fully-in-window trades', () => {
+  const port = BT.simulatePortfolio([TRADE], AXIS, CM, 1);
+  assert.equal(port.reconciliation.checked, 1);
+  assert.ok(Number(port.reconciliation.maxAbsError) < 1e-9, 'trade-level fills reconcile to portfolio P&L');
+});
+
+test('simulatePortfolio: multiple concurrent trades reconcile independently', () => {
+  const cm = { A: CM.A, B: { '2022-01-03': 50, '2022-01-04': 52, '2022-01-05': 49, '2022-01-06': 55, '2022-01-07': 54 } };
+  const t2 = { name: 'B', entryDate: '2022-01-04', exitDate: '2022-01-06', tier: 'Setup', entry: 51, r: -0.05 };
+  const port = BT.simulatePortfolio([TRADE, t2], AXIS, cm, 2);
+  assert.equal(port.reconciliation.checked, 2);
+  assert.ok(Number(port.reconciliation.maxAbsError) < 1e-9);
+});
+
+``````
+
 ## test/predict.test.js
 
 ``````javascript
@@ -53263,6 +57157,227 @@ test('builders return terminal objects (not a stuck-loading shape) even with emp
   assert.ok(Array.isArray(wn.coverage));         // coverage always present
   const gov = governRegistry({ strategies: [] }, new Map());
   assert.equal(gov.clearedWeight, 0);            // concrete number, not NaN/undefined
+});
+
+``````
+
+## test/research-slice.test.js
+
+``````javascript
+'use strict';
+// Deterministic tests for the research vertical slice (Part XVI of the quant redesign):
+// canonical schemas, exact label-end purge, feature train/serve parity, date-grouped rankers,
+// and the validation harness (causal correctness, determinism, honest validity stamp).
+
+const test = require('node:test');
+const assert = require('node:assert');
+
+const S = require('../lib/research/schemas');
+const LP = require('../lib/research/label-purge');
+const { computeFeatureVector, FEATURE_KEYS } = require('../lib/research/features');
+const BR = require('../lib/research/baseline-ranker');
+const H = require('../lib/research/harness');
+const L = require('../lib/evolve-labels');
+
+// ── Canonical schemas ──────────────────────────────────────────────────────────
+test('schema: prediction rejects a same-close fill (eligibleEntryTs must be after decisionTs)', () => {
+  const bad = S.makePrediction({ securityId: 'X', decisionTs: '2023-01-03', horizon: 'swing', eligibleEntryTs: '2023-01-03' });
+  assert.equal(S.validatePrediction(bad).valid, false);
+  const good = S.makePrediction({ securityId: 'X', decisionTs: '2023-01-03', horizon: 'swing', eligibleEntryTs: '2023-01-04' });
+  assert.equal(S.validatePrediction(good).valid, true);
+});
+
+test('schema: feature snapshot rejects look-ahead (dataCutoffTs after decisionTs)', () => {
+  const bad = S.makeFeatureSnapshot({ securityId: 'X', decisionTs: '2023-01-03', dataCutoffTs: '2023-01-04', values: {} });
+  assert.equal(S.validateFeatureSnapshot(bad).valid, false);
+});
+
+test('schema: a filled executable outcome must carry a labelEndTs and fillPrice', () => {
+  const noEnd = S.makeExecutableOutcome({ predictionId: 'p1', fillStatus: 'filled', fillPrice: 10 });
+  assert.equal(S.validateExecutableOutcome(noEnd).valid, false);
+  const ok = S.makeExecutableOutcome({ predictionId: 'p1', fillStatus: 'filled', fillPrice: 10, labelEndTs: '2023-02-01' });
+  assert.equal(S.validateExecutableOutcome(ok).valid, true);
+});
+
+test('schema: records are frozen (immutable) and validity defaults to not-production-grade', () => {
+  const p = S.makePrediction({ securityId: 'X', decisionTs: '2023-01-03', horizon: 'swing' });
+  assert.throws(() => { p.securityId = 'Y'; }, /Cannot assign|read only|object is not extensible/);
+  const m = S.makeExperimentManifest({ experimentId: 'e', primaryMetric: 'ic', datasetHash: 'h' });
+  assert.equal(m.researchValidity.productionGrade, false);
+  assert.equal(m.researchValidity.survivorshipSafe, false);
+});
+
+// ── Exact label-end purge ─────────────────────────────────────────────────────
+test('label-purge: keeps a label that closed before the embargoed test boundary, drops one that overlaps', () => {
+  const axis = LP.buildDateAxis(['2023-01-02', '2023-01-03', '2023-01-04', '2023-01-05', '2023-01-06', '2023-01-09', '2023-01-10']);
+  // test block opens at 2023-01-10 (ord 6); embargo 1 → need labelEnd ord <= 4 (2023-01-06).
+  const closed = { labelEndDate: '2023-01-05' };
+  const overlaps = { labelEndDate: '2023-01-09' };
+  assert.equal(LP.exactPurgeKeep(closed, axis, '2023-01-10', 1), true);
+  assert.equal(LP.exactPurgeKeep(overlaps, axis, '2023-01-10', 1), false);
+});
+
+test('label-purge: an event without a labelEndDate is dropped (never assumed closed)', () => {
+  const axis = LP.buildDateAxis(['2023-01-02', '2023-01-03', '2023-01-04']);
+  assert.equal(LP.exactPurgeKeep({ labelEndDate: null }, axis, '2023-01-04', 0), false);
+});
+
+test('label-purge: distance is measured in TRADING days, immune to weekend/holiday gaps', () => {
+  // Friday 01-06 then Monday 01-09: only 1 trading day apart despite 3 calendar days.
+  const axis = LP.buildDateAxis(['2023-01-06', '2023-01-09', '2023-01-10']);
+  // labelEnd Friday, test opens Monday, embargo 0 → 1 trading day gap → kept.
+  assert.equal(LP.exactPurgeKeep({ labelEndDate: '2023-01-06' }, axis, '2023-01-09', 0), true);
+  // embargo 1 → needs 2 trading days → dropped.
+  assert.equal(LP.exactPurgeKeep({ labelEndDate: '2023-01-06' }, axis, '2023-01-09', 1), false);
+});
+
+// ── Feature train/serve parity + point-in-time ────────────────────────────────
+function synthCandles(n, seed) {
+  let s = seed >>> 0 || 1; const rnd = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+  const out = []; let c = 100;
+  for (let i = 0; i < n; i++) { c = Math.max(1, c * (1 + (rnd() - 0.48) * 0.03)); const d = new Date(Date.UTC(2020, 0, 1 + i)).toISOString().slice(0, 10); out.push({ date: d, open: +(c * 0.995).toFixed(4), high: +(c * 1.02).toFixed(4), low: +(c * 0.98).toFixed(4), close: +c.toFixed(4), volume: Math.round(1e6 * (1 + rnd())) }); }
+  return out;
+}
+
+test('features: identical inputs produce byte-identical vectors (deterministic, one implementation)', () => {
+  const c = synthCandles(120, 7);
+  const a = computeFeatureVector(c, 100, {});
+  const b = computeFeatureVector(c, 100, {});
+  assert.deepStrictEqual(a.values, b.values);
+  assert.equal(a.version, b.version);
+});
+
+test('features: point-in-time — appending future bars does not change a past bar\'s vector (no look-ahead)', () => {
+  const c = synthCandles(120, 9);
+  const atShort = computeFeatureVector(c.slice(0, 101), 100, {});
+  const atLong = computeFeatureVector(c, 100, {});          // same idx, more future bars available
+  assert.deepStrictEqual(atShort.values, atLong.values);
+});
+
+test('features: missing history is reported in `missing`, never fabricated', () => {
+  const c = synthCandles(10, 3);
+  const v = computeFeatureVector(c, 5, {});                 // too little history for ret63 etc.
+  assert.ok(v.missing.includes('ret63'));
+  assert.equal(v.values.ret63, null);
+});
+
+// ── Date-grouped rankers ──────────────────────────────────────────────────────
+test('ranker: residual-momentum orders by residMom21 and is deterministic', () => {
+  const rows = [
+    { securityId: 'A', features: { residMom21: 0.1 } },
+    { securityId: 'B', features: { residMom21: -0.05 } },
+  ];
+  assert.ok(BR.residualMomentumRanker.score(null, rows[0]) > BR.residualMomentumRanker.score(null, rows[1]));
+});
+
+test('ranker: ridge fit is deterministic (identical weights across runs)', () => {
+  let s = 5; const rnd = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+  const rows = Array.from({ length: 60 }, (_, i) => {
+    const rm = rnd() - 0.5;
+    const vals = {}; for (const k of FEATURE_KEYS) vals[k] = rnd() - 0.5; vals.residMom21 = rm;
+    return { securityId: 'S' + i, decisionTs: '2020-01-0' + (1 + (i % 5)), features: vals, outcome: rm * 0.5 + (rnd() - 0.5) * 0.1 };
+  });
+  const m1 = BR.ridgeRanker.fit(rows), m2 = BR.ridgeRanker.fit(rows);
+  assert.deepStrictEqual(m1.w, m2.w);
+  assert.equal(m1.b, m2.b);
+});
+
+// ── Harness: causal correctness, determinism, honest validity ─────────────────
+function makeStudy(seed) {
+  let s = seed >>> 0 || 1; const rnd = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+  const dates = Array.from({ length: 40 }, (_, i) => new Date(Date.UTC(2021, 0, 1 + i)).toISOString().slice(0, 10));
+  const events = [];
+  for (const d of dates) for (let n = 0; n < 8; n++) {
+    const rm = rnd() - 0.5;
+    events.push({ securityId: 'N' + n, decisionTs: d, labelEndDate: dates[Math.min(dates.length - 1, dates.indexOf(d) + 5)], horizon: 'swing', features: { residMom21: rm, ret21: rm }, outcome: rm * 0.4 + (rnd() - 0.5) * 0.2, score: rnd() });
+  }
+  return events;
+}
+
+test('harness: control-random scores ~0 IC while residual-momentum recovers the planted signal', () => {
+  const events = makeStudy(11);
+  const out = H.compareRankers(events, BR.ALL_RANKERS, { folds: 4, embargo: 1 });
+  assert.ok(Math.abs(out.perRanker['control-random'].meanIC) < 0.06, 'control should be near zero');
+  assert.ok(out.perRanker['residual-momentum'].meanIC > out.perRanker['control-random'].meanIC, 'momentum should beat control on planted data');
+});
+
+test('harness: runExperiment is deterministic and stamps survivorship-unsafe / PROVISIONAL', () => {
+  const events = makeStudy(11);
+  const a = H.runExperiment(events, BR.ALL_RANKERS, { folds: 4, embargo: 1 }, { experimentId: 'e', primaryMetric: 'ic', datasetHash: 'h', survivorshipSafe: false });
+  const b = H.runExperiment(events, BR.ALL_RANKERS, { folds: 4, embargo: 1 }, { experimentId: 'e', primaryMetric: 'ic', datasetHash: 'h', survivorshipSafe: false });
+  assert.deepStrictEqual(a.result.perRanker, b.result.perRanker);
+  assert.equal(a.manifest.researchValidity.survivorshipSafe, false);
+  assert.match(a.verdict, /PROVISIONAL/);
+});
+
+// ── Label engine: exact end date + honest profitable-timeout ──────────────────
+test('evolve-labels: a time-exit records labelEndDate and a POSITIVE timeout is profitable but not "won"', () => {
+  // A gently rising path that never reaches +15% nor -7% within the window → time exit, positive.
+  const fwd = Array.from({ length: 25 }, (_, i) => ({ date: '2022-03-' + String(1 + i).padStart(2, '0'), high: 100 + i * 0.3 + 0.5, low: 100 + i * 0.3 - 0.5, close: 100 + i * 0.3 }));
+  const r = L.tripleBarrier(fwd, 100, { up: 0.15, down: 0.07, window: 21 });
+  assert.equal(r.barrier, 'time');
+  assert.equal(r.won, false);              // did not touch the upper barrier first
+  assert.equal(r.profitable, true);        // but the realized return is positive — NOT a loss
+  assert.ok(r.terminalReturn > 0);
+  assert.ok(typeof r.labelEndDate === 'string' && r.labelEndDate.length === 10);
+});
+
+// ── Point-in-time de-survivorship universe (wiring security-master into backtest) ──
+test('secmaster: pointInTimeAugment adds back names delisted AFTER the as-of date, not before', () => {
+  const SM = require('../lib/security-master');
+  const records = {
+    AAA: { symbol: 'AAA', status: 'active', removedDate: null },              // survivor (in static)
+    DEAD: { symbol: 'DEAD', status: 'removed', removedDate: '2023-01-01' },   // active at asOf, delisted later → add back
+    OLD: { symbol: 'OLD', status: 'removed', removedDate: '2020-01-01' },     // already delisted before asOf → NOT tradeable then
+    EXP: { symbol: 'EXP', status: 'active', removedDate: null },              // present-day survivor not in static → NOT a died-since name
+  };
+  const aug = SM.pointInTimeAugment(records, ['AAA', 'BBB'], '2022-06-01');
+  assert.deepStrictEqual(aug.added, ['DEAD']);
+  assert.ok(aug.universe.includes('DEAD'));
+  assert.ok(!aug.universe.includes('OLD'));
+  assert.ok(!aug.universe.includes('EXP'));
+  assert.equal(aug.survivorshipSafe, false);         // ALWAYS unsafe — partial correction only
+});
+
+test('secmaster: augment preserves the full static list and never claims survivorship-safe', () => {
+  const SM = require('../lib/security-master');
+  const aug = SM.pointInTimeAugment({}, ['X', 'Y', 'X'], '2021-01-01');
+  assert.deepStrictEqual(aug.universe.sort(), ['X', 'Y']);   // deduped, nothing added from an empty master
+  assert.equal(aug.addedCount, 0);
+  assert.equal(aug.survivorshipSafe, false);
+});
+
+// ── pit restricted to large-cap (no cap-appropriate delisting source for small/micro) ──
+test('pit: small/micro scopes are NOT augmented — no cap-appropriate delisting coverage', async () => {
+  const BT = require('../api/backtest');
+  for (const scope of ['small', 'micro']) {
+    const { list, pit } = await BT.resolvePitUniverse(['AAA', 'BBB', 'AAA'], 54, true, scope);
+    assert.deepStrictEqual(list.slice().sort(), ['AAA', 'BBB']);   // static list, deduped, NOT augmented
+    assert.equal(pit.enabled, true);
+    assert.equal(pit.applied, false);                              // the fix: no large-cap injection
+    assert.match(pit.note, /No point-in-time delisting coverage/);
+    assert.equal(pit.survivorshipSafe, false);
+  }
+});
+
+test('pit: disabled returns the static list untouched', async () => {
+  const BT = require('../api/backtest');
+  const { list, pit } = await BT.resolvePitUniverse(['X', 'Y'], 12, false, 'large');
+  assert.deepStrictEqual(list, ['X', 'Y']);
+  assert.equal(pit.enabled, false);
+});
+
+// ── Tie-corrected AUC (Part XVIII #5 regression) ──────────────────────────────
+test('backtest aucRank: tied predictions use averaged ranks (all-ties → 0.5)', () => {
+  const { averageRanks } = require('../lib/rankquality');
+  // All identical predictions: with tie correction every rank is the same → AUC exactly 0.5.
+  const scored = [{ p: 0.5, y: 1 }, { p: 0.5, y: 0 }, { p: 0.5, y: 1 }, { p: 0.5, y: 0 }];
+  const ranks = averageRanks(scored.map(s => s.p));
+  assert.ok(ranks.every(r => r === ranks[0]), 'all ties share one averaged rank');
+  const np = scored.filter(s => s.y === 1).length, nn = scored.length - np;
+  let rankSum = 0; scored.forEach((s, i) => { if (s.y === 1) rankSum += ranks[i]; });
+  const auc = (rankSum - np * (np + 1) / 2) / (np * nn);
+  assert.equal(auc, 0.5);
 });
 
 ``````
@@ -54954,7 +59069,9 @@ test('reprime: the reprime chain re-fetches today BEFORE priming the ensemble', 
   const call = recorder();
   await WC.runChain('reprime', { call, now: clock().now });
   const real = call.calls.filter(p => !p.includes('warmchain'));
-  assert.deepStrictEqual(real, ['/api/tracker?op=today', '/api/tracker?op=ensemble']);
+  assert.deepStrictEqual(real, ['/api/tracker?op=today', '/api/tracker?op=ensemble', '/api/tracker?op=challengerlog']);
+  // invariant this test protects: today is re-fetched BEFORE the ensemble projection
+  assert.ok(real.indexOf('/api/tracker?op=today') < real.indexOf('/api/tracker?op=ensemble'));
 });
 
 test('decision: the ensemble is NOT behind the unknown-cost rebuild in one budget', async () => {

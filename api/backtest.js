@@ -7,6 +7,51 @@ const { calcRSI, calcATR } = require('../lib/signal');
 const { LARGE, SMALL_CAPS, MICRO_CAPS } = require('../lib/universe');
 const { runGhostBacktest } = require('../lib/ghost-backtest');
 const { planFill, POLICIES, EXECUTION_POLICY_VERSION } = require('../lib/execution-policy');
+const { averageRanks } = require('../lib/rankquality');
+const SM = require('../lib/security-master');
+
+// Resolve the backtest universe. Default (pit off) is byte-identical to the legacy static list.
+// With ?pit=1 the present-day list is AUGMENTED with delisted names the point-in-time security
+// master knows were active at the window start — a PARTIAL de-survivorship. The result is STILL
+// survivorship-unsafe (no late-listing/IPO feed, S&P-only delisting coverage), which the returned
+// `pit` block states explicitly. `asOf` is a coarse calendar boundary at the window start (the
+// master's delisting dates are calendar dates), not a purge — precision there is unnecessary.
+async function resolvePitUniverse(baseList, months, enabled, scope) {
+  const list = [...new Set(baseList)];
+  if (!enabled) return { list, pit: { enabled: false } };
+  // The ONLY point-in-time delisting source is the S&P-500 removal scrape (all large-cap), and the
+  // security master carries no cap-tier field — so a died-since name cannot be attributed to a cap
+  // band. Augmenting small/micro would inject large-cap names that were never in the band, making
+  // the backtest LESS representative. Restrict de-survivorship to scope=large; other bands report
+  // honestly that no cap-appropriate delisting coverage exists (universe left as the static list).
+  if (scope !== 'large') {
+    return { list, pit: { enabled: true, applied: false, scope, survivorshipSafe: false,
+      note: `No point-in-time delisting coverage for the ${scope}-cap band — the only source is the `
+        + `S&P-500 (large-cap) removal scrape and the security master has no cap-tier field, so `
+        + `augmenting would inject large-cap names that were never ${scope}-cap. Universe left as the `
+        + `present-day static list (survivorship-unsafe).` } };
+  }
+  const asOf = new Date(Date.now() - Math.round(months * 30.44 * 86400000)).toISOString().slice(0, 10);
+  let master = null;
+  try { master = await SM.loadMaster(); } catch { master = null; }
+  if (!master || !master.records) {
+    return { list, pit: { enabled: true, applied: false, built: false, asOf, survivorshipSafe: false,
+      note: 'security master not built — universe fell back to the present-day static list (survivorship-unsafe)' } };
+  }
+  const aug = SM.pointInTimeAugment(master.records, list, asOf);
+  return {
+    list: aug.universe,
+    pit: {
+      enabled: true, applied: true, built: true, asOf, scope,
+      securityMasterVersion: master.v, builtAt: master.builtAt,
+      staticCount: aug.staticCount, addedDelisted: aug.addedCount,
+      added: aug.added.slice(0, 50), addedFull: aug.added,   // addedFull for coverage counting (stripped from response)
+      survivorshipSafe: false,
+      note: 'Added back delisted names the security master knows were active at the window start '
+        + '(S&P-500, large-cap, ≤5yr). Does NOT correct late-listing survivorship or non-S&P delistings — result remains survivorship-unsafe.',
+    },
+  };
+}
 
 const STEP = 5;          // sample every 5 trading days
 const STOP_ATR = 1.5;    // stop = entry − 1.5·ATR
@@ -38,6 +83,53 @@ function simAtrTrade(c, closes, highs, lows, atr, i, tier) {
   }
   if (r == null) { const j = Math.min(fi + MAX_HOLD - 1, last); r = (closes[j] - entry) / entry; exitDate = c[j].date; hold = j - fi + 1; won = r > 0; }
   return { fillDate: c[fi].date, entry, stop, target, r, exitDate, hold, won };
+}
+
+// One position's return on day D (prev day P), from close map cm. The fix for audit #6:
+//   • fill day  (D == entryDate): from the MODELED fill price (open+slippage) to that day's close —
+//     the fill-day open→close P&L the old close/prevClose MTM silently dropped.
+//   • exit day  (D == exitDate):  from the prior close to the BARRIER exit price (entry·(1+r)), not
+//     the day's close — so a stop/target that triggered intraday is realized at the barrier.
+//   • middle days: close→close.
+// These telescope: compounded over [entryDate, exitDate] they equal exactly the trade's realized r.
+function positionDailyReturn(p, D, P, cm) {
+  const cD = cm[D], cP = cm[P];
+  const exitPrice = p.entry * (1 + p.r);
+  const isEntry = D === p.entryDate, isExit = D === p.exitDate;
+  if (isEntry && isExit) return p.entry > 0 ? exitPrice / p.entry - 1 : 0;   // same-bar fill+exit → r
+  if (isEntry) return (p.entry > 0 && cD > 0) ? cD / p.entry - 1 : 0;        // fill open→close
+  if (isExit) return cP > 0 ? exitPrice / cP - 1 : 0;                        // prevClose→barrier
+  return (cD > 0 && cP > 0) ? cD / cP - 1 : 0;                               // close→close
+}
+
+// Daily-rebalanced equal-weight (1/maxPos) portfolio over accepted trades, with correct fill-day and
+// barrier-exit accounting. Also self-reconciles: each fully-in-window position's standalone
+// compounded daily path must equal its realized r (telescoping), reported as reconciliation.maxAbsError.
+function simulatePortfolio(accepted, axis, closeMaps, maxPos) {
+  let eq = 1, peak = 1, mdd = 0, exposSum = 0; const curve = [], dr = [];
+  for (let k = 1; k < axis.length; k++) {
+    const D = axis[k], P = axis[k - 1];
+    const held = accepted.filter(p => p.entryDate <= D && p.exitDate >= D);   // include the FILL day
+    let ret = 0;
+    held.forEach(p => { const cm = closeMaps[p.name]; if (cm) ret += (1 / maxPos) * positionDailyReturn(p, D, P, cm); });
+    eq *= (1 + ret); peak = Math.max(peak, eq); mdd = Math.min(mdd, (eq - peak) / peak);
+    curve.push({ date: D, v: +eq.toFixed(4) }); dr.push(ret); exposSum += held.length / maxPos;
+  }
+  // Reconciliation: for positions whose whole span sits inside the axis, the compounded per-day path
+  // must equal the trade-level realized r. Positions open past the window end are excluded (they are
+  // honestly marked to the last close, not a future barrier).
+  const axisSet = new Set(axis), first = axis[0];
+  let maxAbsError = 0, checked = 0;
+  for (const p of accepted) {
+    const cm = closeMaps[p.name];
+    if (!cm || !Number.isFinite(p.r) || p.entryDate === first || !axisSet.has(p.entryDate) || !axisSet.has(p.exitDate)) continue;
+    let pe = 1;
+    for (let k = 1; k < axis.length; k++) {
+      const D = axis[k]; if (p.entryDate <= D && p.exitDate >= D) pe *= (1 + positionDailyReturn(p, D, axis[k - 1], cm));
+    }
+    maxAbsError = Math.max(maxAbsError, Math.abs((pe - 1) - p.r)); checked++;
+  }
+  return { eq, mdd, curve, dr, exposSum, reconciliation: { checked, maxAbsError: +maxAbsError.toExponential(2) } };
 }
 
 async function mapLimit(items, limit, fn) {
@@ -114,18 +206,27 @@ function trainLogistic(samples, { lr = 0.3, lam = 0.02, iters = 500 } = {}) {
   }
   return { w, b };
 }
+// AUC via the Mann-Whitney U statistic with TIE CORRECTION: tied predictions must share the
+// AVERAGE of their ranks, else many identical scores (common with binary-flag models) bias the
+// AUC. Reuses lib/rankquality.averageRanks so there is one tie-handling implementation.
 function aucRank(scored) {
-  const s = [...scored].sort((a, b) => a.p - b.p);
-  let rankSum = 0, np = 0;
-  for (let i = 0; i < s.length; i++) { if (s[i].y === 1) { rankSum += i + 1; np++; } }
-  const nn = s.length - np;
-  return (np && nn) ? +(((rankSum - np * (np + 1) / 2) / (np * nn))).toFixed(3) : 0.5;
+  const np = scored.filter(s => s.y === 1).length;
+  const nn = scored.length - np;
+  if (!np || !nn) return 0.5;
+  const ranks = averageRanks(scored.map(s => s.p));   // 1-based, tie-averaged
+  let rankSum = 0;
+  for (let i = 0; i < scored.length; i++) if (scored[i].y === 1) rankSum += ranks[i];
+  return +(((rankSum - np * (np + 1) / 2) / (np * nn))).toFixed(3);
 }
 
 async function backtestMode(req, res) {
   const scope = (req.query.scope || 'large').toLowerCase();
-  const months = Math.min(12, Math.max(3, parseInt(req.query.months, 10) || 6));
-  const list = scope === 'micro' ? MICRO_CAPS : scope === 'small' ? SMALL_CAPS : LARGE;
+  // Up to 54mo (matches walkforwardMode) so the window spans multiple regimes (audit #2) AND the
+  // ?pit=1 as-of date reaches back into the security master's ≤5yr S&P delisting window, letting
+  // real delisted names surface. Default stays 6mo, so normal traffic is unchanged.
+  const months = Math.min(54, Math.max(3, parseInt(req.query.months, 10) || 6));
+  const baseList = scope === 'micro' ? MICRO_CAPS : scope === 'small' ? SMALL_CAPS : LARGE;
+  const { list, pit } = await resolvePitUniverse(baseList, months, req.query.pit === '1', scope);
   const opts = optsFor(scope);
 
   try {
@@ -133,9 +234,14 @@ async function backtestMode(req, res) {
     const spyClose = {}; if (spy) for (const d in spy.byDate) spyClose[d] = spy.byDate[d].close;
     const trades = [];   // { tier, date, r, excess, won, hold, regime, feat }
     let names = 0, instances = 0;
+    // Data coverage of the re-added delisted names — quantifies the survivorship gap honestly
+    // (a delisted name with no free candle data still cannot be traded, so we count it).
+    const addedSet = new Set((pit && pit.addedFull) || []);
+    let addedWithData = 0, addedNoData = 0;
 
     await mapLimit([...new Set(list)], 16, async (t) => {
       const data = await fetchDailyHistory(t);
+      if (addedSet.has(t)) { if (data && data.candles && data.candles.length) addedWithData++; else addedNoData++; }
       if (!data) return;
       const c = data.candles, n = c.length;
       if (n < 180) return;
@@ -219,9 +325,18 @@ async function backtestMode(req, res) {
       };
     }
 
+    // Finalize the point-in-time universe report with delisted-name data coverage.
+    let pitOut = pit;
+    if (pit && pit.enabled) {
+      const { addedFull, ...rest } = pit;   // strip the internal full list from the response
+      pitOut = pit.built ? { ...rest, addedWithData, addedNoData } : rest;
+    }
+
     res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
     return res.json({
       scope, months, names, instances,
+      universe: { source: pit && pit.applied ? 'point-in-time (augmented)' : 'present-day static', size: [...new Set(list)].length, survivorshipSafe: false },
+      pit: pitOut,
       exits: { stopATR: STOP_ATR, targetATR: TGT_ATR, maxHold: MAX_HOLD },
       execution: { policy: POLICIES.NEXT_OPEN_PLUS_SLIPPAGE, entry: 'next-open+slippage', tier: tierForScope(scope), policyVersion: EXECUTION_POLICY_VERSION },
       version: BACKTEST_VERSION,
@@ -236,8 +351,9 @@ async function backtestMode(req, res) {
 // Portfolio simulation — top-N concurrent equal-weight positions, daily MTM, vs SPY.
 async function portfolioMode(req, res) {
   const scope = (req.query.scope || 'large').toLowerCase();
-  const months = Math.min(12, Math.max(3, parseInt(req.query.months, 10) || 6));
-  const list = scope === 'micro' ? MICRO_CAPS : scope === 'small' ? SMALL_CAPS : LARGE;
+  const months = Math.min(54, Math.max(3, parseInt(req.query.months, 10) || 6));   // see backtestMode
+  const baseList = scope === 'micro' ? MICRO_CAPS : scope === 'small' ? SMALL_CAPS : LARGE;
+  const { list, pit } = await resolvePitUniverse(baseList, months, req.query.pit === '1', scope);
   const opts = optsFor(scope);
   const maxPos = scope === 'large' ? 10 : 6;
   const TIER_RANK = { Breakout: 0, Setup: 1, Early: 2 };
@@ -273,7 +389,7 @@ async function portfolioMode(req, res) {
         // its exit date comes from the same ATR stop/target scan off the realistic entry.
         const sim = simAtrTrade(c, closes, highs, lows, atr, i, tierForScope(scope));
         if (!sim) continue;
-        entries.push({ name: t, entryDate: sim.fillDate, exitDate: sim.exitDate, tier: e.status });
+        entries.push({ name: t, entryDate: sim.fillDate, exitDate: sim.exitDate, tier: e.status, entry: sim.entry, r: sim.r });
       }
     });
 
@@ -281,15 +397,8 @@ async function portfolioMode(req, res) {
     const accepted = [];
     for (const e of entries) { if (accepted.filter(p => p.exitDate > e.entryDate).length < maxPos) accepted.push(e); }
 
-    let eq = 1, peak = 1, mdd = 0, exposSum = 0; const curve = [], dr = [];
-    for (let k = 1; k < axis.length; k++) {
-      const D = axis[k], P = axis[k - 1];
-      const held = accepted.filter(p => p.entryDate < D && p.exitDate >= D);
-      let ret = 0;
-      held.forEach(p => { const cm = closeMaps[p.name]; if (!cm) return; const cD = cm[D], cP = cm[P]; if (cD > 0 && cP > 0) ret += (1 / maxPos) * (cD / cP - 1); });
-      eq *= (1 + ret); peak = Math.max(peak, eq); mdd = Math.min(mdd, (eq - peak) / peak);
-      curve.push({ date: D, v: +eq.toFixed(4) }); dr.push(ret); exposSum += held.length / maxPos;
-    }
+    const port = simulatePortfolio(accepted, axis, closeMaps, maxPos);
+    const { eq, mdd, curve, dr, exposSum } = port;
     let seq = 1, speak = 1, smdd = 0; const scurve = [], sdr = [];
     for (let k = 1; k < axis.length; k++) {
       const D = axis[k], P = axis[k - 1], cD = spyClose[D], cP = spyClose[P];
@@ -303,15 +412,19 @@ async function portfolioMode(req, res) {
     const cagr = eqv => +((Math.pow(Math.max(0.01, eqv), ann / nDays) - 1) * 100).toFixed(1);
     const sample = arr => { const step = Math.max(1, Math.ceil(arr.length / 120)); return arr.filter((_, i) => i % step === 0 || i === arr.length - 1); };
 
+    const pitOut = pit && pit.enabled ? (({ addedFull, ...rest }) => rest)(pit) : pit;
     res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
     return res.json({
       scope, months, maxPos, trades: accepted.length, signals: entries.length,
+      universe: { source: pit && pit.applied ? 'point-in-time (augmented)' : 'present-day static', size: [...new Set(list)].length, survivorshipSafe: false },
+      pit: pitOut,
       execution: { policy: POLICIES.NEXT_OPEN_PLUS_SLIPPAGE, entry: 'next-open+slippage', tier: tierForScope(scope), policyVersion: EXECUTION_POLICY_VERSION },
       version: BACKTEST_VERSION,
       stats: {
         totalReturn: +((eq - 1) * 100).toFixed(1), cagr: cagr(eq), sharpe: sharpe(dr), maxDD: +(mdd * 100).toFixed(1), exposure: +(exposSum / nDays * 100).toFixed(0),
         spyReturn: +((seq - 1) * 100).toFixed(1), spyCagr: cagr(seq), spySharpe: sharpe(sdr), spyMaxDD: +(smdd * 100).toFixed(1),
       },
+      accounting: { entry: 'fill-day open→close included; barrier exits realized at the stop/target price (not the close)', reconciliation: port.reconciliation },
       curve: sample(curve), spyCurve: sample(scurve),
       generatedAt: new Date().toISOString(),
     });
@@ -352,6 +465,9 @@ module.exports = function handler(req, res) {
 };
 // Exposed for tests — the next-open trade simulator and version marker.
 module.exports.simAtrTrade = simAtrTrade;
+module.exports.resolvePitUniverse = resolvePitUniverse;
+module.exports.simulatePortfolio = simulatePortfolio;
+module.exports.positionDailyReturn = positionDailyReturn;
 module.exports.BACKTEST_VERSION = BACKTEST_VERSION;
 module.exports.STOP_ATR = STOP_ATR;
 module.exports.TGT_ATR = TGT_ATR;
