@@ -10,6 +10,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadEnsemble } from './omega-ensemble.js';
   import { loadIgnition } from './ignition.js';
   import { loadOmega } from './omega-swing.js';
+  import { loadOrbitLab } from './orbit-lab.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
 
@@ -28,7 +29,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     markets:    ['rotation', 'sectors', 'news', 'pulse', 'evolve'],
     predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     proof:      ['scoreboard', 'evidence', 'baselines', 'leaderboard', 'coreperf'],
-    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge'],
+    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge', 'orbitlab'],
   };
   // Holding-horizon of each candidate/position sub-tab → drives the horizon dividers
   // in the sub-nav so the app is visibly separated by time horizon (the spec ask).
@@ -46,7 +47,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     quickhit: '⚡ Quick Hit', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
-    backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book',
+    backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)',
     leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', evidence: '🎖️ Evidence', baselines: '🧪 Baselines', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
   // Plain-English "what is this tab?" hovers for a novice investor — one line per
@@ -73,6 +74,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     trendrider: 'Ride established uptrends; the model drops names once they stop trending.',
     fade: 'Overheated names that may be due to pull back (short/caution ideas).',
     gapdown: 'Stocks gapping DOWN hard on news and continuing lower — short setups (the mirror of Gap & Go). Best off red days; mind borrow costs.',
+    orbitlab: 'ORBIT & ORBIT-ML — experimental residual-drift ranking systems running in shadow (zero weight, never affect the live rank). Shown here to accrue an honest out-of-sample track record; currently grade C with no durable edge.',
     rotation: 'Which sectors money is rotating into and out of, week over week.',
     sectors: 'Sector performance heatmap — what’s leading and lagging.',
     momentum: 'Strong-buy and strong-sell momentum calls right now.',
@@ -363,6 +365,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'ghost' && typeof ensureGhost === 'function') ensureGhost();
     if (sub === 'events' && typeof ensureCern === 'function') ensureCern();
     if (sub === 'edge' && typeof ensureEdge === 'function') ensureEdge();
+    if (sub === 'orbitlab' && typeof ensureOrbitLab === 'function') ensureOrbitLab();
     if (sub === 'evidence' && typeof ensureEvidence === 'function') ensureEvidence();
     if (sub === 'baselines' && typeof ensureBaselines === 'function') ensureBaselines();
     if (sub === 'today' && typeof ensureToday === 'function') ensureToday();
@@ -3500,6 +3503,19 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (btn) btn.addEventListener('click', () => loadOmega(document.getElementById('omega-container')));
     }
     loadOmega(document.getElementById('omega-container'));
+  }
+
+  // 🛰️ ORBIT (shadow) — read-only Research Lab panel over the ORBIT + ORBIT-ML shadow
+  // systems (loadOrbitLab renders op=orbit/orbithealth/orbitml/orbitmlhealth). Weight-0,
+  // never affects the live rank — honest track-record accrual only.
+  let orbitLabLoaded = false;
+  function ensureOrbitLab() {
+    if (!orbitLabLoaded) {
+      orbitLabLoaded = true;
+      const btn = document.getElementById('orbitlab-refresh-btn');
+      if (btn) btn.addEventListener('click', () => loadOrbitLab(document.getElementById('orbitlab-container')));
+    }
+    loadOrbitLab(document.getElementById('orbitlab-container'));
   }
 
   // 🎯 OMEGA ENSEMBLE — the composed board (loadEnsemble renders the op=ensemble payload,
