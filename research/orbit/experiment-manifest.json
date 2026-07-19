@@ -1,0 +1,86 @@
+{
+  "experimentFamilyId": "orbit-v1-vertical-slice",
+  "description": "ORBIT orthogonal-residual Bayesian idiosyncratic-trend screener — shadow-only vertical slice with nested purged walk-forward validation.",
+  "codeCommit": "4371198 (base main; ORBIT changes uncommitted at manifest time)",
+  "generatedFrom": "research/orbit/validate.js",
+  "versions": {
+    "features": "orbit-features-v1",
+    "factorModel": "orbit-factor-v1",
+    "state": "orbit-state-v1",
+    "labels": "orbit-labels-v1",
+    "scenario": "orbit-scenario-v1",
+    "model": "orbit-model-v1",
+    "calibration": "orbit-calib-v1",
+    "walkforward": "orbit-wf-v1",
+    "decision": "orbit-decision-v1",
+    "execution": "exec-v1",
+    "cost": "cost-v1"
+  },
+  "universe": {
+    "source": "lib/universe.js LARGE (current survivors)",
+    "pointInTime": false,
+    "delistedIncluded": false,
+    "note": "Survivorship-biased. security-master.universeAt exists but is unpopulated and unused by the backfill."
+  },
+  "datasetHash": "not-committed (regenerate deterministically via validate.js; Yahoo daily bars, split-adjusted)",
+  "foldDefinitions": {
+    "outerBlocks": 8,
+    "purge": "training event dropped unless labelEndDate + embargo < outer block start",
+    "embargoDays": "ceil(horizonDays * 1.5 * 7/5) calendar days",
+    "innerSplit": "0.8 time-ordered fit / 0.2 out-of-fold calibration",
+    "grouping": "by decision date (per-date rank-IC averaged → ICIR)"
+  },
+  "modelParams": {
+    "type": "L2-regularised logistic sub-models (residualUp/rawUp/severe/barrier one-vs-rest)",
+    "lambda": 0.5,
+    "iters": 400,
+    "featureSet": "residual/demand/drift/relative-strength (raw momentum excluded)",
+    "preprocessing": "winsor(2/98) + standardise, fit in-fold only",
+    "factorModel": "rolling scale-invariant ridge (lambda 1.0 standardised), window 120, betaCap 3.5",
+    "state": "causal Kalman, persistence prior 0.94, qRatio 0.05, expanding-window variances"
+  },
+  "calibration": {
+    "candidates": ["none", "platt", "beta", "isotonic"],
+    "selection": "held-out Brier (log-loss tiebreak)",
+    "minCalibrationN": 60,
+    "nullContract": "returns {calibrated:false, probability:null} when OOF support insufficient"
+  },
+  "costAssumptions": {
+    "model": "cost-v1 round-trip; liquid tier half-spread 3bps + slippage 5bps per side",
+    "execution": "next-open + slippage (exec-v1)"
+  },
+  "configurationsAttempted": 2,
+  "configurationsNote": "Two evaluated runs: (A) 12 names/3y/6 folds, (B) 30 names/5y/8 folds. No hyperparameter sweep performed on OOS; lambda/window/priors are fixed declared defaults. Deflated-Sharpe multiple-testing accounting therefore trivial for this slice.",
+  "results": {
+    "runA_12names_3y": {
+      "samples": 708,
+      "days5": { "purgedIC": 0.0137, "topDecileNet": -0.0051, "dirAcc": 0.48 },
+      "days21": { "purgedIC": 0.0799, "topDecileNet": -0.0315, "dirAcc": 0.50 },
+      "days63": { "purgedIC": 0.2090, "topDecileNet": 0.0320, "dirAcc": 0.55 },
+      "verdict": "SEDUCTIVE ARTIFACT — survivorship x single-regime x tiny sample"
+    },
+    "runB_30names_5y": {
+      "samples": 3270,
+      "days5": { "purgedIC": 0.0045, "icir": 0.02, "topDecileNet": 0.0058, "dirAcc": 0.48, "brier": 0.255, "calibrator": "none" },
+      "days21": { "purgedIC": -0.0053, "icir": -0.02, "topDecileNet": 0.0234, "dirAcc": 0.52, "brier": 0.255, "calibrator": "platt" },
+      "days63": { "purgedIC": -0.0184, "icir": -0.07, "topDecileNet": 0.0232, "dirAcc": 0.50, "brier": 0.250, "calibrator": "platt" },
+      "verdict": "NO durable OOS edge once multi-regime — rank-IC ~0/slightly negative, dirAcc ~coin-flip"
+    }
+  },
+  "limitations": [
+    "Survivorship-biased universe; delisted names absent — production-grade blocked.",
+    "Sector classification is current, not point-in-time.",
+    "Bounded universe (12-30 names) for tractability; full universe not run.",
+    "No prospective (live-forward) evidence yet.",
+    "Total-return labels available but slice uses split-adjusted close (execution truth)."
+  ],
+  "promotionStatus": {
+    "grade": "C",
+    "health": "INSUFFICIENT_DATA",
+    "shadow": true,
+    "affectsLiveRank": false,
+    "deploymentWeight": 0,
+    "productionGrade": false,
+    "survivorshipSafe": false
+  }
+}
