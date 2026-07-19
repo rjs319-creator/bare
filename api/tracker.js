@@ -264,6 +264,8 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'attentiontick') return runAttentionTick(req, res);
   if (req.query.op === 'attention') return runAttention(req, res);
   if (req.query.op === 'whynow') return require('../lib/whynow-routes').runWhyNow(req, res);
+  // NOVEL SIGNAL LAB — shadow-only research surface (never touches prod recs; kill-switch NSL_DISABLED).
+  if (req.query.op === 'nsl') return require('../lib/nsl-routes').runNsl(req, res);
   if (req.query.op === 'today') return require('../lib/decision-routes').runToday(req, res);
   // EVOLVE — Adaptive Pre-Move Discovery Engine (composition + calibration over the
   // existing engines-as-specialists). Live reads are public + cached; the writers
