@@ -83,7 +83,7 @@ const PRIVILEGED_OPS = new Set([
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
-  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'redundancy', 'leadtime', 'failuremodel', 'complab', 'challengereval', 'router', 'orbitwalkforward', 'orbitmlwalkforward',
+  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'redundancy', 'leadtime', 'failuremodel', 'complab', 'challengereval', 'router', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -311,5 +311,6 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'orbitmlresolve') return require('../lib/orbit-ml-routes').runOrbitMlResolve(req, res);
   if (req.query.op === 'orbitmlwalkforward') return require('../lib/orbit-ml-routes').runOrbitMlWalkForward(req, res);
   if (req.query.op === 'orbitmlhealth') return require('../lib/orbit-ml-routes').runOrbitMlHealth(req, res);
+  if (req.query.op === 'orbitcontrols') return require('../lib/orbit-ml-routes').runOrbitControls(req, res);
   return runScoreboard(req, res);
 };
