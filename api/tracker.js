@@ -315,5 +315,6 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'orbitmlhealth') return require('../lib/orbit-ml-routes').runOrbitMlHealth(req, res);
   if (req.query.op === 'orbitcontrols') return require('../lib/orbit-ml-routes').runOrbitControls(req, res);
   if (req.query.op === 'promotionreadiness') return require('../lib/orbit-ml-routes').runPromotionReadiness(req, res);
+  if (req.query.op === 'researchgrade') return require('../lib/research-grade-routes').runResearchGrade(req, res);
   return runScoreboard(req, res);
 };
