@@ -1,7 +1,17 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { mineText, rankPosts } = require('../lib/alerts');
+const { mineText, rankPosts, analyzeEdge, CFG } = require('../lib/alerts');
+
+// Build N graded directional entries with a fixed per-direction excess.
+function gradedEntries({ bull = [], bear = [], score = 3, account = 'x' } = {}) {
+  const mk = (direction, excess, i) => ({ ticker: 'T' + i, direction, account, weightedSignal: score, score, graded: true, excess });
+  let i = 0;
+  return [
+    ...bull.map(x => mk('bullish', x, i++)),
+    ...bear.map(x => mk('bearish', x, i++)),
+  ];
+}
 
 // ── mineText: pull structured signal out of a post ───────────────────────────
 test('mineText: tags catalysts from the thesis language', () => {
@@ -50,4 +60,41 @@ test('rankPosts: surfaces catalysts, conviction, levels, options, timeframe', ()
   assert.equal(a.options.type, 'calls');
   assert.ok(a.conviction >= 50);
   assert.equal(a.timeframe, 'swing');
+});
+
+// ── analyzeEdge.fade: the fade harness ───────────────────────────────────────
+test('analyzeEdge: fade is the exact inversion of the follow signal', () => {
+  // Bullish calls that lost 2% vs market, bearish calls that lost 1% (call wrong).
+  const n = CFG.minGradedForEdge;
+  const entries = gradedEntries({ bull: Array(n).fill(-2), bear: Array(n).fill(1) });
+  const r = analyzeEdge(entries);
+  assert.equal(r.meanExcessPct, -1.5, 'following loses on average');           // mean(signed): (-2 + -1)/2
+  assert.equal(r.fade.meanExcessPct, +1.5, 'fade mirrors follow exactly');
+  assert.equal(r.fade.convictionRankIC, +(-r.convictionRankIC).toFixed(3));
+});
+
+test('analyzeEdge: fade splits into a shortable bull bucket and a long bear bucket', () => {
+  const n = CFG.minGradedForEdge;
+  // Bullish pumps crater (excess -5 → fading them, i.e. SHORT, earns +5).
+  // Bearish calls are right (excess -3 → fading them, i.e. LONG, loses -3).
+  const entries = gradedEntries({ bull: Array(n).fill(-5), bear: Array(n).fill(-3) });
+  const r = analyzeEdge(entries);
+  assert.equal(r.fade.byDirection.bull.side, 'short');
+  assert.equal(r.fade.byDirection.bear.side, 'long');
+  assert.equal(r.fade.byDirection.bull.meanExcessPct, +5, 'fading bullish pumps = profitable short (gross)');
+  assert.equal(r.fade.byDirection.bear.meanExcessPct, -3, 'fading correct bearish calls = losing long');
+  assert.equal(r.fade.byDirection.bull.hitRatePct, 100);
+  assert.equal(r.fade.byDirection.bear.hitRatePct, 0);
+});
+
+test('analyzeEdge: trimmedMean strips outliers so a few pump implosions cannot fake an edge', () => {
+  const n = CFG.minGradedForEdge;
+  // Follow signal ~0 for the body, but a couple of bullish names collapse -60%
+  // (fade +60%). Keep #spikes within the 5% trim window so trimming excises them.
+  const body = Array(n).fill(0.1);                 // bullish, roughly flat vs market
+  const spikes = Array(Math.floor((n + 2) * 0.05)).fill(-60);  // bullish implosions
+  const entries = gradedEntries({ bull: [...body, ...spikes] });
+  const r = analyzeEdge(entries);
+  assert.ok(r.fade.meanExcessPct > r.fade.trimmedMeanExcessPct, 'mean is inflated by the tail');
+  assert.ok(Math.abs(r.fade.trimmedMeanExcessPct) < 0.5, 'trimmed center reveals no broad edge');
 });
