@@ -64,6 +64,96 @@ function boardList(latest, kind) {
   return `<div style="color:#8e8e93;font-size:12px;margin-bottom:4px">${items.length} logged${asOf}</div>${shown}`;
 }
 
+// ── Promotion gate ──────────────────────────────────────────────────────────
+// `promotion-readiness.js` already computes a frozen, machine-checkable verdict
+// with structured blockers — but nothing rendered it, so the Lab could show a
+// grade without ever showing WHY the system is still at zero weight. That gap
+// is what lets a shadow model quietly read as a recommendation. This panel
+// makes the refusal, and the evidence still missing, the visible part.
+
+// The status ladder, ordered least→most promoted. Deliberately NOT a score:
+// every rung except PROMOTABLE means "carries zero weight".
+const PROMO_STATUS = {
+  INSUFFICIENT_DATA:     { label: 'Insufficient data', color: '#8e8e93' },
+  INVALID_EVALUATION:    { label: 'Invalid evaluation', color: '#ff453a' },
+  NO_EDGE:               { label: 'No edge', color: '#ff9f0a' },
+  NO_INCREMENTAL_VALUE:  { label: 'No incremental value', color: '#ff9f0a' },
+  AWAITING_PROSPECTIVE:  { label: 'Awaiting prospective', color: '#ffd60a' },
+  NOT_READY:             { label: 'Not ready', color: '#8e8e93' },
+  PROMOTABLE:            { label: 'Promotable', color: '#34c759' },
+};
+
+// Plain-English gloss per blocker id. The API's `detail` carries the numbers;
+// this says why the criterion exists at all.
+const BLOCKER_WHY = {
+  'survivorship-unsafe': 'Backtest universe excludes delisted names, so results are optimistic by construction.',
+  'too-few-names': 'Cross-section too narrow for a rank-IC to mean anything.',
+  'too-few-dates': 'Too few independent decision dates — 30 names on one day is one market environment, not 30.',
+  'no-walkforward': 'No purged walk-forward was run at the primary horizon.',
+  'ic-below-hurdle': 'Out-of-sample rank correlation with forward return is below the frozen hurdle.',
+  'icir-below-hurdle': 'The IC sign is unstable across blocks — consistent with luck.',
+  'too-few-outer-blocks': 'Not enough nested out-of-sample blocks for an honest estimate.',
+  'too-few-regimes': 'Never tested through a different market regime.',
+  'incremental-untested': 'Marginal contribution over existing algorithms was never measured.',
+  'no-incremental-value': 'Adds nothing over algorithms already running — redundant, not additive.',
+  'controls-not-run': 'The negative-control/placebo battery has not been run.',
+  'controls-not-robust': 'A negative control fired: the evaluation may be leaking or fragile.',
+  'insufficient-prospective': 'Not enough live-forward resolved dates — in-sample results are not confirmation.',
+  'prospective-unhealthy': 'The live monitor shows degradation or breakage.',
+};
+
+// Progress toward the countable gates. This is the "next evidence milestone":
+// the honest answer to "when will you know?" is a sample count, not a date.
+function milestoneRows(coverage = {}, criteria = {}) {
+  const gates = [
+    ['Unique names', coverage.nUniqueNames, criteria.minUniqueNames],
+    ['Decision dates', coverage.nDecisionDates, criteria.minDecisionDates],
+    ['Forward-resolved dates', coverage.nProspectiveDates, criteria.minProspectiveDates],
+  ].filter(([, , need]) => need != null);
+  if (!gates.length) return '';
+  return gates.map(([label, have, need]) => {
+    const h = Number(have) || 0;
+    const pctDone = Math.max(0, Math.min(100, need ? (h / need) * 100 : 0));
+    const met = h >= need;
+    return `<div style="margin-top:6px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#c7c7cc">
+        <span>${esc(label)}</span><span style="color:${met ? '#34c759' : '#8e8e93'}">${h} / ${need}${met ? ' ✓' : ''}</span></div>
+      <div style="height:4px;background:#2c2c2e;border-radius:2px;overflow:hidden;margin-top:3px">
+        <div style="height:100%;width:${pctDone.toFixed(0)}%;background:${met ? '#34c759' : ACCENT}"></div></div></div>`;
+  }).join('');
+}
+
+function promotionPanel(promo) {
+  if (!promo || !promo.readiness) {
+    return card('Promotion gate', 'frozen eligibility criteria',
+      '<div style="color:#8e8e93;font-size:13px">Gate not yet evaluated.</div>');
+  }
+  const r = promo.readiness;
+  const s = PROMO_STATUS[r.status] || { label: r.status || 'unknown', color: '#8e8e93' };
+  const blockers = Array.isArray(r.blockers) ? r.blockers : [];
+
+  const blockerHtml = blockers.length
+    ? blockers.map(b => `<li style="margin-bottom:6px">
+        <span style="color:#ff9f0a">${esc(String(b.id || '').replace(/-/g, ' '))}</span>
+        <div style="color:#c7c7cc;font-size:12px">${esc(b.detail || '')}</div>
+        ${BLOCKER_WHY[b.id] ? `<div style="color:#8e8e93;font-size:12px;font-style:italic">${esc(BLOCKER_WHY[b.id])}</div>` : ''}
+      </li>`).join('')
+    : '<li style="color:#34c759">No blockers — all frozen criteria met.</li>';
+
+  return card('Promotion gate', 'why this is still shadow',
+    `<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;margin-bottom:8px">
+       <span style="font-weight:700;color:${s.color}">${esc(s.label)}</span>
+       <span style="color:#8e8e93;font-size:12px">live weight <b style="color:#c7c7cc">0</b> · ${blockers.length} blocker(s)</span>
+     </div>
+     <div style="color:#c7c7cc;font-size:13px;margin-bottom:10px">${esc(r.note || '')}</div>
+     <div style="color:#8e8e93;font-size:12px;margin-bottom:4px">Blocking criteria</div>
+     <ul style="margin:0 0 10px;padding-left:18px;font-size:13px">${blockerHtml}</ul>
+     <div style="color:#8e8e93;font-size:12px">Next evidence milestone</div>
+     ${milestoneRows(promo.coverage, r.criteria)}
+     <div style="margin-top:10px;font-size:12px;color:#8e8e93">
+       Passing this gate certifies <i>eligibility only</i> — promotion still requires an explicit human action.</div>`);
+}
+
 function card(title, subtitle, bodyHtml) {
   return `<div style="background:#1c1c1e;border:1px solid #2c2c2e;border-radius:10px;padding:14px 16px;margin-bottom:14px">
     <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
@@ -76,11 +166,12 @@ export async function loadOrbitLab(container) {
   if (!container) return;
   container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading ORBIT shadow systems…</p></div>`;
 
-  const [orbit, orbitHealth, orbitml, orbitmlHealth] = await Promise.all([
+  const [orbit, orbitHealth, orbitml, orbitmlHealth, promo] = await Promise.all([
     getJSON('/api/tracker?op=orbit'),
     getJSON('/api/tracker?op=orbithealth'),
     getJSON('/api/tracker?op=orbitml'),
     getJSON('/api/tracker?op=orbitmlhealth'),
+    getJSON('/api/tracker?op=promotionreadiness'),
   ]);
 
   const banner = `<div style="background:#2c2c2e;border-left:3px solid ${ACCENT};border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#c7c7cc">
@@ -111,5 +202,5 @@ export async function loadOrbitLab(container) {
     + marginalHtml
     + `<div style="margin-top:10px"><div style="color:#8e8e93;font-size:12px;margin-bottom:4px">Latest ranking</div>${boardList(orbitml && orbitml.latest, 'orbitml')}</div>`);
 
-  container.innerHTML = banner + orbitCard + orbitmlCard;
+  container.innerHTML = banner + promotionPanel(promo) + orbitCard + orbitmlCard;
 }
