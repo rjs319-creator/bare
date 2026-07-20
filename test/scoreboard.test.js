@@ -2,6 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { forwardReturn, forwardPath, nextOpenReturn, spyForwardReturn, summarizeReturns, summarizePlans, cernPicksFrom, fadeRowsFrom, regimeBucketOf } = require('../lib/apex-routes');
+const { COST_MODEL_VERSION } = require('../lib/costs');
 
 // ── regimeBucketOf: map a macro state into a Scoreboard regime bucket ─────────
 test('regimeBucketOf: null / missing state yields no bucket', () => {
@@ -252,7 +253,9 @@ test('summarizeReturns: net-of-cost fields aggregate the per-record net/netExc',
   assert.equal(s.netWinRate, 67);     // 2 of 3 positive net
   assert.equal(s.avgNetExcess, 0.57); // (2.84 − 1.16 + 0.04) / 3
   assert.equal(s.netBeatMktRate, 67); // 2 of 3 beat the market net
-  assert.equal(s.costModel, 'cost-v1');
+  // Assert the field is WIRED to the cost model, not that it equals a frozen literal —
+  // otherwise every cost-model bump breaks an unrelated aggregation test.
+  assert.equal(s.costModel, COST_MODEL_VERSION);
 });
 
 test('summarizeReturns: net fields are null when no record carries a net', () => {
