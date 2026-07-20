@@ -195,3 +195,41 @@ test('PROPAGATE: a nested chain with NO body (child killed) is unknown, not a fa
   const r = await WC.runChain('ledger', { call, now: clock().now });
   assert.strictEqual(r.ok, true, 'no body = child still running/killed = not a failure');
 });
+
+// ── failDetail: why a step failed, not just that it did ──────────────────────
+// Motivated by a real 3-run fail streak in the evolve sub-chain that op=health
+// could not diagnose: it reported `evolve/op=evolvescore&log=1` as failed but not
+// whether that was a 401, a 504, or a throw — three bugs with three different fixes.
+
+test('failDetail records the STATUS behind each failed step, not just its name', async () => {
+  const r = await WC.runChain('researchgrade', { call: async () => ({ ok: false, status: 500 }) });
+  assert.deepEqual(r.failed, ['op=researchgrade'], 'names still reported for existing consumers');
+  assert.equal(r.failDetail.length, 1);
+  assert.equal(r.failDetail[0].op, 'op=researchgrade');
+  assert.equal(r.failDetail[0].status, 'http:500', 'the status is what makes it diagnosable');
+});
+
+test('failDetail captures a THROWN step\'s error text', async () => {
+  const r = await WC.runChain('researchgrade', { call: async () => { throw new Error('ECONNRESET'); } });
+  assert.equal(r.failDetail[0].status, 'error');
+  assert.match(r.failDetail[0].error, /ECONNRESET/);
+});
+
+test('failDetail from a nested chain bubbles up, name-prefixed like failed does', async () => {
+  const child = {
+    complete: true, failed: ['op=evolvescore&log=1'], skipped: [],
+    failDetail: [{ op: 'op=evolvescore&log=1', status: 'http:504', ms: 60000, error: null }],
+  };
+  const r = await WC.runChain('evolve', {
+    call: async (p) => (p.includes('warmchain') ? { ok: true, status: 200, body: child } : { ok: true, status: 200 }),
+  });
+  const d = r.failDetail.find(x => x.op.endsWith('op=evolvescore&log=1'));
+  assert.ok(d, 'nested detail must reach the parent');
+  assert.match(d.op, /^postdecision\//, 'prefixed with the child chain name');
+  assert.equal(d.status, 'http:504');
+});
+
+test('a healthy chain reports an empty failDetail', async () => {
+  const r = await WC.runChain('researchgrade', { call: async () => ({ ok: true, status: 200 }) });
+  assert.deepEqual(r.failDetail, []);
+});
