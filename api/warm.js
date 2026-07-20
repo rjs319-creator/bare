@@ -142,7 +142,11 @@ module.exports = async function handler(req, res) {
       const b = r && r.body;
       chainReports[k.name] = b && typeof b === 'object'
         ? { dispatched: true, httpStatus: r.httpStatus, complete: b.complete !== false,
-            stepFails: Array.isArray(b.failed) ? b.failed : [], skipped: Array.isArray(b.skipped) ? b.skipped : [] }
+            stepFails: Array.isArray(b.failed) ? b.failed : [], skipped: Array.isArray(b.skipped) ? b.skipped : [],
+            // The status/error behind each failed step. Names alone cannot distinguish a
+            // 401 from a 504 from a throw, which left the evolve sub-chain's 3-run fail
+            // streak undiagnosable from op=health.
+            stepFailDetail: Array.isArray(b.failDetail) ? b.failDetail.slice(0, 12) : [] }
         : { dispatched: true, httpStatus: (r && r.httpStatus) || null, complete: null };
     })),
     new Promise(r => setTimeout(r, Math.max(0, DRAIN_CEIL_MS - (Date.now() - START)))),
