@@ -11,6 +11,19 @@ const assert = require('node:assert/strict');
 const WC = require('../lib/warm-chains');
 const RG = require('../lib/research-grade-routes');
 
+// THE REGRESSION: fetchDailyHistory returns { candles, meta, ... }, not a bare array. If the
+// route hands that wrapper to the grader, Array.isArray(candles) is false and EVERY prediction
+// pends as `no-candles` forever — grading that silently never grades, invisible because
+// cold-start pending looks identical. candlesOf must unwrap it.
+test('candlesOf unwraps fetchDailyHistory({candles}) to the bare array the grader needs', () => {
+  const arr = [{ date: '2026-01-05', open: 1, high: 1, low: 1, close: 1 }];
+  assert.equal(RG.candlesOf({ candles: arr, meta: {}, adjustment: {} }), arr, 'must extract .candles');
+  assert.equal(RG.candlesOf(arr), arr, 'a bare array passes through');
+  assert.equal(RG.candlesOf(null), null);
+  assert.equal(RG.candlesOf({ candles: null }), null, 'a wrapper with no candle array → null, not the object');
+  assert.equal(RG.candlesOf({ nope: 1 }), null);
+});
+
 test('researchgrade is registered as a chain and actually dispatched', () => {
   assert.ok(WC.CHAINS.researchgrade, 'chain must exist');
   assert.ok(WC.CHAINS.researchgrade.length, 'chain must not be empty');
