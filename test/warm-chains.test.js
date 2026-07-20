@@ -233,3 +233,33 @@ test('a healthy chain reports an empty failDetail', async () => {
   const r = await WC.runChain('researchgrade', { call: async () => ({ ok: true, status: 200 }) });
   assert.deepEqual(r.failDetail, []);
 });
+
+// ── evolve depth guard (508 regression) ──────────────────────────────────────
+// evolve was `ledger → @decision → @reprime → @evolve` (4 warmchain hops deep) and
+// every step returned Vercel 508 INFINITE_LOOP_DETECTED on every cron run for 4 days.
+// Each evolve step self-fetches op=today, which itself fans out to more self-fetches, so
+// nested deep the lineage trips the platform's loop guard. It MUST stay a shallow root.
+// Empirical basis: op=evolve is 200 shallow, 508 deep.
+
+test('EVOLVE 508 REGRESSION: evolve is a shallow root, never nested under the decision spine', () => {
+  assert.ok(WC.ROOT_CHAINS.includes('evolve'), 'evolve must be dispatched by warm directly (shallow)');
+  // If any chain hands off to @evolve, evolve is nested again and the 508 returns.
+  for (const [name, steps] of Object.entries(WC.CHAINS)) {
+    assert.ok(!steps.includes('@evolve'), `${name} hands off to @evolve — re-nesting resurrects the 508`);
+  }
+});
+
+test('evolve is reachable exactly once (root, not also nested)', () => {
+  const nested = new Set();
+  for (const steps of Object.values(WC.CHAINS)) for (const s of steps) if (s.startsWith('@')) nested.add(s.slice(1));
+  assert.equal(nested.has('evolve'), false, 'evolve must not be an @-target');
+  assert.equal(WC.ROOT_CHAINS.filter(r => r === 'evolve').length, 1, 'exactly one root entry');
+});
+
+test('detaching evolve did not orphan postdecision', () => {
+  // postdecision still runs — now under the evolve root instead of the reprime spine.
+  const nested = new Set();
+  for (const steps of Object.values(WC.CHAINS)) for (const s of steps) if (s.startsWith('@')) nested.add(s.slice(1));
+  assert.ok(nested.has('postdecision'), 'postdecision must still be reachable');
+  assert.ok(WC.CHAINS.evolve.includes('@postdecision'), 'via the evolve root');
+});
