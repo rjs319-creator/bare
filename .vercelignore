@@ -1,11 +1,17 @@
 # Research rig (offline analysis + cached FMP data) — not imported by the app.
 # Keeping it out of deploys avoids a multi-GB upload of research/data/cache.
-research/
+#
+# LEADING SLASH IS LOAD-BEARING. Unanchored `research/` matches a directory of that
+# name at ANY depth, which silently excluded `lib/research/` from every deploy — so
+# the research contract modules were not merely uncalled, they were undeployable.
+# The first commit to `require()` one of them 500'd /api/tracker?op=today in prod.
+# Anchor every directory rule here unless you genuinely mean "at any depth".
+/research/
 
 # Offline Python screener pipeline (CSV triage tool) — not imported by the app.
-tools/
+/tools/
 
 # logs & local cruft
 *.log
 .DS_Store
-scratchpad/
+/scratchpad/
