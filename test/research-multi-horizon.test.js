@@ -11,7 +11,7 @@ const G = require('../lib/research/grade');
 const MH = require('../lib/research/multi-horizon');
 const S = require('../lib/research/schemas');
 const B = require('../lib/research/live-bridge');
-const { horizonBatchHasPending } = require('../lib/research-grade-routes');
+const { horizonBatchHasPending, sectorEtfFor } = require('../lib/research-grade-routes');
 
 // Deterministic candle series: close moves by `step`/day from `start`, flat OHLC band.
 function series(from, n, start = 100, step = 1) {
@@ -179,6 +179,32 @@ test('idempotent — same inputs, same term structure', () => {
   const a = MH.gradePredictionHorizons(p, { candles, asOf: '2026-12-31' });
   const b = MH.gradePredictionHorizons(p, { candles, asOf: '2026-12-31' });
   assert.deepEqual(a, b);
+});
+
+// ── sector-relative residual across the term structure ──────────────────────────
+test('sectorLookup makes every rung sector-relative', () => {
+  const name = series('2026-01-05', 90, 100, 1);       // name +1/session
+  const sector = series('2026-01-05', 90, 100, 1);     // its sector ETF: identical
+  const market = series('2026-01-05', 90, 100, 0.1);   // slow broad market
+  const snap = B.buildDecisionSnapshot([
+    { ticker: 'AAA', horizon: 'swing', side: 'long', score: 80, state: 'detected', actionable: true, scope: 'liquid' },
+  ], { decisionTs: '2026-01-05', sessionAxis: AXIS, modelVersion: 'decision-v1', sessionAxisKind: 'exact' });
+
+  const batch = MH.gradeSnapshotHorizons(snap, () => name, {
+    asOf: '2026-12-31', benchCandles: market, sectorLookup: () => sector,
+  });
+  const v = batch.vectors[0];
+  for (const h of v.horizons.filter(x => x.status === 'resolved')) {
+    assert.ok(h.sectorReturn > h.benchmarkReturn, `rung ${h.bars}: sector must outpace the slow market`);
+    // Tracks its sector ⇒ residual is the cost drag, not a spurious market-relative gain.
+    assert.ok(Math.abs(h.residualReturn + h.costs) < 0.05, `rung ${h.bars}: residual ${h.residualReturn} ~ -costs ${h.costs}`);
+    assert.equal(h.beatBenchmark, h.residualReturn > 0);
+  }
+});
+
+test('sectorEtfFor maps a known ticker to its SPDR sector ETF and is null for unknowns', () => {
+  assert.equal(sectorEtfFor('AAPL'), 'XLK', 'a Technology name maps to XLK');
+  assert.equal(sectorEtfFor('ZZZZ_NOT_A_TICKER'), null, 'an unmapped ticker yields null (grader falls back to market)');
 });
 
 // ── route helper: a day stays in scope until the whole term structure comes due ──

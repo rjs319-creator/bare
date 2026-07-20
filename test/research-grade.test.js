@@ -193,6 +193,38 @@ test('grading is idempotent — same inputs, same outcomes', () => {
   assert.deepEqual(a, b);
 });
 
+// ── sector-relative residual (the #1 experiment) ─────────────────────────────
+test('a per-ticker sectorLookup makes the residual SECTOR-relative, not market-relative', () => {
+  const name = series('2026-01-05', 40, 100, 1);       // the name: +1/session
+  const sector = series('2026-01-05', 40, 100, 1);     // its sector ETF: identical path
+  const market = series('2026-01-05', 40, 100, 0.1);   // the broad market: much slower
+  const snap = B.buildDecisionSnapshot([
+    { ticker: 'AAA', horizon: 'swing', side: 'long', score: 80, state: 'detected', actionable: true, scope: 'liquid' },
+  ], { decisionTs: '2026-01-05', sessionAxis: AXIS, modelVersion: 'decision-v1', sessionAxisKind: 'exact' });
+
+  const batch = G.gradeSnapshot(snap, () => name, {
+    asOf: '2026-03-01', benchCandles: market, sectorLookup: () => sector,
+  });
+  const o = batch.outcomes[0];
+  // The name exactly tracks its SECTOR, so the sector-relative residual is just the cost drag —
+  // NOT the large positive number a market-relative residual would show against the slow market.
+  assert.ok(Math.abs(o.residualReturn + o.costs) < 0.05,
+    `residual ${o.residualReturn} must be ~ -costs ${o.costs} when the name tracks its sector`);
+  assert.ok(o.sectorReturn > o.benchmarkReturn, 'sector rose faster than the broad market here');
+});
+
+test('sectorLookup falls back to the market benchmark when a name has no mapped sector', () => {
+  const name = series('2026-01-05', 40, 100, 1);
+  const market = series('2026-01-05', 40, 100, 1);     // identical market
+  const snap = B.buildDecisionSnapshot([
+    { ticker: 'AAA', horizon: 'swing', side: 'long', score: 80, state: 'detected', actionable: true, scope: 'liquid' },
+  ], { decisionTs: '2026-01-05', sessionAxis: AXIS, modelVersion: 'decision-v1', sessionAxisKind: 'exact' });
+  // sectorLookup returns null (unknown sector) → grader uses the market benchmark.
+  const o = G.gradeSnapshot(snap, () => name, { asOf: '2026-03-01', benchCandles: market, sectorLookup: () => null }).outcomes[0];
+  assert.equal(o.sectorReturn, null);
+  assert.ok(Math.abs(o.residualReturn + o.costs) < 0.001, 'residual falls back to market = -costs when the name IS the market');
+});
+
 test('an empty snapshot grades to a terminal batch, not a crash', () => {
   const batch = G.gradeSnapshot({ decisionTs: '2026-01-05', predictions: [] }, () => null, { asOf: '2026-03-01' });
   assert.equal(batch.nPredictions, 0);
