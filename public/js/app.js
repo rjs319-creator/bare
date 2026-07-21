@@ -1023,6 +1023,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (!r) { r = { ticker: s.ticker, underlying: s.underlying, undChgPct: s.undChgPct, isIndex: OF_INDEX.has(s.ticker), callPremium: 0, putPremium: 0, contracts: [], sweep: 0, block: 0, large: 0 }; m.set(s.ticker, r); }
       if (s.side === 'call') r.callPremium += s.premium; else r.putPremium += s.premium;
       r.contracts.push(s); r[s.kind] = (r[s.kind] || 0) + 1;
+      // EARNINGS PRESERVATION (phase 6): the per-contract signals carry the
+      // earnings-before-expiry read from the server. Carry the strongest one up to the
+      // ticker row here so the ⚠ warning can NEVER disappear when the browser
+      // reaggregates raw activity (it used to be rebuilt from scratch and lost).
+      if (s.earningsBeforeExpiry) r.earningsBeforeExpiry = true;
+      if (s.earningsInDays != null && (r.earningsInDays == null || s.earningsInDays < r.earningsInDays)) r.earningsInDays = s.earningsInDays;
     });
     const out = [...m.values()].map(r => {
       r.totalPremium = r.callPremium + r.putPremium;
@@ -1204,30 +1210,38 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (optionsGenTime) optionsGenTime.textContent = data.generatedAt ? `Updated ${new Date(data.generatedAt).toLocaleTimeString()}` : '';
     if (optionsMeta) optionsMeta.textContent = `· ${data.count} unusual signals across ${data.universe} liquid names`;
     const vtab = (id, lbl, on) => `<button id="${id}" class="dt-btn" style="border-radius:0;border:none;${on ? 'background:#06c4d4;color:#001' : 'background:transparent'}">${lbl}</button>`;
+    const shadowBanner =
+      `<div class="dt-note" style="margin-bottom:12px;border-left:3px solid var(--amber,#f0a832);padding:8px 10px;background:rgba(240,168,50,0.07)">`
+      + `<b>🔬 Research / shadow overlay · delayed data.</b> This is derived from <b>delayed</b>, free option-chain data (no live tick tape, no trade-level OPRA). `
+      + `We <b>cannot</b> tell whether a trade opened or closed, was bought or sold, or was a hedge — so every directional read here is <b>provisional</b> `
+      + `(<i>provisional bullish/bearish, mixed, or direction-unknown</i>), never proof and never "smart money". `
+      + `It <b>cannot by itself create or boost a Today's Pick</b> — it only confirms, contradicts, or flags risk on an independent price setup.</div>`;
     optionsContainer.innerHTML =
       `<div id="of-summary" style="margin-bottom:14px"></div>`
+      + shadowBanner
       + `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">`
       + `<div style="display:inline-flex;border:1px solid #333;border-radius:6px;overflow:hidden">${vtab('of-v-ticker', '📊 By ticker', ofView === 'ticker')}${vtab('of-v-contracts', '📜 All contracts', ofView === 'contracts')}</div>`
       + `<div style="display:inline-flex;border:1px solid #333;border-radius:6px;overflow:hidden">${vtab('of-m-simple', '🔰 Simple', ofNovice)}${vtab('of-m-pro', '📊 Pro', !ofNovice)}</div>`
       + `<span class="dt-dim" style="font-size:0.74rem">${ofNovice ? 'Plain-English reads' : 'Full numbers & filters'}</span></div>`
       + `<details id="of-explainer" class="dt-note" style="margin-bottom:12px"${ofNovice ? ' open' : ''}><summary style="cursor:pointer;font-weight:600">📖 New to options flow? How to read this</summary>`
-      + `<div style="margin-top:8px;line-height:1.65;font-size:0.85rem">Big traders buy options to bet on (or hedge against) a move. We flag the unusually large ones, then group them by ticker so you see <i>net</i> positioning.`
+      + `<div style="margin-top:8px;line-height:1.65;font-size:0.85rem">We flag contracts trading unusually heavily today (volume vs open interest, plus estimated premium), then group them by ticker. Because the data is delayed and has no trade-level tape, we describe what the activity <i>could</i> mean — never what someone "did".`
       + `<ul style="margin:8px 0;padding-left:18px">`
-      + `<li><b>Calls</b> = a bet the stock goes <b style="color:var(--green)">UP</b>. <b>Puts</b> = a bet it goes <b style="color:var(--red)">DOWN</b>.</li>`
-      + `<li><b>Net bullish/bearish</b> = whether the day's call premium or put premium dominates for that ticker.</li>`
-      + `<li><b>🎯 Single-stock</b> flow is usually conviction; <b>🛡 Index/ETF</b> flow (SPY, QQQ…) is often just hedging — so we separate them.</li>`
-      + `<li><b>⚡ Sweep</b> = aggressive/urgent fill · <b>🧱 Block</b> = one big institutional trade.</li>`
-      + `<li><b>⬆ @ ask / ⬇ @ bid</b> = whether the last order <b>lifted the ask</b> (a buyer paying up — backs the bull/bear read) or <b>hit the bid</b> (a seller — fades it, could be writing/closing). It reads the last print, not the whole day — a tell, not proof.</li>`
-      + `<li><b>Breakeven & "needs +X%"</b> = how far the stock must actually move (and to what price) by expiry for the bet to make money — the real bar to clear, not just the direction.</li>`
-      + `<li><b>⚠ ER (earnings)</b> = the company reports earnings <i>before</i> these options expire. That's an <b>event bet</b>: options often lose value after earnings even if the stock moves your way (volatility "crush"). Tread carefully.</li>`
-      + `<li><b>Confluence badges</b> (🔥 Breakout · 👻 Ghost · 🎯 Top conviction · 🚀 Day-trade mover) appear when the same ticker is <i>also</i> flagged by one of the app's own screeners — the options flow and the screen agreeing is a stronger read than either alone. Tap a badge to jump to that screener.</li>`
-      + `<li><b>🧠 AI trade plan</b> reads each name's actual flow (not just call vs put) and gives a stock-specific plan: a <b>bias</b>, a <b>conviction</b> score (how <i>real/tradeable</i> the flow is, not how big), an <b>entry</b> trigger, an <b>invalidation</b> level, and the lower-risk way to play it. The <b>🧠 Desk read</b> at the top ranks the day's most tradeable flow. It's an AI read of the data — a clue, not advice.</li></ul>`
-      + `<b>Important:</b> this shows where money is <i>flowing</i>, not advice. We can't see whether they bought or sold, so treat it as a directional <i>lean</i> — and the Track Record below shows whether the signals actually predicted moves.</div></details>`
+      + `<li><b>Calls / puts are not automatically bullish / bearish.</b> A call can be sold and a put can be a hedge. We only call activity <b>provisional bullish/bearish</b> when the last trade printed at the <b>ask</b> on a reliable quote (aggressive buying); otherwise it's <b>direction unknown</b>.</li>`
+      + `<li><b>Provisional / mixed / unknown</b> = the honest directional state for a ticker. <i>Mixed</i> means bullish and bearish activity both show up; <i>unknown</i> means we can't defend a lean.</li>`
+      + `<li><b>🎯 Single-stock</b> activity may reflect conviction; <b>🛡 Index/ETF</b> activity (SPY, QQQ…) is often hedging — so we separate them.</li>`
+      + `<li><b>High-turnover contract</b> = volume far above open interest (new activity, not confirmed "sweep"). <b>Large estimated notional</b> = a big estimated dollar size (not a confirmed institutional "block"). These are size heuristics, not tape.</li>`
+      + `<li><b>⬆ @ ask / ⬇ @ bid</b> = where the <i>last</i> print landed in the spread. @ ask supports aggressive buying; @ bid is <b>unknown</b> (could be selling, closing, a spread, or liquidity). One print, not the whole day.</li>`
+      + `<li><b>Suspected spread / multi-leg</b> = coordinated contracts that look like a spread or combo. We mark these <b>ambiguous</b> rather than force a direction.</li>`
+      + `<li><b>Breakeven & "needs +X%"</b> = how far the stock must move (and to what price) by expiry for a simple long option to pay — the real bar, shown for context.</li>`
+      + `<li><b>⚠ ER (earnings)</b> = the company reports earnings <i>before</i> these options expire — an <b>event bet</b> where options can lose value even if the stock moves your way (volatility "crush"). Tread carefully.</li>`
+      + `<li><b>Confluence badges</b> appear when the same ticker is <i>also</i> flagged by one of the app's own price/volume screeners — agreement is a stronger read than options activity alone. Tap a badge to jump there.</li>`
+      + `<li><b>🧠 AI read</b> explains the activity in plain language — it does not invent levels, catalysts, or a probability, and it cannot promote this overlay to a live signal.</li></ul>`
+      + `<b>Important:</b> this is a <b>research/shadow</b> overlay on <b>delayed</b> data — a provisional confirmation layer, not advice and not a standalone signal. The Track Record below shows whether the activity actually preceded moves.</div></details>`
       + `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">`
       + `<select id="of-sent" style="${OF_SEL}"><option value="">All sentiment</option><option value="bullish">▲ Bullish</option><option value="bearish">▼ Bearish</option></select>`
-      + `<select id="of-type" style="${OF_SEL}"><option value="">All flow types</option><option value="sweep">⚡ Sweeps</option><option value="block">🧱 Blocks</option><option value="large">💰 Large</option></select>`
+      + `<select id="of-type" style="${OF_SEL}"><option value="">All activity types</option><option value="sweep">⚡ High-turnover</option><option value="block">🧱 Large notional</option><option value="large">💰 Premium activity</option></select>`
       + `<input id="of-ticker" placeholder="Filter ticker (e.g. NVDA)" style="${OF_SEL};width:170px">`
-      + `<select id="of-prem" style="${OF_SEL}"><option value="0">Any premium</option><option value="100000">≥ $100k</option><option value="250000">≥ $250k</option><option value="1000000">≥ $1M (block-size)</option></select>`
+      + `<select id="of-prem" style="${OF_SEL}"><option value="0">Any premium</option><option value="100000">≥ $100k</option><option value="250000">≥ $250k</option><option value="1000000">≥ $1M (est. notional)</option></select>`
       + (ofNovice ? '' :
           `<select id="of-money" style="${OF_SEL}"><option value="">All moneyness</option><option value="OTM">OTM (directional)</option><option value="ATM">ATM</option><option value="ITM">ITM</option></select>`
         + `<select id="of-aggr" style="${OF_SEL}"><option value="">Any fill</option><option value="ask">⬆ Bought at ask</option><option value="bid">⬇ Sold at bid</option></select>`
@@ -1296,14 +1310,22 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const beNote = (tc && tc.breakeven != null && tc.moveToBePct != null)
       ? ` Its biggest bet (the $${esc(String(tc.strike))} ${tc.side === 'call' ? 'calls' : 'puts'}) needs <b>${tc.moveToBePct > 0 ? '+' : ''}${tc.moveToBePct}%</b> to $${esc(String(tc.breakeven))} by ${esc(tc.expiry || 'expiry')} to break even.`
       : '';
-    const lean = r.net === 'bullish' ? 'bullish' : r.net === 'bearish' ? 'bearish' : null;
+    // HONEST aggregate state (from the server): provisional bullish/bearish, mixed, or
+    // direction-unknown — NOT a raw call/put "bullish grade".
+    const dsLabel = r.directionLabel || (r.directionState === 'PROVISIONAL_BULLISH' ? 'Provisional bullish'
+      : r.directionState === 'PROVISIONAL_BEARISH' ? 'Provisional bearish'
+      : r.directionState === 'MIXED' ? 'Mixed' : 'Direction unknown');
+    const actionable = r.directionState === 'PROVISIONAL_BULLISH' || r.directionState === 'PROVISIONAL_BEARISH';
     // Stock-specific Fable trade plan (both modes). When present it supersedes the
     // generic "what you could do" template; fall back to that only without an AI plan.
     const aiPlan = ofAiPlanHTML(r.ticker);
+    const unknownNote = r.unknownShare != null && r.unknownShare >= 0.5
+      ? ` Most of the activity is direction-unknown (${Math.round(r.unknownShare * 100)}%).` : '';
+    const mlNote = r.suspectedMultiLeg ? ` ${r.suspectedMultiLeg} contract${r.suspectedMultiLeg > 1 ? 's' : ''} look like part of a spread/multi-leg order.` : '';
     const narrative = ofNovice
-      ? `<div class="cx-narrative" style="margin-top:8px">💡 ${esc(r.ticker)}'s options activity grades <b style="color:${gcol}">${r.grade} (${r.score > 0 ? '+' : ''}${r.score})</b> — ${ofUsd(r.callPremium)} in call (bullish) premium vs ${ofUsd(r.putPremium)} in puts, across ${r.contracts.length} unusual trade${r.contracts.length > 1 ? 's' : ''}.${beNote}</div>`
+      ? `<div class="cx-narrative" style="margin-top:8px">💡 ${esc(r.ticker)}'s unusual options activity reads <b style="color:${gcol}">${dsLabel}</b> on delayed data — ${ofUsd(r.callPremium)} in call vs ${ofUsd(r.putPremium)} in put estimated premium, across ${r.contracts.length} contract${r.contracts.length > 1 ? 's' : ''}. Calls/puts aren't automatically bullish/bearish; this is a provisional lean, not proof.${unknownNote}${mlNote}${beNote}</div>`
       : '';
-    const genericAction = (ofNovice && lean && !aiPlan) ? flowAction(lean) : '';
+    const genericAction = (ofNovice && !aiPlan) ? flowAction({ directionState: r.directionState, suspectedMultiLeg: r.suspectedMultiLeg }) : '';
     const body = `${narrative}${flowEarningsWarn(r)}${aiPlan}${genericAction}`;
     const erChip = r.earningsBeforeExpiry ? `<span class="cx-tierbadge" style="color:var(--amber,#f0a832);border-color:currentColor" title="Earnings report lands before these options expire — an event/IV-crush risk">⚠ ER ${r.earningsInDays}d</span>` : '';
     // Baseline overlay: flag names whose option volume is abnormally high vs their OWN
@@ -1329,7 +1351,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
 
   function ofUsd(n) { return n >= 1e6 ? '$' + (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? '$' + Math.round(n / 1e3) + 'k' : '$' + n; }
-  const OF_KIND = { sweep: '⚡ Sweep', block: '🧱 Block', large: '💰 Large' };
+  const OF_KIND = { sweep: '⚡ High-turnover', block: '🧱 Large notional', large: '💰 Premium activity' };
   // Aggressor of the last print: at-ask (bought, ⬆) confirms the call=bullish /
   // put=bearish lean; at-bid (sold, ⬇) fades it. mid/none → no chip.
   function ofAggrChip(s) {
@@ -1352,21 +1374,26 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const col = pct >= 0 ? 'var(--green)' : 'var(--red)';
     return `<span style="color:${col}">${pct > 0 ? '+' : ''}${pct}%</span>`;
   }
-  // Plain-English read of one signal, built deterministically from its fields.
+  // Plain-English read of one signal, built deterministically — HONEST about what
+  // delayed, tape-less chain data can and cannot establish (no "someone bet X").
   function flowPlainEnglish(s) {
     const optType = s.side === 'call' ? 'call options' : 'put options';
-    const dir = s.sentiment === 'bullish' ? 'rises above' : 'falls below';
-    const kindNote = s.kind === 'sweep' ? 'Filled as a sweep — aggressive, urgent buying across exchanges.'
-      : s.kind === 'block' ? 'A single large block — likely an institution.'
-        : 'A large premium trade.';
-    const fresh = s.volOi ? ` Volume was ${s.volOi}× the prior open interest, so it's a brand-new position.` : '';
-    const aggr = s.aggressor === 'ask' ? ` The last order lifted the ask (buyer-initiated) — that backs this read.`
-      : s.aggressor === 'bid' ? ` The last order hit the bid (someone sold) — that cuts against it.` : '';
-    // What actually has to happen for this bet to pay (the most actionable line).
+    const kindNote = s.kind === 'sweep' ? 'Volume ran far above open interest — new activity (not a confirmed sweep).'
+      : s.kind === 'block' ? 'A large estimated dollar size (not a confirmed institutional block).'
+        : 'A large estimated premium.';
+    // Honest directional state — never "calls = bullish".
+    const ds = s.directionState;
+    const dirLine = ds === 'PROVISIONAL_BULLISH' ? ' The last print hit the <b>ask</b> on a reliable quote, so this leans <b>provisionally bullish</b> — buyers paying up. It could still be a hedge or spread.'
+      : ds === 'PROVISIONAL_BEARISH' ? ' The last print hit the <b>ask</b> on a reliable quote, so this leans <b>provisionally bearish</b>. It could still be a hedge or spread.'
+      : s.suspectedMultiLeg ? ' This looks like part of a <b>spread / multi-leg</b> order, so the direction is <b>ambiguous</b>.'
+      : ' We <b>can\'t tell the direction</b> from this — it may be buying, selling, closing, hedging, or a spread.';
+    const fresh = s.newOnZeroOi ? ' There was no prior open interest, so today\'s volume is entirely new.'
+      : (s.volOi ? ` Volume was ${s.volOi}× the prior open interest.` : '');
+    // What a simple long option would need (context only — most activity isn't a naked long).
     const be = (s.breakeven != null && s.moveToBePct != null)
-      ? ` For it to pay, ${esc(s.ticker)} must move <b>~${s.moveToBePct > 0 ? '+' : ''}${s.moveToBePct}%</b> to <b>$${esc(String(s.breakeven))}</b> (breakeven) by ${esc(s.expiry || 'expiry')}.`
+      ? ` For a simple long ${s.side} to pay, ${esc(s.ticker)} would need to move <b>~${s.moveToBePct > 0 ? '+' : ''}${s.moveToBePct}%</b> to <b>$${esc(String(s.breakeven))}</b> (breakeven) by ${esc(s.expiry || 'expiry')}.`
       : '';
-    return `Someone spent ~${ofUsd(s.premium)} on ${esc(s.ticker)} ${optType}, betting it ${dir} $${esc(String(s.strike))} by ${esc(s.expiry || 'expiry')} (${s.dte} days out). ${kindNote}${fresh}${aggr}${be}`;
+    return `~${ofUsd(s.premium)} (estimated) of ${esc(s.ticker)} ${optType} at the $${esc(String(s.strike))} strike traded unusually heavily, expiring ${esc(s.expiry || 'expiry')} (${s.dte} days out). ${kindNote}${dirLine}${fresh}${be}`;
   }
   // The actionable warning + plain "what you could do", honest about risk. Shared
   // by contract and ticker cards. earnings-before-expiry is the big one.
@@ -1374,12 +1401,17 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!s.earningsBeforeExpiry || s.earningsInDays == null) return '';
     return `<div class="of-warn">⚠ <b>Earnings in ${s.earningsInDays}d</b> — before this option expires. That makes it an <b>event bet</b>: the option can lose value even if the stock moves your way, because volatility gets crushed after the report. Beginners: be very careful here.</div>`;
   }
-  function flowAction(sentiment) {
-    const view = sentiment === 'bearish' ? 'bearish' : 'bullish';
-    const simpler = sentiment === 'bearish'
-      ? 'the simpler, lower-risk plays are to avoid/trim the stock or wait — shorting and buying puts both decay over time'
-      : 'the simpler, lower-risk way to play it is owning the shares — options are leveraged and expire worthless if the move is late';
-    return `<div class="of-action">💡 <b>What you could do:</b> this is a <b>${view}</b> lean. If you agree, ${simpler}. Treat the flow as a clue, not a signal to buy the same option — confirm with the Track Record below and your own chart.</div>`;
+  function flowAction(s) {
+    // Accepts a signal (honest directionState) OR a legacy sentiment string.
+    const ds = typeof s === 'object' && s ? s.directionState : (s === 'bearish' ? 'PROVISIONAL_BEARISH' : 'PROVISIONAL_BULLISH');
+    if (ds === 'DIRECTION_UNKNOWN' || ds === 'MIXED' || (typeof s === 'object' && s && s.suspectedMultiLeg)) {
+      return `<div class="of-action">💡 <b>What you could do:</b> the direction here is <b>${ds === 'MIXED' ? 'mixed' : 'unknown'}</b>, so this activity isn't a reason to act on its own. Use it only to sanity-check a view you already hold from price/news, and confirm with the Track Record below.</div>`;
+    }
+    const view = ds === 'PROVISIONAL_BEARISH' ? 'provisional bearish' : 'provisional bullish';
+    const simpler = ds === 'PROVISIONAL_BEARISH'
+      ? 'if your own price read agrees, the lower-risk responses are to avoid/trim or wait'
+      : 'if your own price read agrees, the lower-risk expression is owning the shares — long options decay if the move is late';
+    return `<div class="of-action">💡 <b>What you could do:</b> this is a <b>${view}</b> lean on delayed data, not a signal to buy the same option — ${simpler}. Confirm with the Track Record below and your own chart.</div>`;
   }
   function optionsFlowCard(s) {
     const bull = s.sentiment === 'bullish', col = bull ? 'var(--green)' : 'var(--red)';
@@ -1393,7 +1425,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // Body: novice → plain-English read + earnings warning + what-you-could-do;
     // pro → just the earnings warning (technical lines live in the header).
     const body = ofNovice
-      ? `<div class="cx-narrative" style="margin-top:8px">💡 ${flowPlainEnglish(s)}</div>${flowEarningsWarn(s)}${flowAction(s.sentiment)}`
+      ? `<div class="cx-narrative" style="margin-top:8px">💡 ${flowPlainEnglish(s)}</div>${flowEarningsWarn(s)}${flowAction(s)}`
       : flowEarningsWarn(s);
     return `<div class="cx-card" style="border-left:3px solid ${col}">`
       + `<div class="cx-top"><div>`

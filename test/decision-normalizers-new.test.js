@@ -76,46 +76,64 @@ const optionsflow = {
   ],
 };
 
-test('fromOptionsFlow: bearish positioning becomes a SHORT, bullish a LONG', () => {
-  const out = N.fromOptionsFlow(optionsflow);
+// ── SAFETY CONTRACT: options flow is a SHADOW overlay ───────────────────────
+// The live board normalizer must emit NOTHING while `optionsflow` maturity is 'shadow'
+// (its registered state). Free delayed chains cannot establish trade-level direction,
+// so mechanical call=bullish / put=bearish positioning may neither originate nor boost a
+// live trade. This is the single most important guarantee in this file.
+test('SAFETY: fromOptionsFlow emits no live signals while optionsflow is shadow', () => {
+  assert.deepStrictEqual(N.fromOptionsFlow(optionsflow), [],
+    'a shadow overlay must contribute zero standalone signals to the live board');
+});
+
+test('SAFETY: the gate is what blocks it — optionsflow is registered non-production', () => {
+  const { isTradeEligible, statusOf } = require('../lib/strategy-gate');
+  assert.strictEqual(statusOf('optionsflow'), 'shadow');
+  assert.strictEqual(isTradeEligible('optionsflow'), false);
+});
+
+// The RETAINED mapping logic (mapOptionsFlowRows) is still fully tested so promotion
+// (flip maturity → production) needs no rewrite. It is deliberately NOT wired to the
+// live board — only fromOptionsFlow (gated) is.
+test('mapOptionsFlowRows: bearish positioning becomes a SHORT, bullish a LONG', () => {
+  const out = N.mapOptionsFlowRows(optionsflow);
   assert.strictEqual(out.find(s => s.ticker === 'MU').side, 'short');
   assert.strictEqual(out.find(s => s.ticker === 'BULL').side, 'long');
 });
 
-test('fromOptionsFlow: INDEX rows are excluded — SPY is the tape, not a stock pick', () => {
-  const out = N.fromOptionsFlow(optionsflow);
+test('mapOptionsFlowRows: INDEX rows are excluded — SPY is the tape, not a stock pick', () => {
+  const out = N.mapOptionsFlowRows(optionsflow);
   assert.ok(!out.some(s => s.ticker === 'SPY'));
 });
 
-test('fromOptionsFlow: emits the optionsPositioning family — the point of adding it', () => {
-  // This is the first genuinely NON-PRICE evidence family on the board. If it maps to
-  // anything price-derived, adding the source buys nothing the screener did not have.
-  const [s] = N.fromOptionsFlow(optionsflow);
+test('mapOptionsFlowRows: emits the optionsPositioning family — a non-price family', () => {
+  const [s] = N.mapOptionsFlowRows(optionsflow);
   assert.deepStrictEqual(s.evidenceFamilies, ['optionsPositioning']);
 });
 
-test('fromOptionsFlow: confidence scales with conviction magnitude, not direction', () => {
-  const out = N.fromOptionsFlow(optionsflow);
+test('mapOptionsFlowRows: confidence scales with conviction magnitude, not direction', () => {
+  const out = N.mapOptionsFlowRows(optionsflow);
   const mu = out.find(s => s.ticker === 'MU');     // |score| 45
   const bull = out.find(s => s.ticker === 'BULL'); // |score| 80
   assert.ok(bull.rawConfidence > mu.rawConfidence, 'a stronger read must carry more confidence');
 });
 
-test('fromOptionsFlow: carries NO levels — positioning is evidence, not a trade plan', () => {
-  const [s] = N.fromOptionsFlow(optionsflow);
+test('mapOptionsFlowRows: carries NO levels — positioning is evidence, not a trade plan', () => {
+  const [s] = N.mapOptionsFlowRows(optionsflow);
   assert.strictEqual(s.entry, undefined);
   assert.strictEqual(s.target, undefined);
 });
 
-test('fromOptionsFlow: a flat/neutral read is not a signal', () => {
-  const out = N.fromOptionsFlow({ byTicker: [{ ticker: 'MEH', isIndex: false, score: 3, net: 'neutral', underlying: 10 }] });
+test('mapOptionsFlowRows: a flat/neutral read is not a signal', () => {
+  const out = N.mapOptionsFlowRows({ byTicker: [{ ticker: 'MEH', isIndex: false, score: 3, net: 'neutral', underlying: 10 }] });
   assert.strictEqual(out.length, 0);
 });
 
-test('fromOptionsFlow: empty / malformed input never throws', () => {
+test('fromOptionsFlow + mapOptionsFlowRows: empty / malformed input never throws', () => {
   assert.deepStrictEqual(N.fromOptionsFlow(null), []);
-  assert.deepStrictEqual(N.fromOptionsFlow({}), []);
-  assert.deepStrictEqual(N.fromOptionsFlow({ byTicker: [null] }), []);
+  assert.deepStrictEqual(N.mapOptionsFlowRows(null), []);
+  assert.deepStrictEqual(N.mapOptionsFlowRows({}), []);
+  assert.deepStrictEqual(N.mapOptionsFlowRows({ byTicker: [null] }), []);
 });
 
 // ── the merge SAFETY guard ──────────────────────────────────────────────────
@@ -152,7 +170,10 @@ test('MERGE: options positioning adds an INDEPENDENT family to a screener row', 
     source: 'screener', ticker: 'BULL', horizon: 'swing', side: 'long', price: 40,
     entry: 40, stop: 37, target: 46, rawConfidence: 70, evidenceFamilies: ['priceTrend'],
   };
-  const [opt] = N.fromOptionsFlow(optionsflow).filter(s => s.ticker === 'BULL');
+  // Uses the retained mapping (mapOptionsFlowRows) — this exercises the merge mechanics
+  // that would apply once optionsflow is promoted; the live path (fromOptionsFlow) stays
+  // gated to [] while shadow, verified above.
+  const [opt] = N.mapOptionsFlowRows(optionsflow).filter(s => s.ticker === 'BULL');
   const merged = D.mergeSignals([screenerRow, opt]);
   assert.strictEqual(merged.length, 1, 'same ticker+horizon must merge into one row');
   const fams = merged[0].evidenceFamilies;
