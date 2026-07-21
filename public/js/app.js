@@ -3564,11 +3564,148 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     } catch { const c = document.getElementById('pulse-refine-chip'); if (c) c.innerHTML = ''; }
     finally { pulseRefining = false; }
   }
+  // ── Vocabularies (derived STATES from the server, rendered as visual chips) ──────────
+  // Action state = the single most useful research label (never a buy/sell order).
+  const PULSE_ACTION = {
+    'INVESTIGATE NOW':        ['🔎', '#22c55e', 'Fresh, credible, and price has not fully reacted — worth a look now.'],
+    'EMERGING — WATCH':       ['🌱', '#84cc16', 'Early and gaining attention — track it, do not chase yet.'],
+    'CONFIRMED MOMENTUM':     ['✅', '#16a34a', 'Attention, price and volume agree — the move is real and underway.'],
+    'WAIT FOR ENTRY':         ['⏳', '#f59e0b', 'Interesting but stretched — wait for structure / a pullback.'],
+    'TOO EXTENDED':           ['🚫', '#ef4444', 'Already ran hard (well above its ATR mean) — chasing is poor R:R.'],
+    'CROWDED — DO NOT CHASE': ['🫧', '#ef4444', 'Everyone already knows — crowded, high fade risk.'],
+    'CONTRARIAN WATCH':       ['🎯', '#a855f7', 'There is an explicit, testable contrarian thesis here.'],
+    'CONTEXT ONLY':           ['🗺️', '#9ca3af', 'Useful background — not a single-stock trade.'],
+    'UNVERIFIED':             ['❓', '#eab308', 'No credible independent source yet — treat as a rumour.'],
+    'STALE':                  ['🕰️', '#9ca3af', 'This snapshot is old — refresh before acting.'],
+  };
+  const PULSE_LIFE = {
+    New: ['🆕', 'Just appeared'], Emerging: ['🌱', 'Spreading, early'], Building: ['📶', 'Gaining steam'],
+    Crowded: ['🫧', 'Consensus / extended'], Fading: ['❄️', 'Losing momentum'],
+  };
+  const PULSE_EVID = {
+    'Verified':            ['✅', 'var(--green)', '3+ independent sources'],
+    'Multi-source':        ['🔗', '#60a5fa', '2+ independent sources'],
+    'Single-source':       ['◐', '#f59e0b', 'One source only'],
+    'Search-summary only': ['🔎', '#9ca3af', 'Based on a search summary — no direct source metadata'],
+    'Conflicted':          ['⚠️', '#ef4444', 'Sources disagree on the facts'],
+    'Unverified':          ['❓', '#eab308', 'No credible source'],
+  };
   const PULSE_VEL = { exploding: ['🔥', '#ef4444', 'Exploding'], rising: ['📈', '#f59e0b', 'Rising'], steady: ['➡️', '#9ca3af', 'Steady'], cooling: ['❄️', '#60a5fa', 'Cooling'] };
   const PULSE_SENT = { bullish: ['var(--green)', '▲ Bullish'], bearish: ['var(--red)', '▼ Bearish'], mixed: ['var(--text-dim)', '▬ Mixed'] };
-  // How positioned the crowd already is — the contrarian lens. "crowded"/"capitulation"
-  // are the fade-risk buckets this desk treats skeptically (social sentiment is contrarian).
   const PULSE_CROWD = { early: ['🌱', 'var(--green)', 'Early'], building: ['📶', '#f59e0b', 'Building'], crowded: ['🫧', '#ef4444', 'Crowded'], capitulation: ['💥', '#a855f7', 'Capitulation'] };
+  const PULSE_FRESH = {
+    live: ['🟢', 'var(--green)', 'Live'], stale: ['🟠', '#f59e0b', 'Stale'],
+    'very-stale': ['🔴', '#ef4444', 'Very stale'], cached: ['🟢', 'var(--green)', 'Cached'], unknown: ['⚪', '#9ca3af', ''],
+  };
+
+  // Which lifecycle section a card belongs in.
+  function pulseSection(it) {
+    if (it.category === 'macro') return 'macro';
+    const a = it.actionState;
+    if (a === 'CONTRARIAN WATCH') return 'contrarian';
+    if (a === 'CROWDED — DO NOT CHASE' || a === 'TOO EXTENDED' || it.lifecycleState === 'Crowded') return 'crowded';
+    if (a === 'CONFIRMED MOMENTUM') return 'confirmed';
+    if (a === 'UNVERIFIED') return 'unverified';
+    if (it.lifecycleState === 'Fading' || a === 'CONTEXT ONLY' || a === 'STALE') return 'context';
+    return 'emerging';
+  }
+  const PULSE_SECTIONS = [
+    ['emerging',   '🌱 Emerging now', 'Fresh, credibly-sourced, accelerating — and not yet fully priced. The highest-value lane for momentum traders.'],
+    ['confirmed',  '✅ Confirmed momentum', 'Attention, price and volume agree. (Confirmation ≠ three flavours of the same recent price move.)'],
+    ['crowded',    '🫧 Crowded & extended', 'Heavily watched and already stretched — the R:R of chasing is poor. Caution, not a short signal.'],
+    ['contrarian', '🎯 Contrarian watch', 'Only names with an explicit, testable contrarian thesis.'],
+    ['macro',      '🌐 Macro & market-wide', 'Rates, inflation, commodities, geopolitics, index-level themes — not forced into a ticker.'],
+    ['context',    '🗺️ Context & fading', 'Background and cooling narratives.'],
+    ['unverified', '❓ Unverified', 'Circulating but not yet backed by a credible independent source — treat as rumour.'],
+  ];
+
+  const pctChip = (label, v, good) => v == null ? '' :
+    `<span class="pc-metric" title="${label}">${label} <b style="color:${v > 0 ? 'var(--green)' : v < 0 ? 'var(--red)' : 'var(--text-dim)'}">${v > 0 ? '+' : ''}${v}${good ? '×' : '%'}</b></span>`;
+
+  function pulseSourcesHTML(it) {
+    const list = (it.sourceList || []).filter(s => s && s.url);
+    if (list.length) {
+      return `<div class="pc-sources"><b>Sources (real links):</b><ul>` + list.map(s =>
+        `<li><a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title || s.domain || s.url)}</a>` +
+        `<span class="pc-src-dom">${esc(s.domain || '')}${s.publishedAt ? ' · ' + esc(s.publishedAt) : ''}${s.independent === false ? ' · echo' : ''}</span></li>`).join('') +
+        `</ul></div>`;
+    }
+    // No structured source metadata — say so honestly, never imply a platform was scanned.
+    return `<div class="pc-sources pc-nosrc">Source evidence unavailable — based on search summary.${it.sources ? ' <span class="pc-src-dom">Reported trending on: ' + esc(it.sources) + '</span>' : ''}</div>`;
+  }
+
+  function pulseProHTML(it) {
+    const e = it.enrichment;
+    const enrich = e ? `<div class="pc-enrich"><b>Price context</b> <span class="pc-measured" title="Measured from daily bars at snapshot time (point-in-time, not live)">measured · point-in-time</span><br>
+        ${pctChip('day', e.dayReturn)} ${pctChip('3-sess', e.ret3)} ${pctChip('gap', e.gapPct)}
+        ${e.atrExt != null ? `<span class="pc-metric" title="How many ATRs above the 20-session mean — high = already extended">stretch <b style="color:${e.atrExt >= 2.5 ? 'var(--red)' : e.atrExt >= 1.5 ? '#f59e0b' : 'var(--green)'}">${e.atrExt} ATR</b></span>` : ''}
+        ${e.relVol != null ? pctChip('rel-vol', e.relVol, true) : ''}</div>` : '';
+    const sent = PULSE_SENT[it.sentiment] || PULSE_SENT.mixed;
+    const cw = it.crowding && PULSE_CROWD[it.crowding];
+    const vel = PULSE_VEL[it.velocity] || PULSE_VEL.steady;
+    return `<details class="pc-pro"><summary>Pro details</summary>
+      <div class="pc-pro-body">
+        ${enrich}
+        <div class="pc-inferred"><b>Attention</b> <span class="pc-infnote" title="LLM estimates — not measured counts">inferred</span><br>
+          <span class="pc-metric" style="color:${sent[0]}">${sent[1]}</span>
+          <span class="pc-metric" title="Editorial prominence — an LLM estimate of how widely discussed, NOT a mention count">prominence ${it.popularity}/100</span>
+          <span class="pc-metric" style="color:${vel[1]}" title="Inferred buzz trend">buzz ${vel[2]}</span>
+          ${cw ? `<span class="pc-metric" style="color:${cw[1]}">crowd: ${cw[2]}</span>` : ''}
+          <span class="pc-metric" title="Distinct independent domains cited">indep sources ${it.independentSources || 0}</span></div>
+        ${it.contrarian ? `<div class="pc-line"><b>🎯 Contrarian read:</b> ${esc(it.contrarian)}</div>` : ''}
+        ${it.invalidation ? `<div class="pc-line"><b>❌ Invalidation:</b> ${esc(it.invalidation)}</div>` : ''}
+        ${it.horizon ? `<div class="pc-line"><b>⏱ Horizon:</b> ${esc(it.horizon)}</div>` : ''}
+        ${it.idea ? `<div class="pc-line"><b>Detail:</b> ${esc(it.idea)}</div>` : ''}
+        ${pulseSourcesHTML(it)}
+      </div></details>`;
+  }
+
+  function pulseCard(it) {
+    const [ae, ac, atip] = PULSE_ACTION[it.actionState] || PULSE_ACTION['CONTEXT ONLY'];
+    const [le, ll] = PULSE_LIFE[it.lifecycleState] || PULSE_LIFE.Emerging;
+    const [ee, ecol, etip] = PULSE_EVID[it.evidenceState] || PULSE_EVID['Search-summary only'];
+    const tickers = (it.tickers || []).map(t => `<span class="pulse-tk">$${esc(t)}</span>`).join(' ')
+      || (it.category === 'macro' ? '<span class="pulse-macrotag">macro theme</span>' : '');
+    return `<div class="pulse-card" id="pulse-card-${it.rank}" data-section="${pulseSection(it)}">
+      <div class="pc-head">
+        <span class="pc-action" style="background:${ac}22;color:${ac};border-color:${ac}66" title="${atip}">${ae} ${esc(it.actionState)}</span>
+        <span class="pc-life" title="Attention lifecycle stage">${le} ${esc(it.lifecycleState)}</span>
+        <span class="pc-evid" style="color:${ecol}" title="${etip}">${ee} ${esc(it.evidenceState)}</span>
+      </div>
+      <div class="pc-title">${esc(it.headline)}</div>
+      ${tickers ? `<div class="pc-tks">${tickers}</div>` : ''}
+      ${it.whatChanged ? `<div class="pc-changed"><b>What changed:</b> ${esc(it.whatChanged)}</div>` : ''}
+      ${it.whyItMatters ? `<div class="pc-why"><b>Why it matters:</b> ${esc(it.whyItMatters)}</div>` : (it.whyMoves ? `<div class="pc-why"><b>Why it matters:</b> ${esc(it.whyMoves)}</div>` : '')}
+      ${it.traderRead ? `<div class="pc-trader"><b>Trader read:</b> ${esc(it.traderRead)}</div>` : ''}
+      ${it.noviceTranslation ? `<div class="pc-novice">🔰 <b>Plain English:</b> ${esc(it.noviceTranslation)}</div>` : ''}
+      ${it.primaryRisk ? `<div class="pc-risk">⚠️ <b>Risk:</b> ${esc(it.primaryRisk)}</div>` : (it.caution ? `<div class="pc-risk">⚠️ ${esc(it.caution)}</div>` : '')}
+      ${pulseProHTML(it)}
+    </div>`;
+  }
+
+  // "The tape in 20 seconds" — up to four one-line reads that link to their card.
+  function pulseTape(items) {
+    const tiles = [];
+    const link = (it, label, val, cls) => it ? `<a class="pt-tile ${cls}" href="#pulse-card-${it.rank}"><span class="pt-lbl">${label}</span><span class="pt-val">${esc(val)}</span></a>` : '';
+    const dominant = items[0];
+    const emerging = items.find(x => (x.lifecycleState === 'Emerging' || x.lifecycleState === 'New') && (x.evidenceState === 'Verified' || x.evidenceState === 'Multi-source'))
+      || items.find(x => x.lifecycleState === 'Emerging' || x.lifecycleState === 'New');
+    const accel = items.filter(x => x.velocity === 'exploding').sort((a, b) => b.popularity - a.popularity)[0];
+    const crowd = items.find(x => x.actionState === 'TOO EXTENDED' || x.actionState === 'CROWDED — DO NOT CHASE');
+    tiles.push(link(dominant, '🏆 Dominant narrative', dominant ? dominant.headline : '', 'pt-dom'));
+    tiles.push(link(emerging, '🌱 Newest credible catalyst', emerging ? emerging.headline : '', 'pt-emg'));
+    tiles.push(link(accel, '🔥 Strongest acceleration', accel ? accel.headline : '', 'pt-acc'));
+    tiles.push(link(crowd, '🫧 Biggest chase risk', crowd ? crowd.headline : '', 'pt-crw'));
+    return tiles.filter(Boolean).join('');
+  }
+
+  function pulseRecentlyChanged(list) {
+    if (!list || !list.length) return '';
+    const rows = list.slice(0, 8).map(t =>
+      `<li><b>${esc(t.headline || '')}</b> <span class="pr-move">${esc(t.from || '·')} → ${esc(t.to || '')}</span></li>`).join('');
+    return `<details class="pulse-recent"><summary>🔄 Recently changed (${list.length})</summary><ul>${rows}</ul></details>`;
+  }
+
   function renderPulse(p) {
     const el = document.getElementById('pulse-container');
     if (!el) return;
@@ -3578,40 +3715,45 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     }
     const gt = document.getElementById('pulse-gen-time');
     if (gt && p.generatedAt) gt.textContent = `· updated ${p.ageMins != null && p.ageMins < 90 ? (p.ageMins + 'm ago') : new Date(p.generatedAt).toLocaleString()}`;
-    const bars = n => { const f = Math.round((n / 100) * 10); return '▮'.repeat(f) + '▯'.repeat(10 - f); };
-    const card = it => {
-      const [ve, vc, vl] = PULSE_VEL[it.velocity] || PULSE_VEL.steady;
-      const [sc, sl] = PULSE_SENT[it.sentiment] || PULSE_SENT.mixed;
-      const tickers = (it.tickers || []).map(t => `<span class="pulse-tk">$${esc(t)}</span>`).join(' ');
-      const cw = it.crowding && PULSE_CROWD[it.crowding];
-      const crowd = cw ? `<span class="pulse-crowd" style="color:${cw[1]}" title="How positioned the crowd already is — ‘crowded’/‘capitulation’ carry fade risk">${cw[0]} ${cw[2]}</span>` : '';
-      const contra = it.contrarian ? `<div class="pulse-contra"><b>🎯 Contrarian read:</b> ${esc(it.contrarian)}</div>` : '';
-      return `<div class="pulse-card">
-        <div class="pulse-top">
-          <span class="pulse-rank">#${it.rank}</span>
-          <span class="pulse-head"><b>${esc(it.headline)}</b></span>
-          <span class="pulse-vel" style="color:${vc}" title="How fast this is trending">${ve} ${vl}</span>
-        </div>
-        <div class="pulse-meta">
-          ${tickers ? `<span class="pulse-tks">${tickers}</span>` : ''}
-          <span class="pulse-sent" style="color:${sc}">${sl}</span>
-          ${crowd}
-          <span class="pulse-pop" title="Popularity ${it.popularity}/100"><span class="pulse-bars">${bars(it.popularity)}</span> ${it.popularity}</span>
-        </div>
-        <div class="pulse-idea">${esc(it.idea)}</div>
-        <div class="pulse-why"><b>Why it matters:</b> ${esc(it.whyMoves)}</div>
-        ${contra}
-        ${it.caution ? `<div class="pulse-caution">⚠️ ${esc(it.caution)}</div>` : ''}
-        <div class="pulse-src"><b>Trending on:</b> ${esc(it.sources)}</div>
-      </div>`;
-    };
-    const refined = p.stage === 'refined';
-    const stamp = refined
-      ? '<span class="pulse-refined-tag" title="De-duplicated, re-ranked and given a contrarian read by Fable 5">🧠 Fable-refined</span>'
-      : '<span id="pulse-refine-chip"></span>';
+
+    const items = p.items;
+    const [fe, fc, fl] = PULSE_FRESH[p.freshness] || PULSE_FRESH.unknown;
+    const ageStr = p.ageMins == null ? '' : (p.ageMins >= 120 ? Math.round(p.ageMins / 60) + 'h' : p.ageMins + 'm') + ' old';
+    const lkgStr = p.lastKnownGood ? ' · showing last-known-good' : '';
+    const isStale = p.freshness === 'stale' || p.freshness === 'very-stale' || !!p.stale;
+    const staleWarn = isStale
+      ? `<span class="pulse-stalewarn">${fe} ${fl} snapshot${ageStr ? ' · ' + ageStr : ''}${lkgStr} — refresh before acting</span>`
+      : '';
+    const feedState = p.stage === 'refined' ? '🧠 Fable-refined' : (p.refineFailed ? '📝 draft (refine unavailable)' : '<span id="pulse-refine-chip">📝 draft — sharpening…</span>');
+
+    // Filter chips (section-level show/hide).
+    const present = new Set(items.map(pulseSection));
+    const chips = [['all', 'All']].concat(PULSE_SECTIONS.filter(s => present.has(s[0])).map(s => [s[0], s[1].replace(/^\S+\s/, '')]))
+      .map(([k, lbl]) => `<button class="pulse-fchip${k === 'all' ? ' active' : ''}" data-filter="${k}">${esc(lbl)}</button>`).join('');
+
+    const sectionsHTML = PULSE_SECTIONS.map(([key, title, desc]) => {
+      const secItems = items.filter(it => pulseSection(it) === key);
+      if (!secItems.length) return '';
+      return `<div class="pulse-sec" data-sec="${key}">
+        <div class="pulse-sec-head"><h3>${title} <span class="pulse-sec-n">${secItems.length}</span></h3><p>${desc}</p></div>
+        <div class="pulse-grid">${secItems.map(pulseCard).join('')}</div></div>`;
+    }).join('');
+
     el.innerHTML = `
-      <div class="dt-note" style="border-left-color:#ec4899"><b>📡 What the crowd is watching.</b> ${stamp} ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''}</div>
-      <div class="pulse-grid">${p.items.map(card).join('')}</div>`;
+      <div class="dt-note pulse-note"><b>📡 Attention lifecycle.</b> ${feedState} · <span title="Feed freshness" style="color:${fc}">${fe} ${fl}</span> ${staleWarn}
+        <div class="pulse-counts">✅ ${p.verifiedThemes != null ? p.verifiedThemes : '—'} verified · ❓ ${p.unverifiedThemes != null ? p.unverifiedThemes : '—'} unverified themes</div>
+        <div class="pulse-disc">${esc(p.disclaimer || '')}</div></div>
+      <div class="pulse-tape"><div class="pulse-tape-title">⏱ The tape in 20 seconds</div><div class="pulse-tape-grid">${pulseTape(items)}</div></div>
+      ${pulseRecentlyChanged(p.recentlyChanged)}
+      <div class="pulse-filters">${chips}</div>
+      <div class="pulse-sections">${sectionsHTML}</div>`;
+
+    // Wire filter chips (pure show/hide, no refetch).
+    el.querySelectorAll('.pulse-fchip').forEach(btn => btn.onclick = () => {
+      const f = btn.dataset.filter;
+      el.querySelectorAll('.pulse-fchip').forEach(b => b.classList.toggle('active', b === btn));
+      el.querySelectorAll('.pulse-sec').forEach(sec => { sec.style.display = (f === 'all' || sec.dataset.sec === f) ? '' : 'none'; });
+    });
     const rb = document.getElementById('pulse-refresh-btn');
     if (rb) rb.onclick = () => runPulseUI(true);
   }

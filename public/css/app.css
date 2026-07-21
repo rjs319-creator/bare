@@ -2212,6 +2212,66 @@
 @keyframes pulseGlow { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 .pulse-refined-tag { display: inline-block; background: #ec489922; color: #f9a8d4; border-radius: 5px; padding: 0 7px; font-weight: 700; font-size: .78rem; }
 
+/* ── 📡 Market Pulse redesign (scoped to #pulse so shared .pulse-card tabs are untouched) ── */
+#pulse .pulse-note { border-left-color: #ec4899; }
+#pulse .pulse-counts { font-size: .8rem; color: var(--text-dim); margin-top: 4px; }
+#pulse .pulse-disc { font-size: .76rem; color: var(--text-dim); margin-top: 5px; line-height: 1.4; }
+#pulse .pulse-stalewarn { display: inline-block; background: #f59e0b22; color: #f59e0b; border: 1px solid #f59e0b55; border-radius: 5px; padding: 1px 7px; font-weight: 700; font-size: .78rem; margin-left: 4px; }
+/* The tape in 20 seconds */
+#pulse .pulse-tape { margin: 12px 0; }
+#pulse .pulse-tape-title { font-weight: 800; font-size: .82rem; letter-spacing: .3px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 6px; }
+#pulse .pulse-tape-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+#pulse .pt-tile { display: block; text-decoration: none; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid #ec4899; border-radius: 9px; padding: 8px 11px; color: inherit; transition: border-color .15s; }
+#pulse .pt-tile:hover { border-color: #ec4899; }
+#pulse .pt-emg { border-left-color: #84cc16; } #pulse .pt-acc { border-left-color: #ef4444; } #pulse .pt-crw { border-left-color: #a855f7; }
+#pulse .pt-lbl { display: block; font-size: .72rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .3px; }
+#pulse .pt-val { display: block; font-size: .86rem; margin-top: 2px; line-height: 1.3; }
+/* Recently changed */
+#pulse .pulse-recent { margin: 8px 0; font-size: .84rem; }
+#pulse .pulse-recent summary { cursor: pointer; font-weight: 700; color: #ec4899; }
+#pulse .pulse-recent ul { margin: 6px 0 0; padding-left: 18px; } #pulse .pulse-recent li { margin: 2px 0; }
+#pulse .pr-move { color: var(--text-dim); font-weight: 700; }
+/* Filters */
+#pulse .pulse-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+#pulse .pulse-fchip { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 3px 11px; font-size: .8rem; font-weight: 600; color: var(--text-dim); cursor: pointer; }
+#pulse .pulse-fchip.active { background: #ec489922; color: #f9a8d4; border-color: #ec489988; }
+/* Sections */
+#pulse .pulse-sec { margin: 16px 0; }
+#pulse .pulse-sec-head h3 { font-size: 1rem; margin: 0; }
+#pulse .pulse-sec-n { display: inline-block; background: var(--border); color: var(--text-dim); border-radius: 9px; padding: 0 7px; font-size: .74rem; font-weight: 700; vertical-align: middle; }
+#pulse .pulse-sec-head p { font-size: .78rem; color: var(--text-dim); margin: 2px 0 8px; line-height: 1.4; }
+#pulse .pulse-sec[data-sec="crowded"] .pulse-card { border-left-color: #ef4444; }
+#pulse .pulse-sec[data-sec="contrarian"] .pulse-card { border-left-color: #a855f7; }
+#pulse .pulse-sec[data-sec="confirmed"] .pulse-card { border-left-color: #16a34a; }
+#pulse .pulse-sec[data-sec="emerging"] .pulse-card { border-left-color: #84cc16; }
+#pulse .pulse-sec[data-sec="macro"] .pulse-card { border-left-color: #60a5fa; }
+#pulse .pulse-sec[data-sec="unverified"] .pulse-card { border-left-color: #eab308; }
+/* Card internals */
+#pulse .pc-head { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-bottom: 5px; }
+#pulse .pc-action { font-weight: 800; font-size: .74rem; border: 1px solid; border-radius: 5px; padding: 1px 7px; letter-spacing: .2px; }
+#pulse .pc-life { font-size: .76rem; font-weight: 700; color: var(--text-dim); }
+#pulse .pc-evid { font-size: .74rem; font-weight: 700; margin-left: auto; }
+#pulse .pc-title { font-size: .98rem; font-weight: 700; line-height: 1.3; }
+#pulse .pc-tks { margin: 5px 0; display: flex; flex-wrap: wrap; gap: 5px; }
+#pulse .pulse-macrotag { display: inline-block; background: #60a5fa22; color: #93c5fd; border-radius: 5px; padding: 0 6px; font-weight: 700; font-size: .76rem; }
+#pulse .pc-changed, #pulse .pc-why, #pulse .pc-trader { font-size: .86rem; margin: 3px 0; line-height: 1.4; }
+#pulse .pc-why { color: var(--text-dim); }
+#pulse .pc-novice { font-size: .84rem; margin: 4px 0; padding: 4px 8px; border-radius: 6px; background: #22c55e12; border-left: 2px solid #22c55e88; line-height: 1.4; }
+#pulse .pc-risk { font-size: .82rem; color: #f59e0b; margin: 4px 0; }
+#pulse .pc-pro { margin-top: 7px; font-size: .84rem; }
+#pulse .pc-pro summary { cursor: pointer; font-weight: 700; color: #ec4899; font-size: .8rem; }
+#pulse .pc-pro-body { padding: 7px 2px 2px; border-top: 1px dashed var(--border); margin-top: 6px; }
+#pulse .pc-enrich, #pulse .pc-inferred { margin: 5px 0; line-height: 1.7; }
+#pulse .pc-metric { display: inline-block; margin-right: 8px; font-size: .8rem; color: var(--text-dim); }
+#pulse .pc-measured { display: inline-block; background: #16a34a22; color: #4ade80; border-radius: 4px; padding: 0 5px; font-size: .7rem; font-weight: 700; }
+#pulse .pc-infnote { display: inline-block; background: #9ca3af22; color: #9ca3af; border-radius: 4px; padding: 0 5px; font-size: .7rem; font-weight: 700; }
+#pulse .pc-line { margin: 4px 0; line-height: 1.4; }
+#pulse .pc-sources { margin-top: 6px; }
+#pulse .pc-sources ul { margin: 4px 0 0; padding-left: 16px; } #pulse .pc-sources li { margin: 2px 0; }
+#pulse .pc-src-dom { color: var(--text-dim); font-size: .74rem; margin-left: 5px; }
+#pulse .pc-nosrc { color: var(--text-dim); font-style: italic; }
+@media (max-width: 640px) { #pulse .pc-evid { margin-left: 0; } #pulse .pulse-tape-grid { grid-template-columns: 1fr; } }
+
 /* 🔗 Read-Through — reuses .pulse-card/.pulse-grid; teal accent + tape/link badges */
 #readthrough .pulse-card { border-left-color: #14b8a6; }
 #readthrough .pulse-tk { background: #14b8a622; color: #5eead4; }

@@ -41,7 +41,7 @@ const { runGamePlan } = require('../lib/gameplan-routes');
 const { runToneTick, runTone } = require('../lib/tone-routes');
 const { runAttention, runAttentionTick } = require('../lib/attention-routes');
 const { runOptionsFlow, runOptionsPerf, runOptionsAssess } = require('../lib/optionsflow-routes');
-const { runPulse, runPulseRefine } = require('../lib/pulse-routes');
+const { runPulse, runPulseRefine, runPulseGrade, runPulseEpisodes } = require('../lib/pulse-routes');
 const { runDualRead, runDualReadLog, runDualReadBook, runDualReadTune, runDualReadBackfill, runLtRecs } = require('../lib/dualread-routes');
 const { requireTrusted, requireMethod, stripForceParams, isTrusted } = require('../lib/auth');
 const { rateLimit, clientKey } = require('../lib/ratelimit');
@@ -78,6 +78,9 @@ const PRIVILEGED_OPS = new Set([
   'orbitlog', 'orbitresolve',
   // ORBIT-ML shadow ledger WRITES (log ranked cross-section / resolve forward labels).
   'orbitmltick', 'orbitmlresolve',
+  // Market Pulse SHADOW grader — forward-grades matured first-seen episodes (heavy dated
+  // candle fetches + grader-owned outcome ledger write). Cron/manual only.
+  'pulsegrade',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
@@ -178,6 +181,8 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'confluenceopt') return runConfluenceOpt(req, res);
   if (req.query.op === 'pulse') return runPulse(req, res);
   if (req.query.op === 'pulserefine') return runPulseRefine(req, res);
+  if (req.query.op === 'pulsegrade') return runPulseGrade(req, res);
+  if (req.query.op === 'pulseepisodes') return runPulseEpisodes(req, res);
   if (req.query.op === 'leadtime') return require('../lib/leadtime-routes').runLeadTime(req, res);
   if (req.query.op === 'failuremodel') return require('../lib/failure-model-routes').runFailureModel(req, res);
   if (req.query.op === 'complab') return require('../lib/component-lab-routes').runComponentLabRoute(req, res);
