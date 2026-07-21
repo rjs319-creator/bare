@@ -93,6 +93,22 @@ test('buildForward: no session after first-seen → null (cannot grade)', () => 
   assert.equal(routes.buildForward(rows, null, '2026-07-01'), null);
 });
 
+// ── Insight carry-over (refine can omit insight; it fills from the draft) ─────
+test('carryInsight: backfills omitted insight fields from the matching draft candidate', () => {
+  const candidates = [{ tickers: ['XYZ'], headline: 'XYZ approval', whatChanged: 'FDA nod', noviceTranslation: 'Good news', traderRead: 'watch base', whyItMatters: 'revenue', primaryRisk: 'denial', invalidation: 'narrow label', horizon: 'days' }];
+  const refined = [{ tickers: ['XYZ'], headline: 'XYZ wins approval', whatChanged: null, noviceTranslation: null, whyItMatters: 'kept', traderRead: null, primaryRisk: null, invalidation: null, horizon: 'context' }];
+  const [out] = routes.carryInsight(refined, candidates);
+  assert.equal(out.whatChanged, 'FDA nod');       // filled from draft
+  assert.equal(out.noviceTranslation, 'Good news');
+  assert.equal(out.whyItMatters, 'kept');         // Fable's own value preserved
+  assert.equal(out.horizon, 'days');              // upgraded from context
+});
+
+test('carryInsight: no match → item unchanged (never invents)', () => {
+  const [out] = routes.carryInsight([{ tickers: ['AAA'], headline: 'unrelated', whatChanged: null }], [{ tickers: ['ZZZ'], headline: 'other thing entirely', whatChanged: 'x' }]);
+  assert.equal(out.whatChanged, null);
+});
+
 // ── Stale-state thresholds ────────────────────────────────────────────────────
 test('freshnessOf: <4h live, <12h stale, older very-stale', () => {
   assert.equal(routes.freshnessOf(30), 'live');
