@@ -130,6 +130,30 @@ test('parsePulse / parseRefinedPulse: junk in → clean empty out, no throw', ()
   assert.deepEqual(s.parseRefinedPulse({ items: [{ nope: 1 }] }), []);
 });
 
+// ── Derived insight (LLM prose doesn't fit the wall → templated, honest, always complete) ──
+test('deriveInsight: fills every card field from states + LLM fields (no nulls left)', () => {
+  const it = s.sanitizeItem({ headline: 'h', idea: 'retail piling in', whyMoves: 'earnings catalyst', tickers: ['x'], sentiment: 'bullish', velocity: 'exploding', crowding: 'crowded', sources: 'x' }, true);
+  const d = s.deriveStates(it, { ageDays: 2, enrichment: { atrExt: 3.1, relVol: 2 } });
+  assert.equal(d.actionState, 'TOO EXTENDED');
+  assert.ok(d.whatChanged && d.whyItMatters && d.traderRead && d.noviceTranslation && d.primaryRisk && d.invalidation);
+  assert.match(d.traderRead, /ATR/);                    // enrichment-aware trader read
+  assert.match(d.primaryRisk, /already be over|top/);   // extended → chase-risk warning
+  assert.ok(d.noviceTranslation.length <= s.LIMITS.noviceTranslation);
+});
+
+test('deriveInsight: prefers an LLM-provided value over the template', () => {
+  const it = s.sanitizeItem({ headline: 'h', idea: 'i', tickers: ['x'], sources: 'x', crowding: 'building', noviceTranslation: 'the model said this' }, true);
+  const d = s.deriveStates(it, { ageDays: 1 });
+  assert.equal(d.noviceTranslation, 'the model said this');
+});
+
+test('deriveInsight: unverified action → risk copy flags the rumour', () => {
+  const it = s.sanitizeItem({ headline: 'h', idea: 'i', tickers: ['x'], velocity: 'exploding', crowding: 'early' }, true);
+  const d = s.deriveStates(it, { ageDays: 0 });   // no sources → Unverified
+  assert.equal(d.actionState, 'UNVERIFIED');
+  assert.match(d.primaryRisk, /false or exaggerated|no credible source/);
+});
+
 test('deriveStates: attaches all three states + preserves enrichment (measured)', () => {
   const it = s.sanitizeItem({ headline: 'h', idea: 'i', tickers: ['x'], sentiment: 'bullish', velocity: 'rising', crowding: 'building', sources: 'x' }, true);
   const d = s.deriveStates(it, { ageDays: 1, enrichment: { atrExt: 0.4, relVol: 2, dayReturn: 3 } });
