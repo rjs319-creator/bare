@@ -11,3 +11,6 @@ research/.env
 
 # local analysis scratch (mover/detection back-tests)
 scratch-*
+
+# agent working dir (local, not committed)
+.agents/
