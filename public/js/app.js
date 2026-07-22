@@ -6901,7 +6901,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function xalertsEmpty() {
     return `<div class="mom-status"><p style="text-align:left;line-height:1.7">
       <b>No alerts yet.</b> An <b>external collector</b> POSTs raw social posts to <code>/api/tracker?op=alertsingest</code> (v2 schema, or the legacy <code>{text, account, timestamp}</code>). The app captures provenance, builds immutable ticker-thesis episodes, grades them at the next open, and scores each into the four views above.<br><br>
-      <b>To feed it:</b> set <code>APP_INGEST_URL</code> to the ingest endpoint and (recommended) a matching <code>ALERTS_INGEST_TOKEN</code>, then push on a schedule. Episodes accrue a prospective record; the account model stays shadow (weight 0) until it proves incremental value.</p></div>`;
+      <b>To feed it:</b> set <code>APP_INGEST_URL</code> to the ingest endpoint and (recommended) a matching <code>ALERTS_INGEST_TOKEN</code>, then push on a schedule. Episodes accrue a prospective record; the account model stays shadow (weight 0) until it proves incremental value.<br><br>
+      <b>Payload format:</b> see the <a href="https://github.com/rjs319-creator/bare/blob/main/COLLECTOR-V2-CONTRACT.md" target="_blank" rel="noopener" style="color:#8a6dff">v2 collector contract</a> for the exact fields — send a stable <code>authorId</code> so accounts can earn a track record; the legacy <code>{text, account, timestamp}</code> shape still works with degraded provenance.</p></div>`;
   }
 
   // A mini component-breakdown bar (setup / account / catalyst / execution / regime / social).
