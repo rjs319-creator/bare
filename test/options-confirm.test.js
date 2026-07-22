@@ -47,6 +47,21 @@ test('mixed/unknown options on a valid setup → WAIT (neutral)', () => {
   assert.equal(d.view, 'neutral');
 });
 
+test('a provisional lean with a high unknown share is mid-confidence (mixed) → still REVIEW', () => {
+  // aggregateDirection emitted PROVISIONAL_BULLISH even though 78% of notional is unknown;
+  // that is a real (if noisy) lean supporting the long setup — a confirmation, labeled mixed.
+  const d = buildDecision(longSetup, { ticker: 'MU', directionState: 'PROVISIONAL_BULLISH', directionLabel: 'Provisional bullish', unknownShare: 0.78, oiConfirmedContracts: 0 });
+  assert.equal(d.evidenceQuality, 'mixed');
+  assert.equal(d.action, 'REVIEW');
+  assert.equal(d.view, 'confirmation');
+});
+
+test('an almost-entirely-unknown lean stays thin → WAIT (not a confirmation)', () => {
+  const d = buildDecision(longSetup, { ticker: 'X', directionState: 'PROVISIONAL_BULLISH', unknownShare: 0.92 });
+  assert.equal(d.evidenceQuality, 'thin');
+  assert.equal(d.action, 'WAIT');
+});
+
 test('index/ETF flow → AVOID (hedge ambiguity)', () => {
   const d = buildDecision(longSetup, { ticker: 'SPY', isIndex: true, directionState: 'PROVISIONAL_BULLISH', unknownShare: 0.1, oiConfirmedContracts: 5 });
   assert.equal(d.action, 'AVOID');
