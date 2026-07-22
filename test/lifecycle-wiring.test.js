@@ -94,6 +94,19 @@ test('advanceBoard: post-entry records are locked to MANAGING/CLOSED even when a
   assert.equal(next.MGR.state, STATES.MANAGING, 'a fired alert is never demoted/erased by absence');
 });
 
+test('advanceBoard: a Stage-2 intraday ev override drives a candidate to ACTIONABLE_NOW', () => {
+  // A fully-green intraday ev supplied via evByTicker beats the daily fallback for that name.
+  const intradayEv = {
+    ticker: 'AAA', now: '2026-07-08T14:30:00Z', session: 'regular',
+    freshness: { freshnessStatus: 'FRESH_TODAY', barIsToday: true },
+    aboveVwap: true, momentumOk: true, residualOk: true, relVolOk: true, triggerConfirmed: true,
+    remainingRR: 2.0, extensionAtr: 0.7,
+  };
+  const next = advanceBoard({}, [pick('AAA'), pick('BBB')], '2026-07-08T14:30:00Z', { AAA: intradayEv });
+  assert.equal(next.AAA.state, STATES.ACTIONABLE_NOW, 'intraday-validated name is actionable');
+  assert.equal(next.BBB.state, STATES.BUILDING, 'name without a Stage-2 ev uses the daily fallback');
+});
+
 test('slim: strips heavy history but keeps the last transition + count', () => {
   const next = advanceBoard({}, [pick('AAA')], '2026-07-08T14:00:00Z');
   const [card] = slim(Object.values(next));
