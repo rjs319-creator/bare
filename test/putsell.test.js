@@ -58,7 +58,10 @@ test('analyzePutSetup: uptrend + healthy pullback → a qualifying setup', () =>
   assert.ok(['PRIME', 'SOLID', 'WATCH'].includes(s.tier));
   assert.ok(s.strike < s.price, 'strike is below spot (OTM put)');
   assert.ok(s.bufferPct >= 2, 'has an OTM cushion');
-  assert.match(s.reasons.join(' '), /Sell the \$/);
+  // The setup describes the price-action case; the tradeable strike is a REAL listed
+  // contract chosen by the route, so reasons must NOT display a synthetic "Sell the $X put".
+  assert.doesNotMatch(s.reasons.join(' '), /Sell the \$/);
+  assert.match(s.reasons.join(' '), /support/i);
 });
 
 test('analyzePutSetup: downtrend (below 200-day) → not a candidate', () => {

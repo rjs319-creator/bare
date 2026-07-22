@@ -6067,19 +6067,25 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const gt = document.getElementById('putsell-gen-time');
     if (gt) gt.textContent = t.generatedAt ? new Date(t.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
     // Strategy module heading — one of (eventually several) options moves under this section.
-    const stratHead = `<div class="scr-subhead">🅿️ Cash-Secured Put Selling <span class="sub-meta">quality uptrend · pullback to support · strike below support with an OTM cushion · IV &amp; earnings context</span></div>`;
+    const stratHead = `<div class="scr-subhead">🅿️ Cash-Secured Put Selling <span class="sub-meta">quality uptrend · pullback to support · a REAL listed put (25–45 DTE) below support · full economics</span></div>`;
     const picks = t.picks || [];
     if (!picks.length) {
-      el.innerHTML = stratHead + `<div class="dt-note">No clean put-selling setups right now — that's normal when strong stocks are extended (thin premium) or the tape is weak (better to wait). <span class="dt-dim">(${t.scanned || 0} scanned)</span></div>`;
+      el.innerHTML = stratHead + `<div class="dt-note">No cash-secured puts with a real, liquid listed contract right now — that's normal when strong stocks are extended (thin premium), the tape is weak, or the only fits cross earnings (excluded by default). <span class="dt-dim">(${t.scanned || 0} scanned · ${t.qualified || 0} setups${t.noContract && t.noContract.length ? ` · ${t.noContract.length} with no tradeable contract` : ''})</span></div>`;
       return;
     }
     const gradeClass = g => g === 'A+' || g === 'A' ? 'g-a' : g === 'B' ? 'g-b' : g === 'C' ? 'g-c' : 'g-d';
+    const money = n => n == null ? '' : n >= 1000 ? '$' + Math.round(n).toLocaleString() : '$' + n.toFixed(2);
     const card = p => {
       const tier = PS_TIER[p.tier] || PS_TIER.WATCH;
-      const ivChip = p.ivLevel ? `<span class="ps-iv ${PS_IV[p.ivLevel]}">${esc(p.ivNote || '')}${p.atmIV != null ? ` · IV ${(p.atmIV * 100).toFixed(0)}%` : ''}</span>`
-        : p.ivUnreliable ? `<span class="ps-iv iv-lo" title="Option-chain IV reading looked broken — graded on price action alone">IV n/a</span>` : '';
-      const earn = p.earningsSoon ? `<span class="ps-earn">📅 Earnings ${p.earningsInDays}d</span>` : '';
+      const rp = p.realPut, ec = (rp && rp.economics) || {}, mg = (rp && rp.management) || {};
+      const ivChip = rp && rp.atmIV != null ? `<span class="ps-iv ${PS_IV[p.ivLevel] || ''}">IV ${(rp.atmIV * 100).toFixed(0)}%</span>` : '';
+      const earn = p.earningsInDays != null ? `<span class="ps-earn">📅 Earnings ${p.earningsInDays}d</span>` : '';
+      const liq = rp ? `<span class="ps-meta" title="Real listed-contract liquidity">OI ${rp.openInterest ?? '–'} · spread ${rp.spreadPct != null ? rp.spreadPct + '%' : '–'}</span>` : '';
+      const pd = rp && rp.proxyDelta && rp.proxyDelta.value != null
+        ? `<span class="ps-meta" title="Moneyness+IV proxy — free chains carry no real greeks">~${(rp.proxyDelta.value * 100).toFixed(0)}Δ proxy</span>` : '';
       const cautions = (p.cautions || []).length ? `<div class="ps-caution">${p.cautions.map(c => `⚠ ${esc(c)}`).join('<br>')}</div>` : '';
+      const manage = mg.profitTake ? `<details class="ps-manage" style="margin-top:6px"><summary style="cursor:pointer;font-size:0.78rem">📋 Management plan</summary>
+          <div class="dt-dim" style="font-size:0.76rem;line-height:1.5;margin-top:4px">🎯 ${esc(mg.profitTake)}<br>🛑 ${esc(mg.maxLoss)}<br>📉 ${esc(mg.supportBreak)}<br>⏱ ${esc(mg.exitRollDte)}<br>📅 ${esc(mg.earningsHandling)}</div></details>` : '';
       return `
         <div class="dt-card ps-card" data-ticker="${esc(p.ticker)}">
           <div class="ps-top">
@@ -6091,17 +6097,23 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
             <span class="ps-tier ${tier[1]}">${tier[0]}</span>
           </div>
           <div class="ps-trade">
-            <div class="ps-trade-main">Sell the <b>$${p.strike}</b> put</div>
-            <div class="ps-trade-sub">${p.bufferPct}% below the current <b>$${p.price}</b> · ${p.atrCushion} ATR cushion · ${esc(p.supportBasis)} support</div>
+            <div class="ps-trade-main">Sell the <b>$${rp.strike} put</b> · ${esc(rp.expiry)} <span class="dt-dim">(${rp.dte}d)</span></div>
+            <div class="ps-trade-sub">Credit ~<b>${money(rp.credit)}</b> (conservative bid) · <b>${ec.returnOnCash}%</b> on ${money(ec.cashRequired)} cash · <b>${ec.annualizedYield}%</b> annualized</div>
+            <div class="ps-trade-sub">Breakeven <b>$${ec.breakeven}</b> (${ec.distanceToBreakevenPct}% cushion) · if assigned you own at $${ec.assignmentPrice} (${ec.assignmentDiscountPct}% below spot)</div>
           </div>
-          <div class="ps-chips">${ivChip}${earn}${p.rsi != null ? `<span class="ps-meta">RSI ${p.rsi}</span>` : ''}</div>
+          <div class="ps-chips">${ivChip}${earn}${liq}${pd}${p.rsi != null ? `<span class="ps-meta">RSI ${p.rsi}</span>` : ''}</div>
           <div class="ps-reasons">${(p.reasons || []).map(esc).join(' · ')}</div>
+          ${manage}
           ${cautions}
         </div>`;
     };
-    el.innerHTML = stratHead + `<div class="dt-dim" style="font-size:0.68rem;margin:2px 0 10px">Full-market scan · ${t.scanned || 0} names → ${t.qualified || 0} qualifying setups → top ${picks.length} shown (enriched with live IV &amp; earnings)</div>
+    const noContractNote = (t.noContract && t.noContract.length)
+      ? `<div class="dt-dim" style="font-size:0.68rem;margin-top:10px">${t.noContract.length} qualifying setup${t.noContract.length === 1 ? '' : 's'} had no tradeable listed contract (illiquid, wide spread, or earnings-crossing) — shown as no trade rather than a synthetic strike.${t.eventRiskEnabled ? '' : ' Earnings-crossing puts are excluded by default.'}</div>`
+      : '';
+    el.innerHTML = stratHead + `<div class="dt-dim" style="font-size:0.68rem;margin:2px 0 10px">Full-market scan · ${t.scanned || 0} names → ${t.qualified || 0} qualifying setups → ${picks.length} with a real, liquid listed put</div>
       <div class="ps-grid">${picks.map(card).join('')}</div>
-      <div class="dt-note" style="margin-top:12px">Educational, not advice. Selling a cash-secured put obligates you to <b>buy 100 shares at the strike</b> if assigned — only sell puts on names you'd genuinely want to own at that price, and size to the cash you'd need.</div>`;
+      ${noContractNote}
+      <div class="dt-note" style="margin-top:12px">Real listed contracts, not synthetic strikes. Delta shown is a labeled moneyness+IV proxy (free chains carry no greeks); the credit is a conservative bid estimate — you may fill better. Educational, not advice: selling a cash-secured put obligates you to <b>buy 100 shares at the strike</b> if assigned — only sell puts on names you'd want to own at that price, and size to the cash required.</div>`;
   }
   document.getElementById('putsell-refresh-btn')?.addEventListener('click', runPutSellUI);
 
