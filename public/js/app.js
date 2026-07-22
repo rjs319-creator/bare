@@ -956,6 +956,16 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   let ofSort = (() => { try { return localStorage.getItem('ofSort') || 'premium'; } catch { return 'premium'; } })();
   let ofNovice = (() => { try { return localStorage.getItem('ofNovice') !== 'pro'; } catch { return true; } })();
   let ofView = (() => { try { return localStorage.getItem('ofView') === 'contracts' ? 'contracts' : 'ticker'; } catch { return 'ticker'; } })();
+  // The FOUR coordinated views (step 10). Default is decision-oriented (Swing Confirmations).
+  const OF_PRIMARY = [
+    ['confirmations', '✅ Swing Confirmations'],
+    ['contradictions', '⚠️ Contradictions & Risk'],
+    ['raw', '📊 Raw Activity'],
+    ['income', '🅿️ Income & Entry'],
+  ];
+  const OF_PRIMARY_IDS = OF_PRIMARY.map(v => v[0]);
+  let ofPrimaryView = (() => { try { const v = localStorage.getItem('ofPrimaryView'); return OF_PRIMARY_IDS.includes(v) ? v : 'confirmations'; } catch { return 'confirmations'; } })();
+  let ofDecisions = [];   // per-ticker deterministic decision records (from op=optionsflow)
   // Confluence cross-reference: ticker -> [{icon,label,route,color,title}] of the
   // app's OWN screeners that currently flag the same name. Built lazily.
   let ofConfluence = null;
@@ -979,6 +989,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       (data.byTicker || []).forEach(r => { if (r && r.ticker) ofBaseline[r.ticker] = { abnormalVsNormal: !!r.abnormalVsNormal, baselineNote: r.baselineNote || '', optVol: r.baseline && r.baseline.optVol }; });
       ofAnalyses = data.analyses || {};
       ofDeskRead = data.deskRead || '';
+      ofDecisions = data.decisions || [];
       renderOptionsFlowShell(data);
       applyOptionsView();
       loadOptionsPerf();
@@ -1213,9 +1224,40 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + `We <b>cannot</b> tell whether a trade opened or closed, was bought or sold, or was a hedge — so every directional read here is <b>provisional</b> `
       + `(<i>provisional bullish/bearish, mixed, or direction-unknown</i>), never proof and never "smart money". `
       + `It <b>cannot by itself create or boost a Today's Pick</b> — it only confirms, contradicts, or flags risk on an independent price setup.</div>`;
+    // ── The FOUR coordinated views (primary nav) ──
+    const pvBtn = (id, lbl, on) => `<button data-pv="${id}" class="dt-btn of-pv" style="border-radius:0;border:none;${on ? 'background:#06c4d4;color:#001' : 'background:transparent'}">${lbl}</button>`;
+    const cCount = (ofDecisions || []).filter(d => d.view === 'confirmation').length;
+    const xCount = (ofDecisions || []).filter(d => d.view === 'contradiction').length;
+    const pvLabel = (id, lbl) => id === 'confirmations' && cCount ? `${lbl} (${cCount})` : id === 'contradictions' && xCount ? `${lbl} (${xCount})` : lbl;
+    const primaryNav = `<div style="display:inline-flex;border:1px solid #333;border-radius:6px;overflow:hidden;flex-wrap:wrap;margin-bottom:12px">${OF_PRIMARY.map(([v, l]) => pvBtn(v, pvLabel(v, l), ofPrimaryView === v)).join('')}</div>`;
+    const wirePrimaryNav = () => optionsContainer.querySelectorAll('.of-pv').forEach(b => b.addEventListener('click', () => {
+      ofPrimaryView = b.dataset.pv; try { localStorage.setItem('ofPrimaryView', ofPrimaryView); } catch {}
+      renderOptionsFlowShell(data);
+    }));
+
+    // Confirmations / Contradictions — the interpreted, decision-oriented views.
+    if (ofPrimaryView === 'confirmations' || ofPrimaryView === 'contradictions') {
+      optionsContainer.innerHTML = `<div id="of-summary" style="margin-bottom:14px"></div>` + shadowBanner + primaryNav
+        + `<div id="of-decisions"></div><div id="of-perf" style="margin-top:26px"></div>`;
+      const sm = document.getElementById('of-summary'); if (sm) sm.innerHTML = ofSummaryBar(ofSummary(optionsFlowAll));
+      renderDecisionsView();
+      wirePrimaryNav();
+      loadOptionsPerf();
+      return;
+    }
+    // Income & Entry — real listed cash-secured puts (reuses the CSP renderer inline).
+    if (ofPrimaryView === 'income') {
+      optionsContainer.innerHTML = `<div id="of-summary"></div>` + shadowBanner + primaryNav
+        + `<div id="of-income"><div class="mom-status"><div class="mom-spinner"></div><p>Loading income &amp; entry setups…</p></div></div>`;
+      wirePrimaryNav();
+      loadIncomeView();
+      return;
+    }
+    // Raw Activity — the transparent underlying measurements (existing shell, unchanged).
     optionsContainer.innerHTML =
       `<div id="of-summary" style="margin-bottom:14px"></div>`
       + shadowBanner
+      + primaryNav
       + `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">`
       + `<div style="display:inline-flex;border:1px solid #333;border-radius:6px;overflow:hidden">${vtab('of-v-ticker', '📊 By ticker', ofView === 'ticker')}${vtab('of-v-contracts', '📜 All contracts', ofView === 'contracts')}</div>`
       + `<div style="display:inline-flex;border:1px solid #333;border-radius:6px;overflow:hidden">${vtab('of-m-simple', '🔰 Simple', ofNovice)}${vtab('of-m-pro', '📊 Pro', !ofNovice)}</div>`
@@ -1278,6 +1320,65 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     };
     document.getElementById('of-m-simple').addEventListener('click', () => setMode(true));
     document.getElementById('of-m-pro').addEventListener('click', () => setMode(false));
+    wirePrimaryNav();
+  }
+
+  // ── The four-view decision renderers (Swing Confirmations / Contradictions & Risk) ──
+  const OF_ACTION = { REVIEW: ['var(--green)', '🔎 REVIEW'], WAIT: ['var(--amber,#f0a832)', '⏳ WAIT'], AVOID: ['var(--red)', '🚫 AVOID'] };
+  const OF_TIER = { 'confirmed-shadow': 'Confirmed (shadow)', provisional: 'Provisional', contradiction: 'Contradiction', informational: 'Informational' };
+  const OF_HORIZON_LBL = { '0-7': '0–7 DTE', '8-20': '8–20 DTE', '21-45': '21–45 DTE (swing)', '46-75': '46–75 DTE', '75+': '> 75 DTE' };
+
+  function decisionCard(d) {
+    const [acol, albl] = OF_ACTION[d.action] || OF_ACTION.WAIT;
+    const setupTxt = d.setupDirection === 'long' ? '▲ Long setup' : d.setupDirection === 'short' ? '▼ Short setup' : 'No clean setup';
+    const setupCol = d.setupDirection === 'long' ? 'var(--green)' : d.setupDirection === 'short' ? 'var(--red)' : 'var(--text-dim)';
+    const dcol = d.optionsDirection === 'PROVISIONAL_BULLISH' ? 'var(--green)' : d.optionsDirection === 'PROVISIONAL_BEARISH' ? 'var(--red)' : 'var(--text-dim)';
+    const qChip = `<span class="cx-tierbadge" style="color:var(--text-dim);border-color:#444" title="How clearly the shown options evidence reads">${esc(d.evidenceQuality)} evidence${d.oiConfirmedContracts ? ` · OI building×${d.oiConfirmedContracts}` : ''}</span>`;
+    const lvl = (lbl, v) => v != null ? `<div><span class="dt-dim">${lbl}</span> <b>$${esc(String(v))}</b></div>` : '';
+    const levels = d.setupValid
+      ? `<div class="ps-trade" style="display:flex;gap:14px;flex-wrap:wrap;font-size:0.82rem">${lvl('Trigger', d.trigger)}${lvl('Invalidation', d.invalidation)}${lvl('Target', d.target)}${d.rr != null ? `<div><span class="dt-dim">R:R</span> <b>${d.rr}</b></div>` : ''}</div>`
+      : `<div class="dt-dim" style="font-size:0.8rem">No valid stock setup — see Raw Activity for the underlying measurements.</div>`;
+    const evChip = d.eventRisk !== 'none' ? `<span class="ps-earn">📅 Earnings before expiry</span>` : '';
+    const horizon = d.horizonAlignment ? `<span class="ps-meta">${OF_HORIZON_LBL[d.horizonAlignment] || d.horizonAlignment}</span>` : '';
+    const expert = `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:0.76rem" class="dt-dim">Expert detail</summary>
+      <div class="dt-dim" style="font-size:0.76rem;line-height:1.5;margin-top:4px">
+        Setup direction <b>${esc(d.setupDirection)}</b> (quality ${d.setupQuality != null ? (d.setupQuality * 100).toFixed(0) + '%' : '—'}) · options <b style="color:${dcol}">${esc(d.optionsDirectionLabel)}</b> → confirmation state <b>${esc(d.confirmationState)}</b><br>
+        Evidence tier: ${OF_TIER[d.evidenceTier] || d.evidenceTier} · data ${esc(d.dataQuality)} · liquidity ${esc(d.liquidityQuality)} · maturity <b>${esc(d.researchMaturity)}</b> (weight 0)<br>
+        Levels are deterministic chart math (support $${esc(String(d.support))} / resistance $${esc(String(d.resistance))}) — not from options or an LLM.
+      </div></details>`;
+    return `<div class="dt-card" data-ticker="${esc(d.ticker)}">
+      <div class="ps-top" style="align-items:center">
+        <span class="ps-tk">${esc(d.ticker)}</span>
+        ${d.spot != null ? `<span class="ps-now">$${esc(String(d.spot))}</span>` : ''}
+        <span class="cx-tierbadge" style="color:${setupCol};border-color:currentColor">${setupTxt}</span>
+        <span class="cx-tierbadge" style="color:${acol};border-color:currentColor;font-weight:700">${albl}</span>
+      </div>
+      <div style="margin:6px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${qChip}${horizon}${evChip}</div>
+      ${levels}
+      <div class="ps-reasons" style="margin-top:6px">${(d.reasons || []).map(esc).join(' · ')}</div>
+      ${expert}
+    </div>`;
+  }
+
+  function renderDecisionsView() {
+    const el = document.getElementById('of-decisions'); if (!el) return;
+    const isConf = ofPrimaryView === 'confirmations';
+    const wantView = isConf ? 'confirmation' : 'contradiction';
+    const list = (ofDecisions || []).filter(d => d.view === wantView);
+    const intro = isConf
+      ? 'Options evidence that <b>supports</b> a valid stock swing setup. Every price level is deterministic chart math — options only confirm the setup, they never originate a trade.'
+      : 'Options evidence that <b>conflicts</b> with the price setup, looks hedge-like, carries event risk, or is too ambiguous to trade — the honest reasons to stand aside.';
+    const empty = `<div class="rot-sub dt-dim">No ${isConf ? 'confirmations' : 'contradictions'} right now — that's common: most unusual flow doesn't line up cleanly with a valid setup. Check <b>Raw Activity</b> for the underlying measurements, or <b>Income &amp; Entry</b> for cash-secured puts.</div>`;
+    el.innerHTML = `<div class="dt-note" style="margin-bottom:10px">${intro}</div>`
+      + (list.length ? `<div class="scr-grid">${list.map(decisionCard).join('')}</div>` : empty);
+  }
+
+  async function loadIncomeView() {
+    const el = document.getElementById('of-income'); if (!el) return;
+    try {
+      const t = await fetch('/api/tracker?op=putsell').then(r => r.json());
+      renderPutSell(t, 'of-income');
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load income &amp; entry setups.</p></div>`; }
   }
 
   function applyOptionsView() {
@@ -6061,8 +6162,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
   const PS_TIER = { PRIME: ['🟢 Prime', 'hi'], SOLID: ['🔵 Solid', 'mid'], WATCH: ['⚪ Watch', 'lo'] };
   const PS_IV = { high: 'iv-hi', moderate: 'iv-mid', low: 'iv-lo' };
-  function renderPutSell(t) {
-    const el = document.getElementById('putsell-container');
+  function renderPutSell(t, elId = 'putsell-container') {
+    const el = document.getElementById(elId);
     if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Options Moves unavailable.</p></div>`; return; }
     const gt = document.getElementById('putsell-gen-time');
     if (gt) gt.textContent = t.generatedAt ? new Date(t.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
