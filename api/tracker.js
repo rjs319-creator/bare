@@ -157,6 +157,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'fadeseed') return runFadeSeed(req, res);
   if (req.query.op === 'daytrade') return runDaytrade(req, res);
   if (req.query.op === 'lifecycle') return require('../lib/lifecycle-routes').runLifecycle(req, res);
+  if (req.query.op === 'lifecyclegrade') return require('../lib/lifecycle-routes').runLifecycleGrade(req, res);
   if (req.query.op === 'daytradetick') return runDaytradeTick(req, res);
   if (req.query.op === 'daytradebook') return runDaytradeBook(req, res);
   if (req.query.op === 'daytradeopt') return runDaytradeOpt(req, res);

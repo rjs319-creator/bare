@@ -2,7 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { sessionOf, buildEvaluation, absentEvaluation } = require('../lib/lifecycle-eval');
-const { loadLifecycleDay, saveLifecycleDay, hasDurableStore, keyFor } = require('../lib/lifecycle-store');
+const { loadLifecycleDay, saveLifecycleDay, hasDurableStore, keyFor, appendSnapshots, loadSnapshots, saveGrades, loadGrades, snapKey, gradeKey } = require('../lib/lifecycle-store');
 const { advanceBoard, slim } = require('../lib/lifecycle-routes');
 const { STATES } = require('../lib/opportunity-lifecycle');
 
@@ -55,6 +55,18 @@ test('lifecycle-store: degrades gracefully with no Blob configured', async () =>
   assert.equal(saved.persisted, false);      // no-op, but never throws
   assert.equal(saved.reason, 'no-store');
   assert.equal(keyFor('daytrade', '2026-07-08'), 'lifecycle/daytrade/2026-07-08.json');
+});
+
+test('lifecycle-store: snapshot log + grades degrade gracefully with no Blob configured', async () => {
+  assert.equal(snapKey('daytrade', '2026-07-08'), 'lifecycle/daytrade/snapshots/2026-07-08.json');
+  assert.equal(gradeKey('daytrade', '2026-07-08'), 'lifecycle/daytrade/grades/2026-07-08.json');
+  assert.deepEqual(await loadSnapshots('daytrade', '2026-07-08'), []);
+  const ap = await appendSnapshots('daytrade', '2026-07-08', [{ ticker: 'ABC', at: 't' }]);
+  assert.equal(ap.persisted, false);          // no-op, never throws
+  assert.equal(ap.reason, 'no-store');
+  assert.deepEqual(await loadGrades('daytrade', '2026-07-08'), {});
+  const gr = await saveGrades('daytrade', '2026-07-08', { 'ABC|t': {} });
+  assert.equal(gr.persisted, false);
 });
 
 // ── advanceBoard orchestration (pure, no network/storage) ────────────────────
