@@ -2711,6 +2711,11 @@
 /* OMEGA-SWING v2 — shadow / executable-state / evidence-band styling */
 .om-shadow { margin-top:.45rem; font-size:.8rem; color:#fbbf24; background:rgba(251,191,36,.08); border:1px solid rgba(251,191,36,.3); border-radius:6px; padding:.35rem .55rem; }
 .om-shadow b { color:#fcd34d; }
+.om-research { margin-top:.45rem; font-size:.8rem; border-radius:6px; padding:.35rem .55rem; line-height:1.45; }
+.om-research-noedge { color:#94a3b8; background:rgba(148,163,184,.08); border:1px solid rgba(148,163,184,.28); }
+.om-research-edge { color:#34d399; background:rgba(52,211,153,.08); border:1px solid rgba(52,211,153,.3); }
+.om-research b { color:var(--text,#e8edf4); }
+.om-research-sub { display:block; margin-top:.2rem; font-size:.72rem; color:var(--text-muted,#8590a0); }
 .om-action { margin:.4rem 0 .1rem; font-size:.82rem; color:var(--text,#e8edf4); }
 .om-maxentry { font-weight:400; font-size:.74rem; color:var(--text-muted,#8590a0); }
 .om-band { color:#c4b5fd; font-style:italic; }
