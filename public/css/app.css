@@ -1831,6 +1831,15 @@
     .xa-levels b { color: var(--text); }
     .xa-ai-lb { font-size: 0.62rem; font-weight: 700; }   /* short label — safe to keep on one line */
     .xa-caution { font-size: 0.64rem; line-height: 1.4; margin-top: 4px; overflow-wrap: anywhere; }   /* full-sentence flag — MUST wrap (xa-conv-lb is nowrap → grid blowout) */
+    /* Trade Alerts four-view nav (segmented control) + decision-card breakdown */
+    .xa-nav { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; flex-wrap: wrap; margin-bottom: 14px; }
+    .xa-pv { font-size: 0.72rem; font-weight: 700; padding: 8px 13px; cursor: pointer; }
+    .xa-fine { font-size: 0.66rem; color: var(--text-dim); overflow-wrap: anywhere; }
+    .xa-fine b { color: var(--text); }
+    .xa-bd { margin-top: 9px; }
+    .xa-bd-track { display: flex; height: 7px; border-radius: 4px; overflow: hidden; background: var(--bg-hi, #0d1424); }
+    .xa-bd-legend { font-size: 0.56rem; color: var(--text-dim); margin-top: 4px; display: flex; flex-wrap: wrap; gap: 7px; }
+    @media (max-width: 640px) { .xa-nav { display: flex; width: 100%; overflow-x: auto; } .xa-pv { flex: 1 0 auto; } }
     .cx-narr-str { color: var(--amber); font-weight: 700; }
 
     /* Model panel */

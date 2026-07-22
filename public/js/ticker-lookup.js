@@ -143,18 +143,42 @@ function socialSection(alerts) {
   if (!alerts.length) return sectionNote(title, 'Not currently trending in the Trade Alerts social screener.');
 
   const r = alerts[0];
-  const bull = r.direction === 'bullish', bear = r.direction === 'bearish';
+  // v2 decisions use `side` (long/short) + an absolute score + action; legacy items use
+  // `direction` (bullish/bearish) + a 1-5 star score. Normalize for display.
+  const isV2 = r.side !== undefined || r.action !== undefined;
+  const bull = isV2 ? r.side === 'long' : r.direction === 'bullish';
+  const bear = isV2 ? r.side === 'short' : r.direction === 'bearish';
   const dirCls = bull ? 'bull' : bear ? 'bear' : 'neutral';
+  const leanLabel = isV2 ? (r.side || 'mentioned') : (r.direction || 'mentioned');
+
+  if (isV2) {
+    const clusters = r.independentClusters || 0;
+    const srcLine = [
+      `${clusters} independent cluster${clusters === 1 ? '' : 's'}`,
+      r.accountState ? `source: ${r.accountState}` : null,
+      r.catalystStatus ? r.catalystStatus.replace(/_/g, ' ').toLowerCase() : null,
+    ].filter(Boolean).join(' · ');
+    return `<div class="tkl-sec"><div class="tkl-mtitle">${title} <span style="font-size:.7em;color:#8a6dff">SHADOW</span></div>
+      <div class="tkl-lean">
+        <span class="tkl-pill ${dirCls}">${bull ? '▲' : bear ? '▼' : '◆'} ${esc(leanLabel)}</span>
+        ${r.action ? `<span class="tkl-pill neutral">${esc(r.action)}</span>` : ''}
+        ${r.score != null ? `<span class="tkl-stars">${r.score}/100</span>` : ''}
+        ${r.coordinated ? '<span class="tkl-pill warn">⚠ coordinated</span>' : ''}
+      </div>
+      <div class="tkl-fine">${esc(srcLine)}</div>
+      ${(r.reasons && r.reasons[0]) ? `<div class="tkl-quote">${esc(String(r.reasons[0]).slice(0, 180))}</div>` : ''}</div>`;
+  }
+
+  // Legacy fallback.
   const stars = r.score ? '★'.repeat(r.score) + '☆'.repeat(Math.max(0, 5 - r.score)) : '';
   const accounts = Array.isArray(r.accounts) ? r.accounts.join(', ') : '';
   const srcLine = [
     r.distinctAccounts ? `${r.distinctAccounts} account${r.distinctAccounts > 1 ? 's' : ''}` : null,
-    r.independentSources ? `${r.independentSources} independent source${r.independentSources > 1 ? 's' : ''}` : null,
+    r.independentSources ? `${r.independentSources} distinct text cluster${r.independentSources > 1 ? 's' : ''}` : null,
   ].filter(Boolean).join(' · ');
-
   return `<div class="tkl-sec"><div class="tkl-mtitle">${title}</div>
     <div class="tkl-lean">
-      <span class="tkl-pill ${dirCls}">${bull ? '▲' : bear ? '▼' : '◆'} ${esc(r.direction || 'mentioned')}</span>
+      <span class="tkl-pill ${dirCls}">${bull ? '▲' : bear ? '▼' : '◆'} ${esc(leanLabel)}</span>
       ${stars ? `<span class="tkl-stars">${stars}</span>` : ''}
       ${r.coordinated ? '<span class="tkl-pill warn">⚠ coordinated</span>' : ''}
     </div>
@@ -321,8 +345,12 @@ async function loadExtras(ticker) {
   if (curTicker !== T) return;   // user moved on before both resolved
   extras.options = opt.status === 'fulfilled' && opt.value && Array.isArray(opt.value.signals)
     ? opt.value.signals.filter(s => (s.ticker || '').toUpperCase() === T) : null;
-  extras.social = soc.status === 'fulfilled' && soc.value && Array.isArray(soc.value.ranked)
-    ? soc.value.ranked.filter(x => (x.ticker || '').toUpperCase() === T) : null;
+  // Prefer the v2 source-aware decisions; fall back to the legacy ranked list.
+  const socList = soc.status === 'fulfilled' && soc.value
+    ? (Array.isArray(soc.value.decisions) ? soc.value.decisions
+      : (soc.value.legacy && Array.isArray(soc.value.legacy.ranked)) ? soc.value.legacy.ranked : null)
+    : null;
+  extras.social = socList ? socList.filter(x => (x.ticker || '').toUpperCase() === T) : null;
   paintExtras();
 }
 

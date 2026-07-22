@@ -6802,8 +6802,21 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
   document.getElementById('cfl-refresh-btn')?.addEventListener('click', runConfluenceUI);
 
-  // ── Trade Alerts (social, ranked by the external-collector pipeline) ──
+  // ── Trade Alerts — source-aware swing-research (SHADOW; social posts are leads, not facts) ──
+  // Four decision views (Actionable / Wait / Crowded-Late / Contradictions) + an Account
+  // Scoreboard, mirroring the Options four-view pattern. Reads the v2 payload from
+  // /api/tracker?op=alerts. No batch-relative stars — an absolute 0-100 score with a full
+  // component breakdown. Probability is suppressed until a calibrated model exists.
   let xalertsLoaded = false;
+  let xalertsData = null;
+  const XA_VIEWS = [
+    ['confirmations', '✅ Actionable', 'REVIEW'],
+    ['waiting', '⏳ Wait for Trigger', 'WAIT'],
+    ['crowded', '⚠️ Crowded / Late', 'AVOID'],
+    ['contradictions', '🔻 Contradictions & Exits', 'EXIT'],
+    ['scoreboard', '🏅 Account Scoreboard', ''],
+  ];
+  let xaView = (() => { try { return localStorage.getItem('xaView') || 'confirmations'; } catch { return 'confirmations'; } })();
   function ensureXalerts() { if (!xalertsLoaded) { xalertsLoaded = true; fetchXalerts(); } }
   let xalertsFlashTimer = null;
   async function fetchXalerts() {
@@ -6812,162 +6825,175 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (xalertsFlashTimer) { clearTimeout(xalertsFlashTimer); xalertsFlashTimer = null; }
     if (btn) { btn.disabled = true; btn.textContent = '⟳ Refreshing…'; btn.style.color = '#8a6dff'; }
     let ok = true;
-    try { renderXalerts(await (await fetch('/api/tracker?op=alerts')).json()); }
+    try { xalertsData = await (await fetch('/api/tracker?op=alerts')).json(); renderXalerts(xalertsData); }
     catch { ok = false; c.innerHTML = '<div class="mom-status error"><p>Could not load trade alerts.</p></div>'; }
     finally {
       if (btn) {
         btn.disabled = false;
-        // Brief "✓ Refreshed" flash so the refresh is visibly confirmed even when the
-        // ranked list is unchanged (data only moves when the collector pushes new posts).
         btn.textContent = ok ? '✓ Refreshed' : '⚠ Retry';
         btn.style.color = ok ? 'var(--green, #10d98a)' : 'var(--red, #ef5050)';
-        xalertsFlashTimer = setTimeout(() => {
-          btn.textContent = '⟳ Refresh'; btn.style.color = '#8a6dff'; xalertsFlashTimer = null;
-        }, 1400);
+        xalertsFlashTimer = setTimeout(() => { btn.textContent = '⟳ Refresh'; btn.style.color = '#8a6dff'; xalertsFlashTimer = null; }, 1400);
       }
     }
   }
-  function renderXalertsEdge(edge) {
-    const el = document.getElementById('xalerts-edge'); if (!el) return;
-    if (!edge || edge.n == null) { el.innerHTML = ''; return; }
-    if (edge.n < (edge.minGraded || 50)) {
-      el.innerHTML = `<div class="cx-portfolio"><div class="cx-pf-head">📊 Edge test · gathering data</div><p class="cx-mp-p" style="margin:8px 0 0">${esc(edge.verdict)}. It won't call an edge until ${edge.minGraded || 50} alerts have graded (~3 trading days each) — by design it refuses to flatter small samples.</p></div>`;
-      return;
-    }
-    const good = edge.edge;
-    el.innerHTML = `<div class="cx-portfolio" style="border-color:${good ? '#10d98a55' : '#ef505044'}">
-      <div class="cx-pf-head">📊 Edge test · ${edge.n} graded calls <span style="margin-left:auto;color:${good ? 'var(--green)' : 'var(--red)'}">${good ? '✅ EDGE' : '❌ NO EDGE'}</span></div>
-      <p class="cx-mp-p" style="margin:8px 0 0">Hit rate <b>${edge.hitRatePct}%</b> [${edge.hitRateCI90[0]}–${edge.hitRateCI90[1]}] vs 50% base · conviction rank-IC <b>${edge.convictionRankIC}</b> (t ${edge.rankICtStat}) · mean excess ${edge.meanExcessPct}%/call. <b>${esc(edge.verdict)}.</b></p></div>` + fadeHtml(edge.fade);
-  }
-  // 🔄 Fade-the-loudest panel — when the mechanical signal is anti-predictive,
-  // betting AGAINST each call ("fade") is what backtests positive. The by-direction
-  // split is the tradeability tell: fading a bullish pump = SHORT (often illiquid,
-  // borrow can erase the edge); fading a bearish call = cheap LONG. Mean is gross.
-  const sgn = v => (v > 0 ? '+' : '') + v;
-  function fadeDirRow(o, label, isLong) {
-    if (!o || o.n == null) return '';
-    const pos = o.meanExcessPct > 0;
-    return `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;margin-top:5px;min-width:0">
-      <span class="xa-chip">${label}</span>
-      <b style="color:${pos ? 'var(--green)' : 'var(--red)'}">${sgn(o.meanExcessPct)}%</b>
-      <span style="color:var(--text-dim);overflow-wrap:anywhere">hit ${o.hitRatePct}% [${o.hitRateCI90[0]}–${o.hitRateCI90[1]}] · n ${o.n}</span>
-      ${isLong ? '<span style="color:var(--green)">✔ cheap long</span>' : '<span style="color:var(--amber,#f0a832)">⚠ short — check borrow</span>'}</div>`;
-  }
-  function fadeHtml(f) {
-    if (!f || f.meanExcessPct == null) return '';
-    const b = f.byDirection || {};
-    return `<div class="cx-portfolio" style="margin-top:8px;border-style:dashed;border-color:#8a6dff33">
-      <div class="cx-pf-head">🔄 Fade-the-loudest test <span style="margin-left:auto;color:${f.edge ? 'var(--green)' : 'var(--text-dim)'}">${f.edge ? '✅ FADE EDGE' : '↔ contrarian read'}</span></div>
-      <p class="cx-mp-p" style="margin:8px 0 0">Betting <b>against</b> each call: mean <b>${sgn(f.meanExcessPct)}%</b>/call (gross) · trimmed <b>${sgn(f.trimmedMeanExcessPct)}%</b> · median ${sgn(f.medianExcessPct)}% · hit ${f.hitRatePct}% [${f.hitRateCI90[0]}–${f.hitRateCI90[1]}] · loudness rank-IC <b>${f.convictionRankIC}</b> (t ${f.rankICtStat}, &gt;0 = louder→better fade).</p>
-      ${fadeDirRow(b.bull, 'fade 🐂 bull', false)}
-      ${fadeDirRow(b.bear, 'fade 🐻 bear', true)}
-      <p class="cx-mp-p" style="margin:6px 0 0;color:var(--text-dim);font-size:.85em">Mean is gross (no borrow/slippage). Trimmed mean drops the 5% tails so a few pump implosions can't fake a broad edge — trust it over the raw mean.</p></div>`;
-  }
-  // 🧠 Fable A/B panel — does the AI's directional read beat the keyword bot? Stays
-  // in "tracking" until enough paired calls grade, then flips to PROMOTED (Fable drives
-  // ranking + filtering). Refuses to flatter small samples, like the mechanical edge test.
-  function renderXalertsFableEdge(fe) {
-    const el = document.getElementById('xalerts-fable'); if (!el) return;
-    if (!fe || fe.n == null) { el.innerHTML = ''; return; }
-    if (fe.n < (fe.minGraded || 40)) {
-      el.innerHTML = `<div class="cx-portfolio" style="border-color:#8a6dff44"><div class="cx-pf-head">🧠 AI review · A/B vs the keyword bot</div>
-        <p class="cx-mp-p" style="margin:8px 0 0">Fable re-reads each alert for true direction, credibility and pump-risk, and annotates every card. It won't take over the ranking until its direction has <b>beaten the keyword bot</b> on ${fe.minGraded || 40} paired graded calls. ${esc(fe.verdict)}.</p></div>`;
-      return;
-    }
-    const promoted = fe.promoted;
-    el.innerHTML = `<div class="cx-portfolio" style="border-color:${promoted ? '#8a6dff88' : '#8a6dff44'}">
-      <div class="cx-pf-head">🧠 AI review · A/B vs the keyword bot <span style="margin-left:auto;color:${promoted ? '#8a6dff' : 'var(--text-dim)'}">${promoted ? '✅ PROMOTED' : '⏳ TRACKING'}</span></div>
-      <p class="cx-mp-p" style="margin:8px 0 0">Fable direction <b>${fe.fableHitRatePct}%</b> [LB ${fe.fableHitRateLB90}%] vs keyword bot <b>${fe.mechHitRatePct}%</b> over ${fe.n} paired calls${fe.overrides ? ` · ${fe.overrides} overrides hit ${fe.overrideHitRatePct}%` : ''}. <b>${esc(fe.verdict)}.</b>${promoted ? ' Fable now drives card order and hides junk.' : ''}</p></div>`;
-  }
-  function renderXalerts(d) {
-    renderXalertsEdge(d.edge);
-    renderXalertsFableEdge(d.fableEdge);
-    const c = document.getElementById('xalerts-container'), meta = document.getElementById('xalerts-meta');
-    if (meta) meta.textContent = d.generatedAt ? `· ${d.bufferSize} posts · updated ${new Date(d.generatedAt).toLocaleString()} · ${d.gradedTotal}/${d.loggedTotal} graded${d.aiPromoted ? ' · 🧠 AI-ranked' : d.aiAssessedAt ? ' · 🧠 AI-reviewed' : ''}` : '· awaiting data from the collector';
-    const ranked = d.ranked || [];
-    if (!ranked.length) {
-      c.innerHTML = `<div class="mom-status"><p style="text-align:left;line-height:1.7">
-        <b>No alerts yet.</b> This tab ranks trade alerts that an <b>external collector</b> POSTs to the app — the scraping runs on your machine (where a browser exists); the app does the ranking + edge-grading.<br><br>
-        <b>To feed it</b> (from <code>~/trade-alert-ranker</code>):<br>
-        1. Set <code>APP_INGEST_URL</code> = <code>https://market-news-app-chi.vercel.app/api/tracker?op=alertsingest</code><br>
-        2. (Recommended) set a matching <code>ALERTS_INGEST_TOKEN</code> as a Vercel env var <i>and</i> in the collector.<br>
-        3. Run <code>python3 trade_alert_ranker.py push</code> — schedule it on a cron / GitHub Action to keep this live.<br><br>
-        Posts will rank here; the edge test grades them over the next few days.</p></div>`;
-      return;
-    }
-    c.innerHTML = '';
-    const grid = document.createElement('div'); grid.className = 'scr-grid';
-    ranked.forEach(r => grid.appendChild(buildXalertCard(r)));
-    c.appendChild(grid);
-    // ⏱️ Entry-timing light — buy-side only (bullish alerts); uses the trader's stated
-    // stop/target for R:R when present, else VWAP/extension/volume alone.
-    const bullish = ranked.filter(r => r.direction === 'bullish' && r.ticker).map(r => ({
-      ticker: r.ticker, stop: r.levels && r.levels.stop, target: r.levels && r.levels.target,
-    }));
-    attachTimingLights(c, bullish, 'xalerts', tk => {
-      const el = grid.querySelector(`.cx-ticker[data-live="${tk}"]`);
-      return el ? el.closest('.cx-card') : null;
-    });
-  }
-  const ALERT_CATALYST = { earnings: '📅 Earnings', fda: '🧪 FDA/Trial', breakout: '🚀 Breakout', 'm&a': '🤝 M&A', squeeze: '🩳 Squeeze', analyst: '📊 Analyst', insider: '🏛 Insider', technical: '📈 Technical' };
-  const ALERT_TF = { day: '⏱ Day trade', swing: '📆 Swing', long: '🗓 Long-term' };
-  function convictionMeta(c) {
-    if (c == null) return null;
-    const label = c >= 75 ? 'Extreme' : c >= 50 ? 'High' : c >= 25 ? 'Medium' : 'Low';
-    const col = c >= 75 ? 'var(--red)' : c >= 50 ? 'var(--amber,#f0a832)' : c >= 25 ? '#06c4d4' : 'var(--text-dim)';
-    return { label, col, c };
-  }
-  const XA_PUMP = { low: null, medium: { t: '⚠ pump-risk med', c: 'var(--amber,#f0a832)' }, high: { t: '🚩 pump-risk HIGH', c: 'var(--red)' } };
-  // 🧠 Fable-5 review block — the reasoned read that corrects the keyword bot's
-  // direction/conviction. Shows corrected direction, confidence (thesis right?),
-  // credibility (genuine vs pump), disagreement flag, and a one-line synthesis.
-  function buildXalertAi(r) {
-    const ai = r.ai; if (!ai) return '';
-    const aiColor = ai.direction === 'bullish' ? 'var(--green)' : ai.direction === 'bearish' ? 'var(--red)' : 'var(--text-dim)';
-    const chips = [`<span class="xa-chip" style="color:${aiColor};border-color:currentColor">${esc(ai.direction)}</span>`];
-    if (ai.confidence != null) chips.push(`<span class="xa-chip">conf ${ai.confidence}</span>`);
-    if (ai.credibility != null) chips.push(`<span class="xa-chip">cred ${ai.credibility}</span>`);
-    const pump = XA_PUMP[ai.pumpRisk];
-    if (pump) chips.push(`<span class="xa-chip" style="color:${pump.c};border-color:currentColor">${pump.t}</span>`);
-    if (!ai.agrees) chips.push(`<span class="xa-chip" style="color:var(--amber,#f0a832);border-color:currentColor" title="Fable disagrees with the keyword bot's direction (${esc(r.direction)})">↔ overrides bot</span>`);
-    const thesis = ai.thesis ? `<div class="cx-narrative" style="margin-top:4px;font-style:italic">${esc(ai.thesis)}</div>` : '';
-    const caution = ai.caution ? `<div class="xa-caution" style="color:var(--amber,#f0a832)">⚠ ${esc(ai.caution)}</div>` : '';
-    return `<div class="xa-ai" style="margin-top:7px;padding-top:7px;border-top:1px dashed var(--border,#ffffff1a)">
-        <div class="xa-ai-lb" style="color:#8a6dff;margin-bottom:4px">🧠 Fable review</div>
-        <div class="xa-chips">${chips.join('')}</div>${thesis}${caution}</div>`;
-  }
-  function buildXalertCard(r) {
-    const card = document.createElement('div'); card.className = 'cx-card';
-    const stars = '★'.repeat(r.score) + '☆'.repeat(5 - r.score);
-    const dirColor = r.direction === 'bullish' ? 'var(--green)' : r.direction === 'bearish' ? 'var(--red)' : 'var(--text-dim)';
 
-    // Mined-signal chips: catalysts (WHY), options, timeframe.
+  // Governance banner — echoes the shadow status so the UI can never imply live eligibility.
+  function renderXalertsGov(g) {
+    const el = document.getElementById('xalerts-edge'); if (!el) return;
+    if (!g) { el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="cx-portfolio" style="border-color:#8a6dff44">
+      <div class="cx-pf-head">🛡️ Research maturity <span style="margin-left:auto;color:#8a6dff">SHADOW · weight 0</span></div>
+      <p class="cx-mp-p" style="margin:8px 0 0">${esc(g.note)} Promotion requires the predefined governance gate (≥${g.promotionGate.minResolvedEpisodes} resolved episodes, ≥${g.promotionGate.minIndependentDates} independent dates, cost-aware incremental value over the price/setup baseline) and an explicit human review — never a wording change.</p></div>`;
+  }
+  // Walk-forward validation panel + probability suppression note.
+  function renderXalertsValidation(v, prob) {
+    const el = document.getElementById('xalerts-fable'); if (!el) return;
+    const probLine = `<p class="cx-mp-p" style="margin:6px 0 0;color:var(--text-dim);font-size:.85em">${esc((prob && prob.message) || 'Probability unavailable — insufficient prospective calibrated evidence.')}</p>`;
+    if (!v) { el.innerHTML = `<div class="cx-portfolio" style="border-style:dashed;border-color:#8a6dff33"><div class="cx-pf-head">📈 Incremental-value test</div><p class="cx-mp-p" style="margin:8px 0 0">No graded episodes yet — the account model earns influence only if it beats the price/setup baseline on purged, independently-dated, cost-aware episodes.</p>${probLine}</div>`; return; }
+    const ready = v.ready;
+    el.innerHTML = `<div class="cx-portfolio" style="border-color:${ready ? '#10d98a55' : '#8a6dff33'};border-style:dashed">
+      <div class="cx-pf-head">📈 Incremental-value walk-forward <span style="margin-left:auto;color:${ready ? 'var(--green)' : 'var(--text-dim)'}">${ready ? '✅ READY (human review)' : '⏳ NOT READY'}</span></div>
+      <p class="cx-mp-p" style="margin:8px 0 0">${esc(v.verdict)}${v.independentDates != null ? ` (${v.independentDates} independent dates)` : ''}.</p>${probLine}</div>`;
+  }
+
+  const XA_CAT = { earnings: '📅 Earnings', fda: '🧪 FDA/Trial', breakout: '🚀 Breakout', 'm&a': '🤝 M&A', squeeze: '🩳 Squeeze', analyst: '📊 Analyst', insider: '🏛 Insider', technical: '📈 Technical', momentum: '📈 Momentum', options: '⚡ Options' };
+  const XA_CATSTATUS = { VERIFIED_PRIMARY: { t: '✅ catalyst verified (primary)', c: 'var(--green)' }, VERIFIED_SECONDARY: { t: '✅ catalyst verified', c: 'var(--green)' }, SOCIAL_ONLY: { t: '💬 social-only catalyst', c: 'var(--amber,#f0a832)' }, UNVERIFIED: { t: '❔ catalyst unverified', c: 'var(--text-dim)' }, CONFLICTED: { t: '⚠ catalyst conflicted', c: 'var(--amber,#f0a832)' }, FALSE_OR_STALE: { t: '🚩 catalyst stale/false', c: 'var(--red)' } };
+  const XA_STATE = { UNKNOWN: 'var(--text-dim)', PROVISIONAL: '#06c4d4', SUPPORTED: 'var(--green)', PROVEN: 'var(--green)', DEGRADING: 'var(--amber,#f0a832)', REJECTED: 'var(--red)' };
+  const XA_ACTION = { REVIEW: { t: 'REVIEW', c: 'var(--green)' }, WAIT: { t: 'WAIT', c: '#06c4d4' }, AVOID: { t: 'AVOID', c: 'var(--amber,#f0a832)' }, 'EXIT/REASSESS': { t: 'EXIT / REASSESS', c: 'var(--red)' } };
+
+  function renderXalerts(d) {
+    renderXalertsGov(d && d.governance);
+    renderXalertsValidation(d && d.validation, d && d.probability);
+    const c = document.getElementById('xalerts-container'), meta = document.getElementById('xalerts-meta');
+    if (!d || !d.configured) { c.innerHTML = '<div class="mom-status"><p>Trade Alerts storage not configured.</p></div>'; if (meta) meta.textContent = ''; return; }
+    const counts = d.counts || {};
+    if (meta) meta.textContent = `· ${counts.episodes || 0} theses · ${counts.open || 0} open · ${counts.sources || 0} sources · ${counts.graded || 0} graded${d.decisionsBuiltAt ? ` · built ${new Date(d.decisionsBuiltAt).toLocaleString()}` : ''}`;
+
+    const views = d.views || null;
+    const hasData = views && (views.confirmations.length || views.waiting.length || views.crowded.length || views.contradictions.length);
+    const sbCount = (d.scoreboard && d.scoreboard.accounts) ? d.scoreboard.accounts.length : 0;
+    if (!hasData && !sbCount) { c.innerHTML = xalertsEmpty(); return; }
+
+    // View nav (segmented, mirrors the Options four-view control) with live counts.
+    const count = k => k === 'scoreboard' ? sbCount : (views && views[k] ? views[k].length : 0);
+    const navBtns = XA_VIEWS.map(([k, lbl]) => {
+      const on = xaView === k;
+      return `<button data-xav="${k}" class="dt-btn xa-pv" style="border-radius:0;border:none;${on ? 'background:#8a6dff;color:#0a0a1a' : 'background:transparent;color:var(--text-dim)'}">${lbl}${k !== 'scoreboard' ? ` (${count(k)})` : ''}</button>`;
+    }).join('');
+    c.innerHTML = `<div class="xa-nav">${navBtns}</div><div id="xa-body"></div>`;
+    c.querySelectorAll('.xa-pv').forEach(b => b.addEventListener('click', () => { xaView = b.dataset.xav; try { localStorage.setItem('xaView', xaView); } catch {} renderXalerts(xalertsData); }));
+
+    const body = c.querySelector('#xa-body');
+    if (xaView === 'scoreboard') { body.appendChild(buildScoreboardView(d.scoreboard)); return; }
+    const list = (views && views[xaView]) || [];
+    if (!list.length) { body.innerHTML = `<div class="mom-status"><p>${esc(xaViewEmpty(xaView))}</p></div>`; return; }
+    const grid = document.createElement('div'); grid.className = 'scr-grid';
+    list.forEach(dec => grid.appendChild(buildDecisionCard(dec)));
+    body.appendChild(grid);
+    // Entry-timing light for actionable long confirmations (stated stop/target when present).
+    const longs = list.filter(x => x.side === 'long' && x.ticker).map(x => ({ ticker: x.ticker, stop: x.statedLevels && x.statedLevels.stop, target: x.statedLevels && x.statedLevels.target }));
+    attachTimingLights(body, longs, 'xalerts', tk => { const el = grid.querySelector(`.cx-ticker[data-live="${tk}"]`); return el ? el.closest('.cx-card') : null; });
+  }
+
+  function xaViewEmpty(v) {
+    return { confirmations: 'No actionable confirmations right now — nothing has an independent setup + verified/technical trigger + acceptable execution. That is the honest default, not a bug.', waiting: 'Nothing is waiting on a trigger.', crowded: 'No crowded / late / coordinated names flagged.', contradictions: 'No contradictions, exits, or invalidations.' }[v] || 'Nothing here.';
+  }
+  function xalertsEmpty() {
+    return `<div class="mom-status"><p style="text-align:left;line-height:1.7">
+      <b>No alerts yet.</b> An <b>external collector</b> POSTs raw social posts to <code>/api/tracker?op=alertsingest</code> (v2 schema, or the legacy <code>{text, account, timestamp}</code>). The app captures provenance, builds immutable ticker-thesis episodes, grades them at the next open, and scores each into the four views above.<br><br>
+      <b>To feed it:</b> set <code>APP_INGEST_URL</code> to the ingest endpoint and (recommended) a matching <code>ALERTS_INGEST_TOKEN</code>, then push on a schedule. Episodes accrue a prospective record; the account model stays shadow (weight 0) until it proves incremental value.</p></div>`;
+  }
+
+  // A mini component-breakdown bar (setup / account / catalyst / execution / regime / social).
+  function xaBreakdown(cmp, w) {
+    if (!cmp) return '';
+    const parts = [['setup', 'Setup', '#8a6dff'], ['account', 'Account', '#06c4d4'], ['catalyst', 'Catalyst', 'var(--green)'], ['execution', 'Exec', 'var(--amber,#f0a832)'], ['regime', 'Regime', '#b088ff'], ['social', 'Social', 'var(--text-dim)']];
+    const segs = parts.map(([k, , col]) => cmp[k] > 0 ? `<div title="${k} ${cmp[k]}/${w[k]}" style="width:${cmp[k]}%;background:${col};height:100%"></div>` : '').join('');
+    const legend = parts.filter(([k]) => cmp[k] > 0).map(([k, lbl, col]) => `<span style="color:${col}">${lbl} ${Math.round(cmp[k])}</span>`).join(' · ');
+    return `<div class="xa-bd"><div class="xa-bd-track">${segs}</div><div class="xa-bd-legend">${legend}</div></div>`;
+  }
+
+  function buildDecisionCard(dec) {
+    const card = document.createElement('div'); card.className = 'cx-card';
+    const sideColor = dec.side === 'long' ? 'var(--green)' : dec.side === 'short' ? 'var(--red)' : 'var(--text-dim)';
+    const act = XA_ACTION[dec.action] || { t: dec.action, c: 'var(--text-dim)' };
+    const scoreCol = dec.score >= 65 ? 'var(--green)' : dec.score >= 45 ? '#06c4d4' : 'var(--text-dim)';
+    const stCol = XA_STATE[dec.accountState] || 'var(--text-dim)';
+    const rec = dec.accountRecord || {};
+
+    // Chips: catalyst status, coordination, chase, horizon, distinct clusters.
     const chips = [];
-    (r.catalysts || []).forEach(t => chips.push(`<span class="xa-chip">${ALERT_CATALYST[t] || esc(t)}</span>`));
-    if (r.options) chips.push(`<span class="xa-chip" style="color:#06c4d4;border-color:#06c4d444">⚡ ${esc(r.options.type)}${r.options.strike ? ' $' + esc(String(r.options.strike)) : ''}</span>`);
-    if (r.timeframe && ALERT_TF[r.timeframe]) chips.push(`<span class="xa-chip">${ALERT_TF[r.timeframe]}</span>`);
+    const cs = XA_CATSTATUS[dec.catalystStatus]; if (cs) chips.push(`<span class="xa-chip" style="color:${cs.c};border-color:currentColor">${cs.t}</span>`);
+    (dec.catalysts || []).slice(0, 2).forEach(t => chips.push(`<span class="xa-chip">${XA_CAT[t] || esc(t)}</span>`));
+    if (dec.coordinated) chips.push('<span class="xa-chip" style="color:var(--amber,#f0a832);border-color:currentColor">⚠ coordinated</span>');
+    if (dec.chase && dec.chase.extended) chips.push('<span class="xa-chip" style="color:var(--red);border-color:currentColor">🏃 late / extended</span>');
+    if (dec.intendedHorizon) chips.push(`<span class="xa-chip">📆 ${esc(dec.intendedHorizon)}${dec.horizonAssumed ? '?' : ''}</span>`);
     const chipRow = chips.length ? `<div class="xa-chips">${chips.join('')}</div>` : '';
 
-    // Conviction meter (intensity of the language, distinct from direction).
-    const cm = convictionMeta(r.conviction);
-    const convHtml = (cm && cm.c > 0) ? `<div class="xa-conv" title="How strongly the posts are worded (intensity language + emoji) — not a measure of whether they're right">
-        <span class="xa-conv-lb">Conviction</span><div class="xa-conv-track"><div class="xa-conv-fill" style="width:${cm.c}%;background:${cm.col}"></div></div><span style="color:${cm.col};font-weight:700">${cm.label}</span></div>` : '';
+    // Move since first alert.
+    const move = (dec.priceAtAlert != null && dec.priceNow != null)
+      ? `<span class="xa-fine">$${esc(String(dec.priceAtAlert))} → $${esc(String(dec.priceNow))} <b style="color:${(dec.moveSinceAlertPct || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${(dec.moveSinceAlertPct || 0) >= 0 ? '+' : ''}${dec.moveSinceAlertPct}%</b> since alert</span>` : '';
 
-    // Stated price levels (the actionable part — what the trader is actually playing).
-    const lv = r.levels;
-    const levelsHtml = lv ? `<div class="xa-levels">${lv.entry != null ? `<span>▶ Entry <b>$${esc(String(lv.entry))}</b></span>` : ''}${lv.target != null ? `<span>🎯 Target <b style="color:var(--green)">$${esc(String(lv.target))}</b></span>` : ''}${lv.stop != null ? `<span>🛑 Stop <b style="color:var(--red)">$${esc(String(lv.stop))}</b></span>` : ''}</div>` : '';
+    // Deterministic levels (chart math only).
+    const lv = [];
+    if (dec.trigger != null) lv.push(`<span>▶ Trigger <b>$${esc(String(dec.trigger))}</b></span>`);
+    if (dec.target != null) lv.push(`<span>🎯 Target <b style="color:var(--green)">$${esc(String(dec.target))}</b></span>`);
+    if (dec.invalidation != null) lv.push(`<span>🛑 Invalid <b style="color:var(--red)">$${esc(String(dec.invalidation))}</b></span>`);
+    if (dec.rr != null) lv.push(`<span>R:R <b>${esc(String(dec.rr))}</b></span>`);
+    const levelsHtml = lv.length ? `<div class="xa-levels">${lv.join('')}</div>` : '';
+
+    // Account record line (evidence state, not raw hit rate).
+    const acctLine = `<span class="xa-chip" style="color:${stCol};border-color:currentColor">${esc(dec.accountState)}</span>` +
+      (rec.n ? ` <span class="xa-fine">${rec.n} episodes${rec.ci90 ? ` · CI ${rec.ci90[0]}–${rec.ci90[1]}%` : ''}</span>` : ' <span class="xa-fine">no track record — no bonus</span>');
+
+    // Discovery vs echo.
+    const srcLine = `<span class="xa-fine">${dec.independentClusters || 0} independent cluster${(dec.independentClusters || 0) === 1 ? '' : 's'}${dec.distinctClusters ? ` · ${dec.distinctClusters} distinct text cluster${dec.distinctClusters === 1 ? '' : 's'}` : ''}${dec.handle ? ` · @${esc(dec.handle)}` : ''}</span>`;
+
+    const sem = dec.semantic ? `<div class="cx-narrative" style="font-style:italic">${esc(dec.semantic.summary || '')}${dec.semantic.missingInformation ? ` — missing: ${esc(dec.semantic.missingInformation)}` : ''}</div>` : '';
+    const reasons = (dec.reasons || []).slice(0, 2).map(r => `<div class="xa-fine">• ${esc(r)}</div>`).join('');
 
     card.innerHTML = `<div class="cx-top"><div>
-        <div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(r.ticker)}">$${esc(r.ticker)}</span>
-          <span class="cx-tierbadge" style="color:${dirColor};border-color:currentColor;background:transparent">${esc(r.direction)}</span>
-          ${r.coordinated ? '<span class="cx-tierbadge" style="color:var(--amber);border-color:#f0a83244;background:var(--amber-dim)">⚠ coordinated</span>' : ''}</div>
-        <div class="cx-company">${r.independentSources} independent source${r.independentSources > 1 ? 's' : ''} · ${r.distinctAccounts} account${r.distinctAccounts > 1 ? 's' : ''} · ${esc(r.accounts.join(', '))}</div>
+        <div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(dec.ticker)}">$${esc(dec.ticker)}</span>
+          <span class="cx-tierbadge" style="color:${sideColor};border-color:currentColor;background:transparent">${esc(dec.side || '—')}</span>
+          <span class="cx-tierbadge" style="color:${act.c};border-color:currentColor;background:transparent">${act.t}</span></div>
+        <div class="cx-company">${srcLine}</div>
+        <div class="cx-company">${acctLine}</div>
       </div>
-      <div class="cx-score-col"><div class="cx-score" style="color:#8a6dff;font-size:1.05rem">${stars}</div>
-        <div class="cx-price">signal ${r.weightedSignal}</div></div></div>
-      ${chipRow}${convHtml}${levelsHtml}${buildXalertAi(r)}
-      <div class="cx-narrative">${esc(r.sampleText)}</div>`;
+      <div class="cx-score-col"><div class="cx-score" style="color:${scoreCol};font-size:1.35rem">${dec.score}</div>
+        <div class="cx-price">/100 · ${esc(dec.tier || '')}</div></div></div>
+      ${chipRow}${move ? `<div style="margin-top:5px">${move}</div>` : ''}${levelsHtml}
+      ${xaBreakdown(dec.components, dec.weights)}
+      ${reasons ? `<div style="margin-top:6px">${reasons}</div>` : ''}${sem}`;
     return card;
+  }
+
+  function buildScoreboardView(sb) {
+    const wrap = document.createElement('div');
+    if (!sb || !sb.accounts || !sb.accounts.length) { wrap.innerHTML = `<div class="mom-status"><p>No graded account evidence yet. Accounts earn a state only after ≥30 independent, prospectively-dated episodes.</p></div>`; return wrap; }
+    const head = `<p class="cx-mp-p" style="margin:0 0 10px;color:var(--text-dim)">${esc(sb.note)} Population prior ${sb.populationPrior != null ? (100 * sb.populationPrior).toFixed(0) + '%' : 'n/a'} · ${sb.nAccounts} accounts.</p>`;
+    const grid = document.createElement('div'); grid.className = 'scr-grid';
+    sb.accounts.forEach(a => {
+      const stCol = XA_STATE[a.evidenceState] || 'var(--text-dim)';
+      const wCol = a.weight === 'zero' ? 'var(--text-dim)' : a.weight === 'reduced' ? 'var(--amber,#f0a832)' : 'var(--green)';
+      const card = document.createElement('div'); card.className = 'cx-card';
+      card.innerHTML = `<div class="cx-top"><div>
+          <div class="cx-tk-row"><span class="cx-ticker">${a.handle ? '@' + esc(a.handle) : esc(a.sourceId)}</span>
+            <span class="cx-tierbadge" style="color:${stCol};border-color:currentColor;background:transparent">${esc(a.evidenceState)}</span>
+            ${(a.integrityFlags || []).map(f => `<span class="cx-tierbadge" style="color:var(--amber,#f0a832);border-color:currentColor">${esc(f)}</span>`).join('')}</div>
+          <div class="cx-company"><span class="xa-fine">${a.independentEpisodes} episodes · ${a.independentDates} dates · ${a.monthsSpan}mo</span></div>
+        </div>
+        <div class="cx-score-col"><div class="cx-score" style="color:${a.netExpectancy >= 0 ? 'var(--green)' : 'var(--red)'};font-size:1.1rem">${a.netExpectancy >= 0 ? '+' : ''}${a.netExpectancy}%</div>
+          <div class="cx-price">net/episode</div></div></div>
+        <div class="xa-chips" style="margin-top:6px">
+          <span class="xa-chip">CI90 ${a.ci90 ? a.ci90[0] + '–' + a.ci90[1] + '%' : 'n/a'}</span>
+          <span class="xa-chip">deflated LB ${a.deflatedLB90}%</span>
+          ${a.profitFactor != null ? `<span class="xa-chip">PF ${a.profitFactor}</span>` : ''}
+          <span class="xa-chip" style="color:${wCol};border-color:currentColor">weight: ${esc(a.weight)}</span></div>
+        <div class="xa-fine" style="margin-top:6px">recent ${a.recentVsLong.recent}% vs long ${a.recentVsLong.long}% · ${esc(a.weightReason || '')}</div>`;
+      grid.appendChild(card);
+    });
+    wrap.innerHTML = head; wrap.appendChild(grid);
+    return wrap;
   }
   document.getElementById('xalerts-refresh-btn')?.addEventListener('click', fetchXalerts);
 
