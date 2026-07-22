@@ -1165,9 +1165,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const lbl = bias === 'bullish' ? '▲ Bullish' : bias === 'bearish' ? '▼ Bearish' : '● Neutral';
     return `<span class="cx-tierbadge" style="color:${col};border-color:currentColor">${lbl}</span>`;
   }
-  function ofConvictionChip(n) {
-    const col = n >= 70 ? 'var(--green)' : n >= 40 ? 'var(--amber,#f0a832)' : 'var(--text-dim)';
-    return `<span class="cx-tierbadge" title="How real and tradeable this flow is — aggressive @-ask sweeps + abnormal-vs-own-norm volume + confirming tape score high; a lone block sold @bid scores low. Not premium size." style="color:${col};border-color:currentColor">🔩 ${n}/100 conviction</span>`;
+  function ofClarityChip(c) {
+    const col = c === 'clear' ? 'var(--green)' : c === 'mixed' ? 'var(--amber,#f0a832)' : 'var(--text-dim)';
+    const lbl = c === 'clear' ? 'Clear evidence' : c === 'mixed' ? 'Mixed evidence' : 'Thin evidence';
+    return `<span class="cx-tierbadge" title="How clearly the shown flow reads — clear = aggressive same-direction prints on a reliable quote; mixed = two-sided/conflicting; thin = one lone print, unreliable quote, or wide/illiquid. Evidence quality, NOT a probability of profit." style="color:${col};border-color:currentColor">🔎 ${lbl}</span>`;
   }
   // The per-ticker AI trade plan block, rendered on both Simple and Pro cards when
   // op=optionsassess has run. Stock-specific — replaces the generic "what you could do".
@@ -1177,18 +1178,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const refine = (a.agrees === false)
       ? ` <span class="dt-dim" title="Fable's read differs from the raw call/put lean — it weighs the aggressor, DTE and tape, not just which side traded" style="font-size:0.72rem">↔ refines the raw lean</span>`
       : '';
-    const line = (icon, lbl, val) => val ? `<div style="margin-top:4px"><b>${icon} ${lbl}:</b> ${esc(val)}</div>` : '';
-    const cat = a.catalyst ? ` <span class="cx-tierbadge" style="color:var(--text-dim);border-color:#444" title="Likely reason behind the positioning">${esc(a.catalyst)}</span>` : '';
     const caution = a.caution ? `<div class="of-warn" style="margin-top:6px">⚠ ${esc(a.caution)}</div>` : '';
     return `<div class="of-action" style="border-left-color:#a78bfa">`
       + `<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:5px">`
-      + `<b style="color:#a78bfa">🧠 AI trade plan</b> ${ofBiasChip(a.bias)} ${ofConvictionChip(a.conviction)}${cat}${refine}</div>`
+      + `<b style="color:#a78bfa">🧠 AI read</b> ${ofBiasChip(a.bias)} ${ofClarityChip(a.evidenceClarity)}${refine}</div>`
       + (a.interpretation ? `<div style="line-height:1.55">${esc(a.interpretation)}</div>` : '')
-      + line('🎯', 'Entry', a.entry)
-      + line('🛑', 'Invalidation', a.invalidation)
-      + `<div style="margin-top:4px"><b>🛠 How to play:</b> ${OF_VEHICLE[a.vehicle] || esc(a.vehicle)}${a.timeframe ? ` · <span class="dt-dim">${OF_TIMEFRAME[a.timeframe] || esc(a.timeframe)}</span>` : ''}</div>`
+      + `<div style="margin-top:4px"><b>🛠 Lower-risk expression:</b> ${OF_VEHICLE[a.vehicle] || esc(a.vehicle)}${a.timeframe ? ` · <span class="dt-dim">${OF_TIMEFRAME[a.timeframe] || esc(a.timeframe)}</span>` : ''}</div>`
       + caution
-      + `<div class="dt-dim" style="font-size:0.7rem;margin-top:6px">AI read of the flow — not advice. Confirm on your chart and the Track Record below.</div></div>`;
+      + `<div class="dt-dim" style="font-size:0.7rem;margin-top:6px">Grounded explanation of the shown flow — it invents no price levels, catalysts, or probability, and cannot promote this overlay to a live signal. Levels come from your chart; confirm with the Track Record below.</div></div>`;
   }
   // The desk read — one AI summary of the day's most tradeable flow, atop the grid.
   function ofDeskReadHTML() {

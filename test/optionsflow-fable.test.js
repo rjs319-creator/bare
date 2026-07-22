@@ -3,27 +3,33 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const f = require('../lib/optionsflow-fable');
 
-// ── parseAnalyses: sanitize / clamp / validate against the provided tickers ──
-test('parseAnalyses clamps conviction, validates enums, filters unknown tickers', () => {
+// ── parseAnalyses: GROUNDED-ONLY sanitize / validate against provided tickers ──
+test('parseAnalyses keeps only grounded fields, drops invented levels/catalyst/probability', () => {
   const input = {
     analyses: [
-      { ticker: 'nvda', bias: 'bullish', conviction: 250, interpretation: 'x', entry: 'reclaim $120', invalidation: 'below $110', vehicle: 'call_option', timeframe: 'swing', catalyst: 'earnings', caution: 'IV crush' },
-      { ticker: 'AMD', bias: 'sideways', conviction: -5, interpretation: 'y', entry: 'e', invalidation: 'i', vehicle: 'rocket', timeframe: 'forever' },
-      { ticker: 'FAKE', bias: 'bearish', conviction: 50 },   // not in valid list → dropped
-      { bias: 'bullish' },                                   // no ticker → dropped
+      // Model tries to smuggle in entry/invalidation/catalyst/conviction — all must be dropped.
+      { ticker: 'nvda', bias: 'bullish', evidenceClarity: 'clear', interpretation: 'aggressive OTM calls lifted @ask', vehicle: 'call_option', timeframe: 'swing', caution: 'IV crush', entry: 'reclaim $120', invalidation: 'below $110', catalyst: 'earnings', conviction: 250 },
+      { ticker: 'AMD', bias: 'sideways', evidenceClarity: 'nonsense', interpretation: 'y', vehicle: 'rocket', timeframe: 'forever' },
+      { ticker: 'FAKE', bias: 'bearish', evidenceClarity: 'clear' },   // not in valid list → dropped
+      { bias: 'bullish' },                                             // no ticker → dropped
     ],
-    deskRead: 'NVDA is the cleanest bullish flow today.',
+    deskRead: 'NVDA shows the clearest bullish evidence today.',
   };
   const { analyses, deskRead } = f.parseAnalyses(input, ['NVDA', 'AMD']);
   assert.equal(Object.keys(analyses).length, 2);
-  assert.equal(analyses.NVDA.conviction, 100);              // 250 clamped
+  // Invented fields are NOT carried through — Fable cannot author levels/catalysts/probability.
+  assert.equal(analyses.NVDA.entry, undefined);
+  assert.equal(analyses.NVDA.invalidation, undefined);
+  assert.equal(analyses.NVDA.catalyst, undefined);
+  assert.equal(analyses.NVDA.conviction, undefined);
+  assert.equal(analyses.NVDA.evidenceClarity, 'clear');
   assert.equal(analyses.NVDA.vehicle, 'call_option');
   assert.equal(analyses.AMD.bias, 'neutral');               // invalid enum → default
-  assert.equal(analyses.AMD.conviction, 0);                 // -5 clamped
+  assert.equal(analyses.AMD.evidenceClarity, 'thin');       // invalid clarity → conservative default
   assert.equal(analyses.AMD.vehicle, 'shares');             // invalid → default
   assert.equal(analyses.AMD.timeframe, 'swing');            // invalid → default
   assert.equal(analyses.FAKE, undefined);
-  assert.equal(deskRead, 'NVDA is the cleanest bullish flow today.');
+  assert.equal(deskRead, 'NVDA shows the clearest bullish evidence today.');
 });
 
 test('parseAnalyses tolerates empty / malformed input', () => {
@@ -40,16 +46,35 @@ test('mergeAnalyses attaches ai and computes agrees vs mechanical net', () => {
     { ticker: 'MU', net: 'mixed', totalPremium: 1e6 },
   ];
   const doc = { analyses: {
-    NVDA: { bias: 'bullish', conviction: 80, vehicle: 'shares', catalyst: 'earnings' },
-    AMD: { bias: 'neutral', conviction: 30, vehicle: 'avoid', catalyst: '' },
+    NVDA: { bias: 'bullish', evidenceClarity: 'clear', vehicle: 'shares' },
+    AMD: { bias: 'neutral', evidenceClarity: 'thin', vehicle: 'avoid' },
   } };
   const out = f.mergeAnalyses(rollups, doc);
   assert.equal(out[0].ai.agrees, true);       // bullish == bullish
+  assert.equal(out[0].ai.evidenceClarity, 'clear');
   assert.equal(out[1].ai.agrees, false);      // neutral != bearish (a refinement)
-  assert.equal(out[1].ai.catalyst, null);     // '' normalized to null
+  assert.equal(out[1].ai.catalyst, undefined); // no invented catalyst field at all
   assert.equal(out[2].ai, null);              // no analysis for MU
   assert.notEqual(out[0], rollups[0]);        // new objects (immutable)
   assert.equal(rollups[0].ai, undefined);     // original untouched
+});
+
+// ── the tool SCHEMA itself forbids Fable from authoring levels/catalysts/odds ──
+test('OPTIONS_FABLE_TOOL schema exposes no invented-level / catalyst / probability fields', () => {
+  const props = f.OPTIONS_FABLE_TOOL.input_schema.properties.analyses.items.properties;
+  for (const forbidden of ['entry', 'invalidation', 'catalyst', 'conviction']) {
+    assert.equal(props[forbidden], undefined, `${forbidden} must not be a Fable output field`);
+  }
+  assert.ok(props.evidenceClarity, 'evidence clarity (quality, not probability) is present');
+  const required = f.OPTIONS_FABLE_TOOL.input_schema.properties.analyses.items.required;
+  assert.ok(!required.includes('entry') && !required.includes('conviction'));
+});
+
+test('buildAnalysisPrompt instructs the model not to invent levels/catalysts/probability', () => {
+  const prompt = f.buildAnalysisPrompt([{ ticker: 'NVDA', net: 'bullish', grade: 'Bullish', bullishPct: 70, totalPremium: 1e6, underlying: 100, contracts: [] }]);
+  assert.match(prompt, /Do NOT invent price levels/i);
+  assert.match(prompt, /Do NOT invent a catalyst/i);
+  assert.match(prompt, /Do NOT output a probability/i);
 });
 
 // ── prompt builders are defensive on partial rows ────────────────────────────
