@@ -40,7 +40,7 @@ const { runCoreBuild, runCore, runCoreLog, runCoreDrift, runCorePerf } = require
 const { runGamePlan } = require('../lib/gameplan-routes');
 const { runToneTick, runTone } = require('../lib/tone-routes');
 const { runAttention, runAttentionTick } = require('../lib/attention-routes');
-const { runOptionsFlow, runOptionsPerf, runOptionsAssess } = require('../lib/optionsflow-routes');
+const { runOptionsFlow, runOptionsPerf, runOptionsAssess, runOptionsEpisodes } = require('../lib/optionsflow-routes');
 const { runPulse, runPulseRefine, runPulseGrade, runPulseEpisodes } = require('../lib/pulse-routes');
 const { runDualRead, runDualReadLog, runDualReadBook, runDualReadTune, runDualReadBackfill, runLtRecs } = require('../lib/dualread-routes');
 const { requireTrusted, requireMethod, stripForceParams, isTrusted } = require('../lib/auth');
@@ -93,7 +93,7 @@ const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/
 // the expensive force/refresh rebuild levers for untrusted callers.
 const SHARED_FORCE_OPS = new Set([
   'aligned', 'anomalytick', 'biotechtick', 'calibration', 'coredrift', 'crossassettick',
-  'optionsflow', 'pulse', 'pulserefine', 'putsell', 'readthroughtick', 'secondwavetick',
+  'optionsflow', 'optionsepisodes', 'pulse', 'pulserefine', 'putsell', 'readthroughtick', 'secondwavetick',
   'toneshifttick',
   // redundancy: the cached model is public (the UI panel reads it), but a force=1 rebuild
   // refetches candles for every ticker in the ledger history — trusted callers (the cron)
@@ -206,6 +206,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'gameplan') return runGamePlan(req, res);
   if (req.query.op === 'optionsflow') return runOptionsFlow(req, res);
   if (req.query.op === 'optionsperf') return runOptionsPerf(req, res);
+  if (req.query.op === 'optionsepisodes') return runOptionsEpisodes(req, res);
   if (req.query.op === 'optionsassess') return runOptionsAssess(req, res);
   if (req.query.op === 'perf') return require('../lib/perf-routes').runPerf(req, res);
   if (req.query.op === 'brief') return runBrief(req, res);

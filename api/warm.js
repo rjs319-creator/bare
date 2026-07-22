@@ -111,6 +111,10 @@ module.exports = async function handler(req, res) {
   //
   // 💰 Options Moves — put-selling setups (full-market scan + IV/earnings).
   const putsellKick = warmOne('/api/tracker?op=putsell').catch(() => null);
+  // 📏 Options episode grading — next-open, SPY-relative, cost-aware grading of the
+  // immutable decision episodes (folded by op=optionsflow above). Heavy (candle fetches
+  // per resolvable episode) → its own 60s budget, off warm's critical path.
+  const optionsEpisodesKick = warmOne('/api/tracker?op=optionsepisodes&refresh=1').catch(() => null);
   // Predict-tab feedback loop — recompute each class's Wilson-bounded track-record grade
   // so cards auto-feature/demote as picks resolve. Heavy (fetches history), own budget.
   const calibKick = warmOne('/api/tracker?op=calibration&force=1').catch(() => null);
@@ -162,6 +166,7 @@ module.exports = async function handler(req, res) {
   void researchKick;      // single dispatch: refresh the baseline factor cross-section
   void optionsAssessKick; // single dispatch: Fable options-flow analysis in its own budget
   void putsellKick;       // single dispatch: put-selling setups scan
+  void optionsEpisodesKick; // single dispatch: episode grading in its own budget
 
   const chainsDispatched = chainKicks.length;
   const result = {
