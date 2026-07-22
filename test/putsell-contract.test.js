@@ -65,6 +65,15 @@ test('selectPutContract requires a real, liquid OTM strike BELOW support', () =>
   assert.ok(sel.credit > 0);
 });
 
+test('selectPutContract rejects a near-ATM (high proxy-delta) put — not a conservative CSP', () => {
+  // A liquid put just below support but only ~2% OTM → proxy delta well above the ceiling.
+  const puts = [
+    { strike: 98, bid: 4.0, ask: 4.2, openInterest: 900, impliedVolatility: 0.4 },   // ~ATM, high delta → rejected
+  ];
+  const sel = selectPutContract(puts, { spot: 100, supportPx: 99, dte: 35, iv: 0.4 });
+  assert.equal(sel.contract, null, 'a near-ATM put must not be recommended as a CSP');
+});
+
 test('selectPutContract refuses (no fabrication) when nothing qualifies', () => {
   const puts = [
     { strike: 99, bid: 2.0, ask: 2.1, openInterest: 500 },   // above support
