@@ -61,7 +61,25 @@ function banner(om) {
   return `<div class="om-banner">
     <b>OMEGA-SWING — 5–10 day momentum continuation.</b> Liquid names still early-to-middle in a move, ranked by <b>expected utility</b>. Regime: <b>${esc(r.label || '—')}</b>. ${c.prime || 0} high-ranked · ${c.qualified || 0} conditional · ${c.watch || 0} watch of ${c.total || 0}.
     ${shadow ? `<div class="om-shadow">🧪 <b>SHADOW RESEARCH — weight-0.</b> ${esc(om.evidenceStatus || 'Ranked research candidates, NOT buy signals.')}</div>` : ''}
+    ${researchEvidenceLine(om.researchEvidence)}
     <div class="om-note">⚠️ ${esc(om.dataNote || 'EOD/daily data — entries are next-session; probabilities are an uncalibrated baseline shown as evidence bands.')}</div>
+  </div>`;
+}
+
+// Survivorship-free research verdict — the honest headline the app can stand behind. Recorded
+// snapshot from the research harness (survivorship-complete master), distinct from the live feed.
+function researchEvidenceLine(rv) {
+  if (!rv || !rv.available) return '';
+  const m = rv.metrics || {}, u = rv.universe || {};
+  const noEdge = rv.verdict === 'no-edge';
+  const ic = m.scoreIC_survivorshipFree, mic = m.momentumBaselineIC;
+  const icTxt = (ic != null && mic != null) ? ` · score IC ${ic >= 0 ? '+' : ''}${ic.toFixed(3)} vs momentum ${mic >= 0 ? '+' : ''}${mic.toFixed(3)}` : '';
+  const cls = noEdge ? 'om-research-noedge' : 'om-research-edge';
+  const verdictTxt = noEdge ? 'no edge' : esc(rv.verdict);
+  return `<div class="om-research ${cls}" title="${esc(rv.scope || '')}">
+    🔬 <b>Survivorship-free research verdict: ${verdictTxt}.</b>
+    survivorship-safe ✓ · ${rv.promotable ? 'promotable' : 'not promotable'} · ${u.delisted ?? '–'} delisted names in-panel${icTxt}.
+    <span class="om-research-sub">Research-side (survivorship-complete master), distinct from the survivor-biased live feed. On current evidence there is nothing to promote.</span>
   </div>`;
 }
 
