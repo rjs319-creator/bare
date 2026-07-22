@@ -1321,6 +1321,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     document.getElementById('of-m-simple').addEventListener('click', () => setMode(true));
     document.getElementById('of-m-pro').addEventListener('click', () => setMode(false));
     wirePrimaryNav();
+    // Populate the Raw grid now — this branch also runs when switching TO Raw via the
+    // primary nav (which only rebuilds the shell), so the grid must fill itself here.
+    applyOptionsView();
   }
 
   // ── The four-view decision renderers (Swing Confirmations / Contradictions & Risk) ──
