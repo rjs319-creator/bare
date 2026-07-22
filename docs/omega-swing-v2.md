@@ -99,6 +99,25 @@ sector/cluster headroom. Then an **evidence haircut** shrinks it for shadow stat
 probabilities, binary events, and fat tails. Output is labeled an **educational estimate**, not a
 broker-ready order; portfolio-aware sizing activates only when the caller supplies exposures.
 
+## 7b. Live candidate-funnel capture (Phase 4)
+
+`lib/omega-funnel.js` + `omega/funnel/<date>.json` (write-once). Every day the cron
+(`op=omegalog`) and the on-demand `op=omegafunnel` capture an **immutable, versioned snapshot**
+of the exact `op=today` candidate funnel OMEGA re-ranked:
+
+- The **complete** candidate set (eligible *and* ineligible), each with its source strategy
+  family, raw score, and **within-strategy-and-date normalized** rank/percentile (raw scores from
+  unrelated screeners are not comparable, so they are percentile-ranked *within* each family
+  before the union is OMEGA-ranked).
+- The eligibility filter + candidate cap that were applied, the regime, the universe id, and what
+  OMEGA ultimately **selected** and **ranked** (tier + OMEGA rank per candidate).
+
+`assessFunnelParity(cohortDates, snapshotDates)` is **fail-closed**: `historicalLiveParity` is
+true only when *every* cohort date has a captured funnel. `op=omegawf` reads the captured dates
+and flips parity automatically once a replay range is fully covered; `op=omegamodel` and
+`op=omegafunnel` surface the accrual (`capturedSnapshots`, first/last date). This is the machinery
+that will let a future challenger become *promotable* — it accrues going forward, from now.
+
 ## 8. Validation & promotion (Phase 15)
 
 `op=omegawf` runs the purged walk-forward. `evaluateGates()` (pure, unit-tested) is the fail-closed
@@ -144,10 +163,12 @@ survive* realistic fills, costs, regime changes, and prospective monitoring befo
   (parity + survivorship) exists to train on responsibly. The interpretable formula remains the
   shipped ranker.
 - **No calibrated probabilities.** Requires a trained model + out-of-fold calibration + ≥200 samples.
-- **Point-in-time candidate-funnel reconstruction** (Phase 4) — live snapshots of the `op=today`
-  funnel must be logged going forward; the static-universe replay cannot reproduce it.
-- **Survivorship-complete universe** — needs the research-side PIT security master; until then
-  `survivorshipSafe:false` blocks promotion.
+- **Live candidate-funnel capture (Phase 4) is now BUILT** (`lib/omega-funnel.js`,
+  `omega/funnel/`), but it accrues **going forward** — a walk-forward over historical cohorts still
+  has `historicalLiveParity:false` until enough prospective funnel has been captured to cover a
+  replay range.
+- **Survivorship-complete universe** — still needs the research-side PIT security master; until
+  then `survivorshipSafe:false` blocks promotion even once funnel parity is met.
 - **Setup state machines** (Phase 6) remain the v1 strength-score detectors, not full stateful
   machines with episode boundaries.
 
@@ -159,10 +180,14 @@ sharpen the execution model but are not required for the next-open honesty guara
 
 ## Next highest-value phase
 
-**Phase 4 — log the live `op=today` candidate funnel prospectively** (snapshot id, source score,
-rank, eligibility, regime) each day. That is the single blocker that would let a future challenger
-be *promotable*; everything else (execution, ledgers, calibration gate, sizing, governance) is now
-in place to consume it.
+Phase 4 (funnel capture) is now built and accruing. The remaining blockers to a *promotable*
+challenger, in order:
+
+1. **Survivorship-complete PIT security master** (research side) so `survivorshipSafe` can be true.
+   Funnel capture is already wired into the daily cron (`op=omegalog` runs in the `postdecision`
+   warm chain and now captures the funnel write-once), so parity accrues automatically.
+2. **A trained challenger + out-of-fold calibration** (Phase 8/9) to validate once parity +
+   survivorship hold on a covered replay range.
 
 ## Test coverage
 
