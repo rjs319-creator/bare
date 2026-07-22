@@ -128,9 +128,30 @@ promotion logic:
   baseline** (10d momentum, 52wk-high proximity, relVol).
 - `promotable` additionally requires **live-funnel parity** *and* **survivorship-safe**.
 
-Because the replay scans a **static present-day universe**, `historicalLiveParity` and
-`survivorshipSafe` are `false` — so **`promotable` is structurally false**. A challenger can never
-be promoted off this harness alone. `verdict` is `inconclusive-truncated` on any deadline hit.
+Because the *app-side* replay (`op=omegawf`) runs on the free survivor-biased Yahoo feed and a
+static present-day universe, `historicalLiveParity` and `survivorshipSafe` are `false` there — so
+its `promotable` is structurally false. A challenger can never be promoted off that harness alone.
+`verdict` is `inconclusive-truncated` on any deadline hit.
+
+### 8b. Survivorship-free evidence (research side) — the flag discharged
+
+`survivorshipSafe` cannot be earned on the app's free feed (delisted names return nothing from
+Yahoo). It is discharged the way NSL #7/#8 discharged it — **research-side**, by re-running the
+*identical* OMEGA scorer, executable-fill model, cost model, and `evaluateGates()` over a
+survivorship-**complete** cross-section from the `pit-secmaster-v1` master (delisted names included
+up to their last trading day, with a Shumway −30% delisting haircut):
+
+- `research/53-omega-survivorship-free.js` → `research/OMEGA-SURVIVORSHIP-FREE-2026-07.md`.
+- Universe: 1006 in-band names (600 active + **406 since-delisted**), 25 month-ends 2022–2024,
+  5,053 scored name-dates. `survivorshipSafe = true`.
+- **Result:** score→10d-residual rank-IC **−0.027** (t −1.30) survivorship-free — **below** the 10d
+  momentum baseline (+0.029); tiers not monotone; gates do **not** pass ⇒ verdict **`no-edge`**.
+  Survivorship return bias +0.36%/10d (survivor-only flatters), echoing NSL #8's level-not-ordering
+  finding. `promotable` remains false (live-funnel parity still false).
+
+Reading: OMEGA has **no durable selection edge even once survivorship is removed** — consistent with
+the app's whole edge-hunt. That is the honest, expected outcome, not a bug. The flag is now
+*discharged* (we know the answer isn't a survivorship artifact), but the answer is "no edge here".
 
 ## 9. Governance (Phase 13)
 
@@ -167,8 +188,12 @@ survive* realistic fills, costs, regime changes, and prospective monitoring befo
   `omega/funnel/`), but it accrues **going forward** — a walk-forward over historical cohorts still
   has `historicalLiveParity:false` until enough prospective funnel has been captured to cover a
   replay range.
-- **Survivorship-complete universe** — still needs the research-side PIT security master; until
-  then `survivorshipSafe:false` blocks promotion even once funnel parity is met.
+- **Survivorship — DISCHARGED (research side).** OMEGA's edge test has now been run
+  survivorship-free over the `pit-secmaster-v1` master (§8b) — `survivorshipSafe:true`, verdict
+  `no-edge`. The *app-side* replay stays `survivorshipSafe:false` by construction (free Yahoo feed
+  can't see delisted names); the survivorship-complete verdict lives research-side, which is the
+  honest place for it. Net: survivorship is no longer an *open* blocker — but the survivorship-free
+  answer is "no edge", so there is nothing to promote regardless.
 - **Setup state machines** (Phase 6) remain the v1 strength-score detectors, not full stateful
   machines with episode boundaries.
 
@@ -180,14 +205,19 @@ sharpen the execution model but are not required for the next-open honesty guara
 
 ## Next highest-value phase
 
-Phase 4 (funnel capture) is now built and accruing. The remaining blockers to a *promotable*
-challenger, in order:
+Phase 4 funnel capture is built and accruing; survivorship is discharged research-side (verdict
+`no-edge`). The honest state is now: **the infrastructure is complete, and OMEGA has no demonstrable
+edge to promote.** The remaining possibilities, in order of value:
 
-1. **Survivorship-complete PIT security master** (research side) so `survivorshipSafe` can be true.
-   Funnel capture is already wired into the daily cron (`op=omegalog` runs in the `postdecision`
-   warm chain and now captures the funnel write-once), so parity accrues automatically.
-2. **A trained challenger + out-of-fold calibration** (Phase 8/9) to validate once parity +
-   survivorship hold on a covered replay range.
+1. **Keep accruing prospective evidence** — the live funnel + prospective picks + Scoreboard track
+   record. If a genuine edge ever appears in the prospective record (not the survivorship-free
+   research replay, which says no-edge), *then* a challenger becomes worth training.
+2. **A trained challenger + out-of-fold calibration** (Phase 8/9) — only worth building if (1)
+   surfaces something; on current evidence there is nothing to fit that beats simple momentum.
+3. **Setup state machines** (Phase 6) — a code-quality improvement, not an edge lever.
+
+The disciplined conclusion: OMEGA stays **shadow, weight-0, indefinitely** unless prospective
+evidence contradicts the survivorship-free `no-edge` finding. That is the correct outcome.
 
 ## Test coverage
 
