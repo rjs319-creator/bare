@@ -83,6 +83,8 @@ const PRIVILEGED_OPS = new Set([
   'pulsegrade',
   // ATLAS-X shadow ledger WRITES (build+persist episodes/ledger/predictions; grade terminals).
   'atlasxlog', 'atlasxresolve',
+  // Swing-search shadow ledger WRITES (log the daily swing cross-section PIT / grade forward outcomes).
+  'swingsearchlog', 'swingsearchgrade',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
@@ -161,6 +163,8 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'lifecycle') return require('../lib/lifecycle-routes').runLifecycle(req, res);
   if (req.query.op === 'lifecyclegrade') return require('../lib/lifecycle-routes').runLifecycleGrade(req, res);
   if (req.query.op === 'survival') return require('../lib/survival-eval').runSurvival(req, res);
+  if (req.query.op === 'swingsearchlog') return require('../lib/swing-search-ledger').runSwingSearchLog(req, res);
+  if (req.query.op === 'swingsearchgrade') return require('../lib/swing-search-ledger').runSwingSearchGrade(req, res);
   if (req.query.op === 'swingmonitor') return require('../lib/swing-supervisor-routes').runSwingMonitor(req, res);
   if (req.query.op === 'swinggrade') return require('../lib/swing-supervisor-routes').runSwingGrade(req, res);
   if (req.query.op === 'daytradetick') return runDaytradeTick(req, res);
