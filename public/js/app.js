@@ -10,6 +10,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadEnsemble } from './omega-ensemble.js';
   import { loadIgnition } from './ignition.js';
   import { loadOmega } from './omega-swing.js';
+  import { loadAtlas } from './atlas.js';
   import { loadSwingSupervisor } from './swing-supervisor.js';
   import { loadOrbitLab } from './orbit-lab.js';
   import { loadLeaderboard } from './leaderboard.js';
@@ -25,7 +26,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // prediction-market read. Unproven overlays live in the Research Lab; the honest
     // report cards live in Evidence.
     home:       ['today', 'ensemble', 'start', 'quickhit'],
-    candidates: ['swingsup', 'daytrade', 'gapgo', 'ignition', 'gapdown', 'opportunities', 'omega', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
+    candidates: ['swingsup', 'daytrade', 'gapgo', 'ignition', 'gapdown', 'opportunities', 'omega', 'atlas', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
     positions:  ['coremo', 'momentum', 'putsell', 'picks'],
     markets:    ['rotation', 'sectors', 'news', 'pulse', 'evolve'],
     predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
@@ -37,7 +38,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const SUB_HZ = {
     daytrade: 'intraday', gapgo: 'intraday', gapdown: 'intraday',
     ignition: 'intraday',
-    swingsup: 'swing', opportunities: 'swing', omega: 'swing', aligned: 'swing', screener: 'swing', custom: 'swing', ghost: 'swing', coil: 'swing', downday: 'swing', confluence: 'swing', trendrider: 'swing', fade: 'swing', biotech: 'swing',
+    swingsup: 'swing', opportunities: 'swing', omega: 'swing', atlas: 'swing', aligned: 'swing', screener: 'swing', custom: 'swing', ghost: 'swing', coil: 'swing', downday: 'swing', confluence: 'swing', trendrider: 'swing', fade: 'swing', biotech: 'swing',
     coremo: 'portfolio', momentum: 'portfolio', putsell: 'portfolio', picks: 'portfolio',
   };
   const HZ_DIVIDER = { intraday: '⏱ Intraday · same-day', swing: '📅 Swing · days–weeks', portfolio: '💼 Portfolio · weeks–months' };
@@ -45,7 +46,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
     today: '🏠 Today', ensemble: '🎯 OMEGA Ensemble', start: '📘 Guide',
-    quickhit: '⚡ Quick Hit', swingsup: '📋 Swing Supervisor', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
+    quickhit: '⚡ Quick Hit', swingsup: '📋 Swing Supervisor', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', atlas: '🛰 ATLAS-X', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)',
@@ -68,6 +69,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     daytrade: 'Short-term setups for same-day trading, with a live entry-timing grade.',
     gapgo: 'Stocks gapping up on news and continuing — the one validated event edge.',
     omega: 'OMEGA-SWING — liquid names with early-to-middle-stage momentum likely to keep rising over the next 5–10 trading days. Sector- and market-relative, ranked by expected utility, with an entry plan and invalidation for each. Not a chaser of already-vertical moves; won’t force picks in weak regimes.',
+    atlas: 'ATLAS-X — a SHADOW / weight-0 swing research workspace. Expert-staged candidates are sorted into entry lanes (Enter Next Session / Wait-for-Breakout / -Pullback / -Confirmation / Do Not Chase / Avoid), tracked as episodes once live, and judged in an Evidence & Validation panel. It CANNOT originate or affect a live trade; failure-score and target-before-stop are qualitative bands (never percentages), and it is allowed to show nothing.',
     ignition: 'One acceleration-ranked view over all the momentum scanners: catch names whose price AND volume are speeding up (up 10% and accelerating beats up 60% and slowing), with a catalyst tag, ignition score, and stage. EOD/daily data — no real-time or LULD halt prediction.',
     downday: 'What to trade when the market is red: oversold-bounce longs + overheated shorts, with the honest proof that chasing strength on down days loses.',
     coil: 'Names coiling in tight compression before a potential explosive move.',
@@ -143,6 +145,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       read: `Cards are grouped into <b>💠 Prime</b> (best), <b>🟢 Qualified</b>, and <b>👁 Watch</b> (wait for a trigger). Each shows a <b>Stage</b> (Early/Confirmed/Continuation), an <b>entry recommendation</b> (Buy now / on breakout / on pullback), expected 5- and 10-day <b>sector- & market-relative</b> return, the odds of a ≥3% and ≥5% move, and an <b>invalidation</b> price. Names are ranked by expected utility (reward vs downside), not win rate.`,
       act: `Prefer <b>Prime</b> with a "Buy now" entry. Enter in the shown entry zone, place your stop at the <b>invalidation</b>, aim for the target zones, and use the <b>suggested size</b> (sized so a stop-out costs ~1% of your account). Hold ~1–2 weeks.`,
       catch: `Uses <b>end-of-day data</b> — entry levels are next-session positioning, not live triggers. The probabilities are a <b>baseline</b> until the walk-forward confirms them, and the app's own research found no durable edge on this data beyond avoiding weak markets — so check the <b>OMEGA section on the Scoreboard</b> to see if it's actually working. Zero Prime picks on a given day is normal.`,
+    },
+    atlas: {
+      what: `A <b>shadow research</b> workspace (weight-0) that stages swing candidates into entry lanes — <b>Enter Next Session</b>, wait-for-breakout / -pullback / -first-hour-confirmation, do-not-chase, and avoid — then tracks each as a live <b>episode</b> and grades the whole system in an Evidence &amp; Validation panel.`,
+      read: `Each candidate card shows its expert &amp; stage, an action + trigger, invalidation and targets, a return distribution (bps / %), a utility waterfall, a <b>Champion</b> line and a <b>Prosecutor</b> failure-score band. The failure score and "target-before-stop" are <b>qualitative bands</b>, shown verbatim — <b>not</b> percentages.`,
+      act: `Treat it as <b>research only</b>. Nothing here can start or affect a live trade; the Evidence panel spells out that promotion is <b>not</b> eligible and the portfolio weight is <b>0</b>. Read it to understand how the ATLAS-X thesis is being tested, not as a buy list.`,
+      catch: `Weight-0 and <b>uncalibrated</b> — the numbers that look like probabilities are shown as bands on purpose. Return magnitudes (bps / %) are real returns, not odds. A day with zero actionable candidates is expected and correct.`,
     },
     ignition: {
       what: `One list that ranks every momentum candidate by how fast it's <b>speeding up</b> — price AND volume accelerating — not by how much it's already moved. A stock up 10% and accelerating ranks <b>above</b> one up 60% and slowing down.`,
@@ -378,6 +386,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'gapgo' && typeof ensureGapGo === 'function') ensureGapGo();
     if (sub === 'ignition' && typeof ensureIgnition === 'function') ensureIgnition();
     if (sub === 'omega' && typeof ensureOmega === 'function') ensureOmega();
+    if (sub === 'atlas' && typeof ensureAtlas === 'function') ensureAtlas();
     if (sub === 'swingsup' && typeof ensureSwingSup === 'function') ensureSwingSup();
     if (sub === 'downday' && typeof ensureDownDay === 'function') ensureDownDay();
     if (sub === 'gapdown' && typeof ensureGapDown === 'function') ensureGapDown();
@@ -3639,6 +3648,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (btn) btn.addEventListener('click', () => loadOmega(document.getElementById('omega-container')));
     }
     loadOmega(document.getElementById('omega-container'));
+  }
+
+  // 🛰 ATLAS-X — SHADOW / weight-0 swing research workspace (loadAtlas renders op=atlasx).
+  // Cannot originate or affect any live trade; entry-lane candidates + episode lanes + evidence panel.
+  let atlasLoaded = false;
+  function ensureAtlas() {
+    if (!atlasLoaded) {
+      atlasLoaded = true;
+      const btn = document.getElementById('atlas-refresh-btn');
+      if (btn) btn.addEventListener('click', () => loadAtlas(document.getElementById('atlas-container')));
+    }
+    loadAtlas(document.getElementById('atlas-container'));
   }
 
   // 📋 Swing Supervisor — server-authoritative lifecycle board over every published swing pick
