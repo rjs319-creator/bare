@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { buildSwingSnapshot, gradeSwingSnapshot, summarize, resolvePlan } = require('../lib/swing-search-ledger');
+const { buildSwingSnapshot, gradeSwingSnapshot, summarize, resolvePlan, resolveLogUniverse, lightRegime } = require('../lib/swing-search-ledger');
 
 const swingBuy = () => ({
   action: 'BUY', setup: 'breakout', signedScore: 0.4, evidenceStrength: 6,
@@ -71,6 +71,34 @@ test('SELL is graded with inverted direction (a fall is a win)', () => {
   const fwd = bars(Array.from({ length: 25 }, (_, i) => 100 - i));   // falling
   const g = gradeSwingSnapshot(snap, fwd, null);
   assert.ok(g.byHorizon[10].directional > 0, 'a falling price is a winning short call');
+});
+
+test('warm-cron default logs a CONSISTENT liquid panel tagged cohort=universe', () => {
+  const a = resolveLogUniverse({ query: {} });
+  const b = resolveLogUniverse({ query: {} });
+  assert.strictEqual(a.cohort, 'universe');
+  assert.ok(a.tickers.length > 50, 'a real panel');
+  assert.deepStrictEqual(a.tickers, b.tickers, 'same panel every run (day-over-day consistent)');
+});
+
+test('cursor + limit slice the panel without breaking cohort', () => {
+  const r = resolveLogUniverse({ query: { cursor: '10', limit: '20' } });
+  assert.strictEqual(r.cohort, 'universe');
+  assert.strictEqual(r.tickers.length, 20);
+});
+
+test('an explicit ticker is tagged cohort=searched, never pooled with the universe', () => {
+  const r = resolveLogUniverse({ query: { ticker: 'tsla' } });
+  assert.strictEqual(r.cohort, 'searched');
+  assert.deepStrictEqual(r.tickers, ['TSLA']);
+});
+
+test('lightRegime reads risk-on/off from SPY vs its 50-DMA', () => {
+  const up = Array.from({ length: 60 }, (_, i) => ({ close: 400 + i }));
+  const down = Array.from({ length: 60 }, (_, i) => ({ close: 460 - i }));
+  assert.strictEqual(lightRegime(up), 'risk-on');
+  assert.strictEqual(lightRegime(down), 'risk-off');
+  assert.strictEqual(lightRegime([]), 'unknown');
 });
 
 test('summarize grades BUY / WAIT / SELL separately and excludes no-fills', () => {
