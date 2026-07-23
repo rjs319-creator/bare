@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { buildSwingSnapshot, gradeSwingSnapshot, summarize, resolvePlan, resolveLogUniverse, lightRegime } = require('../lib/swing-search-ledger');
+const { buildSwingSnapshot, gradeSwingSnapshot, summarize, resolvePlan, resolveLogUniverse, lightRegime, pickLatestShards, actionDist } = require('../lib/swing-search-ledger');
 
 const swingBuy = () => ({
   action: 'BUY', setup: 'breakout', signedScore: 0.4, evidenceStrength: 6,
@@ -99,6 +99,30 @@ test('lightRegime reads risk-on/off from SPY vs its 50-DMA', () => {
   assert.strictEqual(lightRegime(up), 'risk-on');
   assert.strictEqual(lightRegime(down), 'risk-off');
   assert.strictEqual(lightRegime([]), 'unknown');
+});
+
+test('pickLatestShards selects the newest shard per cohort by date', () => {
+  const latest = pickLatestShards([
+    'swingsearch/day/universe-2026-07-21.json',
+    'swingsearch/day/universe-2026-07-23.json',
+    'swingsearch/day/universe-2026-07-22.json',
+    'swingsearch/day/searched-2026-07-20.json',
+    'swingsearch/resolved/latest.json',        // ignored (not a day-shard)
+    'other/thing.json',                         // ignored
+  ]);
+  assert.strictEqual(latest.universe.date, '2026-07-23');
+  assert.strictEqual(latest.searched.date, '2026-07-20');
+  assert.strictEqual(latest.universe.path, 'swingsearch/day/universe-2026-07-23.json');
+});
+
+test('pickLatestShards returns empty when no day-shards exist', () => {
+  assert.deepStrictEqual(pickLatestShards(['swingsearch/resolved/latest.json', null, '']), {});
+});
+
+test('actionDist counts BUY/WAIT/SELL/UNAVAILABLE without throwing on junk', () => {
+  const d = actionDist([{ action: 'BUY' }, { action: 'BUY' }, { action: 'WAIT' }, { action: 'SELL' }, { action: 'UNAVAILABLE' }, { action: 'BOGUS' }, {}]);
+  assert.deepStrictEqual(d, { BUY: 2, WAIT: 1, SELL: 1, UNAVAILABLE: 1 });
+  assert.deepStrictEqual(actionDist(null), { BUY: 0, WAIT: 0, SELL: 0, UNAVAILABLE: 0 });
 });
 
 test('summarize grades BUY / WAIT / SELL separately and excludes no-fills', () => {

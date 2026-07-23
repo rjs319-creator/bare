@@ -165,6 +165,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'survival') return require('../lib/survival-eval').runSurvival(req, res);
   if (req.query.op === 'swingsearchlog') return require('../lib/swing-search-ledger').runSwingSearchLog(req, res);
   if (req.query.op === 'swingsearchgrade') return require('../lib/swing-search-ledger').runSwingSearchGrade(req, res);
+  if (req.query.op === 'swingsearchstatus') return require('../lib/swing-search-ledger').runSwingSearchStatus(req, res);
   if (req.query.op === 'swingmonitor') return require('../lib/swing-supervisor-routes').runSwingMonitor(req, res);
   if (req.query.op === 'swinggrade') return require('../lib/swing-supervisor-routes').runSwingGrade(req, res);
   if (req.query.op === 'daytradetick') return runDaytradeTick(req, res);
