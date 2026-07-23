@@ -81,12 +81,14 @@ const PRIVILEGED_OPS = new Set([
   // Market Pulse SHADOW grader — forward-grades matured first-seen episodes (heavy dated
   // candle fetches + grader-owned outcome ledger write). Cron/manual only.
   'pulsegrade',
+  // ATLAS-X shadow ledger WRITES (build+persist episodes/ledger/predictions; grade terminals).
+  'atlasxlog', 'atlasxresolve',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
-  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'failuremodel', 'complab', 'challengereval', 'router', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols',
+  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'failuremodel', 'complab', 'challengereval', 'router', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -94,7 +96,7 @@ const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/
 const SHARED_FORCE_OPS = new Set([
   'aligned', 'anomalytick', 'biotechtick', 'calibration', 'coredrift', 'crossassettick',
   'optionsflow', 'optionsepisodes', 'pulse', 'pulserefine', 'putsell', 'readthroughtick', 'secondwavetick',
-  'toneshifttick',
+  'toneshifttick', 'atlasx',
   // redundancy: the cached model is public (the UI panel reads it), but a force=1 rebuild
   // refetches candles for every ticker in the ledger history — trusted callers (the cron)
   // only. Rate-limiting alone wasn't enough: 6/min per IP of a 200+ ticker rebuild is still
@@ -326,6 +328,12 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'orbitmlwalkforward') return require('../lib/orbit-ml-routes').runOrbitMlWalkForward(req, res);
   if (req.query.op === 'orbitmlhealth') return require('../lib/orbit-ml-routes').runOrbitMlHealth(req, res);
   if (req.query.op === 'orbitcontrols') return require('../lib/orbit-ml-routes').runOrbitControls(req, res);
+
+  // ATLAS-X — shadow swing challenger (weight-0). Read board + cron-only writers.
+  if (req.query.op === 'atlasx') return require('../lib/atlasx-routes').runAtlasX(req, res);
+  if (req.query.op === 'atlasxlog') return require('../lib/atlasx-routes').runAtlasXLog(req, res);
+  if (req.query.op === 'atlasxresolve') return require('../lib/atlasx-routes').runAtlasXResolve(req, res);
+  if (req.query.op === 'atlasxwalkforward') return require('../lib/atlasx-routes').runAtlasXWalkForward(req, res);
   if (req.query.op === 'promotionreadiness') return require('../lib/orbit-ml-routes').runPromotionReadiness(req, res);
   if (req.query.op === 'researchgrade') return require('../lib/research-grade-routes').runResearchGrade(req, res);
   return runScoreboard(req, res);
