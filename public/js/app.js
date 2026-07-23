@@ -2896,22 +2896,41 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     finally { if (btn) { btn.disabled = false; btn.textContent = '↻ Re-run exit study'; } }
   }
 
-  // Post-earnings-drift — the most promising lead (but data-limited).
+  // Post-earnings-drift — the app's one promising lead. Now testable for real:
+  // FMP Premium supplies paired actual/estimate history → a true multi-year SUE.
   function apexPeadPanelHTML() {
     const p = apexModel && apexModel.pead;
-    if (!p || !p.h63) {
-      return `<div class="cx-mp-sec"><h4>Earnings-surprise drift (PEAD)</h4><p class="cx-mp-p">Event-driven test: does a big earnings beat/miss predict the next 1–3 months of <i>market-excess</i> return? Needs a paid earnings feed.</p><button class="refresh-btn" onclick="fetch('/api/tracker?op=pead').then(()=>fetchApexModel()).then(()=>{if(apexLast)renderApexModelPanel(apexLast.regime,apexLast.preset,apexLast.large)})" style="color:#10d98a">📊 Run PEAD study</button></div>`;
+    const s = p && p.surprise;
+    const runBtn = (label) => `<button class="refresh-btn" onclick="fetch('/api/tracker?op=pead&mode=surprise&limit=150').then(()=>fetchApexModel()).then(()=>{if(apexLast)renderApexModelPanel(apexLast.regime,apexLast.preset,apexLast.large)})" style="color:#10d98a">${label}</button>`;
+
+    if (!p || (!p.h63 && !s)) {
+      return `<div class="cx-mp-sec"><h4>Earnings-surprise drift (PEAD)</h4><p class="cx-mp-p">Event-driven test: does a big <b>standardized earnings surprise (SUE)</b> predict the next 1–3 months of <i>market-excess</i> return? Now runnable across multiple years/regimes with the FMP Premium paired-estimate history.</p>${runBtn('📊 Run true SUE study')}</div>`;
     }
-    const m63 = p.h63.bottomQuintileExcess, b21 = (p.h21 || {}).topQuintileExcess || {};
+
+    // Lead with the TRUE multi-year SUE verdict when present.
+    let lead = '<p class="cx-mp-p" style="color:var(--amber)">Run the true SUE study for the multi-year verdict.</p>';
+    if (s) {
+      const vColor = s.verdict === 'CONFIRMED' ? '#10d98a' : s.verdict === 'REGIME-DEPENDENT' ? 'var(--amber)' : 'var(--red)';
+      const ls = s.longShort63 || {}, sg = s.signed63 || {};
+      const yrs = s.byYear63 ? Object.entries(s.byYear63) : [];
+      const posY = yrs.filter(([, x]) => x.meanPct > 0).length;
+      const yrStr = yrs.map(([y, x]) => `${y} ${x.meanPct > 0 ? '+' : ''}${x.meanPct}%${x.tStat >= 2 ? '*' : ''}`).join(' · ');
+      const reg = s.byRegime63 || {};
+      const regStr = ['risk-on', 'neutral', 'risk-off'].filter(R => reg[R] && reg[R].n >= 30).map(R => `${R} ${reg[R].meanPct > 0 ? '+' : ''}${reg[R].meanPct}% (t ${reg[R].tStat})`).join(' · ');
+      lead = `<p class="cx-mp-p"><b style="color:${vColor}">True SUE test — ${s.verdict}.</b> ${s.reason}</p>
+        <p class="cx-mp-p" style="font-size:0.66rem">${s.resolvedEvents} events${s.coverage ? ', ' + s.coverage.earliest + '→' + s.coverage.latest : ''}. 63d: long-short ${ls.meanPct}% (t ${ls.tStat}), signed ${sg.meanPct}% (t ${sg.tStat}). Positive ${posY}/${yrs.length} yrs.${yrStr ? ' By year: ' + yrStr + '.' : ''}${regStr ? ' By macro regime: ' + regStr + '.' : ''} <span style="opacity:.6">(*t≥2)</span></p>`;
+    }
+
+    // Secondary: the older reaction-proxy validation, kept for context (superseded).
     const v = p.validation5y;
-    // Lead with the 5-year verdict if we have it — it overrides the 1-year hint.
-    const verdict = v
-      ? `<p class="cx-mp-p"><b style="color:var(--red)">5-year validation: not confirmed.</b> Over ${v.events} events incl. the 2022 bear, the earnings-reaction drift is statistically zero (signed t-stat <b>${v.signed63.tStat}</b> at 63d), and the biggest reactions actually <b>reverse</b> (top quintile ${v.top63.meanPct}%, t ${v.top63.tStat}). By year, only ${v.byYear63 ? Object.entries(v.byYear63).filter(([, x]) => x.tStat >= 2).map(([y]) => y).join(', ') || 'one recent year' : 'one recent year'} showed it. The 1-year t-stat below was the <b>risk-on-window artifact</b> — same trap as the exit study. <b>No durable PEAD edge in this data.</b></p>`
-      : `<p class="cx-mp-p" style="color:var(--amber)"><b>⚠ Lead, not confirmed:</b> the surprise-data plan only covers ~12 months — run the 5-year reaction validation (button) before trusting it.</p>`;
+    const secondary = v
+      ? `<p class="cx-mp-p" style="font-size:0.62rem;opacity:.7">Earlier reaction-proxy 5y check (superseded by the SUE test above): signed t ${v.signed63.tStat} at 63d; biggest reactions reversed rather than drifted.</p>`
+      : '';
+
     return `<div class="cx-mp-sec"><h4>Earnings-surprise drift (PEAD)</h4>
-      ${verdict}
-      <p class="cx-mp-p" style="font-size:0.66rem">1-year surprise study (${p.resolvedEvents} events, ${p.coverage ? p.coverage.earliest + '→' + p.coverage.latest : ''}): misses ${m63.meanPct}% / 63d (t ${m63.tStat}); beats ${b21.meanPct != null ? '+' + b21.meanPct + '%/21d (t ' + b21.tStat + ')' : '—'}. Significant in-sample, but the 5-year test above shows it doesn't persist.</p>
-      <button class="refresh-btn" onclick="fetch('/api/tracker?op=pead&mode=reaction&limit=150').then(()=>fetchApexModel()).then(()=>{if(apexLast)renderApexModelPanel(apexLast.regime,apexLast.preset,apexLast.large)})" style="color:#10d98a">↻ Re-run 5y validation</button></div>`;
+      ${lead}
+      ${secondary}
+      ${runBtn(s ? '↻ Re-run true SUE study' : '📊 Run true SUE study')}</div>`;
   }
 
   function apexNarrativePanelHTML() {
