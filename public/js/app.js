@@ -8363,7 +8363,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       <div class="sig-banner ${act}">
         <div class="sig-verdict">
           <div class="sig-action">${esc(actLabel)}</div>
-          <div class="sig-conf">Conf ${live.confidence}/10</div>
+          <div class="sig-conf" title="Evidence strength — a heuristic weight of the signals, NOT a probability">Evidence ${live.evidenceStrength ?? live.confidence}/10</div>
         </div>
         <div class="sig-reasons">${reasonsHtml}${counterHtml}</div>
       </div>
@@ -8501,6 +8501,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           st: { action: live.action, confidence: live.confidence, reasons: live.reasons },
           lt: { trend: lt.trend, score: lt.score, reasons: lt.reasons, factors: lt.factors },
           mech: { quadrant: dual.quadrant, verdict: dual.verdict, setupClass: dual.setupClass },
+          sw: data.swing ? { action: data.swing.action, evidenceStrength: data.swing.evidenceStrength, reasons: data.swing.reasons, plan: data.swing.plan } : null,
         }),
       });
       const j = await res.json();

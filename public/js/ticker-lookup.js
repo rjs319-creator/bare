@@ -13,13 +13,35 @@
 // verdict here always matches what every card in the app shows.
 import { esc } from './format.js';
 
-// Maps the signal engine's action → a plain-language "good time to buy?" answer.
-const VERDICT = {
-  STRONG_BUY:  { cls: 'strong_buy', icon: '✅', head: 'Yes — a strong entry',  sub: 'Multiple signals line up on the buy side right now.' },
-  BUY:         { cls: 'buy',        icon: '🟢', head: 'Leaning yes',           sub: 'Momentum is positive — confirm the setup before sizing up.' },
-  HOLD:        { cls: 'hold',       icon: '⏸️', head: 'Not a clear entry',     sub: 'Signals are mixed. Waiting for a cleaner setup is reasonable.' },
-  SELL:        { cls: 'sell',       icon: '🔴', head: 'Not right now',         sub: 'Momentum is negative — buying here fights the trend.' },
-  STRONG_SELL: { cls: 'strong_sell',icon: '⛔', head: 'No',                    sub: 'Sellers are firmly in control.' },
+// ── Three-horizon read (intraday / swing / long-term) ───────────────────────
+// Each horizon is INDEPENDENT (see lib/signal.js, lib/swingread.js, lib/longterm.js)
+// and gets its own timeframe-aware card. We deliberately DO NOT show a single
+// universal "Good time to buy? Yes/No" banner any more — the answer depends on the
+// holding period, and the horizons frequently (honestly) disagree.
+const HZ_SIGN = {
+  STRONG_BUY:  { cls: 'buy',  icon: '✅', word: 'STRONG BUY' },
+  BUY:         { cls: 'buy',  icon: '🟢', word: 'BUY' },
+  HOLD:        { cls: 'wait', icon: '⏸️', word: 'WAIT' },
+  WAIT:        { cls: 'wait', icon: '⏸️', word: 'WAIT' },
+  NEUTRAL:     { cls: 'wait', icon: '⏸️', word: 'NEUTRAL' },
+  SELL:        { cls: 'sell', icon: '🔴', word: 'SELL' },
+  STRONG_SELL: { cls: 'sell', icon: '⛔', word: 'STRONG SELL' },
+  UNAVAILABLE: { cls: 'na',   icon: '—',  word: 'UNAVAILABLE' },
+};
+const LT_SIGN = {
+  bullish: { cls: 'buy',  icon: '🔼', word: 'BULLISH' },
+  bearish: { cls: 'sell', icon: '🔻', word: 'BEARISH' },
+  neutral: { cls: 'wait', icon: '⏸️', word: 'NEUTRAL' },
+};
+const FRESH = {
+  live: ['🟢', 'Live'], stale: ['⚠', 'Stale data'], premarket: ['🌅', 'Pre-market'],
+  afterhours: ['🌙', 'After-hours'], closed: ['●', 'Market closed'],
+  'daily-fallback': ['⚠', 'Daily fallback'], 'daily-close': ['📅', 'Daily close'],
+};
+const OVERALL_LABEL = {
+  'aligned-bullish': ['✅', 'Aligned bullish'], 'aligned-bearish': ['⛔', 'Aligned bearish'],
+  'conflicting': ['⚖️', 'Horizons conflict'], 'leaning-bullish': ['🟢', 'Leaning bullish'],
+  'leaning-bearish': ['🔴', 'Leaning bearish'], 'neutral': ['⏸️', 'Neutral'], 'unavailable': ['—', 'Limited data'],
 };
 
 const OF_KIND = { sweep: '⚡ Sweep', block: '🧱 Block', large: '💰 Large' };
@@ -80,15 +102,147 @@ function priceLine(price) {
   return `<div class="tkl-price"><span class="tkl-px">$${price.live}</span>${chgTxt}</div>${ah ? `<div class="tkl-ah-row">${ah}</div>` : ''}`;
 }
 
-function verdictBanner(live) {
-  const v = VERDICT[live.action] || VERDICT.HOLD;
-  return `<div class="tkl-verdict sig-banner ${v.cls}">
-    <div class="tkl-vic">${v.icon}</div>
-    <div class="tkl-vtext">
-      <div class="tkl-vhead">Good time to buy? <b>${esc(v.head)}</b></div>
-      <div class="tkl-vsub">${esc(v.sub)} <span class="tkl-vconf">Signal confidence ${live.confidence}/10.</span></div>
-    </div>
+// A small "evidence strength" meter — NEVER a percentage/probability (there is no
+// calibrated model behind any of these numbers; it's signed-evidence magnitude).
+function evidenceMeter(n) {
+  if (n == null) return '';
+  const v = Math.max(0, Math.min(10, Math.round(n)));
+  return `<span class="hz-ev" title="Evidence strength ${v}/10 — a heuristic weight of the signals, NOT a probability of rising.">
+    <span class="hz-ev-bar"><span class="hz-ev-fill" style="width:${v * 10}%"></span></span><span class="hz-ev-num">${v}/10</span></span>`;
+}
+
+function freshBadge(f) {
+  const [ic, lbl] = FRESH[f] || ['·', f || ''];
+  return f ? `<span class="hz-fresh f-${(f || '').replace(/[^a-z]/g, '')}" title="Data freshness">${ic} ${esc(lbl)}</span>` : '';
+}
+
+// One horizon card. `c` is a normalized view-model (see buildHorizonCards).
+function horizonCard(c) {
+  const s = c.sign;
+  const reasons = (c.reasons || []).slice(0, 4).map(r =>
+    `<li>${esc(r)}</li>`).join('');
+  const counter = c.counter ? `<div class="hz-line hz-counter"><span class="hz-k">Counter</span><span>${esc(c.counter)}</span></div>` : '';
+  const confirm = c.confirm ? `<div class="hz-line hz-confirm"><span class="hz-k">Confirm</span><span>${esc(c.confirm)}</span></div>` : '';
+  const invalid = c.invalidate ? `<div class="hz-line hz-invalid"><span class="hz-k">Invalidates</span><span>${esc(c.invalidate)}</span></div>` : '';
+  const objective = c.objective ? `<div class="hz-line hz-obj"><span class="hz-k">Objective</span><span>${esc(c.objective)}</span></div>` : '';
+  const factors = c.factors ? `<details class="hz-more"><summary>Details</summary><div class="hz-more-body">${c.factors}</div></details>` : '';
+  return `<div class="hz-card ${s.cls}">
+    <div class="hz-head"><span class="hz-icon">${c.icon}</span><div class="hz-titles"><div class="hz-title">${esc(c.title)}</div><div class="hz-period">${esc(c.period)}</div></div>${freshBadge(c.fresh)}</div>
+    <div class="hz-sign ${s.cls}">${s.icon} ${s.word}</div>
+    ${c.available === false ? `<div class="hz-unavail">${esc(c.unavailReason || 'Data feed unavailable.')}</div>` : `
+    <div class="hz-ev-row">${evidenceMeter(c.evidence)}</div>
+    ${reasons ? `<ul class="hz-reasons">${reasons}</ul>` : ''}
+    ${counter}${confirm}${invalid}${objective}`}
+    <div class="hz-foot">${esc(c.version || '')}${c.calibrated === false ? ' · uncalibrated' : ''}</div>
+    ${factors}
   </div>`;
+}
+
+// Normalize the /api/chart payload's three horizons into card view-models.
+function buildHorizonCards(data) {
+  const intraday = data.intraday || data.live || {};
+  const swing = data.swing || null;
+  const lt = data.longTerm || null;
+  const cards = [];
+
+  // Intraday
+  {
+    const sign = HZ_SIGN[intraday.action] || HZ_SIGN.HOLD;
+    const lv = intraday.levels;
+    cards.push({
+      title: 'Intraday', period: 'Today · current session', icon: '⏱',
+      sign, evidence: intraday.evidenceStrength ?? intraday.confidence,
+      fresh: intraday.freshness || (data.source === 'yahoo' ? 'live' : 'daily-fallback'),
+      available: intraday.available !== false && intraday.action !== 'UNAVAILABLE',
+      unavailReason: (intraday.reasons || [])[0],
+      reasons: intraday.reasons, counter: (intraday.counter || [])[0],
+      confirm: lv ? `Entry ~$${lv.entry}` : null,
+      invalidate: lv ? `Stop $${lv.stop}` : null,
+      objective: lv ? `Target $${lv.target} (R/R ${lv.riskReward})` : null,
+      calibrated: false, version: intraday.version || 'intraday-v1',
+      factors: `RSI ${intraday.rsi ?? '—'} · VWAP ${intraday.vwap != null ? '$' + intraday.vwap : '—'} · levels sized on <b>intraday</b> ATR`,
+    });
+  }
+  // Swing
+  if (swing) {
+    const sign = HZ_SIGN[swing.action] || HZ_SIGN.WAIT;
+    const p = swing.plan;
+    cards.push({
+      title: 'Swing', period: swing.horizon || '2–12 weeks', icon: '📐',
+      sign, evidence: swing.evidenceStrength,
+      fresh: swing.freshness || 'daily-close',
+      available: swing.available !== false && swing.action !== 'UNAVAILABLE',
+      unavailReason: (swing.reasons || [])[0],
+      reasons: swing.reasons, counter: (swing.risks || swing.counter || [])[0],
+      confirm: p ? `Trigger $${p.trigger} (${p.setupType})` : null,
+      invalidate: p ? `Invalidation $${p.invalidation}` : null,
+      objective: p ? `Objective $${p.objective}` : null,
+      calibrated: false, version: swing.version || 'swing-v1',
+      factors: swingFactorsHtml(swing),
+    });
+  } else {
+    cards.push({ title: 'Swing', period: '2–12 weeks', icon: '📐', sign: HZ_SIGN.UNAVAILABLE, available: false, unavailReason: 'Daily data unavailable for a swing read.', calibrated: false, version: 'swing-v1' });
+  }
+  // Long-term
+  if (lt) {
+    const sign = LT_SIGN[lt.trend] || LT_SIGN.neutral;
+    cards.push({
+      title: 'Long term', period: lt.horizon || '6–12 months', icon: '📈',
+      sign, evidence: lt.score != null ? Math.min(10, Math.abs(lt.score)) : null,
+      fresh: lt.freshness || 'daily-close',
+      available: lt.available !== false,
+      reasons: lt.reasons, counter: null,
+      confirm: null, invalidate: lt.factors && lt.factors.sma200 != null ? `Below 200-day $${lt.factors.sma200}` : null,
+      objective: null, calibrated: lt.calibrated === true, version: lt.version || 'lt-v1',
+      factors: ltFactorsHtml(lt),
+    });
+  } else {
+    cards.push({ title: 'Long term', period: '6–12 months', icon: '📈', sign: HZ_SIGN.UNAVAILABLE, available: false, unavailReason: 'Daily data unavailable for a long-term read.', calibrated: false, version: 'lt-v1' });
+  }
+  return cards;
+}
+
+function swingFactorsHtml(sw) {
+  const f = sw.factors || {};
+  const bits = [
+    f.excess63Pct != null ? `RS vs mkt 3mo ${f.excess63Pct >= 0 ? '+' : ''}${f.excess63Pct}pts` : (sw.benchmarkAvailable === false ? 'RS: SPY unavailable' : null),
+    f.sma50SlopePct != null ? `50-day slope ${f.sma50SlopePct >= 0 ? '+' : ''}${f.sma50SlopePct}%` : null,
+    f.extensionATR != null ? `${f.extensionATR} ATR from 20-day` : null,
+    f.rangePos63 != null ? `range pos ${Math.round(f.rangePos63 * 100)}%` : null,
+    sw.families ? `families → trend ${sw.families.trend}, RS ${sw.families.relativeStrength ?? 'n/a'}, vol ${sw.families.participation}` : null,
+    sw.sectorAvailable === false ? 'sector benchmark: n/a' : null,
+  ].filter(Boolean).map(esc).join(' · ');
+  return bits + '<div class="hz-fine">Swing levels sized on <b>daily</b> ATR. Objective is a risk reference, not a forecast.</div>';
+}
+function ltFactorsHtml(lt) {
+  const f = lt.factors || {};
+  return [
+    f.pctFrom200 != null ? `${f.pctFrom200 >= 0 ? '+' : ''}${f.pctFrom200}% vs 200-day` : null,
+    f.rs3mPct != null ? `RS 3mo ${f.rs3mPct >= 0 ? '+' : ''}${f.rs3mPct}pts` : null,
+    f.pctFrom52wHigh != null ? `${f.pctFrom52wHigh}% from 52w high` : null,
+  ].filter(Boolean).map(esc).join(' · ');
+}
+
+// The synthesis banner + three-column horizon grid — replaces the old single verdict.
+function horizonSection(data) {
+  const cards = buildHorizonCards(data);
+  const grid = cards.map(horizonCard).join('');
+  const sum = data.horizonSummary;
+  let synth = '';
+  if (sum) {
+    const [ic, lbl] = OVERALL_LABEL[sum.overall] || ['·', sum.overall];
+    const conflicts = (sum.conflicts || []).length
+      ? `<div class="hz-conflicts">${sum.conflicts.map(c => `<span class="hz-conflict">⚠ ${esc(c)}</span>`).join('')}</div>`
+      : '';
+    synth = `<div class="hz-synth">
+      <div class="hz-synth-top"><span class="hz-overall ov-${(sum.overall || '').replace(/[^a-z]/g, '')}">${ic} ${esc(lbl)}</span></div>
+      <div class="hz-headline">${esc(sum.headline)}</div>
+      ${conflicts}
+      <div class="hz-note">${esc(sum.note || '')}</div>
+    </div>`;
+  }
+  return `<div class="tkl-horizons-wrap">${synth}<div class="tkl-horizons">${grid}</div>
+    <div class="hz-disclaimer">Three independent reads for three holding periods. A swing/long-term <b>SELL</b> or <b>BEARISH</b> means the multi-week/multi-month setup is damaged or an avoid — it does <b>not</b> tell a long-only trader to short. Educational, not financial advice.</div></div>`;
 }
 
 function mentionsBlock(ticker) {
@@ -355,12 +509,12 @@ async function loadExtras(ticker) {
 }
 
 function renderBody(data) {
-  const { ticker, live, price } = data;
+  const { ticker, price } = data;
   body.innerHTML = `
     <div class="tkl-head"><span class="tkl-tk">📈 ${esc(ticker)}</span></div>
     ${priceLine(price)}
     <div id="tkl-whynow"></div>
-    ${verdictBanner(live)}
+    ${horizonSection(data)}
     <div id="tkl-chart"></div>
     <div id="tkl-breakdown"></div>
     <div id="tkl-flow"></div>
