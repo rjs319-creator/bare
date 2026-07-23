@@ -10,6 +10,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadEnsemble } from './omega-ensemble.js';
   import { loadIgnition } from './ignition.js';
   import { loadOmega } from './omega-swing.js';
+  import { loadSwingSupervisor } from './swing-supervisor.js';
   import { loadOrbitLab } from './orbit-lab.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
@@ -24,7 +25,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // prediction-market read. Unproven overlays live in the Research Lab; the honest
     // report cards live in Evidence.
     home:       ['today', 'ensemble', 'start', 'quickhit'],
-    candidates: ['daytrade', 'gapgo', 'ignition', 'gapdown', 'opportunities', 'omega', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
+    candidates: ['swingsup', 'daytrade', 'gapgo', 'ignition', 'gapdown', 'opportunities', 'omega', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
     positions:  ['coremo', 'momentum', 'putsell', 'picks'],
     markets:    ['rotation', 'sectors', 'news', 'pulse', 'evolve'],
     predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
@@ -36,7 +37,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const SUB_HZ = {
     daytrade: 'intraday', gapgo: 'intraday', gapdown: 'intraday',
     ignition: 'intraday',
-    opportunities: 'swing', omega: 'swing', aligned: 'swing', screener: 'swing', custom: 'swing', ghost: 'swing', coil: 'swing', downday: 'swing', confluence: 'swing', trendrider: 'swing', fade: 'swing', biotech: 'swing',
+    swingsup: 'swing', opportunities: 'swing', omega: 'swing', aligned: 'swing', screener: 'swing', custom: 'swing', ghost: 'swing', coil: 'swing', downday: 'swing', confluence: 'swing', trendrider: 'swing', fade: 'swing', biotech: 'swing',
     coremo: 'portfolio', momentum: 'portfolio', putsell: 'portfolio', picks: 'portfolio',
   };
   const HZ_DIVIDER = { intraday: '⏱ Intraday · same-day', swing: '📅 Swing · days–weeks', portfolio: '💼 Portfolio · weeks–months' };
@@ -44,7 +45,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
     today: '🏠 Today', ensemble: '🎯 OMEGA Ensemble', start: '📘 Guide',
-    quickhit: '⚡ Quick Hit', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
+    quickhit: '⚡ Quick Hit', swingsup: '📋 Swing Supervisor', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)',
@@ -57,6 +58,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     ensemble: 'Every screener combined into ONE portfolio-aware book. Correlated screeners are counted once (not seven times), trading costs are charged against each target, and names are dropped when they add duplicate risk — with the reason shown. It composes the existing engines and computes no score of its own, so it is allowed to hand you fewer than 10 names, or none.',
     start: 'A beginner’s guide to what everything in this app means.',
     quickhit: 'The Top 5 plays across large, small AND micro caps — one fast shortlist with links to where each lives.',
+    swingsup: 'Every published swing pick, tracked from its original thesis until a documented end. A pick never disappears without an explanation — it is re-evaluated each session (still valid, weakening, displaced, target hit, invalidated, no-fill or expired) even after it drops off its own screener. Accountability, not a claim of edge.',
     opportunities: 'The best setups across all the screeners, gathered in one ranked list.',
     aligned: 'Stocks that are a BUY on both horizons at once — the short-term signal AND the ~1-year trend both point up. The strongest agreement of the dual read.',
     putsell: 'Options Moves — AI-screened options-strategy setups from full-market price action. First strategy: cash-secured put selling (quality uptrends pulled back to support, with a suggested strike below support). More strategies coming.',
@@ -376,6 +378,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'gapgo' && typeof ensureGapGo === 'function') ensureGapGo();
     if (sub === 'ignition' && typeof ensureIgnition === 'function') ensureIgnition();
     if (sub === 'omega' && typeof ensureOmega === 'function') ensureOmega();
+    if (sub === 'swingsup' && typeof ensureSwingSup === 'function') ensureSwingSup();
     if (sub === 'downday' && typeof ensureDownDay === 'function') ensureDownDay();
     if (sub === 'gapdown' && typeof ensureGapDown === 'function') ensureGapDown();
     if (sub === 'aligned' && typeof ensureAligned === 'function') ensureAligned();
@@ -3636,6 +3639,19 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (btn) btn.addEventListener('click', () => loadOmega(document.getElementById('omega-container')));
     }
     loadOmega(document.getElementById('omega-container'));
+  }
+
+  // 📋 Swing Supervisor — server-authoritative lifecycle board over every published swing pick
+  // (loadSwingSupervisor renders op=swingmonitor). The server unions all non-terminal episodes
+  // with today's candidates, so a destructive re-render never drops a tracked pick.
+  let swingSupLoaded = false;
+  function ensureSwingSup() {
+    if (!swingSupLoaded) {
+      swingSupLoaded = true;
+      const btn = document.getElementById('swingsup-refresh-btn');
+      if (btn) btn.addEventListener('click', () => loadSwingSupervisor(document.getElementById('swingsup-container')));
+    }
+    loadSwingSupervisor(document.getElementById('swingsup-container'));
   }
 
   // 🛰️ ORBIT (shadow) — read-only Research Lab panel over the ORBIT + ORBIT-ML shadow

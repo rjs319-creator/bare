@@ -62,7 +62,12 @@ export function rankOpportunities(results, reliability = {}, healthFactor = 1, l
       const ss = setupSignals(c);                                      // O'Neil/Minervini pre-breakout signals
       const base = 0.28 * q + 0.26 * g + 0.18 * stage + 0.12 * narr + 0.16 * conv + themeBoost + sm.boost + ss.boost;
       const rec = reliability[`Ghost|${c.ghost.tier}`];
-      const opp = Math.round(base * relWeight(rec) * healthFactor);   // tilt by the model's live record + tier track record
+      // relWeight is a per-Ghost-tier track-record tilt (it CAN reorder names). healthFactor is a
+      // single global scalar applied identically to every candidate — it is order-preserving by
+      // construction (it scales the whole list's conviction, it does not rerank). Honest,
+      // algorithm-SPECIFIC, evidence-gated reranking lives server-side in the Swing Supervisor
+      // (lib/swing-router.js), not here.
+      const opp = Math.round(base * relWeight(rec) * healthFactor);
       // Relative strength vs its OWN theme — leader or catch-up laggard.
       const tMom = themeMom[theme], myMom = c.factors?.mom63;
       let rsTheme = null;
@@ -270,21 +275,23 @@ export async function loadOpportunities(container, scope = 'large', limit = 6) {
   const ranked = rankOpportunities(d.results, reliability, health.factor, leadSet, themeMom);
   const top = ranked.slice(0, limit);
 
-  // Model-health line — the loop OPERATING now: the app grades its own resolved
-  // picks and this ranking responds (down-weights when degrading, boosts when beating).
+  // Model-health line — the loop OPERATING now: the app grades its own resolved picks and dials
+  // the WHOLE list's conviction up or down. This is a uniform, order-preserving scalar (it does
+  // not rerank the names — per-name order comes from each Ghost-tier's own track record, and
+  // algorithm-specific reranking lives in the 📋 Swing Supervisor).
   let trackLine, trackCol;
   if (health.state === 'building') {
     const logged = (sb && sb.totalPicks) || 0;
-    trackLine = `📊 The ranking self-tunes from results — ${logged} picks logged, ${health.n} resolved so far. As more mature it tilts harder.`;
+    trackLine = `📊 The list-level conviction self-tunes from results — ${logged} picks logged, ${health.n} resolved so far. As more mature the dial moves further.`;
     trackCol = 'var(--cyan)';
   } else if (health.degrading) {
-    trackLine = `⚠️ <b>The model is grading its own recent picks as weak</b> — its last ${health.n} resolved won just <b>${health.live}%</b> vs a ${health.base}% baseline. This list is <b>down-weighted</b> and these are research ideas, not green lights — size down and lean on the ${L('regime', 'regime')}.`;
+    trackLine = `⚠️ <b>The model is grading its own recent picks as weak</b> — its last ${health.n} resolved won just <b>${health.live}%</b> vs a ${health.base}% baseline. The whole list's conviction is dialed <b>down uniformly</b> (this lowers how hard to act on all of them; it does not reorder them) — size down and lean on the ${L('regime', 'regime')}.`;
     trackCol = 'var(--red)';
   } else if (health.beating) {
-    trackLine = `✅ <b>The model's recent picks are working</b> — its last ${health.n} resolved beat baseline (${health.live}% vs ${health.base}%). The ranking is leaning into it. Still confirm and use a ${L('stop', 'stop')}.`;
+    trackLine = `✅ <b>The model's recent picks are working</b> — its last ${health.n} resolved beat baseline (${health.live}% vs ${health.base}%). The whole list's conviction is dialed up uniformly. Still confirm and use a ${L('stop', 'stop')}.`;
     trackCol = 'var(--green)';
   } else {
-    trackLine = `📊 The model's recent picks are tracking baseline (${health.live}% over ${health.n} resolved). Ranking tilts live with each new result.`;
+    trackLine = `📊 The model's recent picks are tracking baseline (${health.live}% over ${health.n} resolved). The list-level conviction dial sits neutral.`;
     trackCol = 'var(--cyan)';
   }
 
@@ -318,7 +325,7 @@ export async function loadOpportunities(container, scope = 'large', limit = 6) {
       return `<div class="opp-ai-row"><span class="opp-ai-tk">$${esc(r.ticker)}</span><span class="opp-ai-badges">${badges}</span><span class="opp-ai-note">${esc(r.note)}</span></div>`;
     }).join('') + `</div>`;
   }
-  html += `<div class="dt-dim opp-foot">Scored on accumulation, setup stage, momentum &amp; the model's ${L('conviction', 'results-trained conviction')}, then tilted by how its own recent picks are actually resolving — so the ranking adapts as results come in. Not advice; always confirm and use a ${L('stop', 'stop')}.</div>`;
+  html += `<div class="dt-dim opp-foot">Scored on accumulation, setup stage, momentum &amp; the model's ${L('conviction', 'results-trained conviction')}. Per-name order is tilted by each Ghost-tier's own resolved record; the whole list's conviction is then dialed by the model's live results (a uniform scalar — it does not reorder the names). Algorithm-specific, evidence-gated reranking lives in the 📋 Swing Supervisor. Not advice; always confirm and use a ${L('stop', 'stop')}.</div>`;
   container.innerHTML = html;
 }
 
