@@ -5910,7 +5910,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const card = (r, i) => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
           <span>${rankChip(i)} ${carryBadge(r)} ${relBadge(r)} <b>${esc(r.ticker)}</b>${r.preferred ? ' <span class="dt-star" title="Top-half by rank — the experimental config\'s preferred selection">⭐</span>' : ''}${tierBadge(r)} <span class="dt-sec">${esc(r.sector || '')}</span></span>
-          <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
+          <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">prev close</span></span>
         </div>
         <div class="dt-card-sub"><span data-dt-daychg>${r.pctChange >= 0 ? '+' : ''}${r.pctChange}%</span> today <span class="dt-dim">· ${L('rvol', 'RVOL')} ${r.relVol}×${rvMark}${r.beta != null ? ' · ' + L('beta', 'β') + ' ' + r.beta : ''}${r.gapPct != null ? ' · gap ' + r.gapPct + '%' : ''}</span></div>
         ${orb(r) ? `<div class="dt-card-plan">📈 <b>Opening-range breakout</b> <span class="dt-dim">(next session)</span> — break above <b>$${orb(r).trigger}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${orb(r).stop}</b> <span class="dt-dim">(−${orb(r).riskPct}%, 2.5×ATR)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${orb(r).target}</b> <span class="dt-dim">${L('rr', 'R:R')} 1:${orb(r).rr}</span></div>` : ''}
@@ -5936,7 +5936,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const runCard = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
           <span>${carryBadge(r)} ${r.relScore != null ? `<span class="dt-relscore" title="Relative strength (0–100)">${r.relScore}</span> ` : ''}<b>${esc(r.ticker)}</b>${tierBadge(r)} <span class="dt-sec">${esc(r.sector || '')}</span></span>
-          <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
+          <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">prev close</span></span>
         </div>
         <div class="dt-card-sub"><b style="color:var(--green)">+${r.pct5d}% / 5d</b> <span class="dt-dim">· ${r.highVolDays5} high-vol days · ${Math.round((r.nearHighFrac5 || 0) * 100)}% of run-high · today <span data-dt-daychg>${r.pctChange >= 0 ? '+' : ''}${r.pctChange}%</span> · RVOL ${r.relVol}×${rvMark}</span></div>
         ${r.stop ? `<div class="dt-card-plan">🛑 ${L('stop', 'Stop')} <b>$${r.stop}</b> <span class="dt-dim">(2.5×ATR)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${r.target}</b>${r.rr != null ? ` <span class="dt-dim">${L('rr', 'R:R')} 1:${r.rr}</span>` : ''}</div>` : ''}
@@ -6021,6 +6021,20 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const t = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     el.innerHTML = `<span class="live-dot"></span>Live prices · updated ${t} · list refreshes every 15 min`;
   }
+  // Session-aware display for a /api/price quote on the day-trade-style price
+  // nodes. q.price is ALREADY the current print (extended in pre/post, last
+  // regular close when the market is CLOSED). We derive an honest state label
+  // from marketState so a closed market — or a failed live fetch that leaves the
+  // "prev close" baseline showing — is never presented as "live": PRE/AH show the
+  // extended move, CLOSED is tagged "close" (the day's regular change), and only
+  // regular-session hours render the bare move.
+  function livePriceLabel(q) {
+    const state = (q.marketState || 'CLOSED').toUpperCase();
+    const pct = q.afterHours ? q.afterHours.changePct : q.changePct;
+    const up = parseFloat(pct) >= 0;
+    const tag = state === 'PRE' ? 'PRE ' : state === 'POST' ? 'AH ' : state === 'CLOSED' ? 'close ' : '';
+    return { price: q.price, text: `${tag}${up ? '▲ +' : '▼ '}${pct}%`, up };
+  }
   async function updateDaytradePrices(tickers) {
     try {
       // /api/price caps at 12 tickers/call — chunk so EVERY card gets a live quote,
@@ -6039,19 +6053,16 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       let updated = 0;
       document.querySelectorAll('#daytrade .dt-card[data-ticker]').forEach(cardEl => {
         const q = data[cardEl.dataset.ticker]; if (!q) return;
-        const shown = q.afterHours ? q.afterHours.price : q.regularPrice;
+        const v = livePriceLabel(q);
         const priceEl = cardEl.querySelector('[data-dt-price]');
         const changeEl = cardEl.querySelector('[data-dt-change]');
-        if (priceEl && shown != null && priceEl.textContent !== '$' + shown) {
-          priceEl.textContent = '$' + shown;
+        if (priceEl && v.price != null && priceEl.textContent !== '$' + v.price) {
+          priceEl.textContent = '$' + v.price;
           priceEl.classList.remove('price-flash'); void priceEl.offsetWidth; priceEl.classList.add('price-flash');
         }
         if (changeEl) {
-          const pct = q.afterHours ? q.afterHours.changePct : q.changePct;
-          const up = parseFloat(pct) >= 0;
-          const tag = q.afterHours ? (q.afterHours.session === 'pre' ? 'PRE ' : 'AH ') : '';
-          changeEl.textContent = `${tag}${up ? '▲ +' : '▼ '}${pct}%`;
-          changeEl.style.color = up ? 'var(--green)' : 'var(--red)';
+          changeEl.textContent = v.text;
+          changeEl.style.color = v.up ? 'var(--green)' : 'var(--red)';
         }
         // Keep the headline "% today" consistent with the live regular-session change
         // (the card ships with the EOD scan value, which can be a full day stale).
@@ -6345,7 +6356,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const card = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
           <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span>${r.earningsCheck === 'unknown' ? ' <span class="dt-tier-b" title="Earnings adjacency could not be verified (no data) — confirm there is no scheduled report before trading">? ER</span>' : ''}</span>
-          <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
+          <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">prev close</span></span>
         </div>
         <div class="dt-card-sub"><b style="color:#22d3ee">▲ gap +${r.gapPct}%</b> <span class="dt-dim">· ${L('rvol', 'RVOL')} ${r.relVol}×${r.excessPct != null ? ' · vs SPY ' + (r.excessPct >= 0 ? '+' : '') + r.excessPct + '%' : ''}</span>${ggCauseBadge(r.cause)}</div>
         ${r.continuationScore != null ? `<div class="dt-card-sub">🎯 <b title="Take/skip meta-label: gap size + RVOL + regime. Top-third beat bottom in 6/6 years OOS. Ranks a right-skewed edge — it does not raise the ~50% hit rate.">Continuation ${r.continuationScore}</b>/100 ${r.take ? '<span class="dt-tier-a" style="background:#22c55e33;color:#22c55e">✅ TAKE</span>' : '<span class="dt-dim">· watch</span>'}${r.suggestedRiskPct ? ` &nbsp;·&nbsp; 💰 <b title="0.25× fractional Kelly by tier, scaled by score, zeroed in risk-off. Position = this% × equity ÷ (trigger − stop).">risk ${r.suggestedRiskPct}%</b> <span class="dt-dim">of capital</span>` : (r.suggestedRiskPct === 0 ? ' <span class="dt-dim">· risk-off: size 0</span>' : '')}</div>` : ''}
@@ -6425,10 +6436,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         if (!Object.keys(data).length) return;
         document.querySelectorAll('#gapgo .dt-card[data-ticker]').forEach(cardEl => {
           const q = data[cardEl.dataset.ticker]; if (!q) return;
-          const shown = q.afterHours ? q.afterHours.price : q.regularPrice;
+          const v = livePriceLabel(q);
           const pe = cardEl.querySelector('[data-dt-price]'), ce = cardEl.querySelector('[data-dt-change]');
-          if (pe && shown != null && pe.textContent !== '$' + shown) { pe.textContent = '$' + shown; pe.classList.remove('price-flash'); void pe.offsetWidth; pe.classList.add('price-flash'); }
-          if (ce) { const pct = q.afterHours ? q.afterHours.changePct : q.changePct; const up = parseFloat(pct) >= 0; ce.textContent = `${q.afterHours ? (q.afterHours.session === 'pre' ? 'PRE ' : 'AH ') : ''}${up ? '▲ +' : '▼ '}${pct}%`; ce.style.color = up ? 'var(--green)' : 'var(--red)'; }
+          if (pe && v.price != null && pe.textContent !== '$' + v.price) { pe.textContent = '$' + v.price; pe.classList.remove('price-flash'); void pe.offsetWidth; pe.classList.add('price-flash'); }
+          if (ce) { ce.textContent = v.text; ce.style.color = v.up ? 'var(--green)' : 'var(--red)'; }
         });
       } catch {}
     };
@@ -6496,7 +6507,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const longCard = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
           <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> ${tierBadge(r.tier)}</span>
-          <span class="dt-now"><b data-dd-price>$${r.price}</b> <span data-dd-change class="dt-dim">live</span></span>
+          <span class="dt-now"><b data-dd-price>$${r.price}</b> <span data-dd-change class="dt-dim">prev close</span></span>
         </div>
         <div class="dt-card-sub"><b style="color:#22c55e">🔄 Oversold bounce</b> <span class="dt-dim">· dropped ${r.geometry.dropPct}% into RSI ${r.geometry.rsiAtPivot} · up ${r.geometry.rallyOffLowPct}% off the low · score ${r.downScore}/100</span></div>
         <div class="dt-card-plan">📈 <b>Long</b> near <b>$${r.signals.entry}</b> &nbsp;·&nbsp; 🛑 Stop <b>$${r.signals.stop}</b> <span class="dt-dim">(−${r.signals.riskPct}%, below the V-low)</span> &nbsp;·&nbsp; 🏁 Target <b>$${r.signals.target}</b> <span class="dt-dim">R:R 1:${r.signals.rr}</span></div>
@@ -6507,7 +6518,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const shortCard = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
           <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> ${tierBadge(r.tier)}</span>
-          <span class="dt-now"><b data-dd-price>$${r.price}</b> <span data-dd-change class="dt-dim">live</span></span>
+          <span class="dt-now"><b data-dd-price>$${r.price}</b> <span data-dd-change class="dt-dim">prev close</span></span>
         </div>
         <div class="dt-card-sub"><b style="color:#ef4444">📉 Overheated / rollover</b> <span class="dt-dim">· ran ${r.geometry.risePct}% into RSI ${r.geometry.rsiAtPivot} · off the high ${r.geometry.dropOffHighPct}% · score ${r.score}/100</span>${r.learnedExcess != null ? ` <span class="dt-tier-b" title="Fade-engine per-stock learned edge (${r.nPriors || 0} priors). Positive = this name has historically reverted after such tops.${r.drifted ? ' ⚠ DRIFTED — the edge stopped working; deprioritized.' : ''}" style="background:${r.drifted ? '#94a3b822;color:#94a3b8' : (r.learnedExcess > 0 ? '#22c55e22;color:#22c55e' : '#ef444422;color:#ef4444')}">🧠 ${r.learnedExcess > 0 ? '+' : ''}${r.learnedExcess}%${r.drifted ? ' drift' : ''}</span>` : ''}</div>
         <div class="dt-card-plan">📉 <b>Short</b> near <b>$${r.signals.entry}</b> &nbsp;·&nbsp; 🛑 Stop <b>$${r.signals.stop}</b> <span class="dt-dim">(+${r.signals.riskPct}%, above the peak)</span> &nbsp;·&nbsp; 🏁 Target <b>$${r.signals.target}</b> <span class="dt-dim">R:R 1:${r.signals.rr}</span></div>
@@ -6526,7 +6537,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const revCard = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
           <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> <span class="dt-tier-b" style="background:#a78bfa22;color:#a78bfa;border-color:#a78bfa55">${esc(CERN_LBL[r.type] || r.type)}</span></span>
-          <span class="dt-now"><b data-dd-price>$${r.entry != null ? (+r.entry).toFixed(2) : '—'}</b> <span data-dd-change class="dt-dim">live</span></span>
+          <span class="dt-now"><b data-dd-price>$${r.entry != null ? (+r.entry).toFixed(2) : '—'}</b> <span data-dd-change class="dt-dim">prev close</span></span>
         </div>
         <div class="dt-card-sub"><b style="color:#22c55e">🎁 Forced-selling reversion</b> <span class="dt-dim">· mechanical selling overshot → tends to revert${r.pProfit != null ? ` · ${Math.round(r.pProfit * 100)}% model win-prob` : ''}${r.horizon ? ` · ~${r.horizon}d hold` : ''}</span></div>
         ${r.stop != null && r.target != null ? `<div class="dt-card-plan">📈 <b>Long</b> near <b>$${(+r.entry).toFixed(2)}</b> &nbsp;·&nbsp; 🛑 Stop <b>$${(+r.stop).toFixed(2)}</b> &nbsp;·&nbsp; 🏁 Target <b>$${(+r.target).toFixed(2)}</b></div>` : ''}
@@ -6576,10 +6587,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         if (!Object.keys(data).length) return;
         document.querySelectorAll('#downday .dt-card[data-ticker]').forEach(cardEl => {
           const q = data[cardEl.dataset.ticker]; if (!q) return;
-          const shown = q.afterHours ? q.afterHours.price : q.regularPrice;
+          const v = livePriceLabel(q);
           const pe = cardEl.querySelector('[data-dd-price]'), ce = cardEl.querySelector('[data-dd-change]');
-          if (pe && shown != null && pe.textContent !== '$' + shown) { pe.textContent = '$' + shown; pe.classList.remove('price-flash'); void pe.offsetWidth; pe.classList.add('price-flash'); }
-          if (ce) { const pct = q.afterHours ? q.afterHours.changePct : q.changePct; const up = parseFloat(pct) >= 0; ce.textContent = `${up ? '▲ +' : '▼ '}${pct}%`; ce.style.color = up ? 'var(--green)' : 'var(--red)'; }
+          if (pe && v.price != null && pe.textContent !== '$' + v.price) { pe.textContent = '$' + v.price; pe.classList.remove('price-flash'); void pe.offsetWidth; pe.classList.add('price-flash'); }
+          if (ce) { ce.textContent = v.text; ce.style.color = v.up ? 'var(--green)' : 'var(--red)'; }
         });
       } catch {}
     };
@@ -6620,7 +6631,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const card = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
           <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span>${r.earningsCheck === 'unknown' ? ' <span class="dt-tier-b" title="Earnings adjacency unverified — check for a scheduled report">? ER</span>' : ''}</span>
-          <span class="dt-now"><b data-gd-price>$${r.last}</b> <span data-gd-change class="dt-dim">live</span></span>
+          <span class="dt-now"><b data-gd-price>$${r.last}</b> <span data-gd-change class="dt-dim">prev close</span></span>
         </div>
         <div class="dt-card-sub"><b style="color:#ef4444">▼ gap ${r.gapPct}%</b> <span class="dt-dim">· RVOL ${r.relVol}×${r.excessPct != null ? ' · vs SPY ' + (r.excessPct >= 0 ? '+' : '') + r.excessPct + '%' : ''} · continuation ${r.continuationScore}/100</span></div>
         <div class="dt-card-plan">📉 <b>Short the break below</b> <b>$${r.plan.trigger}</b> <span class="dt-dim">(OR low)</span> &nbsp;·&nbsp; 🛑 Stop <b>$${r.plan.stop}</b> <span class="dt-dim">(+${r.plan.riskPct}%, 2.5×ATR above)</span> &nbsp;·&nbsp; 🏁 Target <b>$${r.plan.target}</b> <span class="dt-dim">1:${r.plan.rr}</span></div>
@@ -6655,10 +6666,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         if (!Object.keys(data).length) return;
         document.querySelectorAll('#gapdown .dt-card[data-ticker]').forEach(cardEl => {
           const q = data[cardEl.dataset.ticker]; if (!q) return;
-          const shown = q.afterHours ? q.afterHours.price : q.regularPrice;
+          const v = livePriceLabel(q);
           const pe = cardEl.querySelector('[data-gd-price]'), ce = cardEl.querySelector('[data-gd-change]');
-          if (pe && shown != null && pe.textContent !== '$' + shown) { pe.textContent = '$' + shown; pe.classList.remove('price-flash'); void pe.offsetWidth; pe.classList.add('price-flash'); }
-          if (ce) { const pct = q.afterHours ? q.afterHours.changePct : q.changePct; const up = parseFloat(pct) >= 0; ce.textContent = `${up ? '▲ +' : '▼ '}${pct}%`; ce.style.color = up ? 'var(--green)' : 'var(--red)'; }
+          if (pe && v.price != null && pe.textContent !== '$' + v.price) { pe.textContent = '$' + v.price; pe.classList.remove('price-flash'); void pe.offsetWidth; pe.classList.add('price-flash'); }
+          if (ce) { ce.textContent = v.text; ce.style.color = v.up ? 'var(--green)' : 'var(--red)'; }
         });
       } catch {}
     };
@@ -6719,7 +6730,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           <span style="font-size:1.4em;font-weight:800;color:${coilBandColor(r.band)}">${r.explodeProbPct}%</span>
           <span class="dt-dim">chance to break out (~${t.horizonDays}d) · ${r.lift}× base · <b style="color:${coilBandColor(r.band)}">${esc((r.band || '').toUpperCase())} coil</b> (D${r.decile || ''}/10)</span>
         </div>
-        <div class="dt-card-plan">📈 <b>Breakout plan</b> <span class="dt-dim">(buy the break, not the quiet)</span> — now <b data-dt-price>$${r.price}</b> <span data-dt-change class="dt-dim">live</span> &nbsp;·&nbsp; enter above <b>$${r.entry}</b> &nbsp;·&nbsp; 🛑 stop <b>$${r.stop}</b> <span class="dt-dim">(−${r.riskPct}%)</span> &nbsp;·&nbsp; 🎯 target <b>$${r.target}</b> <span class="dt-dim">(+${r.rewardPct}%, R:R 1:${r.rr})</span></div>
+        <div class="dt-card-plan">📈 <b>Breakout plan</b> <span class="dt-dim">(buy the break, not the quiet)</span> — now <b data-dt-price>$${r.price}</b> <span data-dt-change class="dt-dim">prev close</span> &nbsp;·&nbsp; enter above <b>$${r.entry}</b> &nbsp;·&nbsp; 🛑 stop <b>$${r.stop}</b> <span class="dt-dim">(−${r.riskPct}%)</span> &nbsp;·&nbsp; 🎯 target <b>$${r.target}</b> <span class="dt-dim">(+${r.rewardPct}%, R:R 1:${r.rr})</span></div>
         <div class="dt-card-sub"><span class="dt-dim">squeeze ${r.metrics.squeezePctile}th pctile · vol ${r.metrics.hvPctile}th pctile · base ${r.metrics.rangeTightPct}% · ATR ${r.metrics.atrRatio}× · 20d ${r.metrics.ret20Pct >= 0 ? '+' : ''}${r.metrics.ret20Pct}%</span></div>
         ${(r.reasons || []).length ? `<ul class="coil-reasons" style="margin:6px 0 0 16px;padding:0;font-size:.86em;color:var(--text-dim,#9ca3af)">${r.reasons.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
       </div>`;
@@ -6752,10 +6763,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         if (!Object.keys(data).length) return;
         document.querySelectorAll('#coil .dt-card[data-ticker]').forEach(cardEl => {
           const q = data[cardEl.dataset.ticker]; if (!q) return;
-          const shown = q.afterHours ? q.afterHours.price : q.regularPrice;
+          const v = livePriceLabel(q);
           const pe = cardEl.querySelector('[data-dt-price]'), ce = cardEl.querySelector('[data-dt-change]');
-          if (pe && shown != null && pe.textContent !== '$' + shown) { pe.textContent = '$' + shown; pe.classList.remove('price-flash'); void pe.offsetWidth; pe.classList.add('price-flash'); }
-          if (ce) { const pct = q.afterHours ? q.afterHours.changePct : q.changePct; const up = parseFloat(pct) >= 0; ce.textContent = `${q.afterHours ? (q.afterHours.session === 'pre' ? 'PRE ' : 'AH ') : ''}${up ? '▲ +' : '▼ '}${pct}%`; ce.style.color = up ? 'var(--green)' : 'var(--red)'; }
+          if (pe && v.price != null && pe.textContent !== '$' + v.price) { pe.textContent = '$' + v.price; pe.classList.remove('price-flash'); void pe.offsetWidth; pe.classList.add('price-flash'); }
+          if (ce) { ce.textContent = v.text; ce.style.color = v.up ? 'var(--green)' : 'var(--red)'; }
         });
       } catch {}
     };
@@ -6819,7 +6830,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       return `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
           <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> <span class="dt-dim">${L('confluence', r.score + '/' + r.maxScore)}</span></span>
-          <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">live</span></span>
+          <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">prev close</span></span>
         </div>
         <div class="dt-card-sub">${badges} ${famChip} <span class="dt-dim">${r.excess21d != null ? '· ' + L('relStrength', '1mo vs SPY') + ' ' + (r.excess21d > 0 ? '+' : '') + r.excess21d + '%' : ''}${r.beta != null ? ' · ' + L('beta', 'β') + ' ' + r.beta : ''}</span></div>
         ${pb ? `<div class="dt-card-plan">↩️ <b>${L('pullback', 'Pullback')}</b> <b>$${pb.entry}</b> · 🛑 ${L('stop', '<b>$' + pb.stop + '</b>')} <span class="dt-dim">(−${pb.riskPct}%)</span> · 🏁 ${L('target', '<b>$' + pb.target + '</b>')} <span class="dt-dim">${L('rr', 'R:R')} 1:${pb.rr}</span></div>` : ''}
@@ -6868,10 +6879,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         if (!Object.keys(data).length) return;
         document.querySelectorAll('#confluence .dt-card[data-ticker]').forEach(cardEl => {
           const q = data[cardEl.dataset.ticker]; if (!q) return;
-          const shown = q.afterHours ? q.afterHours.price : q.regularPrice;
+          const v = livePriceLabel(q);
           const pe = cardEl.querySelector('[data-dt-price]'), ce = cardEl.querySelector('[data-dt-change]');
-          if (pe && shown != null && pe.textContent !== '$' + shown) { pe.textContent = '$' + shown; pe.classList.remove('price-flash'); void pe.offsetWidth; pe.classList.add('price-flash'); }
-          if (ce) { const pct = q.afterHours ? q.afterHours.changePct : q.changePct; const up = parseFloat(pct) >= 0; ce.textContent = `${q.afterHours ? (q.afterHours.session === 'pre' ? 'PRE ' : 'AH ') : ''}${up ? '▲ +' : '▼ '}${pct}%`; ce.style.color = up ? 'var(--green)' : 'var(--red)'; }
+          if (pe && v.price != null && pe.textContent !== '$' + v.price) { pe.textContent = '$' + v.price; pe.classList.remove('price-flash'); void pe.offsetWidth; pe.classList.add('price-flash'); }
+          if (ce) { ce.textContent = v.text; ce.style.color = v.up ? 'var(--green)' : 'var(--red)'; }
         });
       } catch {}
     };
@@ -8041,7 +8052,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         if (changeEl) {
           const up = parseFloat(q.changePct) >= 0;
           changeEl.className = 'alert-change ' + (up ? 'up' : 'down');
-          changeEl.textContent = (up ? '▲ +' : '▼ ') + q.changePct + '%';
+          const closed = (q.marketState || '').toUpperCase() === 'CLOSED';
+          changeEl.textContent = (closed ? 'close ' : '') + (up ? '▲ +' : '▼ ') + q.changePct + '%';
         }
         if (ahEl) {
           if (q.afterHours) {
