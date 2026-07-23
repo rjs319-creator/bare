@@ -6032,7 +6032,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const state = (q.marketState || 'CLOSED').toUpperCase();
     const pct = q.afterHours ? q.afterHours.changePct : q.changePct;
     const up = parseFloat(pct) >= 0;
-    const tag = state === 'PRE' ? 'PRE ' : state === 'POST' ? 'AH ' : state === 'CLOSED' ? 'close ' : '';
+    const tag = state === 'PRE' ? 'PRE ' : state === 'POST' ? 'AH ' : state === 'CLOSED' ? 'close ' : 'live ';
     return { price: q.price, text: `${tag}${up ? '▲ +' : '▼ '}${pct}%`, up };
   }
   async function updateDaytradePrices(tickers) {
