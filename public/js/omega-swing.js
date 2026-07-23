@@ -46,8 +46,9 @@ function renderOmega(container, om) {
   for (const [tier, label, blurb] of TIER_ORDER) {
     const cards = (om.byTier && om.byTier[tier]) || [];
     html += `<div class="om-tier-head"><h3>${label} <span class="om-count">${cards.length}</span></h3><span class="om-tier-blurb">${esc(blurb)}</span></div>`;
-    html += cards.length ? `<div class="om-cards">${cards.map(cardHtml).join('')}</div>` : `<div class="om-tier-empty">None today.</div>`;
+    html += cards.length ? `<div class="om-cards">${cards.map(c => cardHtml(c)).join('')}</div>` : `<div class="om-tier-empty">None today.</div>`;
   }
+  html += avoidSection(om);
   html += evidenceNote();
   container.innerHTML = html;
   container.querySelectorAll('[data-ticker]').forEach(el => el.addEventListener('click', () => {
@@ -94,13 +95,13 @@ function probCell(label, assess, rawP) {
   return `<div class="om-stat" title="Probability unavailable — insufficient calibration evidence (uncalibrated baseline)."><span class="om-stat-l">${label}</span><span class="om-stat-v om-band">${band}</span></div>`;
 }
 
-function cardHtml(cd) {
+function cardHtml(cd, opts = {}) {
   const f = cd.features || {}, e = cd.execution || {}, rk = cd.risk || {}, sz = cd.sizing || {}, cal = cd.calibration || {};
   const dayCls = (cd.changePct ?? 0) >= 0 ? 'om-pos' : 'om-neg';
   const stage = cd.stageMeta || {};
   const stat = (label, val, cls = '') => `<div class="om-stat"><span class="om-stat-l">${label}</span><span class="om-stat-v ${cls}">${val}</span></div>`;
   const state = e.executableState || (cd.entry && cd.entry.classification) || 'AVOID';
-  return `<div class="om-card om-${cd.tier}">
+  return `<div class="om-card om-${cd.tier}${cd.funnelDisplaced ? ' om-carried' : ''}">
     <div class="om-card-top">
       <div class="om-id" data-ticker="${esc(cd.ticker)}" role="button">
         <b class="om-tk">${esc(cd.ticker)}</b>
@@ -109,11 +110,13 @@ function cardHtml(cd) {
       <div class="om-px">$${cd.price ?? '–'} <span class="${dayCls}">${cd.changePct == null ? '' : (cd.changePct >= 0 ? '+' : '') + cd.changePct + '%'}</span></div>
       <div class="om-score" title="OMEGA-SWING rank score 0–100 (interpretable baseline)">${cd.score}</div>
     </div>
+    ${opts.transition || ''}
     <div class="om-action"><b>${STATE_LABEL[state] || state}</b>${e.maxAcceptableEntryPrice ? ` <span class="om-maxentry">· max entry $${e.maxAcceptableEntryPrice} · max gap ${Math.round((e.maxAcceptableGapPct || 0) * 100)}%</span>` : ''}</div>
     <div class="om-chips">
       <span class="om-chip om-stage">${stage.icon || ''} ${esc(cd.stage)}</span>
       ${cd.setup ? `<span class="om-chip om-setup">${esc(cd.setup)}</span>` : ''}
       ${cd.sector ? `<span class="om-chip om-sec">${esc(cd.sector)}</span>` : ''}
+      ${cd.funnelDisplaced ? `<span class="om-chip om-carry" title="${esc(cd.carryReason || 'carried forward from a prior day — dropped below the top-60 shortlist')}">↩ carried-forward</span>` : ''}
       ${cd.candidateSource ? `<span class="om-chip om-src" title="Source screener + within-funnel rank">from ${esc(cd.candidateSource)} #${cd.sourceRank ?? '–'}</span>` : ''}
     </div>
     <div class="om-stats">
@@ -136,6 +139,43 @@ function cardHtml(cd) {
     ${(cd.risks || []).length ? `<div class="om-risks">⚠️ ${cd.risks.map(esc).join(' · ')}</div>` : ''}
     <div class="om-foot"><span>Evidence: baseline (uncalibrated) · shadow</span><span>${esc(cd.provenance || 'prospective_live')}</span></div>
   </div>`;
+}
+
+// Derive WHY a name is now Avoid, from fields already on the card object (buildOmega /
+// evaluateCandidate). Never a sell signal — these stay research candidates, shown for monitoring.
+export function deriveAvoidReason(cd) {
+  const f = cd.features || {};
+  const risks = [...(cd.penalties || []), ...(cd.risks || [])].map(x => String(x));
+  const hasRisk = (re) => risks.some(x => re.test(x));
+  const out = [];
+  if (cd.stage === 'FAILED' || cd.stage === 'EXHAUSTED') out.push('failed/exhausted momentum');
+  if (cd.utility != null && cd.utility <= 0) out.push('negative expected utility');
+  if (hasRisk(/thin liquidity/i)) out.push('liquidity too thin');
+  if (hasRisk(/risk-off/i)) out.push('risk-off regime');
+  if ((f.rsSpy5 != null && f.rsSpy5 < 0) || (f.rsSpy10 != null && f.rsSpy10 < 0)) out.push('lost relative strength');
+  if (f.volPersistence != null && f.volPersistence < 0.4) out.push('volume persistence faded');
+  if (f.extAbove20 != null && f.extAbove20 > 15) out.push('over-extended');
+  if (!out.length) out.push('no longer clears the entry bar');
+  return out;
+}
+
+// COLLAPSED "No Longer Actionable" section (Defect A). AVOID cards are computed and bucketed
+// server-side but previously had no render path, so picks silently vanished. They are still
+// research candidates (NOT sell signals): same shadow/evidence-band rendering, no percentages.
+export function avoidSection(om) {
+  const cards = (om.byTier && om.byTier.AVOID) || [];
+  if (!cards.length) return '';
+  const body = cards.map(cd => {
+    const reasons = deriveAvoidReason(cd);
+    const transition = `<div class="om-transition"><b>Why Avoid:</b> ${reasons.map(esc).join(' · ')}</div>`;
+    return cardHtml(cd, { transition });
+  }).join('');
+  return `<details class="om-avoid"><summary>🚫 No Longer Actionable <span class="om-count">${cards.length}</span></summary>
+    <div class="om-avoid-body">
+      <p class="om-avoid-note">Names that were research candidates but no longer clear the entry bar — kept visible (not silently dropped) so the transition is monitored. These are <b>not</b> sell signals; probabilities remain uncalibrated evidence bands.</p>
+      <div class="om-cards">${body}</div>
+    </div>
+  </details>`;
 }
 
 function evidenceNote() {
