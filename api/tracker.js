@@ -33,7 +33,7 @@ const { runAlertsIngest, runAlerts, runAlertsGrade, runAlertsAssess } = require(
 const { runArchive, runBaseline, runInsiderIngest, runInsider, runFundBuild, runFundamentals,
         runCernTickOp, runCern, runCernFsProbe, runCernLockProbe, runIntraCapture, runIntraday } = require('../lib/capture-routes');
 const { runTrack, runScoreboard, runApexLog, runGhostLog, runEdgeLog, runEdgeBook, runVReversal, runVReversalTest,
-        runDrift, runRecalibrate, runResearchOp, runExitsOp, runEmergingOp, runLongShortOp, runPeadOp, runBackfillOp, runModel, runNarrative, runMoverStudyOp, runCernDecay, runRankQuality } = require('../lib/apex-routes');
+        runDrift, runRecalibrate, runResearchOp, runExitsOp, runEmergingOp, runLongShortOp, runPeadOp, runBackfillOp, runModel, runNarrative, runMoverStudyOp, runCernDecay, runRankQuality, runCongressOp, runRevisionsOp } = require('../lib/apex-routes');
 const { runHealth } = require('../lib/health');
 const { runLeaderboard, runLeaderboardTick } = require('../lib/leaderboard');
 const { runCoreBuild, runCore, runCoreLog, runCoreDrift, runCorePerf } = require('../lib/stablecore-routes');
@@ -88,7 +88,7 @@ const PRIVILEGED_OPS = new Set([
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
-  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'failuremodel', 'complab', 'challengereval', 'router', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward',
+  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'failuremodel', 'complab', 'challengereval', 'router', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -253,6 +253,8 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'emerging') return runEmergingOp(req, res);
   if (req.query.op === 'longshort') return runLongShortOp(req, res);
   if (req.query.op === 'pead') return runPeadOp(req, res);
+  if (req.query.op === 'congress') return runCongressOp(req, res);
+  if (req.query.op === 'revisions') return runRevisionsOp(req, res);
   if (req.query.op === 'alertsingest') return runAlertsIngest(req, res);
   if (req.query.op === 'alerts') return runAlerts(req, res);
   if (req.query.op === 'alertsgrade') return runAlertsGrade(req, res);

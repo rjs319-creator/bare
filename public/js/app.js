@@ -2933,6 +2933,26 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       ${runBtn(s ? '↻ Re-run true SUE study' : '📊 Run true SUE study')}</div>`;
   }
 
+  // Shadow alt-signal probes (congressional trades, analyst-revision momentum).
+  // Newly testable with the FMP Premium data; weight-0, never touch live ranking.
+  function apexAltProbesPanelHTML() {
+    const ap = apexModel && apexModel.altProbes;
+    if (!ap) return '';
+    const vColor = v => v === 'CONFIRMED' ? '#10d98a' : v === 'REGIME-DEPENDENT' ? 'var(--amber)' : 'var(--red)';
+    const runBtn = (op, label) => `<button class="refresh-btn" onclick="fetch('/api/tracker?op=${op}&limit=150').then(()=>fetchApexModel()).then(()=>{if(apexLast)renderApexModelPanel(apexLast.regime,apexLast.preset,apexLast.large)})" style="color:#10d98a;font-size:0.6rem">↻ ${label}</button>`;
+    const row = (p, title, op) => {
+      if (!p) return `<p class="cx-mp-p" style="font-size:0.66rem"><b>${title}:</b> not run yet. ${runBtn(op, 'Run')}</p>`;
+      const ls = p.longShort63 || {}, sg = p.signed63 || {};
+      const yrs = p.byYear63 ? Object.entries(p.byYear63) : [];
+      const posY = yrs.filter(([, x]) => x.meanPct > 0).length;
+      return `<p class="cx-mp-p" style="font-size:0.66rem"><b style="color:${vColor(p.verdict)}">${title} — ${p.verdict}.</b> ${p.resolvedEvents} events${p.coverage ? ', ' + p.coverage.earliest + '→' + p.coverage.latest : ''}. 63d: long-short ${ls.meanPct}% (t ${ls.tStat}), signed ${sg.meanPct}% (t ${sg.tStat}); positive ${posY}/${yrs.length} yrs. ${runBtn(op, 'Re-run')}</p>`;
+    };
+    return `<div class="cx-mp-sec"><h4>Alt-signal probes <span style="opacity:.6;font-weight:400">(shadow · FMP Premium)</span></h4>
+      <p class="cx-mp-p" style="font-size:0.62rem;opacity:.75">Two newly-testable alt-data signals, same PIT drift test as PEAD. Diagnostic only — never weighted into live picks. Congressional trades are scored as-of their <i>disclosure</i> date (30–45d lag), so this reflects tradable, not hindsight, information.</p>
+      ${row(ap.congress, 'Congressional net-flow', 'congress')}
+      ${row(ap.revisions, 'Analyst-revision momentum', 'revisions')}</div>`;
+  }
+
   function apexNarrativePanelHTML() {
     const nar = (apexModel && apexModel.narrative) || (apexDrift && apexDrift.narrative);
     const breakdown = apexDrift && apexDrift.narrativeBreakdown;
@@ -3378,6 +3398,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         ${table}
       </div>
       ${apexPeadPanelHTML()}
+      ${apexAltProbesPanelHTML()}
       ${apexExitsPanelHTML()}
       ${apexRecalPanelHTML()}
       ${apexHealthPanelHTML()}
