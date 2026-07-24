@@ -193,7 +193,10 @@ test('summarizeBoard buckets records into the UI sections', () => {
     mk(STATES.MANAGING), mk(STATES.CLOSED), null,
   ]);
   assert.equal(board.counts.actionableNow, 1);
-  assert.equal(board.counts.buildingNearTrigger, 2);   // BUILDING + ARMED
+  // ARMED now has its own "Armed / Waiting for Trigger" lane (the redesign separates
+  // "waiting for the trigger" from generic building/watch), so it is no longer folded in.
+  assert.equal(board.counts.buildingNearTrigger, 1);   // BUILDING only
+  assert.equal(board.counts.armed, 1);                  // ARMED gets its own lane
   assert.equal(board.counts.tooExtended, 1);
   assert.equal(board.counts.retiredToday, 2);           // FAILED + STALLING
   assert.equal(board.counts.managing, 1);
