@@ -85,6 +85,9 @@ const PRIVILEGED_OPS = new Set([
   'atlasxlog', 'atlasxresolve',
   // Swing-search shadow ledger WRITES (log the daily swing cross-section PIT / grade forward outcomes).
   'swingsearchlog', 'swingsearchgrade',
+  // Evidence Consensus & Thesis Change engine — the daily snapshot build makes LLM extraction
+  // calls per active-attention name + writes the evidence ledger. Cron/manual-with-bearer only.
+  'evidencetick',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
@@ -285,6 +288,10 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'attentiontick') return runAttentionTick(req, res);
   if (req.query.op === 'attention') return runAttention(req, res);
   if (req.query.op === 'whynow') return require('../lib/whynow-routes').runWhyNow(req, res);
+  // EVIDENCE CONSENSUS & THESIS CHANGE engine — news→events→clusters→consensus→thesis.
+  if (req.query.op === 'evidencetick') return require('../lib/evidence-routes').runEvidenceTick(req, res);
+  if (req.query.op === 'evidence') return require('../lib/evidence-routes').runEvidence(req, res);
+  if (req.query.op === 'evidencestock') return require('../lib/evidence-routes').runEvidenceStock(req, res);
   // NOVEL SIGNAL LAB — shadow-only research surface (never touches prod recs; kill-switch NSL_DISABLED).
   if (req.query.op === 'nsl') return require('../lib/nsl-routes').runNsl(req, res);
   if (req.query.op === 'today') return require('../lib/decision-routes').runToday(req, res);

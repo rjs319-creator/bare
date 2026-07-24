@@ -7245,11 +7245,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const scoreboardMeta       = document.getElementById('scoreboard-meta');
   let   lastScoreboard       = null;
 
-  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', Biotech: '🧬 Biotech Radar (Hot vs Watch)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)', DownDay: '🪁 Down-Day Bounce (Longs)', GapDown: '🐻 Gap-Down Continuation (Shorts)', daytrade: '⚡ Day Trade (A vs B)', coil: '🧬 Coil Radar (squeeze bands)', Ignition: '🔥 Momentum Ignition (Ignition vs Watch)', OMEGA: '💠 OMEGA-Swing (Prime vs Watch)' };
+  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', Biotech: '🧬 Biotech Radar (Hot vs Watch)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)', DownDay: '🪁 Down-Day Bounce (Longs)', GapDown: '🐻 Gap-Down Continuation (Shorts)', daytrade: '⚡ Day Trade (A vs B)', coil: '🧬 Coil Radar (squeeze bands)', Ignition: '🔥 Momentum Ignition (Ignition vs Watch)', OMEGA: '💠 OMEGA-Swing (Prime vs Watch)', Evidence: '🧾 Evidence / Thesis Change (Strong vs Weak)' };
   const SB_TIER_LABEL = { Breakout: 'Breakout', Setup: 'Setup', Early: 'Early', StrongBuy: 'Strong Buy', StrongSell: 'Strong Sell', GHOST: '👻 Ghost', STALKING: '🥷 Stalking', SHORT: 'Short', SHORT_LIGHT: 'Short (light)',
     WATCH: '👀 Watch (fresh turn)', EMERGING: '🌗 Emerging (turning)', CONFIRMED: '✅ Confirmed (late)',
     IGNITION: '🔥 Ignition (accelerating)',
     OMEGA_PRIME: '💠 Prime', OMEGA_QUALIFIED: '🟢 Qualified', OMEGA_WATCH: '👁 Watch',
+    EV_STRONG: '🧾 Strong change', EV_MODERATE: '🧾 Moderate change', EV_WEAK: '🧾 Weak change',
     STRONG: '🔴 Strong (≥5% gap)', MODERATE: '🟠 Moderate (3–5% gap)',
     INDEX_DELETE: 'Index Delete', INDEX_ADD_FADE: 'Index Add (fade)', LOCKUP_EXPIRY: 'Lockup Expiry', TAX_LOSS: 'Tax-Loss Selling', FIRE_SALE: 'Fire Sale', MARGIN_SPIRAL: 'Margin Spiral', FORCED_DOWNGRADE: 'Forced Downgrade',
     Bullish: '📈 Bullish tone', Neutral: '➖ Neutral tone', Bearish: '📉 Bearish tone',
