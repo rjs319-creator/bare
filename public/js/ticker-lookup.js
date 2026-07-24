@@ -538,9 +538,7 @@ function renderBody(data) {
 
 async function load(ticker, silent) {
   try {
-    const res = await fetch('/api/chart?ticker=' + encodeURIComponent(ticker));
-    if (!res.ok) throw new Error('no data');
-    const data = await res.json();
+    const data = await fetchJSON('/api/chart?ticker=' + encodeURIComponent(ticker));
     if (curTicker !== ticker) return;   // user moved on
     renderBody(data);
   } catch {

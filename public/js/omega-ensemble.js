@@ -8,6 +8,7 @@
 // Where an engine has no number, the payload says so and we print the reason. We do not
 // render a dash and let the reader assume it is loading.
 import { esc } from './format.js';
+import { fetchJSON } from './fetch-json.js';
 
 const REASON_ICON = {
   'sector-cap': '🏛', 'family-cap': '🧬', 'duplicate-underlying': '👥',
@@ -169,8 +170,7 @@ export async function loadEnsemble(container, force = false) {
   if (!container) return;
   container.innerHTML = '<div class="mom-status"><div class="mom-spinner"></div><p>Composing the ensemble from every engine… <span class="dt-dim">(can take ~15s cold)</span></p></div>';
   try {
-    const r = await fetch(`/api/tracker?op=ensemble${force ? `&_cb=${Date.now()}` : ''}`);
-    const p = await r.json();
+    const p = await fetchJSON(`/api/tracker?op=ensemble${force ? `&_cb=${Date.now()}` : ''}`);
     renderEnsemble(container, p);
   } catch (e) {
     container.innerHTML = `<div class="oe-empty">⚠️ Could not reach the ensemble: ${esc(String(e && e.message || e))}</div>`;
