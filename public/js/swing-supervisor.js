@@ -9,6 +9,7 @@
 // field renders '—', never 'null' / 'undefined' / 'NaN'.
 
 import { esc } from './format.js';
+import { fetchJSON } from './fetch-json.js';
 
 // Lifecycle-state chip colors (spec color map). Anything unlisted falls back to grey.
 const LIFECYCLE_COLOR = {
@@ -29,7 +30,7 @@ export async function loadSwingSupervisor(container) {
   container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading swing lifecycle…</p></div>`;
   try {
     // Public read — same-origin GET, no auth header.
-    const data = await fetch('/api/tracker?op=swingmonitor').then(r => r.json()).catch(() => null);
+    const data = await fetchJSON('/api/tracker?op=swingmonitor').catch(() => null);
     renderSupervisor(container, data);
   } catch {
     container.innerHTML = `<div class="mom-status error"><p>Could not load the Swing Supervisor.</p></div>`;

@@ -5,6 +5,7 @@
 // expert detail, and tap-to-learn on every term. Regime-gated — stands down when
 // the backdrop is hostile (the project's one validated lever).
 import { esc } from './format.js';
+import { fetchJSON } from './fetch-json.js';
 import { canonTheme, rankThemes, leadingThemeSet } from './themes.js';
 
 const L = (term, txt) => `<span class="learn-term" data-learn="${term}">${txt}</span>`;
@@ -256,10 +257,10 @@ export async function loadOpportunities(container, scope = 'large', limit = 6) {
   if (!container) return;
   container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Finding the best setups to buy before they run…</p></div>`;
   let d, sb, drift, rt, an, sw, ca, ts;
-  const j = op => fetch('/api/tracker?op=' + op).then(r => r.json()).catch(() => null);
+  const j = op => fetchJSON('/api/tracker?op=' + op).catch(() => null);
   try {
     [d, sb, drift, rt, an, sw, ca, ts] = await Promise.all([
-      fetch('/api/screener?scope=' + scope).then(r => r.json()),
+      fetchJSON('/api/screener?scope=' + scope),
       j('scoreboard'), j('drift'),
       j('readthrough'), j('anomaly'), j('secondwave'), j('crossasset'), j('toneshift'),
     ]);

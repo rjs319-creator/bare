@@ -9,6 +9,7 @@
 // right next to the action, not hidden at the bottom.
 
 import { esc } from './format.js';
+import { fetchJSON } from './fetch-json.js';
 
 // Executable states (from lib/omega-execution) → plain-language action.
 const STATE_LABEL = {
@@ -29,7 +30,7 @@ export async function loadOmega(container) {
   if (!container) return;
   container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scoring 5–10 day continuation candidates…</p></div>`;
   try {
-    const om = await fetch('/api/tracker?op=omega').then(r => r.json()).catch(() => null);
+    const om = await fetchJSON('/api/tracker?op=omega').catch(() => null);
     renderOmega(container, om);
   } catch { container.innerHTML = `<div class="mom-status error"><p>Could not load OMEGA-SWING.</p></div>`; }
 }

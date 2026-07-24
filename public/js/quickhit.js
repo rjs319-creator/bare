@@ -4,6 +4,7 @@
 // represented, cross-confirms with the 5 AI screeners, and hands back a Top 5 — each
 // card labeled with its cap size and a 📍 reference to where it lives in the app.
 import { esc } from './format.js';
+import { fetchJSON } from './fetch-json.js';
 import { fetchPrices } from './live-price.js';
 import { rankThemes, leadingThemeSet } from './themes.js';
 import {
@@ -233,8 +234,8 @@ export async function loadQuickHit(container, bindNav) {
   if (!container) return;
   if (moversTimer) { clearInterval(moversTimer); moversTimer = null; }   // drop any prior tab's timer
   container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning large, small &amp; micro caps for today's best plays…</p></div>`;
-  const j = op => fetch('/api/tracker?op=' + op).then(r => r.json()).catch(() => null);
-  const scr = scope => fetch('/api/screener?scope=' + scope).then(r => r.json()).catch(() => null);
+  const j = op => fetchJSON('/api/tracker?op=' + op).catch(() => null);
+  const scr = scope => fetchJSON('/api/screener?scope=' + scope).catch(() => null);
   let large, small, micro, sb, drift, rt, an, sw, ca, ts, of, pr;
   try {
     [large, small, micro, sb, drift, rt, an, sw, ca, ts, of, pr] = await Promise.all([
@@ -276,7 +277,7 @@ export async function loadQuickHit(container, bindNav) {
     // the live regular-session change overwrite the candle day-change so "Today's Top
     // Movers" ranks and shows the live intraday tape, not yesterday's close-to-close.
     const [pj, live] = await Promise.all([
-      fetch('/api/tracker?op=perf&tickers=' + encodeURIComponent(union.join(','))).then(r => r.json()).catch(() => null),
+      fetchJSON('/api/tracker?op=perf&tickers=' + encodeURIComponent(union.join(','))).catch(() => null),
       fetchPrices(union).catch(() => ({})),
     ]);
     if (pj && pj.perf) perf = pj.perf;
