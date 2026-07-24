@@ -3,6 +3,7 @@
 // cache) for the names ON SCREEN and shows price + intraday % next to each ticker.
 // Cards opt in with data-live="TICKER"; a .live-px badge is injected/updated.
 import { esc } from './format.js';
+import { fetchJSON } from './fetch-json.js';
 
 // Sub-tabs that get the overlay (daytrade already has its own live price).
 // xalerts = Trade Alerts: cards carry data-live on .cx-ticker, so each alert shows a
@@ -14,7 +15,7 @@ export async function fetchPrices(tickers) {
   for (let i = 0; i < tickers.length; i += 12) {          // /api/price caps at 12/call
     const chunk = tickers.slice(i, i + 12);
     try {
-      const d = await fetch('/api/price?tickers=' + encodeURIComponent(chunk.join(','))).then(r => r.json());
+      const d = await fetchJSON('/api/price?tickers=' + encodeURIComponent(chunk.join(',')));
       if (d && !d.error) Object.assign(out, d);
     } catch { /* offline / rate-limited — leave gaps, keep the daily close visible */ }
   }

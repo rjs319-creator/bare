@@ -358,7 +358,7 @@ export function renderCommandCenter(container, p) {
     const host = container.querySelector('[data-redun-pairs]');
     host.innerHTML = `<div class="td-dim">Measuring overlap and return correlation across the ledgers…</div>`;
     try {
-      const m = await fetch('/api/tracker?op=redundancy').then(r => r.json());
+      const m = await fetchJSON('/api/tracker?op=redundancy');
       renderPairs(host, m);
     } catch {
       host.innerHTML = `<div class="td-dim">Couldn't load the pair matrix right now — the ranking is unaffected.</div>`;

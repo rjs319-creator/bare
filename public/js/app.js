@@ -573,11 +573,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     }
     btn.disabled = true; btn.textContent = 'Summarizing…';
     try {
-      const res = await fetch('/api/news', {
+      const data = await fetchJSON('/api/news', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: article.title, description: article.description, content: article.content }),
       });
-      const data = await res.json();
       if (data.error) throw new Error(data.error);
       summaryCache[id] = data.summary;
       box.textContent = data.summary;
@@ -2779,7 +2778,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const btn = document.getElementById('cx-recal-btn');
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Recalibrating…'; }
     try {
-      const res = await (await fetch('/api/tracker?op=recalibrate')).json();
+      const res = await fetchJSON('/api/tracker?op=recalibrate');
       apexRecalMsg = res.error ? ('Error: ' + res.error)
         : res.refit ? '✅ Re-fit adopted — weights updated and applied forward.'
         : `Kept current weights — ${res.totalResolved || 0} resolved signals (need ≥40 per regime, beating preset out-of-sample).`;
@@ -2796,11 +2795,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const btn = document.getElementById('cx-seed-btn');
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Scanning ~12mo of history…'; }
     try {
-      const bf = await (await fetch('/api/tracker?op=backfill')).json();
+      const bf = await fetchJSON('/api/tracker?op=backfill');
       if (!bf.ok) { apexRecalMsg = 'Backfill failed: ' + (bf.error || 'error'); }
       else {
         const st = bf.stats || {};
-        const res = await (await fetch('/api/tracker?op=recalibrate&source=all')).json();
+        const res = await fetchJSON('/api/tracker?op=recalibrate&source=all');
         apexRecalMsg = `Seeded ${st.signals || 0} historical signals across ${st.datesUsed || 0} dates. `
           + (res.refit ? '✅ Re-fit adopted from the seed (technical pillars only — P3 held neutral).'
                        : 'Kept presets — the seed didn’t beat them under walk-forward CV.');
@@ -6118,11 +6117,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     }
     const run = async () => {
       try {
-        const res = await fetch('/api/tracker?op=timing', {
+        const j = await fetchJSON('/api/tracker?op=timing', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ picks }),
         });
-        const j = await res.json();
         if (!j || !j.ok) return;
         picks.forEach(p => {
           const card = locate(p.ticker);
@@ -8491,7 +8489,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!root) return;
     const { live, longTerm: lt, dual } = data;
     try {
-      const res = await fetch('/api/tracker?op=dualread', {
+      const j = await fetchJSON('/api/tracker?op=dualread', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ticker: data.ticker, price: data.price && data.price.live,
@@ -8501,7 +8499,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           sw: data.swing ? { action: data.swing.action, evidenceStrength: data.swing.evidenceStrength, reasons: data.swing.reasons, plan: data.swing.plan } : null,
         }),
       });
-      const j = await res.json();
       const ai = j && j.ai;
       if (ai) {
         if (ai.verdict) {
