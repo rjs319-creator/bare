@@ -27,7 +27,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // prediction-market read. Unproven overlays live in the Research Lab; the honest
     // report cards live in Evidence.
     home:       ['today', 'ensemble', 'start', 'quickhit'],
-    candidates: ['swingsup', 'daytrade', 'gapgo', 'ignition', 'gapdown', 'opportunities', 'omega', 'atlas', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
+    candidates: ['swingsup', 'daytrade', 'gapgo', 'ignition', 'gapdown', 'opportunities', 'omega', 'atlas', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'patternradar', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
     positions:  ['coremo', 'momentum', 'putsell', 'picks'],
     markets:    ['rotation', 'sectors', 'news', 'thesis', 'pulse', 'evolve'],
     predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
@@ -39,7 +39,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const SUB_HZ = {
     daytrade: 'intraday', gapgo: 'intraday', gapdown: 'intraday',
     ignition: 'intraday',
-    swingsup: 'swing', opportunities: 'swing', omega: 'swing', atlas: 'swing', aligned: 'swing', screener: 'swing', custom: 'swing', ghost: 'swing', coil: 'swing', downday: 'swing', confluence: 'swing', trendrider: 'swing', fade: 'swing', biotech: 'swing',
+    swingsup: 'swing', opportunities: 'swing', omega: 'swing', atlas: 'swing', aligned: 'swing', screener: 'swing', custom: 'swing', ghost: 'swing', coil: 'swing', patternradar: 'swing', downday: 'swing', confluence: 'swing', trendrider: 'swing', fade: 'swing', biotech: 'swing',
     coremo: 'portfolio', momentum: 'portfolio', putsell: 'portfolio', picks: 'portfolio',
   };
   const HZ_DIVIDER = { intraday: '⏱ Intraday · same-day', swing: '📅 Swing · days–weeks', portfolio: '💼 Portfolio · weeks–months' };
@@ -47,7 +47,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
     today: '🏠 Today', ensemble: '🎯 OMEGA Ensemble', start: '📘 Guide',
-    quickhit: '⚡ Quick Hit', swingsup: '📋 Swing Supervisor', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', atlas: '🛰 ATLAS-X', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
+    quickhit: '⚡ Quick Hit', swingsup: '📋 Swing Supervisor', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', atlas: '🛰 ATLAS-X', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', patternradar: '📐 Pattern Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', thesis: '🧾 Thesis Changes', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)',
@@ -74,6 +74,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     ignition: 'One acceleration-ranked view over all the momentum scanners: catch names whose price AND volume are speeding up (up 10% and accelerating beats up 60% and slowing), with a catalyst tag, ignition score, and stage. EOD/daily data — no real-time or LULD halt prediction.',
     downday: 'What to trade when the market is red: oversold-bounce longs + overheated shorts, with the honest proof that chasing strength on down days loses.',
     coil: 'Names coiling in tight compression before a potential explosive move.',
+    patternradar: 'Classic chart patterns (bull flag, VCP, double bottom…) detected by objective geometry, with an honest phase and action. Shadow/descriptive — similarity is shape agreement, not a win rate.',
     confluence: 'Stocks flagged by several screeners at once (agreement = higher conviction).',
     ghost: 'Quiet accumulation — big money building a position before the breakout.',
     trendrider: 'Ride established uptrends; the model drops names once they stop trending.',
@@ -141,6 +142,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // (tabs that already have their own inline guide — trendrider/daytrade/coil/
   // confluence/gapgo/gapdown/fade/aligned/putsell — are deliberately omitted).
   const HOWTO = {
+    patternradar: {
+      what: `Classic chart patterns — <b>bull flag, VCP, flat base, cup & handle, double bottom, bear flag, double top</b> and more — detected by <b>objective geometry</b> (ATR-normalized shape, pivots, volume), not by eyeballing. Each match carries a <b>phase</b> (forming → near-trigger → confirmed → failed) and an honest <b>action</b>.`,
+      read: `Each card shows the pattern, its direction, phase, a <b>match tier</b> (how closely the shape fits — this is <b>shape agreement, not a win rate</b>), and a trigger / stop / target plan. A "target-first" number is a <b>model estimate</b> unless it says <i>calibrated</i>. The buckets run Actionable Now → Near Trigger → Forming → Retesting → Too Extended → Failed Today → Strongest Matches → Research-Only.`,
+      act: `Treat this as <b>context, not a buy list</b>. Only <b>Actionable Now</b> means live-confirmed-and-fresh; everything else is watch/wait. A strong shape with an <b>unproven edge</b> shows as <b>Research only</b>. Click a ticker for its full multi-timeframe read.`,
+      catch: `<b>Shadow / descriptive.</b> Chart patterns are not certainty, and this layer does <b>not</b> change any live ranking. Similarity ≠ probability; a pattern's real edge is only trusted once enough forward outcomes resolve (shown under Evidence). Stale or failed setups are shown as such, never as buys.`,
+    },
     omega: {
       what: `A shortlist of liquid stocks with <b>early-to-middle-stage momentum</b> that's likely to keep rising over the next <b>5–10 trading days</b>. It looks for sustainable continuation — strong relative strength, real multi-day volume, a smooth trend, a fresh catalyst, and a good entry — <b>not</b> stocks that already went vertical.`,
       read: `Cards are grouped into <b>💠 Prime</b> (best), <b>🟢 Qualified</b>, and <b>👁 Watch</b> (wait for a trigger). Each shows a <b>Stage</b> (Early/Confirmed/Continuation), an <b>entry recommendation</b> (Buy now / on breakout / on pullback), expected 5- and 10-day <b>sector- & market-relative</b> return, the odds of a ≥3% and ≥5% move, and an <b>invalidation</b> price. Names are ranked by expected utility (reward vs downside), not win rate.`,
@@ -395,6 +402,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'aligned' && typeof ensureAligned === 'function') ensureAligned();
     if (sub === 'putsell' && typeof ensurePutSell === 'function') ensurePutSell();
     if (sub === 'coil' && typeof ensureCoil === 'function') ensureCoil();
+    if (sub === 'patternradar' && typeof ensurePatternRadar === 'function') ensurePatternRadar();
     if (sub === 'confluence' && typeof ensureConfluence === 'function') ensureConfluence();
     if (sub === 'xalerts' && typeof ensureXalerts === 'function') ensureXalerts();
     if (sub === 'leaderboard' && typeof ensureLeaderboard === 'function') ensureLeaderboard();
@@ -6886,6 +6894,77 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // attaches an EMPIRICALLY-CALIBRATED probability of an abnormal upside break.
   let coilLoaded = false, coilScope = 'all';
   function ensureCoil() { if (!coilLoaded) { coilLoaded = true; runCoilUI(); } }
+
+  // ── Chart Pattern Radar (op=patterns) — SHADOW/descriptive ──
+  // Reads the last logged pattern snapshot (a live request must not brute-force the universe).
+  // Ranks by validated edge/actionability/freshness, not by raw visual similarity.
+  let patternRadarLoaded = false, patternRadarView = 'all';
+  const PR_ACTION_LABEL = {
+    ACTIONABLE_NOW: 'Buy triggered', RESEARCH_ONLY: 'Research only', WAIT_FOR_TRIGGER: 'Wait for trigger',
+    FORMING: 'Forming — watch', WATCH: 'Watch', NO_ACTION_STALE: 'No action (stale)', DO_NOT_CHASE: 'Do not chase',
+    STALLING: 'Stalling', FAILED: 'Failed', EXIT_INVALIDATED: 'Exit / invalidated', EXPIRED: 'Expired', MANAGE_POSITION: 'Manage',
+  };
+  function ensurePatternRadar() {
+    if (patternRadarLoaded) return;
+    patternRadarLoaded = true;
+    const rb = document.getElementById('patternradar-refresh-btn');
+    if (rb) rb.addEventListener('click', () => runPatternRadarUI());
+    runPatternRadarUI();
+  }
+  async function runPatternRadarUI() {
+    const el = document.getElementById('patternradar-container');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading pattern radar…</p></div>`;
+    try {
+      const t = await fetchJSON(`/api/tracker?op=patterns&view=${patternRadarView}`);
+      renderPatternRadar(t, el);
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the pattern radar.</p></div>`; }
+  }
+  function renderPatternRadar(t, el) {
+    if (!t || !t.ok) { el.innerHTML = `<div class="pr-empty">Pattern radar unavailable.</div>`; return; }
+    if (!t.ready) {
+      el.innerHTML = `<div class="pr-empty">The pattern radar has not been built yet.<br><span class="tkl-fine">It populates from the daily background scan (op=patternlog). Until then, search any ticker to see its full pattern analysis, or the Coil Radar for live compression.</span></div>`;
+      return;
+    }
+    const r = t.radar || {};
+    const filters = ['all', 'bullish', 'bearish', 'actionable'].map(v =>
+      `<button class="hub-sub-btn${v === patternRadarView ? ' active' : ''}" data-prview="${v}">${v}</button>`).join(' ');
+    const buckets = [
+      ['actionableNow', '⚡ Actionable Now'], ['nearTrigger', '🎯 Near Trigger'], ['forming', '🌱 Forming'],
+      ['retesting', '🔁 Retesting'], ['tooExtended', '🏃 Too Extended'], ['failedToday', '❌ Failed Today'],
+      ['strongMatches', '📐 Strongest Classic-Pattern Matches'], ['researchOnly', '🔬 Research-Only Challengers'],
+    ];
+    const body = buckets.map(([k, lbl]) => {
+      const items = r[k] || [];
+      if (!items.length) return '';
+      return `<div class="pr-bucket"><h3>${lbl} (${items.length})</h3>${items.map(prCard).join('')}</div>`;
+    }).filter(Boolean).join('');
+    el.innerHTML = `<div class="tkl-fine" style="margin-bottom:8px">Shadow / descriptive · ranked by validated edge, actionability & freshness — not raw visual similarity. Similarity is shape agreement, not a win rate.</div>
+      <div class="hub-subnav" style="margin-bottom:10px">${filters}</div>
+      ${body || '<div class="pr-empty">No qualifying pattern matches in the latest scan.</div>'}
+      <div class="tkl-fine">Snapshot ${esc(t.date || '')} · ${t.count || 0} matches.</div>`;
+    el.querySelectorAll('[data-prview]').forEach(b => b.addEventListener('click', () => {
+      patternRadarView = b.dataset.prview; runPatternRadarUI();
+    }));
+    el.querySelectorAll('[data-pr-tk]').forEach(a => a.addEventListener('click', (e) => {
+      e.preventDefault(); openTickerLookup(a.dataset.prTk);
+    }));
+  }
+  function prCard(m) {
+    const sim = m.similarity || {}, plan = m.plan || {}, pred = m.prediction || {};
+    const dir = m.direction === 'SHORT' ? 'short' : 'long';
+    const action = plan.action || 'WATCH';
+    const calib = pred && pred.available && pred.calibrated ? `tgt-first ${Math.round(pred.targetBeforeStop * 100)}% (calibrated)` : 'model-estimate only';
+    return `<div class="hzp"><div class="hzp-head">
+        <a href="#" class="hzp-label" data-pr-tk="${esc(m.ticker)}">${esc(m.ticker)}</a>
+        <span class="hzp-label">${esc(m.patternLabel || '')}</span>
+        <span class="hzp-dir ${dir}">${esc(m.direction || '')}</span>
+        <span class="hzp-phase">${esc(m.phase || '')}</span>
+        <span class="hzp-action a-${esc(action)}">${esc(PR_ACTION_LABEL[action] || action)}</span></div>
+      <div class="hzp-novice">${esc(m.noviceExplanation || '')}</div>
+      <div class="hzp-metrics">Match <b>${esc(sim.matchTier || 'NONE')}</b> (${sim.combined ?? '—'}) · ${esc(m.timeframe || '')} · Trig ${plan.trigger ?? '—'} · Stop ${plan.stop ?? '—'} · Tgt ${plan.target ?? '—'} · R:R ${plan.rewardRisk ?? '—'} · ${calib}</div>
+    </div>`;
+  }
   async function runCoilUI() {
     const el = document.getElementById('coil-container');
     if (!el) return;

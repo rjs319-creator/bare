@@ -56,7 +56,7 @@ const PRIVILEGED_OPS = new Set([
   'brieftick', 'cerntick', 'coiltick', 'confluencetick', 'corebuild', 'corelog',
   'crowdtick', 'daytradetick', 'downdaytick', 'dualreadlog', 'dualreadtune', 'edgelog',
   'fadetick', 'gapdowntick', 'gapgotick', 'ghostlog', 'intracapture', 'leaderboardtick',
-  'narrative', 'optionsassess', 'predicttick', 'timinglog', 'timingtune', 'tonetick',
+  'narrative', 'optionsassess', 'patternlog', 'patterngrade', 'predicttick', 'timinglog', 'timingtune', 'tonetick',
   // 'track' snapshots the day's Screener+Momentum picks to Blob (a state-changing WRITE).
   // The daily cron dispatches it with the internal bearer (warm-chains-routes.js), so gating
   // it here blocks an anonymous public GET from mutating the ledger without breaking the cron.
@@ -352,5 +352,12 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'atlasxwalkforward') return require('../lib/atlasx-routes').runAtlasXWalkForward(req, res);
   if (req.query.op === 'promotionreadiness') return require('../lib/orbit-ml-routes').runPromotionReadiness(req, res);
   if (req.query.op === 'researchgrade') return require('../lib/research-grade-routes').runResearchGrade(req, res);
+
+  // Chart Pattern Intelligence — SHADOW (weight-0, never changes a live ranking).
+  // patternsearch/patterns are public cached reads; patternlog/patterngrade are cron-only writers.
+  if (req.query.op === 'patternsearch') return require('../lib/pattern-routes').runPatternSearch(req, res);
+  if (req.query.op === 'patterns') return require('../lib/pattern-routes').runPatterns(req, res);
+  if (req.query.op === 'patternlog') return require('../lib/pattern-routes').runPatternLog(req, res);
+  if (req.query.op === 'patterngrade') return require('../lib/pattern-routes').runPatternGrade(req, res);
   return runScoreboard(req, res);
 };
