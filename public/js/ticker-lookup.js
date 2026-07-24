@@ -478,6 +478,56 @@ async function loadWhyNow(ticker) {
   paintWhyNow();
 }
 
+// 🧾 Evidence & Thesis panel — fetch this ticker's slot in the latest evidence snapshot
+// (op=evidencestock) and render what materially changed + the transparent consensus score.
+// Silent/absent when the ticker isn't in today's snapshot (the honest empty state).
+const EV_LEVEL = {
+  strengthened: '🟢 Strengthened', improving: '🟩 Improving', deteriorating: '🟧 Deteriorating',
+  weakened: '🔴 Weakened', conflicting: '🟨 Conflicting', stable: '⚪ Stable', none: '⚪ No events',
+};
+const EV_HORIZON = { swing: 'Swing (days–weeks)', long_term: 'Long-term (months)', both: 'Swing + Long-term', unclear: 'horizon unclear' };
+async function loadEvidenceStock(ticker) {
+  const T = ticker.toUpperCase();
+  let j = null;
+  try { j = await fetchJSON('/api/tracker?op=evidencestock&ticker=' + encodeURIComponent(T) + '&_cb=' + Date.now()); }
+  catch { j = null; }
+  if (curTicker !== T) return;
+  const host = body && body.querySelector('#tkl-evidence');
+  if (!host) return;
+  if (!j || !j.ready || !j.evidence) { host.innerHTML = ''; return; }   // not in snapshot → show nothing
+  host.innerHTML = evidencePanel(j.evidence, j.date);
+}
+
+function evidencePanel(ev, date) {
+  const t = ev.thesis || {}, c = ev.consensus || {};
+  const scored = c.state === 'scored';
+  const score = scored ? Math.round(c.score) : '—';
+  const subs = scored ? [['Evidence', c.subscores?.evidence], ['Revision', c.subscores?.revision], ['Mkt confirm', c.subscores?.marketConfirm], ['Catalyst', c.subscores?.catalyst], ['Source', c.subscores?.source]]
+    .filter(x => x[1] != null).map(x => `<span class="tkl-ev-sub">${x[0]} <b>${x[1] > 0 ? '+' : ''}${Math.round(x[1])}</b></span>`).join('') : '';
+  const pens = scored ? Object.entries(c.penalties || {}).filter(([, v]) => v < 0).map(([k, v]) => `<span class="tkl-ev-pen">${esc(k)} ${Math.round(v)}</span>`).join('') : '';
+  const drivers = (t.drivers || []).slice(0, 3).map(d => `<li><span class="tkl-ev-etype">${esc(d.eventType)}</span> ${esc(d.claim)}</li>`).join('');
+  const clusters = (ev.clusters || []).map(cl => {
+    const pr = cl.primary || {};
+    const dup = cl.derivativeCount > 0 ? `${cl.coverageCount} articles → 1 event` : '1 source';
+    return `<div class="tkl-ev-cl">${cl.hasPrimarySource ? '🟢' : '⚪'} <b>${esc(pr.eventType || '')}</b> — ${esc(pr.claim || '')} <span class="tkl-ev-dup">(${dup})</span></div>`;
+  }).join('');
+  return `<div class="tkl-ev">
+    <div class="tkl-ev-head">🧾 Evidence &amp; Thesis <span class="tkl-ev-date">${esc(date || '')}</span></div>
+    ${scored ? '' : '<div class="tkl-ev-insuff">🚫 Insufficient independent evidence to assert a thesis change.</div>'}
+    <div class="tkl-ev-verdict">
+      <span class="tkl-ev-level">${EV_LEVEL[t.level] || ''}</span>
+      <span class="tkl-ev-score">${score}<small>/100</small></span>
+      <span class="tkl-ev-hz">${EV_HORIZON[t.horizon] || ''}</span>
+      <span class="tkl-ev-conf">${t.confirmed ? '✓ confirmed' : 'unconfirmed'}</span>
+    </div>
+    ${t.headline ? `<div class="tkl-ev-hl">${esc(t.headline)}</div>` : ''}
+    ${subs ? `<div class="tkl-ev-subs">${subs}${pens ? ` <span class="tkl-ev-pensep">penalties:</span> ${pens}` : ''}</div>` : ''}
+    ${scored ? `<div class="tkl-ev-breadth">${c.distinctFamilies} independent evidence ${c.distinctFamilies === 1 ? 'family' : 'families'} · ${c.clusterCount} event${c.clusterCount === 1 ? '' : 's'} · ${c.coverageCount} article${c.coverageCount === 1 ? '' : 's'} collapsed</div>` : ''}
+    ${drivers ? `<div class="tkl-ev-drivers"><div class="tkl-ev-dh">What changed</div><ul>${drivers}</ul></div>` : ''}
+    ${clusters ? `<details class="tkl-ev-src"><summary>Sources</summary>${clusters}</details>` : ''}
+  </div>`;
+}
+
 // Paint the options + social sections from current `extras` state (called on
 // first render and again whenever fetchExtras resolves).
 function paintExtras() {
@@ -514,6 +564,7 @@ function renderBody(data) {
     <div class="tkl-head"><span class="tkl-tk">📈 ${esc(ticker)}</span></div>
     ${priceLine(price)}
     <div id="tkl-whynow"></div>
+    <div id="tkl-evidence"></div>
     ${horizonSection(data)}
     <div id="tkl-chart"></div>
     <div id="tkl-breakdown"></div>
@@ -528,6 +579,7 @@ function renderBody(data) {
 
   paintWhyNow();  // fill the WHY NOW block + breakdown from state
   paintExtras();  // fill options/social from state (loading first time, data on refresh)
+  loadEvidenceStock(ticker);  // 🧾 Evidence & Thesis panel (op=evidencestock), async fill
 
   body.querySelectorAll('.tkl-chip').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.reveal;

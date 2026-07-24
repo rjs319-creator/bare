@@ -29,7 +29,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     home:       ['today', 'ensemble', 'start', 'quickhit'],
     candidates: ['swingsup', 'daytrade', 'gapgo', 'ignition', 'gapdown', 'opportunities', 'omega', 'atlas', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
     positions:  ['coremo', 'momentum', 'putsell', 'picks'],
-    markets:    ['rotation', 'sectors', 'news', 'pulse', 'evolve'],
+    markets:    ['rotation', 'sectors', 'news', 'thesis', 'pulse', 'evolve'],
     predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     proof:      ['scoreboard', 'evidence', 'baselines', 'leaderboard', 'coreperf'],
     lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge', 'orbitlab'],
@@ -48,7 +48,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const SUB_LABEL = {
     today: '🏠 Today', ensemble: '🎯 OMEGA Ensemble', start: '📘 Guide',
     quickhit: '⚡ Quick Hit', swingsup: '📋 Swing Supervisor', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', atlas: '🛰 ATLAS-X', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
-    rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
+    rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', thesis: '🧾 Thesis Changes', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)',
     leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', evidence: '🎖️ Evidence', baselines: '🧪 Baselines', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
@@ -378,6 +378,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'edge' && typeof ensureEdge === 'function') ensureEdge();
     if (sub === 'orbitlab' && typeof ensureOrbitLab === 'function') ensureOrbitLab();
     if (sub === 'evidence' && typeof ensureEvidence === 'function') ensureEvidence();
+    if (sub === 'thesis' && typeof ensureThesis === 'function') ensureThesis();
     if (sub === 'baselines' && typeof ensureBaselines === 'function') ensureBaselines();
     if (sub === 'today' && typeof ensureToday === 'function') ensureToday();
     if (sub === 'rotation' && typeof ensureRotationDW === 'function') ensureRotationDW();
@@ -7935,6 +7936,173 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   window.ensureEvidence = ensureEvidence;
   const evidenceRefreshBtn = document.getElementById('evidence-refresh-btn');
   if (evidenceRefreshBtn) evidenceRefreshBtn.addEventListener('click', () => loadEvidence(true));
+
+  // ── 🧾 Evidence Consensus & Thesis Change (the News redesign) ────────────────
+  // Reads the daily evidence snapshot (op=evidence, built by the cron) and renders it as a
+  // decision-support surface: what materially changed, is it confirmed by independent evidence,
+  // which horizon, has the market validated it. Honest — shows the transparent consensus
+  // subscores/penalties and an explicit "insufficient evidence" state; not a buy signal.
+  const thxEsc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const THX_VIEWS = [
+    { k: 'thesis', l: '🔀 Thesis Changes' }, { k: 'improving', l: '📈 Improving' },
+    { k: 'deteriorating', l: '📉 Deteriorating' }, { k: 'swing', l: '📅 Swing' },
+    { k: 'longterm', l: '🗓️ Long-Term' }, { k: 'contrarian', l: '↔️ Contrarian' },
+    { k: 'market', l: '🌐 Market Changes' }, { k: 'watchlist', l: '⭐ Watchlist' },
+    { k: 'raw', l: '📄 Raw Sources' },
+  ];
+  const THX_DIR_COLOR = { positive: 'var(--green)', negative: 'var(--red)', mixed: 'var(--amber)', conflicting: 'var(--amber)', neutral: 'var(--muted, #888)' };
+  const THX_LEVEL_LABEL = {
+    strengthened: '🟢 Strengthened', improving: '🟩 Improving', deteriorating: '🟧 Deteriorating',
+    weakened: '🔴 Weakened', conflicting: '🟨 Conflicting', stable: '⚪ Stable', none: '⚪ No events',
+  };
+  const THX_HORIZON_LABEL = { swing: '📅 Swing (days–weeks)', long_term: '🗓️ Long-term (months)', both: '📅🗓️ Both', unclear: '· horizon unclear' };
+  let thesisLoaded = false, thxView = 'thesis', thxSnap = null;
+  let thxWatch = [];
+  try { thxWatch = JSON.parse(localStorage.getItem('thxWatch')) || []; } catch { thxWatch = []; }
+
+  function ensureThesis() { if (!thesisLoaded) { thesisLoaded = true; renderThxNav(); loadThesis(); } }
+  window.ensureThesis = ensureThesis;
+
+  function renderThxNav() {
+    const nav = document.getElementById('thx-viewnav');
+    if (!nav) return;
+    nav.innerHTML = THX_VIEWS.map(v => `<button class="thx-vbtn${v.k === thxView ? ' active' : ''}" data-view="${v.k}">${v.l}</button>`).join('');
+    nav.querySelectorAll('.thx-vbtn').forEach(b => b.addEventListener('click', () => {
+      thxView = b.dataset.view;
+      renderThxNav();
+      renderThesis();
+    }));
+  }
+
+  async function loadThesis() {
+    const el = document.getElementById('thx-container');
+    if (!el) return;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading evidence…</p></div>`;
+    try {
+      // watchlist/raw are client-side lenses over the full snapshot; the rest map to server views.
+      thxSnap = await fetchJSON('/api/tracker?op=evidence&view=all&_cb=' + Date.now());
+      renderThesis();
+    } catch {
+      el.innerHTML = `<div class="mom-status error"><p>Could not load the evidence snapshot.</p></div>`;
+    }
+  }
+
+  // Client-side view filter (mirrors the server's filterView so switching views needs no refetch).
+  function thxFilter(results, view) {
+    const changed = results.filter(r => r.thesis && r.thesis.changed);
+    switch (view) {
+      case 'thesis': return changed;
+      case 'improving': return changed.filter(r => ['improving', 'strengthened'].includes(r.thesis.level));
+      case 'deteriorating': return changed.filter(r => ['deteriorating', 'weakened'].includes(r.thesis.level));
+      case 'swing': return changed.filter(r => ['swing', 'both'].includes(r.thesis.horizon));
+      case 'longterm': return changed.filter(r => ['long_term', 'both'].includes(r.thesis.horizon));
+      case 'contrarian': return results.filter(r => r.consensus && (r.consensus.conflicting ||
+        (r.consensus.direction !== 'neutral' && (r.consensus.subscores?.marketConfirm || 0) === 0 && r.consensus.hasPrimarySource)));
+      case 'market': return results.filter(r => (r.clusters || []).some(c => ['macro', 'industry'].includes(c.primary?.eventType)));
+      case 'watchlist': return results.filter(r => thxWatch.includes(r.ticker));
+      case 'raw': return results;
+      default: return results;
+    }
+  }
+
+  function thxBar(label, val, cap) {
+    const pct = cap > 0 ? Math.max(0, Math.min(100, (val / cap) * 100)) : 0;
+    const neg = cap < 0;
+    return `<div class="thx-sub"><span class="thx-sub-l">${label}</span><span class="thx-sub-track"><span class="thx-sub-fill${neg ? ' neg' : ''}" style="width:${Math.abs(pct)}%"></span></span><span class="thx-sub-v">${val > 0 ? '+' : ''}${(+val).toFixed(0)}</span></div>`;
+  }
+
+  function thxConsensusBlock(c) {
+    if (!c || c.state !== 'scored') {
+      return `<div class="thx-insuff">🚫 Insufficient evidence${c && c.reason ? ` — ${thxEsc(c.reason)}` : ''}</div>`;
+    }
+    const s = c.subscores || {}, p = c.penalties || {}, caps = c.caps || {};
+    const subs = [['Evidence', s.evidence, caps.evidence], ['Revision', s.revision, caps.revision], ['Mkt confirm', s.marketConfirm, caps.marketConfirm], ['Catalyst', s.catalyst, caps.catalyst], ['Regime', s.regime, caps.regime], ['Source', s.source, caps.source], ['Setup', s.setup, caps.setup]];
+    const pens = [['Contradiction', p.contradiction, caps.contradiction], ['Duplication', p.duplication, caps.duplication], ['Staleness', p.staleness, caps.staleness], ['Crowding', p.crowding, caps.crowding], ['Saturation', p.saturation, caps.saturation]];
+    const method = c.evidenceMethod === 'measured' ? '<span class="thx-tag">measured redundancy</span>' : '';
+    return `<div class="thx-score-detail">
+      <div class="thx-sub-grid">${subs.filter(x => x[1] != null).map(x => thxBar(x[0], x[1], x[2])).join('')}</div>
+      <div class="thx-sub-grid pen">${pens.filter(x => x[1] < 0).map(x => thxBar(x[0], x[1], x[2])).join('') || '<span class="thx-nopen">no penalties</span>'}</div>
+      <div class="thx-meta-row">${c.distinctFamilies} independent evidence ${c.distinctFamilies === 1 ? 'family' : 'families'} · ${c.clusterCount} event${c.clusterCount === 1 ? '' : 's'} · ${c.coverageCount} article${c.coverageCount === 1 ? '' : 's'} collapsed ${method}</div>
+    </div>`;
+  }
+
+  function thxClusters(r) {
+    return (r.clusters || []).map(c => {
+      const pr = c.primary || {};
+      const dup = c.derivativeCount > 0 ? `<span class="thx-dup">${c.coverageCount} articles → 1 event (${c.derivativeCount} reprints collapsed)</span>` : `<span class="thx-dup">1 source</span>`;
+      const prim = c.hasPrimarySource ? '<span class="thx-tag prim">primary source</span>' : '<span class="thx-tag sec">secondary</span>';
+      return `<div class="thx-cluster">
+        <div class="thx-cl-head"><span class="thx-etype">${thxEsc(pr.eventType || '?')}</span> ${prim} ${dup}</div>
+        <div class="thx-claim">${thxEsc(pr.claim || pr.headline || '')}</div>
+        ${(pr.evidence || []).length ? `<div class="thx-ev">${pr.evidence.map(e => `“${thxEsc(e)}”`).join(' · ')}</div>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  function buildThxCard(r, view) {
+    const t = r.thesis || {}, c = r.consensus || {};
+    const dirColor = THX_DIR_COLOR[c.direction] || THX_DIR_COLOR.neutral;
+    const score = c.state === 'scored' ? Math.round(c.score) : '—';
+    const inWatch = thxWatch.includes(r.ticker);
+    const drivers = (t.drivers || []).slice(0, 3).map(d =>
+      `<li><span class="thx-dtype" style="color:${THX_DIR_COLOR[d.direction] || 'inherit'}">${thxEsc(d.eventType)}</span> ${thxEsc(d.claim)}</li>`).join('');
+    const contras = (t.contradictions || []).map(x => `<li>⚠ ${thxEsc(x.note)}</li>`).join('');
+    const confirmed = t.confirmed ? '<span class="thx-chip ok">✓ confirmed</span>' : '<span class="thx-chip warn">unconfirmed</span>';
+    return `<div class="thx-card" style="border-left-color:${dirColor}">
+      <div class="thx-card-top">
+        <div class="thx-id">
+          <button class="thx-tkr" data-ticker="${r.ticker}" title="Open ${r.ticker} detail">${r.ticker}</button>
+          <span class="thx-co">${thxEsc(r.company || '')}</span>
+          ${r.sector ? `<span class="thx-sector">${thxEsc(r.sector)}</span>` : ''}
+        </div>
+        <div class="thx-score" style="color:${dirColor}">${score}<span class="thx-score-max">/100</span></div>
+      </div>
+      <div class="thx-headline">${THX_LEVEL_LABEL[t.level] || ''} — ${thxEsc(t.headline || '')}</div>
+      <div class="thx-chips">
+        <span class="thx-chip">${THX_HORIZON_LABEL[t.horizon] || ''}</span>
+        ${confirmed}
+        <button class="thx-watch${inWatch ? ' on' : ''}" data-watch="${r.ticker}">${inWatch ? '★ watching' : '☆ watch'}</button>
+      </div>
+      ${thxConsensusBlock(c)}
+      ${drivers ? `<div class="thx-drivers"><div class="thx-dh">What changed</div><ul>${drivers}</ul></div>` : ''}
+      ${contras ? `<div class="thx-contras"><ul>${contras}</ul></div>` : ''}
+      <details class="thx-src"${view === 'raw' ? ' open' : ''}><summary>📄 Evidence & sources (${r.clusterCount} event${r.clusterCount === 1 ? '' : 's'})</summary>${thxClusters(r)}</details>
+    </div>`;
+  }
+
+  function renderThesis() {
+    const el = document.getElementById('thx-container');
+    if (!el) return;
+    const meta = document.getElementById('thx-meta');
+    if (!thxSnap || !thxSnap.ready) {
+      if (meta) meta.textContent = '';
+      el.innerHTML = `<div class="dt-note">🧾 No evidence snapshot yet. It's built by the daily cron over the day's active-attention names; check back after the next run.</div>`;
+      return;
+    }
+    if (meta) meta.textContent = `${thxSnap.date} · ${thxSnap.regime} · ${thxSnap.processed} names scanned`;
+    const results = thxFilter(thxSnap.results || [], thxView).slice().sort((a, b) => (b.consensus?.score || 0) - (a.consensus?.score || 0));
+    if (thxView === 'watchlist' && !thxWatch.length) {
+      el.innerHTML = `<div class="dt-note">⭐ Your watchlist is empty. Tap <b>☆ watch</b> on any card to track how its thesis evolves.</div>`;
+      return;
+    }
+    if (!results.length) {
+      el.innerHTML = `<div class="dt-note">No names match “${thxEsc(THX_VIEWS.find(v => v.k === thxView)?.l || thxView)}” in today's snapshot. Try another view.</div>`;
+      return;
+    }
+    el.innerHTML = results.map(r => buildThxCard(r, thxView)).join('');
+    // watch toggles
+    el.querySelectorAll('.thx-watch').forEach(b => b.addEventListener('click', () => {
+      const tk = b.dataset.watch;
+      const i = thxWatch.indexOf(tk);
+      if (i >= 0) thxWatch.splice(i, 1); else thxWatch.push(tk);
+      try { localStorage.setItem('thxWatch', JSON.stringify(thxWatch)); } catch {}
+      renderThesis();
+    }));
+    // open ticker detail on click (reuse the app's global lookup if present)
+    el.querySelectorAll('.thx-tkr').forEach(b => b.addEventListener('click', () => {
+      openTickerLookup(b.dataset.ticker);   // imported at module top
+    }));
+  }
 
   // ── Baseline validation — does a strategy beat a DUMB baseline? ──────────────
   let baselinesData = null, baselinesComputing = false;

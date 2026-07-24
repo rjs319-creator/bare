@@ -2918,3 +2918,78 @@
 .td-action-avoid { font-size: 0.76rem; padding: 4px 0; border-bottom: 1px dashed var(--border); }
 .td-action-foot { font-size: 0.68rem; margin-top: 8px; }
 @media (max-width: 720px) { .td-action-grid { grid-template-columns: 1fr; } }
+
+/* ── 🧾 Evidence Consensus & Thesis Change (the News redesign) ─────────────── */
+.thx-viewnav { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 14px; }
+.thx-vbtn { background: var(--surface-2); color: var(--text-dim); border: 1px solid var(--border);
+  border-radius: 999px; padding: 5px 12px; font-size: 0.76rem; cursor: pointer; transition: all 0.15s; }
+.thx-vbtn:hover { border-color: var(--border-hi); color: var(--text); }
+.thx-vbtn.active { background: var(--purple-dim); border-color: var(--purple); color: var(--text); font-weight: 700; }
+#thx-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+.thx-card { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--muted);
+  border-radius: 10px; padding: 13px 15px; display: flex; flex-direction: column; gap: 9px; }
+.thx-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.thx-id { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+.thx-tkr { background: none; border: none; color: var(--text); font-size: 1.05rem; font-weight: 900; cursor: pointer; padding: 0; }
+.thx-tkr:hover { text-decoration: underline; }
+.thx-co { color: var(--text-dim); font-size: 0.78rem; }
+.thx-sector { color: var(--text-muted); font-size: 0.68rem; background: var(--surface-2); border-radius: 4px; padding: 1px 6px; }
+.thx-score { font-size: 1.6rem; font-weight: 900; line-height: 1; white-space: nowrap; }
+.thx-score-max { font-size: 0.72rem; color: var(--text-muted); font-weight: 600; }
+.thx-headline { font-size: 0.86rem; font-weight: 700; line-height: 1.35; }
+.thx-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.thx-chip { font-size: 0.68rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; color: var(--text-dim); }
+.thx-chip.ok { color: var(--green); border-color: var(--green-dim); }
+.thx-chip.warn { color: var(--amber); border-color: var(--amber-dim); }
+.thx-watch { font-size: 0.68rem; background: none; border: 1px solid var(--border); border-radius: 5px; padding: 2px 8px; color: var(--text-dim); cursor: pointer; margin-left: auto; }
+.thx-watch.on { color: var(--amber); border-color: var(--amber); }
+.thx-score-detail { border-top: 1px dashed var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 7px; }
+.thx-sub-grid { display: flex; flex-direction: column; gap: 3px; }
+.thx-sub-grid.pen { opacity: 0.9; }
+.thx-sub { display: grid; grid-template-columns: 74px 1fr 30px; align-items: center; gap: 7px; font-size: 0.66rem; }
+.thx-sub-l { color: var(--text-dim); }
+.thx-sub-track { height: 5px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+.thx-sub-fill { display: block; height: 100%; background: var(--green); }
+.thx-sub-fill.neg { background: var(--red); }
+.thx-sub-v { text-align: right; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.thx-nopen { font-size: 0.66rem; color: var(--text-muted); }
+.thx-meta-row { font-size: 0.68rem; color: var(--text-muted); }
+.thx-tag { font-size: 0.62rem; background: var(--surface-2); border-radius: 4px; padding: 1px 5px; color: var(--text-dim); }
+.thx-tag.prim { color: var(--green); } .thx-tag.sec { color: var(--text-muted); }
+.thx-insuff { font-size: 0.76rem; color: var(--amber); background: var(--amber-dim); border-radius: 6px; padding: 6px 9px; }
+.thx-drivers { font-size: 0.76rem; }
+.thx-dh { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 3px; }
+.thx-drivers ul, .thx-contras ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 3px; line-height: 1.4; }
+.thx-dtype { font-weight: 700; text-transform: capitalize; }
+.thx-contras { font-size: 0.74rem; color: var(--amber); }
+.thx-src { font-size: 0.74rem; }
+.thx-src summary { cursor: pointer; color: var(--text-dim); font-size: 0.72rem; }
+.thx-cluster { border-top: 1px solid var(--border); padding: 6px 0; }
+.thx-cl-head { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 3px; }
+.thx-etype { font-weight: 700; text-transform: capitalize; font-size: 0.72rem; }
+.thx-dup { font-size: 0.64rem; color: var(--text-muted); }
+.thx-claim { line-height: 1.4; }
+.thx-ev { font-size: 0.68rem; color: var(--text-muted); margin-top: 2px; font-style: italic; }
+
+/* Evidence & Thesis panel inside the ticker-lookup modal */
+.tkl-ev { border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; margin: 10px 0; background: var(--surface-2); }
+.tkl-ev-head { font-size: 0.78rem; font-weight: 800; display: flex; justify-content: space-between; }
+.tkl-ev-date { color: var(--text-muted); font-weight: 500; font-size: 0.7rem; }
+.tkl-ev-insuff { font-size: 0.74rem; color: var(--amber); margin-top: 5px; }
+.tkl-ev-verdict { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; margin-top: 6px; }
+.tkl-ev-level { font-weight: 700; font-size: 0.82rem; }
+.tkl-ev-score { font-size: 1.3rem; font-weight: 900; } .tkl-ev-score small { font-size: 0.62rem; color: var(--text-muted); }
+.tkl-ev-hz, .tkl-ev-conf { font-size: 0.68rem; color: var(--text-dim); background: var(--card); border-radius: 4px; padding: 1px 6px; }
+.tkl-ev-hl { font-size: 0.8rem; margin-top: 5px; line-height: 1.35; }
+.tkl-ev-subs { font-size: 0.68rem; color: var(--text-dim); margin-top: 6px; display: flex; flex-wrap: wrap; gap: 8px; }
+.tkl-ev-sub b { color: var(--text); } .tkl-ev-pen { color: var(--red); } .tkl-ev-pensep { color: var(--text-muted); }
+.tkl-ev-breadth { font-size: 0.68rem; color: var(--text-muted); margin-top: 5px; }
+.tkl-ev-drivers { font-size: 0.75rem; margin-top: 7px; }
+.tkl-ev-dh { font-size: 0.64rem; text-transform: uppercase; color: var(--text-muted); }
+.tkl-ev-drivers ul { margin: 3px 0 0; padding-left: 16px; line-height: 1.4; }
+.tkl-ev-etype { font-weight: 700; text-transform: capitalize; }
+.tkl-ev-src { margin-top: 6px; font-size: 0.73rem; }
+.tkl-ev-src summary { cursor: pointer; color: var(--text-dim); }
+.tkl-ev-cl { padding: 4px 0; border-top: 1px solid var(--border); line-height: 1.4; }
+.tkl-ev-dup { color: var(--text-muted); font-size: 0.66rem; }
+@media (max-width: 560px) { #thx-container { grid-template-columns: 1fr; } }
