@@ -6905,6 +6905,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     ['scoreboard', '🏅 Account Scoreboard', ''],
   ];
   let xaView = (() => { try { return localStorage.getItem('xaView') || 'confirmations'; } catch { return 'confirmations'; } })();
+  const XALERTS_FETCH_TIMEOUT_MS = 20000;   // a stalled/cold-start read must fail-fast, not hang forever
   function ensureXalerts() { if (!xalertsLoaded) { xalertsLoaded = true; fetchXalerts(); } }
   let xalertsFlashTimer = null;
   async function fetchXalerts() {
@@ -6913,9 +6914,23 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (xalertsFlashTimer) { clearTimeout(xalertsFlashTimer); xalertsFlashTimer = null; }
     if (btn) { btn.disabled = true; btn.textContent = '⟳ Refreshing…'; btn.style.color = '#8a6dff'; }
     let ok = true;
-    try { xalertsData = await (await fetch('/api/tracker?op=alerts')).json(); renderXalerts(xalertsData); }
-    catch { ok = false; c.innerHTML = '<div class="mom-status error"><p>Could not load trade alerts.</p></div>'; }
+    // A bare fetch() never times out: a stalled request neither resolves nor rejects, so the
+    // loading skeleton would sit up forever. Abort after a bound so it lands in catch → Retry.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), XALERTS_FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetch('/api/tracker?op=alerts', { signal: ctrl.signal });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      xalertsData = await res.json();
+      renderXalerts(xalertsData);
+    }
+    catch {
+      ok = false;
+      xalertsLoaded = false;   // let a re-entry re-fetch instead of stranding the tab on the error
+      if (c) c.innerHTML = '<div class="mom-status error"><p>Could not load trade alerts — the request timed out or failed. Tap Retry.</p></div>';
+    }
     finally {
+      clearTimeout(timer);
       if (btn) {
         btn.disabled = false;
         btn.textContent = ok ? '✓ Refreshed' : '⚠ Retry';
