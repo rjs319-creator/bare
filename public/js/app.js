@@ -6723,11 +6723,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       : `<div class="dt-note"><b>⏭️ Earnings gap-downs are filtered out</b> — unscheduled catalyst gap-downs only.</div>`;
     const card = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
-          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span>${r.earningsCheck === 'unknown' ? ' <span class="dt-tier-b" title="Earnings adjacency unverified — check for a scheduled report">? ER</span>' : ''}</span>
+          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span>${r.actionable === false ? ' <span class="dt-tier-b" style="background:#f59e0b22;color:#f59e0b" title="Borrow availability/fee is unknown to this app, so this is a research/watch lead, not an actionable short. Verify borrow with your broker first.">👁 WATCH ONLY</span>' : ''}${r.earningsCheck === 'unknown' ? ' <span class="dt-tier-b" title="Earnings adjacency unverified — check for a scheduled report">? ER</span>' : ''}</span>
           <span class="dt-now"><b data-gd-price>$${r.last}</b> <span data-gd-change class="dt-dim">prev close</span></span>
         </div>
         <div class="dt-card-sub"><b style="color:#ef4444">▼ gap ${r.gapPct}%</b> <span class="dt-dim">· RVOL ${r.relVol}×${r.excessPct != null ? ' · vs SPY ' + (r.excessPct >= 0 ? '+' : '') + r.excessPct + '%' : ''} · continuation ${r.continuationScore}/100</span></div>
-        <div class="dt-card-plan">📉 <b>Short the break below</b> <b>$${r.plan.trigger}</b> <span class="dt-dim">(OR low)</span> &nbsp;·&nbsp; 🛑 Stop <b>$${r.plan.stop}</b> <span class="dt-dim">(+${r.plan.riskPct}%, 2.5×ATR above)</span> &nbsp;·&nbsp; 🏁 Target <b>$${r.plan.target}</b> <span class="dt-dim">1:${r.plan.rr}</span></div>
+        <div class="dt-card-plan">📉 <b>${r.actionable === false ? 'Short setup (watch)' : 'Short'} below</b> <b>$${r.plan.trigger}</b> <span class="dt-dim">(OR low)</span> &nbsp;·&nbsp; 🛑 Stop <b>$${r.plan.stop}</b> <span class="dt-dim">(+${r.plan.riskPct}%, 2.5×ATR above)</span> &nbsp;·&nbsp; 🏁 Target <b>$${r.plan.target}</b> <span class="dt-dim">1:${r.plan.rr}</span></div>
         <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
         <div class="chart-panel" data-chart-panel style="display:none"></div>
       </div>`;
@@ -6820,10 +6820,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           <span class="dt-now"><span class="dt-dim" style="font-size:.8em">coil</span> <b style="color:#c084fc">${r.coilScore != null ? r.coilScore.toFixed(2) : ''}</b></span>
         </div>
         <div class="dt-card-sub" style="display:flex;align-items:center;gap:8px;margin:4px 0 6px">
-          <span style="font-size:1.4em;font-weight:800;color:${coilBandColor(r.band)}">${r.explodeProbPct}%</span>
-          <span class="dt-dim">chance to break out (~${t.horizonDays}d) · ${r.lift}× base · <b style="color:${coilBandColor(r.band)}">${esc((r.band || '').toUpperCase())} coil</b> (D${r.decile || ''}/10)</span>
+          <span style="font-size:1.4em;font-weight:800;color:${coilBandColor(r.band)}">${r.abnormalExpansionPct != null ? r.abnormalExpansionPct : r.explodeProbPct}%</span>
+          <span class="dt-dim">chance of an <b>abnormal move</b> (~${t.horizonDays}d, calibrated) · ${r.lift}× base · <b style="color:${coilBandColor(r.band)}">${esc((r.band || '').toUpperCase())} coil</b> (D${r.decile || ''}/10)</span>
         </div>
         <div class="dt-card-plan">📈 <b>Breakout plan</b> <span class="dt-dim">(buy the break, not the quiet)</span> — now <b data-dt-price>$${r.price}</b> <span data-dt-change class="dt-dim">prev close</span> &nbsp;·&nbsp; enter above <b>$${r.entry}</b> &nbsp;·&nbsp; 🛑 stop <b>$${r.stop}</b> <span class="dt-dim">(−${r.riskPct}%)</span> &nbsp;·&nbsp; 🎯 target <b>$${r.target}</b> <span class="dt-dim">(+${r.rewardPct}%, R:R 1:${r.rr})</span></div>
+        ${r.executable ? `<div class="dt-card-sub" style="margin-top:4px" title="Executable trade-plan odds from a transparent barrier model — UNCALIBRATED (not a validated win rate). Kept separate from the abnormal-move rate above, which is the only calibrated number.">
+          <span class="dt-dim">🎲 <b>trade-plan odds</b> (uncalibrated model): fill ${Math.round(r.executable.pTrigger * 100)}% · target-before-stop <b>${Math.round(r.executable.pTargetBeforeStopGivenFill * 100)}%</b> · net exp. <b>${r.executable.expectedNetR >= 0 ? '+' : ''}${r.executable.expectedNetR}R</b> ${r.executable.expectedNetR < 0 ? '<span style="color:#f87171">(negative after costs)</span>' : ''}</span>
+        </div>` : ''}
         <div class="dt-card-sub"><span class="dt-dim">squeeze ${r.metrics.squeezePctile}th pctile · vol ${r.metrics.hvPctile}th pctile · base ${r.metrics.rangeTightPct}% · ATR ${r.metrics.atrRatio}× · 20d ${r.metrics.ret20Pct >= 0 ? '+' : ''}${r.metrics.ret20Pct}%</span></div>
         ${(r.reasons || []).length ? `<ul class="coil-reasons" style="margin:6px 0 0 16px;padding:0;font-size:.86em;color:var(--text-dim,#9ca3af)">${r.reasons.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
       </div>`;
