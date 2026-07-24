@@ -595,8 +595,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const el = document.getElementById(listId);
     el.innerHTML = `<div class="status"><div class="spinner"></div><p>Loading…</p></div>`;
     try {
-      const res = await fetch(`/api/news?type=${type}`);
-      const data = await res.json();
+      const data = await fetchJSON(`/api/news?type=${type}`);
       if (data.status === 'error') {
         if (data.code === 'rateLimited') {
           showError(el, '⏳ NewsAPI daily limit reached (100 req/day free plan). Articles will reload automatically in a few hours.');
@@ -666,8 +665,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   async function loadSectorHeatmap() {
     try {
-      const res = await fetch('/api/sectors');
-      const data = await res.json();
+      const data = await fetchJSON('/api/sectors');
       if (data.sectors?.length) renderSectorHeatmap(data.sectors);
     } catch {}
   }
@@ -690,8 +688,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   async function enrichWithPrices(picks) {
     const tickers = picks.map(p => p.ticker).join(',');
     try {
-      const res = await fetch(`/api/price?tickers=${encodeURIComponent(tickers)}`);
-      const prices = await res.json();
+      const prices = await fetchJSON(`/api/price?tickers=${encodeURIComponent(tickers)}`);
       for (const p of picks) {
         const q = prices[p.ticker];
         if (q?.price) { p._price = q; savePriceHist(p.ticker, q.price); }
@@ -782,8 +779,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     picksRefreshBtn.disabled = true;
     picksContainer.innerHTML = skeletonGrid(6);
     try {
-      const res = await fetch('/api/picks');
-      const data = await res.json();
+      const data = await fetchJSON('/api/picks');
       if (data.error) { showPicksError(data.error); return; }
       await enrichWithPrices([...(data.shortTerm || []), ...(data.longTerm || []), ...(data.watch || [])]);
       renderPicks(data);
@@ -1951,7 +1947,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     hcRefreshing = true; updateHCLabel();
     // Run all three scope backtests concurrently; each list updates as it lands.
     await Promise.all(HC_SCOPES.map(async sc => {
-      try { const r = await fetch('/api/backtest?scope=' + sc + '&months=' + hcWindow); const d = await r.json(); if (d && d.efficacy) storeHCEdges(d.efficacy, d.months, d.scope || sc); if (d && d.model) storeModel(d.model, d.scope || sc); } catch {}
+      try { const d = await fetchJSON('/api/backtest?scope=' + sc + '&months=' + hcWindow); if (d && d.efficacy) storeHCEdges(d.efficacy, d.months, d.scope || sc); if (d && d.model) storeModel(d.model, d.scope || sc); } catch {}
     }));
     hcRefreshing = false; updateHCLabel();
   }
@@ -2047,8 +2043,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Replaying the screen across history… (a few seconds)</p></div>`;
     try {
-      const res = await fetch('/api/backtest?scope=large&months=' + btMonths);
-      const d = await res.json();
+      const d = await fetchJSON('/api/backtest?scope=large&months=' + btMonths);
       if (d.error) { el.innerHTML = `<div class="mom-status error"><p>${esc(d.error)}</p></div>`; return; }
       renderBacktest(d);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Backtest failed. Please try again.</p></div>`; }
@@ -2060,8 +2055,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Reconstructing point-in-time GAI pillars across history & running purged walk-forward… (~10–25s)</p></div>`;
     try {
-      const res = await fetch('/api/backtest?mode=walkforward&scope=large&months=' + btMonths);
-      const d = await res.json();
+      const d = await fetchJSON('/api/backtest?mode=walkforward&scope=large&months=' + btMonths);
       if (d.error) { el.innerHTML = `<div class="mom-status error"><p>${esc(d.error)}</p></div>`; return; }
       renderWalkForward(d);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Walk-forward failed. Please try again.</p></div>`; }
@@ -2248,8 +2242,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el) return;
     el.innerHTML = `<div class="mom-status" style="padding:24px 0"><div class="mom-spinner"></div><p>Simulating the portfolio…</p></div>`;
     try {
-      const r = await fetch('/api/backtest?mode=portfolio&scope=large&months=' + btMonths);
-      const d = await r.json();
+      const d = await fetchJSON('/api/backtest?mode=portfolio&scope=large&months=' + btMonths);
       if (d.error) { el.innerHTML = ''; return; }
       renderPortfolio(d);
     } catch { el.innerHTML = ''; }
@@ -2320,8 +2313,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     screenerRefreshBtn.disabled = true;
     container.innerHTML = skeletonGrid(scope === 'large' ? 6 : 4);
     try {
-      const res = await fetch('/api/screener?scope=' + scope + scrFilterQS() + (scope === 'large' ? '&lookback=' + scrLookback : ''));
-      const data = await res.json();
+      const data = await fetchJSON('/api/screener?scope=' + scope + scrFilterQS() + (scope === 'large' ? '&lookback=' + scrLookback : ''));
       if (data.error) { container.innerHTML = `<div class="mom-status error"><p>${esc(data.error)}</p></div>`; return; }
       const { results = [], cap, rotation, scannedCount, breakoutCount, generatedAt, narrativeEnabled } = data;
       if (isMain && generatedAt) screenerGenTime.textContent = `Updated ${new Date(generatedAt).toLocaleTimeString()}`;
@@ -2778,7 +2770,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     return (apexModel && apexModel.weights && apexModel.weights[regime]) || APEX_PRESETS[regime];
   }
   async function fetchApexModel() {
-    try { const r = await fetch('/api/tracker?op=model'); apexModel = await r.json(); }
+    try { apexModel = await fetchJSON('/api/tracker?op=model'); }
     catch { apexModel = null; }
   }
   let apexRecalMsg = '';
@@ -3071,7 +3063,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
 
   async function fetchApexScope(scope) {
-    try { const r = await fetch('/api/screener?scope=' + scope); return await r.json(); }
+    try { return await fetchJSON('/api/screener?scope=' + scope); }
     catch { return { error: 'fetch failed' }; }
   }
 
@@ -3080,7 +3072,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // Module 3 — live drift detection. Fetched alongside the model; refreshes the
   // health badge, banner, and the Model-panel health section when it returns.
   async function fetchApexDrift() {
-    try { const r = await fetch('/api/tracker?op=drift'); apexDrift = await r.json(); }
+    try { apexDrift = await fetchJSON('/api/tracker?op=drift'); }
     catch { apexDrift = null; }
     renderApexHealthBanner();
     if (apexLast) { renderApexStrip(apexLast.regime, apexLast.preset, apexLast.raw); renderApexModelPanel(apexLast.regime, apexLast.preset, apexLast.large); }
@@ -4940,7 +4932,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const GHOST_TIER_CSS = { GHOST: 'apex', STALKING: 'loaded', WATCH: 'watch' }; // reuse existing card colors
 
   async function fetchGhostScope(scope) {
-    try { const r = await fetch('/api/screener?scope=' + scope); return await r.json(); }
+    try { return await fetchJSON('/api/screener?scope=' + scope); }
     catch { return { error: 'fetch failed' }; }
   }
 
@@ -7109,8 +7101,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     momentumRefreshBtn.disabled = true;
     momentumContainer.innerHTML = skeletonGrid(4);
     try {
-      const res  = await fetch('/api/momentum');
-      const data = await res.json();
+      const data = await fetchJSON('/api/momentum');
       if (data.error) { showMomError(data.error); return; }
       renderMomentum(data);
     } catch { showMomError('Could not load momentum data. Please try again.'); }
@@ -7227,8 +7218,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     scoreboardRefreshBtn.disabled = true;
     scoreboardContainer.innerHTML = '<div class="mom-status"><div class="mom-spinner"></div><p>Computing realized returns…</p></div>';
     try {
-      const res = await fetch('/api/tracker');
-      const data = await res.json();
+      const data = await fetchJSON('/api/tracker');
       lastScoreboard = data;
       renderScoreboard(data);
     } catch { scoreboardContainer.innerHTML = '<div class="mom-status error"><p>Could not load the scoreboard. Please try again.</p></div>'; }
@@ -8238,9 +8228,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       )].slice(0, 12);
       await Promise.all(tickers.map(async t => {
         try {
-          const r = await fetch('/api/chart?ticker=' + encodeURIComponent(t));
-          if (!r.ok) return;
-          const d = await r.json();
+          const d = await fetchJSON('/api/chart?ticker=' + encodeURIComponent(t));
           if (d && d.live) handleSignalUpdate(t, d.live.action);
         } catch {}
       }));
@@ -8329,9 +8317,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   async function loadChart(ticker, panel, silent) {
     try {
-      const res = await fetch('/api/chart?ticker=' + encodeURIComponent(ticker));
-      if (!res.ok) throw new Error('no data');
-      const data = await res.json();
+      const data = await fetchJSON('/api/chart?ticker=' + encodeURIComponent(ticker));
       renderChart(panel, data);
     } catch {
       if (!silent) panel.innerHTML = `<div class="chart-err">Live chart unavailable for ${esc(ticker)}.</div>`;
@@ -8478,8 +8464,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const host = root.querySelector('[data-ltrecs]');
     if (!host) return;
     try {
-      const res = await fetch('/api/tracker?op=ltrecs&ticker=' + encodeURIComponent(data.ticker));
-      const j = await res.json();
+      const j = await fetchJSON('/api/tracker?op=ltrecs&ticker=' + encodeURIComponent(data.ticker));
       if (!j || !j.recs) return;
       const R = j.recs;
       const custom = { rec: LT_TREND_TO_REC[data.longTerm && data.longTerm.trend] || 'Hold', detail: `Trend + relative-strength model · score ${data.longTerm ? data.longTerm.score : '—'}` };
