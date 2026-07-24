@@ -5,6 +5,7 @@
 // mirror of the confluence badges on the Options tab — it makes every screener
 // options-aware so the tools cross-reference each other in both directions.
 import { esc } from './format.js';
+import { fetchJSON } from './fetch-json.js';
 
 // Stock-screener sub-tabs whose cards should get the badge (have data-live).
 export const FLOW_BADGE_TABS = new Set(['screener', 'custom', 'ghost', 'trendrider', 'fade', 'confluence', 'daytrade']);
@@ -20,7 +21,7 @@ function usd(n) { return n >= 1e6 ? '$' + (n / 1e6).toFixed(1) + 'M' : n >= 1e3 
 function ensureLookup() {
   if (lookup) return Promise.resolve(lookup);
   if (!loading) {
-    loading = fetch('/api/tracker?op=optionsflow').then(r => r.json()).then(d => {
+    loading = fetchJSON('/api/tracker?op=optionsflow').then(d => {
       const m = {};
       (d && d.signals || []).forEach(s => {
         const r = m[s.ticker] || (m[s.ticker] = { ticker: s.ticker, call: 0, put: 0, premium: 0 });

@@ -12,6 +12,7 @@
 // Every number is guarded with Number.isFinite so a null field renders '—', not 'NaN'/'undefined'.
 
 import { esc } from './format.js';
+import { fetchJSON } from './fetch-json.js';
 
 // Which lanes hold which card kind. Evidence is handled on its own path.
 const ENTRY_LANES = new Set(['enterNextSession', 'waitBreakout', 'waitPullback', 'waitConfirmation', 'doNotChase', 'avoid']);
@@ -33,7 +34,7 @@ export async function loadAtlas(container) {
   container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading ATLAS-X research candidates…</p></div>`;
   try {
     // Public read — same-origin GET, no auth header.
-    const data = await fetch('/api/tracker?op=atlasx').then(r => r.json()).catch(() => null);
+    const data = await fetchJSON('/api/tracker?op=atlasx').catch(() => null);
     renderAtlas(container, data);
   } catch {
     container.innerHTML = `<div class="mom-status error"><p>Could not load ATLAS-X.</p></div>`;
