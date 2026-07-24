@@ -18,8 +18,11 @@ const SCREENER = {
 };
 const GAPGO = { strong: [{ ticker: 'AAA', sector: 'Technology', last: 101, tier: 'STRONG', continuationScore: 75,
   avgDollarVol: 4e7, plan: { trigger: 103, stop: 98, target: 112, rr: 2 }, nextEarnings: null, cause: 'NEWS' }] };
+// bestOpportunities now carries the canonical actionability envelope (only ACTIONABLE_NOW,
+// current-session-fresh, thesis/plan-valid rows reach it) — the Today normalizer requires it.
 const DAYTRADE = { bestOpportunities: [{ ticker: 'CCC', sector: 'Health Care', last: 30, tier: 'B', relScore: 67,
-  entry: 30.2, stop: 28.5, target: 34, rr: 2, source: 'Momentum & Liquid', catalyst: 'GUIDE' }] };
+  entry: 30.2, stop: 28.5, target: 34, rr: 2, source: 'Momentum & Liquid', catalyst: 'GUIDE',
+  lifecycleState: 'ACTIONABLE_NOW', actionable: true, currentSessionFresh: true, thesisValid: true, planValid: true, barIsToday: true }] };
 const COIL = { picks: [{ ticker: 'DDD', company: 'Delta', sector: 'Utilities', price: 70, decile: 10, band: 'high',
   entry: 70.6, stop: 69, target: 76, rr: 3.2 }] };
 const SECTORS = { sectors: [{ name: 'Technology', changePct: 1.5 }, { name: 'Energy', changePct: 0.2 }, { name: 'Utilities', changePct: -0.9 }] };

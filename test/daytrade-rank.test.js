@@ -18,7 +18,10 @@ const cfFor = (todayPct, adrPct = 4, nearHighFrac = 0.99) => {
   return pcarryPriceFeatures(c);
 };
 
-const mk = (ticker, relVol, pctChange, excessPct, extra = {}) => ({ ticker, relVol, pctChange, excessPct, last: 10, score: relVol * 10 + pctChange, ...extra });
+// These fixtures exercise the FADE-AVOIDANCE ranking, not freshness, so they default to a
+// current-session bar (barIsToday) — the live actionability gate (freshness enforcement) is
+// covered separately in bestopp-freshness.test.js.
+const mk = (ticker, relVol, pctChange, excessPct, extra = {}) => ({ ticker, relVol, pctChange, excessPct, last: 10, score: relVol * 10 + pctChange, barIsToday: true, freshness: { freshnessStatus: 'FRESH_TODAY', barIsToday: true }, ...extra });
 
 test('assignRelScores: assigns 0-100 with the strongest pick at 100 and weakest at 0', () => {
   const ml = [mk('A', 5, 12, 11), mk('B', 1.3, 3, 2)];

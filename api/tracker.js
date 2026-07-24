@@ -93,7 +93,7 @@ const PRIVILEGED_OPS = new Set([
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
-  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'failuremodel', 'complab', 'challengereval', 'router', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward',
+  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'failuremodel', 'complab', 'challengereval', 'router', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward', 'evidencediag',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -292,6 +292,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'evidencetick') return require('../lib/evidence-routes').runEvidenceTick(req, res);
   if (req.query.op === 'evidence') return require('../lib/evidence-routes').runEvidence(req, res);
   if (req.query.op === 'evidencestock') return require('../lib/evidence-routes').runEvidenceStock(req, res);
+  if (req.query.op === 'evidencediag') return require('../lib/evidence-routes').runEvidenceDiag(req, res);
   // NOVEL SIGNAL LAB — shadow-only research surface (never touches prod recs; kill-switch NSL_DISABLED).
   if (req.query.op === 'nsl') return require('../lib/nsl-routes').runNsl(req, res);
   if (req.query.op === 'today') return require('../lib/decision-routes').runToday(req, res);

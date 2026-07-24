@@ -5916,8 +5916,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   document.getElementById('trendr-refresh-btn')?.addEventListener('click', runTrendRider);
 
   // ── Day Trade (momentum / relative-volume movers, regime-gated, self-learning) ──
-  let daytradeLoaded = false, dtListTimer = null;
-  const DT_LIST_REFRESH_MS = 15 * 60 * 1000; // re-pull the whole pick list every 15 min (matches the op=daytrade cache TTL)
+  let daytradeLoaded = false, dtListTimer = null, dtRevalidating = false;
+  // Re-pull (and re-CLASSIFY) the whole board every 60s — actionability is time-sensitive and
+  // the op=daytrade response is now near-live (s-maxage 30s). A price tick that contradicts a
+  // card (below stop / hard drop) also forces an immediate re-pull; see updateDaytradePrices.
+  const DT_LIST_REFRESH_MS = 60 * 1000;
   function ensureDaytrade() {
     if (!daytradeLoaded) { daytradeLoaded = true; runDaytradeUI(); }
     if (!dtListTimer) dtListTimer = setInterval(() => runDaytradeUI(true), DT_LIST_REFRESH_MS);
@@ -6006,14 +6009,43 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       return `<span class="dt-carry" style="color:${col};border-color:${col}55" title="Honest continuation odds over ~3 sessions (price overextension + news catalyst + regime + scan base-rate). Tradeable continuation is ~coin-flip — this mainly flags FADE risk, it does NOT predict winners.${flags ? ' ' + flags : ''}">🔮 ${c}%${r.overextended ? ' ⚠' : ''}</span>`;
     };
     const rankChip = i => `<span class="dt-rank${i === 0 ? ' dt-rank-top' : ''}" title="Rank in this list — #1 is the strongest setup by the momentum-anomaly + learned tilt; recommendations weaken toward the bottom">#${i + 1}</span>`;
-    const card = (r, i) => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
+    // Lifecycle state chip + a plain-English freshness line. Only ACTIONABLE_NOW / REVERSAL_RECLAIM
+    // are "live buys"; everything else is watch / armed / retired / prior-session context.
+    const LC_LABEL = {
+      ACTIONABLE_NOW: ['⚡ Actionable now', '#22c55e'], REVERSAL_RECLAIM: ['🔄 Reclaim setup', '#22c55e'],
+      ARMED: ['🎯 Armed — waiting for trigger', '#eab308'], BUILDING: ['🔨 Building', '#38bdf8'],
+      OPENING_RANGE_FORMING: ['⏳ Opening range forming', '#38bdf8'], WATCHING: ['👀 Watching', '#64748b'],
+      TOO_EXTENDED: ['🚀 Too extended', '#f59e0b'], STALLING: ['🟠 Stalling', '#f59e0b'],
+      FAILED: ['❌ Failed', '#ef4444'], EXPIRED: ['⌛ Expired', '#ef4444'],
+      PRIOR_SESSION_WATCH: ['🕰 Prior-session', '#94a3b8'], MANAGING: ['📈 Managing', '#22c55e'], CLOSED: ['🏁 Closed', '#64748b'],
+    };
+    const lifeBadge = r => {
+      if (!r.lifecycleState) return '';
+      const [lbl, col] = LC_LABEL[r.lifecycleState] || [r.lifecycleState, '#64748b'];
+      return `<span class="dt-life" style="color:${col};border:1px solid ${col}66;border-radius:4px;padding:0 5px;font-size:10.5px;white-space:nowrap" title="${esc(r.explanation || '')}">${lbl}</span>`;
+    };
+    const freshLine = r => {
+      if (!r.lifecycleState && r.currentSessionFresh == null && r.barIsToday == null) return '';
+      const bits = [];
+      if (r.currentSessionFresh) bits.push('<span style="color:var(--green)">● live-validated</span>');
+      else if (r.lifecycleState === 'PRIOR_SESSION_WATCH' || r.barIsToday === false) bits.push('<span style="color:#f59e0b">◐ prior-session bar — not live</span>');
+      if (r.candidateAsOf || r.date) bits.push('as of ' + esc(r.candidateAsOf || r.date));
+      if (r.validatedAt) bits.push('validated ' + new Date(r.validatedAt).toLocaleTimeString());
+      if (r.lossFromDetectionPct != null && r.lossFromDetectionPct < 0) bits.push(`<span style="color:var(--red)">${r.lossFromDetectionPct}% since detection</span>`);
+      return bits.length ? `<div class="dt-card-sub dt-dim" style="font-size:10.5px">${bits.join(' · ')}</div>` : '';
+    };
+    // Same-session buy language (the pullback "buy a dip" entry, or the green ORB emphasis) is
+    // shown ONLY for live-actionable names — never beside a stale or retired recommendation.
+    const isLiveActionable = r => r.lifecycleState === 'ACTIONABLE_NOW' || r.lifecycleState === 'REVERSAL_RECLAIM' || (r.lifecycleState == null && r.currentSessionFresh == null);
+    const card = (r, i) => `<div class="dt-card" data-ticker="${esc(r.ticker)}" data-stop="${orb(r) ? orb(r).stop : (r.stop != null ? r.stop : '')}" data-actionable="${isLiveActionable(r) ? '1' : '0'}">
         <div class="dt-card-top">
-          <span>${rankChip(i)} ${carryBadge(r)} ${relBadge(r)} <b>${esc(r.ticker)}</b>${r.preferred ? ' <span class="dt-star" title="Top-half by rank — the experimental config\'s preferred selection">⭐</span>' : ''}${tierBadge(r)} <span class="dt-sec">${esc(r.sector || '')}</span></span>
+          <span>${rankChip(i)} ${lifeBadge(r)} ${carryBadge(r)} ${relBadge(r)} <b>${esc(r.ticker)}</b>${r.preferred ? ' <span class="dt-star" title="Top-half by rank — the experimental config\'s preferred selection">⭐</span>' : ''}${tierBadge(r)} <span class="dt-sec">${esc(r.sector || '')}</span></span>
           <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">prev close</span></span>
         </div>
-        <div class="dt-card-sub"><span data-dt-daychg>${r.pctChange >= 0 ? '+' : ''}${r.pctChange}%</span> today <span class="dt-dim">· ${L('rvol', 'RVOL')} ${r.relVol}×${rvMark}${r.beta != null ? ' · ' + L('beta', 'β') + ' ' + r.beta : ''}${r.gapPct != null ? ' · gap ' + r.gapPct + '%' : ''}</span></div>
-        ${orb(r) ? `<div class="dt-card-plan">📈 <b>Opening-range breakout</b> <span class="dt-dim">(next session)</span> — break above <b>$${orb(r).trigger}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${orb(r).stop}</b> <span class="dt-dim">(−${orb(r).riskPct}%, 2.5×ATR)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${orb(r).target}</b> <span class="dt-dim">${L('rr', 'R:R')} 1:${orb(r).rr}</span></div>` : ''}
-        ${pb(r) ? `<div class="dt-card-plan">↩️ <b>${L('pullback', 'Pullback entry')}</b> <span class="dt-dim">(alt: wait for a dip)</span> <b>$${pb(r).entry}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${pb(r).stop}</b> <span class="dt-dim">(−${pb(r).riskPct}%)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${pb(r).target}</b> <span class="dt-dim">${L('rr', 'R:R')} 1:${pb(r).rr}</span></div>` : ''}
+        <div class="dt-card-sub"><span data-dt-daychg>${r.pctChange >= 0 ? '+' : ''}${r.pctChange}%</span> ${r.barIsToday === false ? '<span class="dt-dim">(prior session)</span>' : 'today'} <span class="dt-dim">· ${L('rvol', 'RVOL')} ${r.relVol}×${rvMark}${r.beta != null ? ' · ' + L('beta', 'β') + ' ' + r.beta : ''}${r.gapPct != null ? ' · gap ' + r.gapPct + '%' : ''}</span></div>
+        ${freshLine(r)}
+        ${orb(r) ? `<div class="dt-card-plan">📈 <b>Opening-range breakout</b> <span class="dt-dim">(next-session reference)</span> — break above <b>$${orb(r).trigger}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${orb(r).stop}</b> <span class="dt-dim">(−${orb(r).riskPct}%, 2.5×ATR)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${orb(r).target}</b> <span class="dt-dim">${L('rr', 'R:R')} 1:${orb(r).rr}</span></div>` : ''}
+        ${pb(r) && isLiveActionable(r) ? `<div class="dt-card-plan">↩️ <b>${L('pullback', 'Pullback entry')}</b> <span class="dt-dim">(alt: wait for a dip)</span> <b>$${pb(r).entry}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${pb(r).stop}</b> <span class="dt-dim">(−${pb(r).riskPct}%)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${pb(r).target}</b> <span class="dt-dim">${L('rr', 'R:R')} 1:${pb(r).rr}</span></div>` : ''}
         <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
         <div class="chart-panel" data-chart-panel style="display:none"></div>
       </div>`;
@@ -6058,39 +6090,85 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     } else {
       track = `<div class="rot-panel rot-panel-pending"><div class="rot-head">📊 Live track record — building…</div><div class="rot-sub">${book ? `${book.stillOpen || 0} open, ${book.resolved || 0} resolved` : ''}. Each pick is scored ~${t.horizon} sessions later; accrues automatically via the daily cron.</div></div>`;
     }
-    // ⭐ Today's Best Opportunities — ranked, from the validated positive-edge scans only.
+    // ⚡ Actionable Now — the ONLY buy-language section: current-session-validated, fade-gated,
+    // carry-ranked. Every card here cleared the intraday actionable gate (fresh 5-min evidence
+    // + valid thesis + valid plan). A stale prior-session mover can NEVER appear here.
     const best = (t.bestOpportunities || []);
-    const bestCard = o => `<div class="dt-best-card">
-        <div class="dt-best-top"><span class="dt-best-rank">#${o.rank}</span> ${carryBadge(o)} <b>${esc(o.ticker)}</b> <span class="dt-relscore" title="Relative strength (0–100)">${o.relScore}</span> <span class="dt-sec">${esc(o.source)}${o.tier === 'B' ? ' · B' : ''}</span></div>
-        <div class="dt-card-sub">${o.pctChange >= 0 ? '+' : ''}${o.pctChange}% today · RVOL ${o.relVol}×${rvMark} · <span class="dt-dim">${esc(o.why)}</span></div>
+    const lanes = t.lanes || {};
+    const bestCard = (o, i) => `<div class="dt-best-card" data-ticker="${esc(o.ticker)}" data-stop="${o.orb ? o.orb.stop : (o.stop != null ? o.stop : '')}" data-actionable="1" style="border-color:#22c55e55">
+        <div class="dt-best-top"><span class="dt-best-rank">#${o.rank ?? (i + 1)}</span> ${lifeBadge(o)} ${carryBadge(o)} <b>${esc(o.ticker)}</b> <span class="dt-relscore" title="Within-pool relative-strength percentile (0–100) — ordering, NOT a probability">${o.relScore}</span> <span class="dt-sec">${esc(o.source)}${o.tier === 'B' ? ' · B' : ''}</span></div>
+        <div class="dt-card-sub"><span data-dt-daychg>${o.pctChange >= 0 ? '+' : ''}${o.pctChange}%</span> today · RVOL ${o.relVol}×${rvMark} · <span class="dt-dim">${esc(o.why)}</span></div>
+        ${freshLine(o)}
         ${o.orb ? `<div class="dt-card-plan">📈 <b>ORB</b> break &gt;<b>$${o.orb.trigger}</b> · 🛑 <b>$${o.orb.stop}</b> · 🏁 <b>$${o.orb.target}</b> <span class="dt-dim">1:${o.orb.rr}</span></div>` : (o.stop ? `<div class="dt-card-plan">🛑 <b>$${o.stop}</b> · 🏁 <b>$${o.target}</b>${o.rr != null ? ` <span class="dt-dim">1:${o.rr}</span>` : ''}</div>` : '')}
       </div>`;
-    const bestSubtitle = `Now a <b>fade-avoidance quality gate</b>, not a ranked dump of the whole pool. <b>Why the change</b>: the app's own forward tracker showed the raw momentum/explosive picks <b>losing ~4% excess vs SPY</b> over 3 sessions (worst on overextended/froth names), and the survivorship-corrected research (research/33, 26k candidate-days) found the <b>only</b> durable tradeable signal is <b>fade avoidance</b>. So this list now admits <b>only</b> names the model does <b>not</b> flag: carry above the ~49% beat-SPY base rate, <b>not</b> an overextended blow-off, and no dilution/M&amp;A fade pop. Fewer, cleaner names on purpose — on a day with no clean setups it's <b>empty</b> (that's the honest answer, not a bug). Still not a winner-predictor: tradeable 3-session continuation is ~a coin-flip (the predictable part is the un-tradeable overnight leg); this just avoids the traps.`;
+    const bestSubtitle = `<b>Live-validated buys only.</b> Every card here cleared the <b>current-session actionable gate</b> — fresh 5-minute evidence, a valid thesis, and a valid plan — then the fade-avoidance filter (carry above the ~49% beat-SPY base rate, not an overextended blow-off, no dilution/M&amp;A pop) and carry ranking. A stale prior-session mover (yesterday's candle) <b>cannot</b> appear here no matter how bullish it looked — it drops to the <b>Prior-Session Watchlist</b> below. On a day with no live-actionable setup this is <b>empty</b> — the honest answer, not a bug. Still not a winner-predictor: tradeable 3-session continuation is ~a coin-flip; this avoids the traps and refuses to show a "buy now" that already failed.`;
+    const bestEmptyMsg = t.session && t.session !== 'regular'
+      ? `<b>Nothing is actionable right now — the market is ${esc(t.session)}.</b> A prior regular-session setup is never a live buy outside regular hours. The movers watchlist and prior-session names are below; they need fresh current-session evidence to become actionable.`
+      : (t.dataFreshness && t.dataFreshness.degraded)
+        ? `<b>Live validation is temporarily unavailable</b> (intraday data provider). Failing closed: nothing is shown as actionable. The prior-session watchlist and movers are below.`
+        : `<b>No live-actionable setups right now.</b> Nothing on the tape cleared the current-session gate (fresh evidence + valid thesis + valid plan) and the fade-avoidance filter. Showing nothing is the honest call; the movers watchlist and prior-session names are below.`;
     const bestEmpty = `<div class="rot-panel" style="border-color:#f59e0b44;background:#f59e0b0a">
-        <div class="rot-head" style="color:#f59e0b">⭐ Today's Best Opportunities <span class="dt-dim">(0)</span></div>
-        <div class="rot-sub"><b>No clean setups passed the fade-avoidance gate today.</b> Every mover on the tape is either overextended, below the ~49% carry base-rate, or carrying a dilution/M&amp;A pop — the exact population that fades. Showing nothing is the honest call; the full movers watchlist is still below.</div>
+        <div class="rot-head" style="color:#f59e0b">⚡ Actionable Now <span class="dt-dim">(0)</span></div>
+        <div class="rot-sub">${bestEmptyMsg}</div>
       </div>`;
-    const bestSection = t.riskOff ? '' : (!best.length ? bestEmpty : `<div class="rot-panel" style="border-color:#f59e0b66;background:#f59e0b0d">
-        <div class="rot-head" style="color:#f59e0b">⭐ Today's Best Opportunities <span class="dt-dim">(${best.length})</span></div>
+    const bestSection = t.riskOff ? '' : (!best.length ? bestEmpty : `<div class="rot-panel" style="border-color:#22c55e66;background:#22c55e0d">
+        <div class="rot-head" style="color:#22c55e">⚡ Actionable Now <span class="dt-dim">(${best.length})</span></div>
         <div class="rot-sub">${bestSubtitle}</div>
         <div class="dt-best-grid">${best.map(bestCard).join('')}</div>
       </div>`);
-    el.innerHTML = banner + tapeBadge + pacedBanner + bestSection + configBanner + howto + ml + es + runSection + expList + track + timingScorecard(timingBook) +
+
+    // 🎯 Armed / Waiting for Trigger — live-validated setups that have NOT triggered yet.
+    const armedRows = lanes.armed || [];
+    const armedSection = (t.riskOff || !armedRows.length) ? '' : `<div class="rot-panel" style="border-color:#eab30855">
+        <div class="rot-head" style="color:#eab308">🎯 Armed — waiting for the trigger <span class="dt-dim">(${armedRows.length})</span></div>
+        <div class="rot-sub">Setup complete and live-validated, but <b>not yet triggered</b>. This is "wait for the break," <b>not</b> "buy now."</div>
+        <div class="dt-best-grid">${armedRows.map(bestCard).join('')}</div>
+      </div>`;
+
+    // 🗂 Retired Today — names that INVALIDATED intraday. Kept (never silently removed) for
+    // honesty + forward grading. A down name is a FAILED setup, not a discounted original buy.
+    const laneCard = o => `<div class="dt-best-card" style="border-color:#64748b44">
+        <div class="dt-best-top">${lifeBadge(o)} <b>${esc(o.ticker)}</b> <span class="dt-sec">${esc(o.sector || o.source || '')}</span></div>
+        <div class="dt-card-sub dt-dim" style="font-size:11px">detected <b>$${o.originalPrice ?? o.last}</b>${o.candidateAsOf ? ' · ' + esc(o.candidateAsOf) : ''}${o.currentPrice != null && o.currentPrice !== (o.originalPrice ?? o.last) ? ` · now <b>$${o.currentPrice}</b>` : ''}${o.lossFromDetectionPct != null && o.lossFromDetectionPct < 0 ? ` · <span style="color:var(--red)">${o.lossFromDetectionPct}% since</span>` : ''}</div>
+        ${o.explanation ? `<div class="dt-card-sub">${esc(o.explanation)}</div>` : ''}
+      </div>`;
+    const retiredRows = lanes.retiredToday || [];
+    const retiredSection = retiredRows.length ? `<div class="rot-panel" style="border-color:#ef444444">
+        <div class="rot-head" style="color:#ef4444">🗂 Retired Today <span class="dt-dim">(${retiredRows.length})</span></div>
+        <div class="rot-sub">Names that <b>invalidated intraday</b> — a stop breach, breakout failure, two closes below VWAP, or a collapse past the ATR loss threshold. Kept here (not silently deleted) so the track record is honest and false retirements are graded. A stock down 10% is a <b>failed momentum setup</b>, never a discounted version of the original bullish buy — a genuine recovery would have to qualify as a <b>new</b> reclaim setup on current-session evidence.</div>
+        <div class="dt-best-grid">${retiredRows.slice(0, 24).map(laneCard).join('')}</div>
+      </div>` : '';
+
+    // 🕰 Prior-Session Watchlist — discovered on a completed prior-session bar; historical only.
+    const priorRows = lanes.priorSessionWatch || [];
+    const priorSection = priorRows.length ? `<div class="rot-panel" style="border-color:#64748b55">
+        <div class="rot-head" style="color:#94a3b8">🕰 Prior-Session Watchlist <span class="dt-dim">(${priorRows.length})</span></div>
+        <div class="rot-sub">Discovered on a <b>completed prior-session bar</b> (the daily scan runs off a cache built pre-open). These are <b>historical discovery only — not live buys right now.</b> The live quote is overlaid, but the setup describes an earlier session; a name here needs <b>fresh current-session evidence</b> to become actionable. This is where yesterday's big mover sits until it re-proves itself today.</div>
+        <div class="dt-best-grid">${priorRows.slice(0, 30).map(laneCard).join('')}</div>
+      </div>` : '';
+    el.innerHTML = banner + tapeBadge + pacedBanner + bestSection + armedSection + retiredSection + priorSection + configBanner + howto + ml + es + runSection + expList + track + timingScorecard(timingBook) +
       `<div class="fade-caveats"><b>How to use.</b> Today's relative-volume + momentum movers (the EOD version of the Finviz day-trade scans), regime-gated and self-learning. <b>Honest validation</b> (5y, forward 3-session excess vs SPY): large-cap momentum-chasing does <b>not</b> beat the market (it mean-reverts, −1.3% out-of-sample); explosive small-caps carry a <b>positive average excess</b> (~+1.7–2.3% in risk-on/neutral) but a <b>sub-50% hit-rate</b> — a few big runners carry it, and it dies in risk-off. So treat these as a <b>ranked movers watchlist</b>, not a win-rate edge; the per-stock learner tilts toward names whose momentum actually continues and drops the rest. <b>The 🧪 experimental config above</b> (opening-range-breakout entry + 2.5×ATR stop + top-half selection) is the one variant that tested out-of-sample positive on <b>real intraday execution</b> — but it <b>failed formal deflation</b> (deflated Sharpe 0.59), so it's a paper-trading lead to confirm forward, not a proven edge. Confirm entries in TradingView (MACD / RSI / Smart-Money). Research, not advice.</div>`;
     // Wire each card's chart toggle (reuses the shared /api/chart canvas renderer)
     // and start live-price polling for the recommended names.
     const dtTickers = [];
-    el.querySelectorAll('.dt-card[data-ticker]').forEach(cardEl => {
+    // Include the Actionable/Armed cards (.dt-best-card[data-ticker]) so live quotes AND the
+    // live re-evaluation reach the buy cards, not only the mover lists.
+    el.querySelectorAll('[data-ticker]').forEach(cardEl => {
       const tk = cardEl.dataset.ticker; dtTickers.push(tk);
       const btn = cardEl.querySelector('[data-chart-toggle]');
       if (btn) btn.addEventListener('click', () => toggleChart(cardEl, tk));
     });
     startDaytradePrices([...new Set(dtTickers)]);
     // ⏱️ Entry-timing lights — use each pick's ORB plan levels + avg volume when present.
+    // ⏱️ Entry-timing lights carry the lifecycle context so the server can refuse to grade a
+    // stale / failed / not-yet-valid setup (returns "not eligible"), and only ACTIONABLE_NOW
+    // names can score green. Watchlist-only and prior-session rows therefore show ⛔, not a buy.
     const seen = new Set();
     const dtPicks = [...(t.bestOpportunities || []), ...(t.momentumLiquid || []), ...(t.explosiveSmall || []), ...(t.momentumRun || []), ...(t.momentumExpanded || [])]
       .filter(p => p && p.ticker && !seen.has(p.ticker) && seen.add(p.ticker))
-      .map(p => ({ ticker: p.ticker, stop: p.orb && p.orb.stop, target: p.orb && p.orb.target, trigger: p.orb && p.orb.trigger, avgVol: p.avgVol }));
+      .map(p => ({ ticker: p.ticker, stop: p.orb && p.orb.stop, target: p.orb && p.orb.target, trigger: p.orb && p.orb.trigger, avgVol: p.avgVol,
+        lifecycleState: p.lifecycleState, thesisValid: p.thesisValid, planValid: p.planValid,
+        currentSessionFresh: p.currentSessionFresh, breakoutFailed: p.breakoutFailed, stopBreached: p.stopBreached }));
     attachTimingLights(el, dtPicks, 'daytrade');
 
     const meta = document.getElementById('dt-meta');
@@ -6147,8 +6225,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         } catch { /* skip this chunk, keep the rest */ }
       }
       if (!Object.keys(data).length) return;
-      let updated = 0;
-      document.querySelectorAll('#daytrade .dt-card[data-ticker]').forEach(cardEl => {
+      let updated = 0, contradicted = false;
+      // Both the mover cards (.dt-card) and the Actionable/Armed cards (.dt-best-card) carry
+      // data-ticker now, so every live buy gets a live quote — no static price beside a "buy".
+      document.querySelectorAll('#daytrade [data-ticker]').forEach(cardEl => {
         const q = data[cardEl.dataset.ticker]; if (!q) return;
         const v = livePriceLabel(q);
         const priceEl = cardEl.querySelector('[data-dt-price]');
@@ -6169,9 +6249,39 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           dayEl.textContent = (up ? '+' : '') + q.changePct + '%';
           dayEl.style.color = up ? 'var(--green)' : 'var(--red)';
         }
+        // LIVE RE-EVALUATION (not just price text). If a card presented as actionable is now
+        // contradicted by the live quote — price at/through its stop, or a hard current-session
+        // drop — invalidate it in place immediately and flag the board for a full re-classify.
+        // The decision must never lag the quote: a live "down 10%" cannot sit beside a buy.
+        if (cardEl.dataset.actionable === '1' && !cardEl.dataset.invalidated) {
+          const price = parseFloat(v.price), stop = parseFloat(cardEl.dataset.stop);
+          const dayPct = q.changePct != null ? parseFloat(q.changePct) : null;
+          const breached = Number.isFinite(price) && Number.isFinite(stop) && stop > 0 && price <= stop;
+          const collapsed = Number.isFinite(dayPct) && dayPct <= -6;
+          if (breached || collapsed) {
+            cardEl.dataset.invalidated = '1';
+            cardEl.style.opacity = '0.6';
+            const plan = cardEl.querySelector('.dt-card-plan'); if (plan) plan.style.textDecoration = 'line-through';
+            const top = cardEl.querySelector('.dt-best-top') || cardEl.querySelector('.dt-card-top span');
+            if (top && !cardEl.querySelector('.dt-invalidated')) {
+              const w = document.createElement('span');
+              w.className = 'dt-invalidated'; w.style.cssText = 'color:#ef4444;border:1px solid #ef444466;border-radius:4px;padding:0 5px;font-size:10.5px;margin-left:6px';
+              w.textContent = breached ? '❌ stop breached — invalidated' : '❌ collapsed — invalidated';
+              top.appendChild(w);
+            }
+            contradicted = true;
+          }
+        }
         updated++;
       });
       if (updated) setDtPriceAsOf();
+      // A live contradiction forces an immediate server re-classification (Stage-2 re-runs),
+      // so membership/lifecycle/timing update too — not just the price text. Guarded so a
+      // burst of ticks triggers at most one re-pull in flight.
+      if (contradicted && !dtRevalidating) {
+        dtRevalidating = true;
+        runDaytradeUI(true).finally(() => { dtRevalidating = false; });
+      }
     } catch { /* keep last good prices */ }
   }
   document.getElementById('dt-refresh-btn')?.addEventListener('click', () => runDaytradeUI(false));
