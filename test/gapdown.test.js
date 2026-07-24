@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { scoreGapDown, orbLowLevels, continuationScore, GAP_STRONG } = require('../lib/gapdown');
+const { scoreGapDown, orbLowLevels, continuationScore, assessShortExecution, GAP_STRONG, MAX_BORROW_FEE_BPS } = require('../lib/gapdown');
 
 // Build ~40 flat candles (~$50, ~1M shares → ~$50M ADV) then a gap-down last day.
 function withGapDown(gapPct, { price = 50, vol = 1_000_000, lastVol = 3_000_000 } = {}) {
@@ -55,4 +55,39 @@ test('orbLowLevels builds a valid short measured-move (1:2)', () => {
   assert.ok(p.stop > p.trigger && p.target < p.trigger);
   const risk = p.stop - p.trigger, reward = p.trigger - p.target;
   assert.ok(Math.abs(reward / risk - 2) < 0.05, 'reward is ~2× risk');
+});
+
+// ── Fail-closed borrow gate ──────────────────────────────────────────────────
+test('with NO borrow data, a short is research/watch only — never actionable (fail-closed)', () => {
+  const s = scoreGapDown(withGapDown(-6));
+  assert.ok(s);
+  assert.equal(s.actionable, false);
+  assert.equal(s.actionability, 'research-watch');
+  assert.equal(s.execution.borrowKnown, false);
+  assert.match(s.execution.reason, /unavailable/);
+});
+
+test('confirmed borrow within the fee ceiling unlocks an actionable short', () => {
+  const s = scoreGapDown(withGapDown(-6), null, { borrow: { shortable: true, feeBps: 150 } });
+  assert.equal(s.actionable, true);
+  assert.equal(s.actionability, 'actionable-short');
+  assert.equal(s.execution.borrowKnown, true);
+});
+
+test('a hard-to-borrow name (no shares) stays research/watch even with borrow data', () => {
+  const s = scoreGapDown(withGapDown(-6), null, { borrow: { shortable: false } });
+  assert.equal(s.actionable, false);
+  assert.equal(s.execution.borrowKnown, true);
+});
+
+test('an exorbitant borrow fee fails the gate', () => {
+  const g = assessShortExecution({ shortable: true, feeBps: MAX_BORROW_FEE_BPS + 1 });
+  assert.equal(g.executable, false);
+  assert.match(g.reason, /exceeds/);
+});
+
+test('assessShortExecution with null borrow is fail-closed', () => {
+  const g = assessShortExecution(null);
+  assert.equal(g.executable, false);
+  assert.equal(g.borrowKnown, false);
 });
