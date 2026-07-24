@@ -96,7 +96,7 @@ const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/
 // Ops both the cron AND the browser call: leave the cached read public, but strip
 // the expensive force/refresh rebuild levers for untrusted callers.
 const SHARED_FORCE_OPS = new Set([
-  'aligned', 'anomalytick', 'biotechtick', 'calibration', 'coredrift', 'crossassettick',
+  'aligned', 'anomalytick', 'biotechtick', 'biotechgrade', 'calibration', 'coredrift', 'crossassettick',
   'optionsflow', 'optionsepisodes', 'pulse', 'pulserefine', 'putsell', 'readthroughtick', 'secondwavetick',
   'toneshifttick', 'atlasx',
   // redundancy: the cached model is public (the UI panel reads it), but a force=1 rebuild
@@ -204,6 +204,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'anomalytick') return require('../lib/anomaly-routes').runAnomalyTick(req, res);
   if (req.query.op === 'biotech') return require('../lib/biotech-routes').runBiotech(req, res);
   if (req.query.op === 'biotechtick') return require('../lib/biotech-routes').runBiotechTick(req, res);
+  if (req.query.op === 'biotechgrade') return require('../lib/biotech-routes').runBiotechGrade(req, res);
   if (req.query.op === 'secondwave') return require('../lib/secondwave-routes').runSecondWave(req, res);
   if (req.query.op === 'secondwavetick') return require('../lib/secondwave-routes').runSecondWaveTick(req, res);
   if (req.query.op === 'crossasset') return require('../lib/crossasset-routes').runCrossAsset(req, res);

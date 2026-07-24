@@ -122,6 +122,10 @@ module.exports = async function handler(req, res) {
   // quintile excess for momentum / 52-week / rel-volume) that the Baselines tab reads via
   // op=baselines. The bearer (internalHeaders) exempts it from the op=research rate limit.
   const researchKick = warmOne('/api/tracker?op=research&scope=large').catch(() => null);
+  // 🧬 Biotech episode grading — next-open, XBI-relative, multi-horizon (3/5/10/21) grading of
+  // the biotech research ledger, stratified by archetype. Heavy (candle fetch per ledger
+  // ticker) → its own 60s budget, off warm's critical path. Shadow measurement only.
+  const biotechGradeKick = warmOne('/api/tracker?op=biotechgrade').catch(() => null);
 
   // The tick chains are now warmchain roots (ticks1/ticks2/ticks3 in lib/warm-chains.js).
   // They were previously built HERE as `.then()` chains and drained for whatever was left
@@ -167,6 +171,7 @@ module.exports = async function handler(req, res) {
   void optionsAssessKick; // single dispatch: Fable options-flow analysis in its own budget
   void putsellKick;       // single dispatch: put-selling setups scan
   void optionsEpisodesKick; // single dispatch: episode grading in its own budget
+  void biotechGradeKick;  // single dispatch: biotech episode grading in its own budget
 
   const chainsDispatched = chainKicks.length;
   const result = {
