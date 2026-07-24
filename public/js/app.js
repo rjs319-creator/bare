@@ -2846,7 +2846,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function apexExitsPanelHTML() {
     const ex = apexModel && apexModel.exits;
     if (!ex || !ex.summary) {
-      return `<div class="cx-mp-sec"><h4>Exit strategy (backtested)</h4><p class="cx-mp-p">Research finding: the screener's structure stops historically <b>erode</b> these momentum setups — they get whipsawed before the ~3-month directional edge plays out. Run the study to compare exit rules on the historical Apex/Loaded selections.</p><button class="refresh-btn" id="cx-exits-btn" onclick="apexRunExits()" style="color:#06c4d4">⏱ Run exit study (~10s)</button></div>`;
+      return `<div class="cx-mp-sec"><h4>Exit strategy (backtested)</h4><p class="cx-mp-p">Research finding: the screener's structure stops historically <b>erode</b> these momentum setups — they get whipsawed before the ~3-month directional edge plays out. Run the study to compare exit rules on the historical Apex/Loaded selections.</p><button class="refresh-btn" data-apex-run="exits" style="color:#06c4d4">⏱ Run exit study (~10s)</button></div>`;
     }
     const s = ex.summary;
     const order = ['time63', 'catastrophic', 'atr3', 'structure', 'time21', 'atr2', 'trail3ATR', 'ema21'];
@@ -2871,29 +2871,42 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const verdict = rg ? `<p class="cx-mp-p"><b>What to actually do:</b> only take these long momentum setups in <b style="color:var(--green)">Risk-On</b> (Risk-Off entries are a disaster — time63 PF ${rg.RISK_OFF && rg.RISK_OFF.time63 ? rg.RISK_OFF.time63.pf : '~0.5'}); hold ~63 sessions (stops make it worse); and accept the edge is thin and disappears in choppy/correcting periods. The model's regime gate is doing the real work, not the exit.</p>` : '';
     // Market-neutral (long top decile / short bottom) — is there any selection edge?
     const ls = apexModel && apexModel.longshort && apexModel.longshort.decile;
-    const lsLine = ls ? `<p class="cx-mp-p"><b>Market-neutral test</b> (long top decile / short bottom, beta removed): spread <b>${ls.overall.meanPct > 0 ? '+' : ''}${ls.overall.meanPct}%</b>/63d but <b>t-stat ${ls.overall.tStat}</b> — ${Math.abs(ls.overall.tStat) >= 2 ? 'significant' : 'not statistically significant (need t≥2)'}. Still regime-split: Risk-On ${ls.byRegime && ls.byRegime.RISK_ON ? ls.byRegime.RISK_ON.meanPct + '%' : '—'} vs Risk-Off <b style="color:var(--red)">${ls.byRegime && ls.byRegime.RISK_OFF ? ls.byRegime.RISK_OFF.meanPct + '%' : '—'}</b> (momentum crash). <b>No durable security-selection edge</b> once the market is removed — what's here is a momentum tilt, not stock-picking skill.</p>` : `<p class="cx-mp-p" style="font-size:0.62rem"><button class="refresh-btn" onclick="fetch('/api/tracker?op=longshort').then(()=>fetchApexModel()).then(()=>{if(apexLast)renderApexModelPanel(apexLast.regime,apexLast.preset,apexLast.large)})" style="color:#8a6dff">⚖ Run market-neutral (long/short) test</button></p>`;
+    const lsLine = ls ? `<p class="cx-mp-p"><b>Market-neutral test</b> (long top decile / short bottom, beta removed): spread <b>${ls.overall.meanPct > 0 ? '+' : ''}${ls.overall.meanPct}%</b>/63d but <b>t-stat ${ls.overall.tStat}</b> — ${Math.abs(ls.overall.tStat) >= 2 ? 'significant' : 'not statistically significant (need t≥2)'}. Still regime-split: Risk-On ${ls.byRegime && ls.byRegime.RISK_ON ? ls.byRegime.RISK_ON.meanPct + '%' : '—'} vs Risk-Off <b style="color:var(--red)">${ls.byRegime && ls.byRegime.RISK_OFF ? ls.byRegime.RISK_OFF.meanPct + '%' : '—'}</b> (momentum crash). <b>No durable security-selection edge</b> once the market is removed — what's here is a momentum tilt, not stock-picking skill.</p>` : `<p class="cx-mp-p" style="font-size:0.62rem"><button class="refresh-btn" data-apex-run="longshort" style="color:#8a6dff">⚖ Run market-neutral (long/short) test</button></p>`;
     return `<div class="cx-mp-sec"><h4>Exit strategy (backtested · ${ex.selections} selections · ${ex.range || '5y'})</h4>${rec}
       <table class="cx-preset-table cx-ex-table"><thead><tr><th>Exit rule</th><th>PF</th><th>Win</th><th>Expect</th><th>Hold</th></tr></thead><tbody>${rows}</tbody></table>
       ${rgTable ? `<p class="cx-mp-p" style="margin-top:8px"><b>By entry regime</b> — the edge is entirely regime-conditional:</p>${rgTable}` : ''}
       ${verdict}
       ${lsLine}
       <p class="cx-mp-p" style="font-size:0.62rem">PF>1 = net-profitable. No-stop carries full per-name drawdown risk; the −15% catastrophic variant is the risk-managed compromise. In-sample backtest — directional, not a guarantee.</p>
-      <button class="refresh-btn" id="cx-exits-btn" onclick="apexRunExits()" style="color:#06c4d4">↻ Re-run exit study</button></div>`;
+      <button class="refresh-btn" data-apex-run="exits" style="color:#06c4d4">↻ Re-run exit study</button></div>`;
   }
-  async function apexRunExits() {
-    const btn = document.getElementById('cx-exits-btn');
-    if (btn) { btn.disabled = true; btn.textContent = '⏱ Running… (~10s)'; }
-    try { await fetch('/api/tracker?op=exits'); await fetchApexModel(); if (apexLast) renderApexModelPanel(apexLast.regime, apexLast.preset, apexLast.large); }
-    catch {}
-    finally { if (btn) { btn.disabled = false; btn.textContent = '↻ Re-run exit study'; } }
+  // Extra query params per study op (op alone is carried in the button's data-apex-run).
+  const APEX_RUN_PARAMS = { pead: '&mode=surprise&limit=150', congress: '&limit=150', revisions: '&limit=150' };
+  // Study-trigger buttons are injected into the re-rendered #cx-model-body, so they're wired
+  // once by delegation (below) instead of inline onclick handlers.
+  async function apexRunStudy(op, btn) {
+    const label = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '⏱ Running…'; }
+    try {
+      await fetchJSON('/api/tracker?op=' + op + (APEX_RUN_PARAMS[op] || ''));
+      await fetchApexModel();
+      if (apexLast) renderApexModelPanel(apexLast.regime, apexLast.preset, apexLast.large);
+    } catch {
+      // On failure the panel isn't re-rendered, so restore the button in place.
+      if (btn && document.body.contains(btn)) { btn.disabled = false; btn.textContent = label; }
+    }
   }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-apex-run]');
+    if (b) apexRunStudy(b.dataset.apexRun, b);
+  });
 
   // Post-earnings-drift — the app's one promising lead. Now testable for real:
   // FMP Premium supplies paired actual/estimate history → a true multi-year SUE.
   function apexPeadPanelHTML() {
     const p = apexModel && apexModel.pead;
     const s = p && p.surprise;
-    const runBtn = (label) => `<button class="refresh-btn" onclick="fetch('/api/tracker?op=pead&mode=surprise&limit=150').then(()=>fetchApexModel()).then(()=>{if(apexLast)renderApexModelPanel(apexLast.regime,apexLast.preset,apexLast.large)})" style="color:#10d98a">${label}</button>`;
+    const runBtn = (label) => `<button class="refresh-btn" data-apex-run="pead" style="color:#10d98a">${label}</button>`;
 
     if (!p || (!p.h63 && !s)) {
       return `<div class="cx-mp-sec"><h4>Earnings-surprise drift (PEAD)</h4><p class="cx-mp-p">Event-driven test: does a big <b>standardized earnings surprise (SUE)</b> predict the next 1–3 months of <i>market-excess</i> return? Now runnable across multiple years/regimes with the FMP Premium paired-estimate history.</p>${runBtn('📊 Run true SUE study')}</div>`;
@@ -2931,7 +2944,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const ap = apexModel && apexModel.altProbes;
     if (!ap) return '';
     const vColor = v => v === 'CONFIRMED' ? '#10d98a' : v === 'REGIME-DEPENDENT' ? 'var(--amber)' : 'var(--red)';
-    const runBtn = (op, label) => `<button class="refresh-btn" onclick="fetch('/api/tracker?op=${op}&limit=150').then(()=>fetchApexModel()).then(()=>{if(apexLast)renderApexModelPanel(apexLast.regime,apexLast.preset,apexLast.large)})" style="color:#10d98a;font-size:0.6rem">↻ ${label}</button>`;
+    const runBtn = (op, label) => `<button class="refresh-btn" data-apex-run="${op}" style="color:#10d98a;font-size:0.6rem">↻ ${label}</button>`;
     const row = (p, title, op) => {
       if (!p) return `<p class="cx-mp-p" style="font-size:0.66rem"><b>${title}:</b> not run yet. ${runBtn(op, 'Run')}</p>`;
       const ls = p.longShort63 || {}, sg = p.signed63 || {};
