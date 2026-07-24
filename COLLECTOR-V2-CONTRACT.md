@@ -1,9 +1,14 @@
 # Trade Alerts — Collector v2 Ingest Contract
 
-The external social collector (the browser box, **outside this repo** — historically
-`~/trade-alert-ranker`) POSTs raw posts to the app. This document specifies the **v2** payload
-the collector should emit so the app can capture trustworthy provenance and earn per-account
-track records.
+The external social collector (the browser box, **outside this repo** — the reference
+implementation is `~/trade-alert-ranker/trade_alert_ranker.py`) POSTs raw posts to the app.
+This document specifies the **v2** payload the collector emits so the app can capture
+trustworthy provenance and earn per-account track records.
+
+> **Status (shipped 2026-07-23):** the reference collector emits v2 and is live in production —
+> pushing on a 2-hour launchd schedule (`collectorVersion: "2.0.0"`). First live batch took the
+> app's `sources` count from `0` → `400+` with stable-ID accounts. Trade Alerts remains
+> **shadow / weight 0**.
 
 > **Source of truth:** `lib/alerts-schema.js` (`normalizeV2Post` / `adaptLegacyPost` /
 > `normalizeBatch`). If this doc and the code disagree, the code wins — update this doc.
@@ -37,7 +42,8 @@ and v2 stores.
 {
   "collectorId": "box-1",          // optional; also accepted as header x-collector-id
   "collectorVersion": "2.0.0",     // optional
-  "posts": [ /* v2 post objects (or legacy objects — see below) */ ]
+  "posts": [ /* v2 post objects (or legacy objects — see below) */ ],
+  "sourceHealth": { /* optional — see "Source-health" below. Currently NOT consumed by ingest. */ }
 }
 ```
 
@@ -45,6 +51,11 @@ The server routes each row to the **v2** normalizer or the **legacy** adapter au
 (`isV2Payload`): a row is treated as v2 if it carries any of `authorId` / `author_id` /
 `userId` / `postId` / `platform` / `schemaVersion`. Otherwise it's treated as legacy
 `{text, account, timestamp}`.
+
+The reference collector sends `collectorId` both as the batch field **and** the
+`x-collector-id` header, and stamps `collectorVersion` from its own `COLLECTOR_VERSION`
+constant. Unknown top-level keys (like `sourceHealth`) are ignored by ingest, so the payload is
+forward-compatible.
 
 ---
 
@@ -74,8 +85,12 @@ pooled under a shared `"?"` bucket.
 | `following` | integer | opt. | Snapshot. Integrity only. |
 | `paidPromotion` | boolean | opt. | `true` if disclosed paid/sponsored. Surfaces as an integrity flag. |
 | `positionDisclosed` | boolean | opt. | `true` if the author disclosed a position. |
-| `flags` | string[] | opt. | Collector/data-quality flags (e.g. `ocr-uncertain`). Max 12, ≤40 chars each. |
+| `flags` | string[] | opt. | Collector/data-quality flags → stored as `collectorFlags`. Max 12, ≤40 chars each. See **Collector-emitted flags** below for the vocabulary the reference collector uses. |
 | `collectedAt` | — | **ignored** | **The server sets `collectedAt` from its own clock.** Any collector-supplied value is discarded (prevents backdating). |
+
+> **Collector extras (not parsed):** the reference collector also sends `referencedSymbols`
+> (string[], StockTwits cashtags) and `captureLatencySeconds` on each post. These are **not** in
+> the schema whitelist — the app ignores them. They're carried for auditability/forward use only.
 
 ### Server-side derived (do NOT send)
 
@@ -128,13 +143,13 @@ Rejected rows are dropped and summarized in the response (`rejected`, `rejectedS
 
 ---
 
-## What the collector must CHANGE from v1
+## What v2 changed from v1 (✅ shipped)
 
 v1 emitted `{ text, account, timestamp }`. That **still works** through the legacy adapter, but
 every legacy post gets **degraded provenance and zero account-history credit** (the `account`
 string is treated as a non-canonical handle, `accountKey: legacy:<handle>`, never a stable id).
 
-To move to v2, the collector should:
+The reference collector now does all of the following (see **Reference implementation** below):
 
 1. **Add `authorId`** — the single highest-value change. Emit the platform's **stable numeric/GUID
    user id**, not the handle. This is what lets an account build a track record and eventually
@@ -174,6 +189,87 @@ To move to v2, the collector should:
   ]
 }
 ```
+
+---
+
+## Collector-emitted flags
+
+The reference collector puts these in `flags` (stored as `collectorFlags`; the app treats them
+as metadata, never as predictive signal):
+
+| Flag | Meaning |
+|---|---|
+| `st-sentiment:bullish` / `st-sentiment:bearish` | StockTwits' own sentiment tag. **Carried as a flag, never concatenated into `text`** (that would corrupt keyword parsing). |
+| `capture:delayed` | Post was 15 min–6 h old when captured (not real-time). |
+| `capture:historical` | 6 h–30 d old at capture. |
+| `capture:backfill` | > 30 d old at capture — must never read as live evidence. |
+| `authorId-source:manual-map` | `authorId` came from the explicit handle→id map, **not** the provider. |
+
+`capture:*` is derived from `captureLatencySeconds = collectedAt − publishedAt`. Live posts
+(≤15 min) carry no capture flag.
+
+---
+
+## Source-health (`sourceHealth`)
+
+The collector sends a per-provider health block so a **failed fetch is never mistaken for a
+quiet market**. **The app does not consume this yet** — it's sent for forward compatibility and
+written locally by the collector (`collector_health.json`). Shape:
+
+```jsonc
+{
+  "collectorId": "collector-1",
+  "collectorVersion": "2.0.0",
+  "generatedAt": "2026-07-23T…Z",
+  "providers": {
+    "stocktwits": {
+      "attempted": true, "success": true,
+      "lastAttemptAt": "…", "lastSuccessAt": "…",
+      "postsReceived": 209,               // NEW posts after watermarking
+      "newestPublishedAt": "…",
+      "captureDelaySeconds": 39.7,         // now − newest publication
+      "staleFeedWarning": false,           // true if newest post > ALERT_STALE_FEED_HOURS old
+      "failureReason": null,               // e.g. "trending_or_stream_empty (blocked/down)"
+      "coverage": { "maxSymbols": 20 }
+    },
+    "nitter": { … "coverage": { "accountsQueried": 14, "accountsWithPosts": 13, "zeroAccounts": ["Walter_Bloomberg"] } }
+  }
+}
+```
+
+---
+
+## Reference implementation (what shipped)
+
+`~/trade-alert-ranker/trade_alert_ranker.py` — merged, live on a 2-hour launchd schedule.
+
+### Stable-identity coverage by provider
+
+| Provider | `authorId` | `postId` | Notes |
+|---|:--:|:--:|---|
+| **StockTwits** | ✅ numeric user id | ✅ message id | Full provenance. `postUrl`, cashtags, reshare/reply `kind`, `since` cursor. |
+| **X API** (official) | ✅ user id | ✅ tweet id | Full provenance. Referenced-tweet → `quote`/`reply`/`repost`; `since_id` cursor. |
+| **Nitter** (keyless) | ❌ **null** | ✅ status id (from GUID/link) | **No stable author id exists in Nitter RSS.** Stays `unknown_identity` (no account credit) unless an explicit `X_ID_MAP` resolves the handle. Never handle-as-id. |
+| **scrapegraph** | ❌ null (or map) | ❌ | Rendered-profile scrape → no stable id. |
+
+### Watermarks (collector-side; no duplicate evidence)
+
+Per-provider cursors persist in `collector_state.json` so a previously-captured post can't
+re-enter as fresh evidence: seen-id ring + numeric high-water mark + a content-hash fallback for
+id-less posts, plus provider `since`/`since_id` API cursors. This is what lets the app's
+content-hash dedup stay effectively empty of re-sends (verified live: a re-run dropped 272 → 37).
+
+### Collector environment variables
+
+| Var | Purpose |
+|---|---|
+| `APP_INGEST_URL` | `https://<app>/api/tracker?op=alertsingest` |
+| `ALERTS_INGEST_TOKEN` | Must match the app's Vercel env (see auth above). |
+| `COLLECTOR_ID` | Batch attribution (default `collector-1`). |
+| `X_ID_MAP` / `X_ID_MAP_FILE` | Explicit, labeled handle→stable-X-id map. Never inferred. |
+| `ALERT_EMIT_LEGACY` | `1` forces the legacy `{text, account, timestamp}` shape. |
+| `ALERT_STALE_FEED_HOURS` | Stale-feed warning threshold (default 24). |
+| `ALERT_STATE_FILE` / `ALERT_HEALTH_FILE` | Override the state/health file paths. |
 
 ---
 
