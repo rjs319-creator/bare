@@ -232,10 +232,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       catch: `"No news I could find" isn't "no news exists," and many anomalies are nothing. Benchmarked vs sector on the Scoreboard.`,
     },
     biotech: {
-      what: `Early-stage <b>biotech</b> names showing runner characteristics, scored /100 with awareness of catalysts (biotech moves on trial and FDA news).`,
-      read: `Tier <b>Hot &gt; Emerging &gt; Watch</b> with an AI reason. Measured against the biotech index (XBI), not just the S&P.`,
-      act: `A specialist watchlist. Biotech is binary and headline-driven — size <b>tiny</b> and know the catalyst dates.`,
-      catch: `A single trial result can gap a biotech 50% overnight — enormous risk. Only money you can fully lose; beginners should mostly just watch.`,
+      what: `The <b>Biotech Swing Engine</b> finds biotech runners and sorts them into opportunity lanes — post-catalyst continuation, pre-event run-up, catalyst-base breakout, buyable pullback, financing relief — while pulling <b>binary gambles, dilution traps, illiquid promotions and already-consumed moves</b> out of the actionable set.`,
+      read: `Use the view pills. The 0–100 is a <b>Research Priority</b> (attention ordering), <b>not</b> a probability. Each card shows an <b>action ceiling</b> (the highest action allowed after the severe-loss & dilution gates), a plan (entry/stop/targets/R:R), the verified catalyst + source link, and the capital-structure state. Benchmarked vs XBI.`,
+      act: `Trade only the <b>Actionable Now</b> lane, and only when the trigger is met. Pre-event names carry a mandatory <b>exit-before</b> date. Anything in <b>Binary Risk</b> or <b>Dilution / Avoid</b> is research, not a buy.`,
+      catch: `A single trial result can gap a biotech 50% overnight. The engine withholds probabilities until a frozen model passes prospective validation — treat everything here as a research lead, size tiny, and never hold an unresolved binary you can't afford to lose.`,
     },
     secondwave: {
       what: `Stocks that had a first move and may get a reflexive <b>second leg</b> as attention builds — catching early movers before the crowd piles in.`,
@@ -4250,56 +4250,154 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     FINANCING: ['💧', 'var(--red)', 'Financing / Dilution'], STEALTH: ['🕵️', 'var(--text)', 'Stealth (no news)'],
     NOISE: ['🌫️', 'var(--text-dim)', 'Noise'],
   };
+  // Archetype → [emoji, label] and the honest opportunity-lane grouping.
+  const BIO_ARCH = {
+    POST_CATALYST: ['🚀', 'Post-Catalyst Continuation'], POST_EVENT_PULLBACK: ['↩︎', 'Post-Event Pullback'],
+    CATALYST_BASE: ['🧱', 'Catalyst-Base Breakout'], FINANCING_RELIEF: ['💵', 'Financing-Overhang Relief'],
+    PRE_EVENT: ['📅', 'Pre-Event Run-Up'], SYMPATHY: ['🌊', 'Mechanistic Sympathy'],
+    BINARY_WATCH: ['⚠️', 'Binary / Special Situation'], UNCLASSIFIED: ['🌫️', 'Unclassified'],
+  };
   const bioTierColor = t => t === 'Hot' ? '#10b981' : t === 'Emerging' ? '#eab308' : 'var(--text-dim)';
+  // Action ceiling → colour. Green = clean/actionable, amber = wait/watch/review, red = avoid/binary/late.
+  const bioCeilColor = c => /PRIMARY|ACTIONABLE/.test(c) ? '#10b981'
+    : /^WAIT$|WATCH ONLY|NEEDS REVIEW/.test(c) ? '#eab308'
+    : /AVOID|BINARY|NON-EXEC|LATE|FINANCING/.test(c) ? '#ef4444' : 'var(--text-dim)';
+  // The 8 sub-views — client-side partitions of the single board (no silent disappearance).
+  const BIO_VIEWS = [
+    { key: 'actionable', label: '✅ Actionable Now', f: it => it.actionability === 'actionable' },
+    { key: 'waiting', label: '⏳ Waiting for Entry', f: it => it.actionability === 'waiting' },
+    { key: 'postcat', label: '🚀 Post-Catalyst', f: it => ['POST_CATALYST', 'POST_EVENT_PULLBACK', 'CATALYST_BASE', 'FINANCING_RELIEF'].includes(it.archetype) },
+    { key: 'preevent', label: '📅 Pre-Event Run-Ups', f: it => it.archetype === 'PRE_EVENT' },
+    { key: 'binary', label: '⚠️ Binary Risk', f: it => it.archetype === 'BINARY_WATCH' || it.actionability === 'binary' },
+    { key: 'dilution', label: '💧 Dilution / Avoid', f: it => it.actionability === 'avoid' || /AVOID|FINANCING/.test(it.actionCeiling || '') || ['PENDING_OFFERING', 'ACTIVE_ATM', 'SEVERE_DILUTION_RISK'].includes(it.capitalState) },
+    { key: 'lifecycle', label: '🧬 All / Prior Picks', f: () => true },
+    { key: 'scoreboard', label: '📊 Scoreboard', f: () => true },
+  ];
+  let _bioPayload = null, _bioView = 'actionable';
+  const bioFmt = v => v == null ? '—' : (+v).toFixed(2);
+
   function renderBiotech(p) {
     const el = document.getElementById('biotech-container');
     if (!el) return;
+    if (p) _bioPayload = p;
+    p = _bioPayload;
     if (!p || !p.ok || !(p.items || []).length) {
       const why = p && p.error ? ' — ' + esc(p.error) : (p && p.ok ? ' — no biotech runners on the latest tape' : '');
-      el.innerHTML = `<div class="mom-status error"><p>Biotech Radar is warming up${why}. It scans ~200 biotech names for early runners — try Refresh in a moment.</p></div>`;
+      el.innerHTML = `<div class="mom-status error"><p>The Biotech Swing Engine is warming up${why}. It scans the biotech universe for early runners, verifies catalyst + capital-structure evidence, and separates actionable setups from binary gambles — try Refresh in a moment.</p></div>`;
       return;
     }
     const gt = document.getElementById('biotech-gen-time');
     if (gt && p.generatedAt) gt.textContent = `· ${p.asOf ? 'as of ' + esc(p.asOf) + ' · ' : ''}updated ${p.ageMins != null && p.ageMins < 90 ? (p.ageMins + 'm ago') : new Date(p.generatedAt).toLocaleString()}`;
-    const dots = n => '●'.repeat(Math.max(0, Math.min(5, n))) + '○'.repeat(5 - Math.max(0, Math.min(5, n)));
-    const card = it => {
-      const [ce, cc, cl] = BIO_CLASS[it.classification] || BIO_CLASS.NOISE;
-      const { dim, feat, c: cal } = calibState('Biotech', it, it.tier === 'Hot');
-      const tc = bioTierColor(it.tier);
-      const move = `<span class="anom-move">+${it.pct5d}% / ${it.relVol}x vol${it.runAge != null ? ` · day ~${it.runAge}` : ''}${it.adrDaysConsumed != null ? ` · ${it.adrDaysConsumed} ADR-days` : ''}</span>`;
-      // Evidence + timing chips (Fable B1/B8): reaction-to-catalyst vs running-into-a-binary.
-      const evChip = it.evidence ? `<span class="bio-chip" title="Evidence grade">${it.evidence === 'Verified' ? '✅ Verified' : it.evidence === 'Inferred' ? '≈ Inferred' : '❔ Unconfirmed'}</span>` : '';
-      const tmChip = it.catalyst_timing === 'Ahead'
-        ? `<span class="bio-chip bio-warn" title="Running INTO a dated binary event — holding through it risks a large gap either way">⚠️ binary ahead</span>`
-        : it.catalyst_timing === 'Behind' ? `<span class="bio-chip" title="Reacting to a catalyst already out — no pending binary event">↩︎ reaction</span>` : '';
-      const subChip = it.subsector ? `<span class="bio-chip">${esc(it.subsector)}</span>` : '';
-      const dilChip = it.dilution_risk && it.dilution_risk !== 'None' ? `<span class="bio-chip${it.dilution_risk === 'High' ? ' bio-warn' : ''}" title="Dilution / offering risk">💧 ${esc(it.dilution_risk)} dilution risk</span>` : '';
-      // Trap-flag row (Fable B6).
-      const fl = it.flags || {};
-      const flags = [fl.dilutionHigh ? '💧 offering risk' : '', fl.serialSpiker ? '🔁 serial spike-fade' : '', fl.penny ? '💵 sub-$2' : '', fl.overextended ? '📛 overextended' : ''].filter(Boolean);
-      const flagRow = flags.length ? `<div class="bio-flags">${flags.map(f => `<span class="bio-flag">${f}</span>`).join('')}</div>` : '';
-      return `<div class="pulse-card${dim ? ' rt-dim' : ''}${feat ? ' calib-feat' : ''}">
-        <div class="pulse-top">
-          <span class="pulse-head"><b>$${esc(it.ticker)}</b> ${move}</span>
-          <span class="bio-score" style="color:${tc};border-color:${tc}" title="Biotech Radar score (0–100; 100 = highest conviction)">${it.score}<span class="bio-score-max">/100</span> · ${esc(it.tier)}</span>
-        </div>
-        ${priceBar(it.ticker)}
-        ${cal ? `<div class="pulse-calib">${calibBadge(cal)}</div>` : ''}
-        <div class="pulse-idea"><span style="color:${cc}">${ce} <b>${esc(cl)}</b></span> — ${esc(it.reason)}</div>
-        <div class="bio-chips">${evChip}${tmChip}${dilChip}${subChip}<span class="anom-conf" title="AI confidence">${dots(it.confidence)}</span></div>
-        ${it.thesis ? `<div class="pulse-why">${esc(it.thesis)}</div>` : ''}
-        ${it.bear_case ? `<div class="pulse-caution" style="border-left-color:#ef4444">🐻 <b>Bear:</b> ${esc(it.bear_case)}</div>` : ''}
-        ${it.caution ? `<div class="pulse-caution">⚠️ ${esc(it.caution)}</div>` : ''}
-        ${flagRow}
-      </div>`;
-    };
+
+    const view = BIO_VIEWS.find(v => v.key === _bioView) || BIO_VIEWS[0];
+    const pills = BIO_VIEWS.map(v => {
+      const n = v.key === 'scoreboard' ? '' : ` <span class="bio-pill-n">${(p.items || []).filter(v.f).length}</span>`;
+      return `<button class="bio-pill${v.key === _bioView ? ' active' : ''}" data-bioview="${v.key}">${v.label}${n}</button>`;
+    }).join('');
+
+    let body;
+    if (_bioView === 'scoreboard') body = bioScoreboard(p);
+    else {
+      const items = calibSort('Biotech', (p.items || []).filter(view.f));
+      body = items.length ? `<div class="pulse-grid">${items.map(bioCard).join('')}</div>`
+        : `<div class="anom-meta">No candidates in this lane on the latest tape.</div>`;
+    }
+
+    const cov = p.coverage || {};
     el.innerHTML = `
-      <div class="dt-note" style="border-left-color:#10b981"><b>🧬 Biotech Radar.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND} ${convictionLine('Biotech')}</div>
-      <div class="anom-meta">Scanned ~200 biotech names → ${p.detected != null ? p.detected + ' early runners' : ''}${p.regime ? ' · macro ' + esc(p.regime) : ''}${p.etfPct5d != null ? ' · XBI 5d ' + (p.etfPct5d > 0 ? '+' : '') + p.etfPct5d + '%' : ''} → scored + investigated ${(p.items || []).length}.</div>
-      <div class="pulse-grid">${calibSort('Biotech', p.items).map(card).join('')}</div>`;
+      <div class="dt-note" style="border-left-color:#10b981"><b>🧬 Biotech Swing Engine.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND} ${convictionLine('Biotech')}</div>
+      <div class="anom-meta">Universe ${p.universe ? p.universe.size + ' names' : '~200'}${cov.candleCoveragePct != null ? ' · ' + cov.candleCoveragePct + '% candle coverage' : ''}${cov.staleCandles ? ' · ' + cov.staleCandles + ' stale' : ''} · ${p.detected != null ? p.detected + ' early runners' : ''}${p.regime ? ' · XBI regime ' + esc(p.regime) : ''} · investigated ${p.investigated != null ? p.investigated : (p.items || []).length}${p.ai && p.ai.model ? ' (' + esc(p.ai.model) + ')' : ''}.</div>
+      <div class="bio-views">${pills}</div>
+      ${body}`;
+    el.querySelectorAll('[data-bioview]').forEach(b => b.onclick = () => { _bioView = b.dataset.bioview; renderBiotech(); });
     hydratePredictPrices(el);
     const rb = document.getElementById('biotech-refresh-btn');
     if (rb) rb.onclick = () => runBiotechUI(true);
+  }
+
+  // One rich, honest candidate card.
+  function bioCard(it) {
+    const dots = n => '●'.repeat(Math.max(0, Math.min(5, n || 0))) + '○'.repeat(5 - Math.max(0, Math.min(5, n || 0)));
+    const [ce, cc, cl] = BIO_CLASS[it.classification] || BIO_CLASS.NOISE;
+    const [ae, al] = BIO_ARCH[it.archetype] || BIO_ARCH.UNCLASSIFIED;
+    const { dim, feat, c: cal } = calibState('Biotech', it, it.tier === 'Hot');
+    const ceil = it.actionCeiling || 'WATCH ONLY';
+    const ceilCol = bioCeilColor(ceil);
+    const rp = it.researchPriority != null ? it.researchPriority : it.score;
+    const resid = it.features && it.features.residual5 != null ? ` · <span title="5-day return net of XBI">XBI-rel ${it.features.residual5 > 0 ? '+' : ''}${it.features.residual5}%</span>` : '';
+    const move = `<span class="anom-move">+${it.pct5d != null ? it.pct5d : '?'}% / ${it.relVol}x${resid}</span>`;
+    // Evidence + timing + capital chips.
+    const evChip = it.evidence ? `<span class="bio-chip" title="Evidence grade (Verified requires a cited primary source)">${it.evidence === 'Verified' ? '✅ Verified' : it.evidence === 'Inferred' ? '≈ Inferred' : '❔ Unconfirmed'}</span>` : '';
+    const tmChip = it.timing === 'Ahead' ? `<span class="bio-chip bio-warn" title="Running INTO a dated binary — gap risk either way">⚠️ binary ahead${it.daysToBinary != null ? ' ~' + it.daysToBinary + 'd' : ''}</span>`
+      : it.timing === 'Behind' ? `<span class="bio-chip" title="Reacting to a catalyst already out">↩︎ reaction</span>` : '';
+    const capChip = it.capitalState && it.capitalState !== 'UNKNOWN' ? `<span class="bio-chip${/PENDING|ATM|SEVERE/.test(it.capitalState) ? ' bio-warn' : ''}" title="Deterministic capital-structure state">${esc(it.capitalState.replace(/_/g, ' '))}</span>` : '';
+    const dilChip = it.dilutionRisk && it.dilutionRisk !== 'None' && it.dilutionRisk !== 'Unknown' ? `<span class="bio-chip${it.dilutionRisk === 'High' ? ' bio-warn' : ''}">💧 ${esc(it.dilutionRisk)} dilution</span>` : '';
+    const subChip = it.subsector ? `<span class="bio-chip">${esc(it.subsector)}</span>` : '';
+    const dq = it.dataQuality && it.dataQuality !== 'OK' ? `<span class="bio-chip bio-warn" title="Data-quality warning">⚠ data ${esc(it.dataQuality.toLowerCase())}</span>` : '';
+    // Executable plan block.
+    const pl = it.plan || {};
+    const planBlock = pl.planStatus && pl.planStatus !== 'no-plan' ? `<div class="bio-plan">
+        <span title="Entry style">${esc(pl.entryStyle || '')}</span> · Entry ${pl.trigger != null ? bioFmt(pl.trigger) : (pl.entryZone ? bioFmt(pl.entryZone[0]) + '–' + bioFmt(pl.entryZone[1]) : '—')}
+        ${pl.chaseCeiling != null ? ` · chase ≤ ${bioFmt(pl.chaseCeiling)}` : ''} · Stop ${bioFmt(pl.stop)} · T1 ${bioFmt(pl.target1)} / T2 ${bioFmt(pl.target2)} · R:R ${pl.rewardRisk != null ? pl.rewardRisk : '—'}
+        · hold ~${pl.expectedHoldingSessions}d${pl.exitBeforeDate ? ` · <b style="color:#ef4444">exit before ${esc(pl.exitBeforeDate)}</b>` : ''}${pl.costEstimate != null ? ` · cost ~${pl.costEstimate}%` : ''}
+      </div>` : `<div class="bio-plan bio-dim">${esc((pl.reason) || 'no executable plan for this lane')}</div>`;
+    const severe = it.severeLossRisk === 'High' ? `<div class="pulse-caution" style="border-left-color:#ef4444">🛑 <b>Severe-loss risk:</b> ${esc((it.severeLossReasons || []).join(', ') || 'elevated')}</div>` : '';
+    const reason = it.actionCeilingReasons && it.actionCeilingReasons.length ? `<div class="bio-dim" style="font-size:12px">${esc(it.actionCeilingReasons[0])}</div>` : '';
+    // Verified source link (first primary source with a url).
+    const ev = it.event || {};
+    const src = (ev.sources || []).find(s => s.primary && s.url);
+    const srcLink = src ? ` <a href="${esc(src.url)}" target="_blank" rel="noopener" class="bio-src">source ↗</a>` : '';
+    const evDate = ev.actualDate ? ` · ${esc(ev.actualDate)}` : ev.expectedDate ? ` · exp ${esc(ev.expectedDate)}` : '';
+    // Expandable evidence panel.
+    const evidence = `<details class="bio-evi"><summary>evidence & lifecycle</summary>
+        <div class="bio-evi-body">
+          ${it.thesis ? `<div>💡 ${esc(it.thesis)}</div>` : ''}
+          ${it.bear_case ? `<div style="color:#ef4444">🐻 ${esc(it.bear_case)}</div>` : ''}
+          ${it.caution ? `<div>⚠️ ${esc(it.caution)}</div>` : ''}
+          ${(it.capitalEvidence || []).length ? `<div>🏦 ${esc((it.capitalEvidence || []).join('; '))}</div>` : ''}
+          ${(ev.sources || []).length ? `<div>📎 ${(ev.sources || []).map(s => s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.sourceType)}</a>` : esc(s.title || s.sourceType)).join(' · ')}</div>` : ''}
+          ${it.citations && it.citations.length ? `<div class="bio-dim">cited: ${esc(it.citations.join(', '))}${it.groundedPrimary ? ' (primary-grounded)' : ''}</div>` : ''}
+          <div class="bio-dim">scores — setup ${it.setupScore} · catalyst-evidence ${it.catalystEvidenceScore} · scientific ${it.scientificQualityScore} · capital ${it.capitalStructureScore} · execution ${it.executionScore}</div>
+        </div></details>`;
+    return `<div class="pulse-card${dim ? ' rt-dim' : ''}${feat ? ' calib-feat' : ''}">
+      <div class="pulse-top">
+        <span class="pulse-head"><b>$${esc(it.ticker)}</b> ${move}</span>
+        <span class="bio-score" style="color:${bioTierColor(it.tier)};border-color:${bioTierColor(it.tier)}" title="Research Priority (0–100 attention ordering — NOT a probability)">${rp}<span class="bio-score-max">/100</span></span>
+      </div>
+      <div class="bio-chips">
+        <span class="bio-arch" title="Opportunity lane">${ae} ${esc(al)}</span>
+        <span class="bio-ceil" style="color:${ceilCol};border-color:${ceilCol}" title="Highest action allowed after the severe-loss & dilution gates">${esc(ceil)}</span>
+      </div>
+      ${priceBar(it.ticker)}
+      ${cal ? `<div class="pulse-calib">${calibBadge(cal)}</div>` : ''}
+      ${planBlock}
+      <div class="pulse-idea"><span style="color:${cc}">${ce} <b>${esc(cl)}</b></span>${evDate} — ${esc(it.thesis || (it.reasons && it.reasons[0]) || '')}${srcLink}</div>
+      <div class="bio-chips">${evChip}${tmChip}${capChip}${dilChip}${subChip}${dq}<span class="anom-conf" title="AI confidence">${dots(it.confidence)}</span></div>
+      ${severe}
+      ${reason}
+      ${evidence}
+    </div>`;
+  }
+
+  // Research Scoreboard sub-view — honest attention distribution + the validation gate status.
+  function bioScoreboard(p) {
+    const items = p.items || [];
+    const byArch = {};
+    for (const it of items) { const a = it.archetype || 'UNCLASSIFIED'; (byArch[a] = byArch[a] || []).push(it); }
+    const rows = Object.keys(byArch).sort((a, b) => byArch[b].length - byArch[a].length).map(a => {
+      const [ae, al] = BIO_ARCH[a] || BIO_ARCH.UNCLASSIFIED;
+      const n = byArch[a].length;
+      const actionable = byArch[a].filter(x => x.actionability === 'actionable').length;
+      return `<tr><td>${ae} ${esc(al)}</td><td style="text-align:right">${n}</td><td style="text-align:right">${actionable}</td></tr>`;
+    }).join('');
+    const ceilCounts = {};
+    for (const it of items) { const c = it.actionCeiling || 'WATCH ONLY'; ceilCounts[c] = (ceilCounts[c] || 0) + 1; }
+    const ceilRow = Object.keys(ceilCounts).map(c => `<span class="bio-chip" style="border-color:${bioCeilColor(c)}">${esc(c)} ${ceilCounts[c]}</span>`).join(' ');
+    return `<div class="bio-scoreboard">
+      <div class="anom-meta">${convictionLine('Biotech')} The Research-Priority number orders attention; it is <b>not</b> a probability. Prospective outcome grading (next-open, XBI-relative, 3/5/10/21 sessions, per archetype) accrues in the ledger and is <b>shadow-only</b> — it changes no live weight until the pre-registered validation gate (≥150 resolved episodes, ≥60 independent dates, per-archetype coverage, CI excluding zero vs the price/volume baseline) is cleared.</div>
+      <table class="bio-table"><thead><tr><th>Opportunity lane</th><th style="text-align:right">candidates</th><th style="text-align:right">actionable</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="bio-chips" style="margin-top:8px">Action ceilings: ${ceilRow}</div>
+    </div>`;
   }
 
   // ── 🌊 SECOND WAVE — first-leg movers the crowd hasn't piled into yet; an AI forecasts

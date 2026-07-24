@@ -2394,6 +2394,26 @@
 .bio-chip.bio-warn { color: #ef4444; background: rgba(239,68,68,.12); font-weight: 700; }
 .bio-flags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
 .bio-flag { font-size: .7rem; color: #f59e0b; background: rgba(245,158,11,.12); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
+/* Biotech Swing Engine — sub-view pills, archetype/ceiling chips, plan block, evidence panel. */
+.bio-views { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 12px; }
+.bio-pill { font-size: .74rem; font-weight: 600; color: var(--text-dim); background: var(--surface-2, rgba(127,127,127,.1)); border: 1px solid transparent; border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+.bio-pill:hover { color: var(--text); }
+.bio-pill.active { color: #10b981; border-color: #10b981; background: rgba(16,185,129,.1); }
+.bio-pill-n { font-size: .68rem; opacity: .7; margin-left: 2px; }
+.bio-arch { font-size: .74rem; font-weight: 700; color: var(--text); background: rgba(16,185,129,.1); border-radius: 5px; padding: 1px 7px; white-space: nowrap; }
+.bio-ceil { font-size: .72rem; font-weight: 800; border: 1px solid; border-radius: 5px; padding: 1px 7px; white-space: nowrap; }
+.bio-plan { font-size: .76rem; font-family: var(--mono, ui-monospace, monospace); color: var(--text); background: var(--surface-2, rgba(127,127,127,.08)); border-radius: 6px; padding: 5px 8px; margin: 6px 0; line-height: 1.5; }
+.bio-plan.bio-dim, .bio-dim { color: var(--text-dim); }
+.bio-src { color: #10b981; font-size: .72rem; text-decoration: none; }
+.bio-src:hover { text-decoration: underline; }
+.bio-evi { margin-top: 7px; }
+.bio-evi summary { font-size: .72rem; color: var(--text-dim); cursor: pointer; }
+.bio-evi-body { font-size: .74rem; line-height: 1.55; margin-top: 5px; display: flex; flex-direction: column; gap: 3px; }
+.bio-evi-body a { color: #10b981; text-decoration: none; }
+.bio-table { width: 100%; border-collapse: collapse; font-size: .8rem; margin-top: 8px; }
+.bio-table th, .bio-table td { padding: 4px 8px; border-bottom: 1px solid var(--border, rgba(127,127,127,.15)); }
+.bio-table th { color: var(--text-dim); font-weight: 600; text-align: left; }
+.bio-scoreboard { margin-top: 4px; }
 
 /* 🌊 Second Wave — reuses .pulse-card/.pulse-grid; sky accent */
 #secondwave .pulse-card { border-left-color: #0ea5e9; }
