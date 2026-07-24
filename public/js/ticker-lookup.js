@@ -12,6 +12,7 @@
 // The grade + chart itself is delegated to the app's shared renderChart so the
 // verdict here always matches what every card in the app shows.
 import { esc } from './format.js';
+import { fetchJSON } from './fetch-json.js';
 
 // ── Three-horizon read (intraday / swing / long-term) ───────────────────────
 // Each horizon is INDEPENDENT (see lib/signal.js, lib/swingread.js, lib/longterm.js)
@@ -470,8 +471,7 @@ async function loadWhyNow(ticker) {
   const T = ticker.toUpperCase();
   whynow = { ticker: T, data: undefined };
   try {
-    const r = await fetch('/api/tracker?op=whynow&ticker=' + encodeURIComponent(T));
-    const j = r.ok ? await r.json() : null;
+    const j = await fetchJSON('/api/tracker?op=whynow&ticker=' + encodeURIComponent(T));
     if (curTicker !== T) return;   // user moved on
     whynow.data = j && j.ok ? j : null;
   } catch { if (curTicker === T) whynow.data = null; }
@@ -493,8 +493,8 @@ async function loadExtras(ticker) {
   const T = ticker.toUpperCase();
   extras = { ticker: T, options: undefined, social: undefined };
   const [opt, soc] = await Promise.allSettled([
-    fetch('/api/tracker?op=optionsflow').then(r => (r.ok ? r.json() : null)),
-    fetch('/api/tracker?op=alerts').then(r => (r.ok ? r.json() : null)),
+    fetchJSON('/api/tracker?op=optionsflow'),
+    fetchJSON('/api/tracker?op=alerts'),
   ]);
   if (curTicker !== T) return;   // user moved on before both resolved
   extras.options = opt.status === 'fulfilled' && opt.value && Array.isArray(opt.value.signals)

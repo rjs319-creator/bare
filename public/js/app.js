@@ -1,4 +1,5 @@
   import { esc, fmtMoney, timeAgo } from './format.js';
+  import { fetchJSON } from './fetch-json.js';
   import { startLivePrices as startScreenerLive, stopLivePrices as stopScreenerLive, LIVE_SCREENERS } from './live-price.js';
   import { startFlowBadges, setFlowNav, FLOW_BADGE_TABS } from './flow-badge.js';
   import { initCommandPalette, openPalette, revealTicker } from './command-palette.js';
@@ -993,8 +994,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     optionsRefreshBtn.disabled = true;
     optionsContainer.innerHTML = skeletonGrid(4);
     try {
-      const res = await fetch('/api/tracker?op=optionsflow' + (refresh ? '&refresh=1' : ''));
-      const data = await res.json();
+      const data = await fetchJSON('/api/tracker?op=optionsflow' + (refresh ? '&refresh=1' : ''));
       if (!data.ok) { showOptionsError(data.error || 'No options flow available right now.'); return; }
       optionsFlowAll = data.signals || [];
       ofBaseline = {};
@@ -6905,7 +6905,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     ['scoreboard', '🏅 Account Scoreboard', ''],
   ];
   let xaView = (() => { try { return localStorage.getItem('xaView') || 'confirmations'; } catch { return 'confirmations'; } })();
-  const XALERTS_FETCH_TIMEOUT_MS = 20000;   // a stalled/cold-start read must fail-fast, not hang forever
   function ensureXalerts() { if (!xalertsLoaded) { xalertsLoaded = true; fetchXalerts(); } }
   let xalertsFlashTimer = null;
   async function fetchXalerts() {
@@ -6914,14 +6913,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (xalertsFlashTimer) { clearTimeout(xalertsFlashTimer); xalertsFlashTimer = null; }
     if (btn) { btn.disabled = true; btn.textContent = '⟳ Refreshing…'; btn.style.color = '#8a6dff'; }
     let ok = true;
-    // A bare fetch() never times out: a stalled request neither resolves nor rejects, so the
-    // loading skeleton would sit up forever. Abort after a bound so it lands in catch → Retry.
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), XALERTS_FETCH_TIMEOUT_MS);
+    // fetchJSON aborts a stalled/cold-start read after a bound, so it lands in catch → Retry
+    // instead of leaving the loading skeleton up forever.
     try {
-      const res = await fetch('/api/tracker?op=alerts', { signal: ctrl.signal });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      xalertsData = await res.json();
+      xalertsData = await fetchJSON('/api/tracker?op=alerts');
       renderXalerts(xalertsData);
     }
     catch {
@@ -6930,7 +6925,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (c) c.innerHTML = '<div class="mom-status error"><p>Could not load trade alerts — the request timed out or failed. Tap Retry.</p></div>';
     }
     finally {
-      clearTimeout(timer);
       if (btn) {
         btn.disabled = false;
         btn.textContent = ok ? '✓ Refreshed' : '⚠ Retry';

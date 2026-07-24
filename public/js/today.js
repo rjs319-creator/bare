@@ -5,6 +5,7 @@
 // events, and data-freshness. The engine lives in lib/decision.js (server) — this
 // module only renders, so there is no client/server scoring skew.
 import { esc } from './format.js';
+import { fetchJSON } from './fetch-json.js';
 
 const HORIZONS = [
   ['intraday', '⚡ Intraday', 'gaps · momentum · VWAP/ORB — same-session'],
@@ -480,9 +481,9 @@ export async function loadCommandCenter(container) {
   // 2) Fetch fresh in the background; swap in when it arrives.
   let p = null, mat = null, chal = null;
   try { [p, mat, chal] = await Promise.all([
-    fetch('/api/tracker?op=today').then(r => r.json()),
-    fetch('/api/tracker?op=maturity').then(r => r.json()).catch(() => null),
-    fetch('/api/tracker?op=challenger').then(r => r.json()).catch(() => null), // shadow — optional
+    fetchJSON('/api/tracker?op=today'),
+    fetchJSON('/api/tracker?op=maturity').catch(() => null),
+    fetchJSON('/api/tracker?op=challenger').catch(() => null), // shadow — optional
   ]); } catch { p = null; }
 
   if (p && p.ok) {
