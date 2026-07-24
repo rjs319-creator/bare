@@ -473,7 +473,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     };
     render();
     if (!_tapeCache || Date.now() - _tapeAt > 5 * 60 * 1000) {
-      try { const r = await fetch('/api/tracker?op=tape'); _tapeCache = await r.json(); _tapeAt = Date.now(); render(); } catch {}
+      try { _tapeCache = await fetchJSON('/api/tracker?op=tape'); _tapeAt = Date.now(); render(); } catch {}
     }
   }
 
@@ -5163,14 +5163,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading the event engine…</p></div>`;
     try {
       // State + decay curves (excess-vs-market by day, per event type) in parallel.
-      const [r, dr] = await Promise.all([
-        fetch('/api/tracker?op=cern'),
-        fetch('/api/tracker?op=cerndecay').catch(() => null),
+      const [d, decay] = await Promise.all([
+        fetchJSON('/api/tracker?op=cern'),
+        fetchJSON('/api/tracker?op=cerndecay').catch(() => null),
       ]);
-      const d = await r.json();
       if (!d.ok) { el.innerHTML = `<div class="mom-status error"><p>${esc(d.error || 'CERN unavailable')}</p></div>`; return; }
-      let decay = null;
-      try { decay = dr ? await dr.json() : null; } catch { decay = null; }
       renderCern(d, decay);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the event engine.</p></div>`; }
   }
@@ -6034,9 +6031,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       for (let i = 0; i < tickers.length; i += 12) {
         const chunk = tickers.slice(i, i + 12);
         try {
-          const res = await fetch('/api/price?tickers=' + encodeURIComponent(chunk.join(',')));
-          if (!res.ok) continue;
-          const d = await res.json();
+          const d = await fetchJSON('/api/price?tickers=' + encodeURIComponent(chunk.join(',')));
           if (d && !d.error) Object.assign(data, d);
         } catch { /* skip this chunk, keep the rest */ }
       }
@@ -6409,9 +6404,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const data = {};
     for (let i = 0; i < tickers.length; i += 12) {
       try {
-        const res = await fetch('/api/price?tickers=' + encodeURIComponent(tickers.slice(i, i + 12).join(',')));
-        if (!res.ok) continue;
-        const d = await res.json();
+        const d = await fetchJSON('/api/price?tickers=' + encodeURIComponent(tickers.slice(i, i + 12).join(',')));
         if (d && !d.error) Object.assign(data, d);
       } catch { /* skip this chunk, keep the rest */ }
     }
@@ -8032,9 +8025,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   async function updateLivePrices(tickers) {
     try {
-      const res = await fetch('/api/price?tickers=' + encodeURIComponent(tickers.join(',')));
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await fetchJSON('/api/price?tickers=' + encodeURIComponent(tickers.join(',')));
       document.querySelectorAll('.alert-card[data-ticker]').forEach(card => {
         const q = data[card.dataset.ticker];
         if (!q) return;
@@ -8105,8 +8096,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // show a one-tap refresh bar. No build-time asset versioning required.
   (function autoUpdate() {
     let bootVersion = null, dismissedVersion = null;
-    const fetchVersion = () => fetch('/api/tracker?op=version', { cache: 'no-store' })
-      .then(r => (r.ok ? r.json() : null)).then(d => d && d.version).catch(() => null);
+    const fetchVersion = () => fetchJSON('/api/tracker?op=version', { cache: 'no-store' })
+      .then(d => d && d.version).catch(() => null);
     const showBar = (v) => {
       if (document.getElementById('update-bar')) return;
       const bar = document.createElement('div');
