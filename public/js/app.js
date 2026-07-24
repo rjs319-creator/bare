@@ -6095,8 +6095,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // + valid thesis + valid plan). A stale prior-session mover can NEVER appear here.
     const best = (t.bestOpportunities || []);
     const lanes = t.lanes || {};
-    const bestCard = o => `<div class="dt-best-card" data-ticker="${esc(o.ticker)}" data-stop="${o.orb ? o.orb.stop : (o.stop != null ? o.stop : '')}" data-actionable="1" style="border-color:#22c55e55">
-        <div class="dt-best-top"><span class="dt-best-rank">#${o.rank}</span> ${lifeBadge(o)} ${carryBadge(o)} <b>${esc(o.ticker)}</b> <span class="dt-relscore" title="Within-pool relative-strength percentile (0–100) — ordering, NOT a probability">${o.relScore}</span> <span class="dt-sec">${esc(o.source)}${o.tier === 'B' ? ' · B' : ''}</span></div>
+    const bestCard = (o, i) => `<div class="dt-best-card" data-ticker="${esc(o.ticker)}" data-stop="${o.orb ? o.orb.stop : (o.stop != null ? o.stop : '')}" data-actionable="1" style="border-color:#22c55e55">
+        <div class="dt-best-top"><span class="dt-best-rank">#${o.rank ?? (i + 1)}</span> ${lifeBadge(o)} ${carryBadge(o)} <b>${esc(o.ticker)}</b> <span class="dt-relscore" title="Within-pool relative-strength percentile (0–100) — ordering, NOT a probability">${o.relScore}</span> <span class="dt-sec">${esc(o.source)}${o.tier === 'B' ? ' · B' : ''}</span></div>
         <div class="dt-card-sub"><span data-dt-daychg>${o.pctChange >= 0 ? '+' : ''}${o.pctChange}%</span> today · RVOL ${o.relVol}×${rvMark} · <span class="dt-dim">${esc(o.why)}</span></div>
         ${freshLine(o)}
         ${o.orb ? `<div class="dt-card-plan">📈 <b>ORB</b> break &gt;<b>$${o.orb.trigger}</b> · 🛑 <b>$${o.orb.stop}</b> · 🏁 <b>$${o.orb.target}</b> <span class="dt-dim">1:${o.orb.rr}</span></div>` : (o.stop ? `<div class="dt-card-plan">🛑 <b>$${o.stop}</b> · 🏁 <b>$${o.target}</b>${o.rr != null ? ` <span class="dt-dim">1:${o.rr}</span>` : ''}</div>` : '')}
