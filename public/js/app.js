@@ -517,7 +517,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   // ── System health banner — surfaces stale data or a failed daily cron run ──
   async function checkHealth() {
-    let d; try { d = await fetch('/api/tracker?op=health').then(r => r.json()); } catch { return; }
+    let d; try { d = await fetchJSON('/api/tracker?op=health'); } catch { return; }
     if (!d || !d.ok) return;
     const warns = [];
     if (d.data && d.data.stale) warns.push(`⚠️ Market data is ${d.data.ageDays}d stale (last EOD ${esc(d.data.spyDate || '—')}) — prices may be behind.`);
@@ -936,7 +936,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function ensureToneMap(onLoad) {
     if (toneLoaded) return;
     toneLoaded = true;
-    fetch('/api/tracker?op=tone').then(r => r.json()).then(d => {
+    fetchJSON('/api/tracker?op=tone').then(d => {
       if (d && d.byTicker) { toneMap = d.byTicker; if (typeof onLoad === 'function') onLoad(); }
     }).catch(() => {});
   }
@@ -954,7 +954,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function ensureAttnMap(onLoad) {
     if (attnLoaded) return;
     attnLoaded = true;
-    fetch('/api/tracker?op=attention').then(r => r.json()).then(d => {
+    fetchJSON('/api/tracker?op=attention').then(d => {
       if (d && d.byTicker) { attnMap = d.byTicker; if (typeof onLoad === 'function') onLoad(); }
     }).catch(() => {});
   }
@@ -1164,9 +1164,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     ofConfLoaded = true;
     try {
       const [scr, dt, coil] = await Promise.all([
-        fetch('/api/screener?scope=large').then(r => r.json()).catch(() => null),
-        fetch('/api/tracker?op=daytrade').then(r => r.json()).catch(() => null),
-        fetch('/api/tracker?op=coil&scope=large&limit=24').then(r => r.json()).catch(() => null),
+        fetchJSON('/api/screener?scope=large').catch(() => null),
+        fetchJSON('/api/tracker?op=daytrade').catch(() => null),
+        fetchJSON('/api/tracker?op=coil&scope=large&limit=24').catch(() => null),
       ]);
       ofConfluence = buildConfluence(scr, dt, coil);
       if (document.getElementById('of-grid')) applyOptionsView(); // re-decorate now that the join is ready
@@ -1391,7 +1391,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   async function loadIncomeView() {
     const el = document.getElementById('of-income'); if (!el) return;
     try {
-      const t = await fetch('/api/tracker?op=putsell').then(r => r.json());
+      const t = await fetchJSON('/api/tracker?op=putsell');
       renderPutSell(t, 'of-income');
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load income &amp; entry setups.</p></div>`; }
   }
@@ -1575,7 +1575,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   async function loadOptionsPerf() {
     const el = document.getElementById('of-perf'); if (!el) return;
     try {
-      const p = await fetch('/api/tracker?op=optionsperf').then(r => r.json());
+      const p = await fetchJSON('/api/tracker?op=optionsperf');
       if (!p || !p.ok) return;
       if (!p.logged) { el.innerHTML = `<div class="rot-head">📊 Options Signal Track Record</div><div class="dt-note">Gathering data — flow signals are logged daily; their forward 1-week / 1-month returns on the underlying fill in over the coming weeks. By design it won't claim an edge on a thin sample.</div>`; return; }
       const row = (lbl, h) => (h && h.n) ? `<div class="bt-ic-row"><span>${lbl}</span><span>${h.winRate}% win · ${h.avgReturnPct > 0 ? '+' : ''}${h.avgReturnPct}% avg · n=${h.n}</span></div>` : '';
@@ -2476,7 +2476,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading daily &amp; weekly rotation…</p></div>`;
     try {
-      const d = await fetch('/api/sectors?mode=rotation').then(r => r.json());
+      const d = await fetchJSON('/api/sectors?mode=rotation');
       renderRotationDW(d);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load rotation trends.</p></div>`; }
   }
@@ -3606,8 +3606,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Reading today's market…</p></div>`;
     try {
       const [tape, dt] = await Promise.all([
-        fetch('/api/tracker?op=tape').then(r => r.json()).catch(() => null),
-        fetch('/api/tracker?op=daytrade').then(r => r.json()).catch(() => null),
+        fetchJSON('/api/tracker?op=tape').catch(() => null),
+        fetchJSON('/api/tracker?op=daytrade').catch(() => null),
       ]);
       renderToday(tape, dt);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Today.</p></div>`; }
@@ -3755,7 +3755,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Re-scanning' : 'Scanning'} X · StockTwits · Reddit · finance YouTube… <span class="dt-dim">(can take ~20s)</span></p></div>`;
     try {
-      const p = await fetch('/api/tracker?op=pulse' + (force ? '&force=1' : '')).then(r => r.json());
+      const p = await fetchJSON('/api/tracker?op=pulse' + (force ? '&force=1' : ''));
       renderPulse(p);
       // STAGE 2: if we got the Haiku draft (not yet Fable-refined), upgrade it in the
       // background — the draft is already useful, and Fable sharpens the read a few sec later.
@@ -3768,7 +3768,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const chip = document.getElementById('pulse-refine-chip');
     if (chip) chip.innerHTML = `<span class="pulse-refining">🧠 Fable is sharpening the read…</span>`;
     try {
-      const p = await fetch('/api/tracker?op=pulserefine' + (force ? '&force=1' : '')).then(r => r.json());
+      const p = await fetchJSON('/api/tracker?op=pulserefine' + (force ? '&force=1' : ''));
       if (p && p.ok && p.stage === 'refined') renderPulse(p);
       else if (chip) chip.innerHTML = '';   // refine failed → keep the draft, drop the chip
     } catch { const c = document.getElementById('pulse-refine-chip'); if (c) c.innerHTML = ''; }
@@ -3981,8 +3981,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   async function loadCalibration() {
     if (_calib) return _calib;
     if (!_calibPromise) {
-      _calibPromise = fetch('/api/tracker?op=calibration')
-        .then(r => r.json())
+      _calibPromise = fetchJSON('/api/tracker?op=calibration')
         .then(j => (_calib = (j && j.sections) ? j : { sections: {}, minResolved: 15 }))
         .catch(() => (_calib = { sections: {}, minResolved: 15 }));
     }
@@ -4093,7 +4092,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     for (let i = 0; i < tickers.length; i += 12) {           // /api/price caps at 12/call
       const chunk = tickers.slice(i, i + 12);
       try {
-        const d = await fetch('/api/price?spark=1&tickers=' + encodeURIComponent(chunk.join(','))).then(r => r.json());
+        const d = await fetchJSON('/api/price?spark=1&tickers=' + encodeURIComponent(chunk.join(',')));
         if (d && !d.error) Object.assign(quotes, d);
       } catch { /* offline / rate-limited — leave the card without a live price */ }
     }
@@ -4112,9 +4111,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     try {
       // Two-stage: a manual Refresh first regenerates the raw Fable graph (Stage 1, slow),
       // then re-enriches (Stage 2). A normal open just hits the fast serve/enrich path.
-      if (force) await fetch('/api/tracker?op=readthroughtick').then(r => r.json()).catch(() => {});
+      if (force) await fetchJSON('/api/tracker?op=readthroughtick').catch(() => {});
       const [p] = await Promise.all([
-        fetch('/api/tracker?op=readthrough' + (force ? '&force=1' : '')).then(r => r.json()),
+        fetchJSON('/api/tracker?op=readthrough' + (force ? '&force=1' : '')),
         loadCalibration(),
       ]);
       renderReadThrough(p);
@@ -4179,8 +4178,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Re-scanning for unexplained movers & investigating… <span class="dt-dim">(the AI web-searches each — ~50s)</span>' : 'Loading the anomaly scan…'}</p></div>`;
     try {
-      if (force) await fetch('/api/tracker?op=anomalytick').then(r => r.json()).catch(() => {});
-      const [p] = await Promise.all([fetch('/api/tracker?op=anomaly').then(r => r.json()), loadCalibration()]);
+      if (force) await fetchJSON('/api/tracker?op=anomalytick').catch(() => {});
+      const [p] = await Promise.all([fetchJSON('/api/tracker?op=anomaly'), loadCalibration()]);
       renderAnomaly(p);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the Stealth scan.</p></div>`; }
   }
@@ -4234,8 +4233,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Re-scanning biotech for early runners & investigating each… <span class="dt-dim">(the AI web-searches each — ~50s)</span>' : 'Loading the biotech scan…'}</p></div>`;
     try {
-      if (force) await fetch('/api/tracker?op=biotechtick').then(r => r.json()).catch(() => {});
-      const [p] = await Promise.all([fetch('/api/tracker?op=biotech').then(r => r.json()), loadCalibration()]);
+      if (force) await fetchJSON('/api/tracker?op=biotechtick').catch(() => {});
+      const [p] = await Promise.all([fetchJSON('/api/tracker?op=biotech'), loadCalibration()]);
       renderBiotech(p);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the Biotech Radar.</p></div>`; }
   }
@@ -4309,8 +4308,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Re-scanning first-leg movers & forecasting second waves… <span class="dt-dim">(the AI gauges the crowd — ~50s)</span>' : 'Loading the second-wave scan…'}</p></div>`;
     try {
-      if (force) await fetch('/api/tracker?op=secondwavetick').then(r => r.json()).catch(() => {});
-      const [p] = await Promise.all([fetch('/api/tracker?op=secondwave').then(r => r.json()), loadCalibration()]);
+      if (force) await fetchJSON('/api/tracker?op=secondwavetick').catch(() => {});
+      const [p] = await Promise.all([fetchJSON('/api/tracker?op=secondwave'), loadCalibration()]);
       renderSecondWave(p);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the Second Wave scan.</p></div>`; }
   }
@@ -4364,8 +4363,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Sweeping commodities, overnight markets, crypto & rates… <span class="dt-dim">(~45s)</span>' : 'Loading the cross-asset scan…'}</p></div>`;
     try {
-      if (force) await fetch('/api/tracker?op=crossassettick').then(r => r.json()).catch(() => {});
-      const [p] = await Promise.all([fetch('/api/tracker?op=crossasset').then(r => r.json()), loadCalibration()]);
+      if (force) await fetchJSON('/api/tracker?op=crossassettick').catch(() => {});
+      const [p] = await Promise.all([fetchJSON('/api/tracker?op=crossasset'), loadCalibration()]);
       renderCrossAsset(p);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the Cross-Asset scan.</p></div>`; }
   }
@@ -4416,8 +4415,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Comparing recent calls to last quarter’s tone… <span class="dt-dim">(~45s)</span>' : 'Loading the tone-shift scan…'}</p></div>`;
     try {
-      if (force) await fetch('/api/tracker?op=toneshifttick').then(r => r.json()).catch(() => {});
-      const [p] = await Promise.all([fetch('/api/tracker?op=toneshift').then(r => r.json()), loadCalibration()]);
+      if (force) await fetchJSON('/api/tracker?op=toneshifttick').catch(() => {});
+      const [p] = await Promise.all([fetchJSON('/api/tracker?op=toneshift'), loadCalibration()]);
       renderToneShift(p);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the Tone Shift scan.</p></div>`; }
   }
@@ -4467,7 +4466,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const el = document.getElementById('gameplan-container'); if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${refresh ? 'Rebuilding today’s game plan from the latest headlines… (this can take ~30s)' : 'Loading today’s game plan…'}</p></div>`;
     try {
-      const g = await fetch(`/api/tracker?op=gameplan${refresh ? '&refresh=1' : ''}`).then(r => r.json()).catch(() => null);
+      const g = await fetchJSON(`/api/tracker?op=gameplan${refresh ? '&refresh=1' : ''}`).catch(() => null);
       if (!g || !g.ok) { el.innerHTML = `<div class="mom-status error"><p>Could not build the game plan${g && g.error ? ' — ' + esc(g.error) : ''}.</p><button class="dt-btn" id="gp-retry">Try rebuild</button></div>`; const b = document.getElementById('gp-retry'); if (b) b.onclick = () => runGamePlanUI(true); return; }
       renderGamePlan(g);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the game plan.</p></div>`; }
@@ -4531,7 +4530,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const el = document.getElementById('brief-container'); if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Synthesizing forecasts, the crowd &amp; sharp money…</p></div>`;
     try {
-      const b = await fetch('/api/tracker?op=brief').then(r => r.json()).catch(() => null);
+      const b = await fetchJSON('/api/tracker?op=brief').catch(() => null);
       if (!b || !b.ok) { el.innerHTML = `<div class="mom-status error"><p>Could not build the brief.</p></div>`; return; }
       renderBrief(b);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not build the brief.</p></div>`; }
@@ -4600,8 +4599,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading forecasts &amp; the auto-graded track record…</p></div>`;
     try {
       const [pred, tape] = await Promise.all([
-        fetch('/api/tracker?op=predict').then(r => r.json()).catch(() => null),
-        fetch('/api/tracker?op=tape').then(r => r.json()).catch(() => null),
+        fetchJSON('/api/tracker?op=predict').catch(() => null),
+        fetchJSON('/api/tracker?op=tape').catch(() => null),
       ]);
       renderForecast(pred, tape);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load forecasts.</p></div>`; }
@@ -4688,7 +4687,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const el = document.getElementById('crowd-container'); if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning Kalshi &amp; Polymarket for unusual activity…</p></div>`;
     try {
-      const d = await fetch('/api/tracker?op=crowd').then(r => r.json()).catch(() => null);
+      const d = await fetchJSON('/api/tracker?op=crowd').catch(() => null);
       renderCrowd(d);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load prediction-market data.</p></div>`; }
   }
@@ -4750,7 +4749,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const el = document.getElementById('sharp-container'); if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning for size + conviction fingerprints…</p></div>`;
     try {
-      const d = await fetch('/api/tracker?op=crowd').then(r => r.json()).catch(() => null);
+      const d = await fetchJSON('/api/tracker?op=crowd').catch(() => null);
       renderSharp(d);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load prediction-market data.</p></div>`; }
   }
@@ -4841,7 +4840,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     else if (sb && sb.querySelector('.nav-badge')) sb.querySelector('.nav-badge').style.display = unread > 0 ? '' : 'none';
   }
   async function fetchAlerts() {
-    try { const d = await fetch('/api/tracker?op=alertfeed').then(r => r.json()); if (d && d.ok) alertItems = d.items || []; } catch {}
+    try { const d = await fetchJSON('/api/tracker?op=alertfeed'); if (d && d.ok) alertItems = d.items || []; } catch {}
     return alertItems;
   }
   function maybeNotify(items) {
@@ -5349,9 +5348,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading the Edge Book…</p></div>`;
     try {
       const [book, scr, cern] = await Promise.all([
-        fetch('/api/tracker?op=edgebook').then(r => r.json()).catch(() => null),
-        fetch('/api/screener?scope=large').then(r => r.json()).catch(() => null),
-        fetch('/api/tracker?op=cern').then(r => r.json()).catch(() => null),
+        fetchJSON('/api/tracker?op=edgebook').catch(() => null),
+        fetchJSON('/api/screener?scope=large').catch(() => null),
+        fetchJSON('/api/tracker?op=cern').catch(() => null),
       ]);
       renderEdge(book, scr, cern);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the Edge Book.</p></div>`; }
@@ -5436,8 +5435,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (cont && !coremoCore) cont.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading the Core Momentum book…</p></div>`;
     try {
       const [c, d] = await Promise.all([
-        fetch('/api/tracker?op=core').then(r => r.json()).catch(() => null),
-        fetch('/api/tracker?op=coredrift').then(r => r.json()).catch(() => null),
+        fetchJSON('/api/tracker?op=core').catch(() => null),
+        fetchJSON('/api/tracker?op=coredrift').catch(() => null),
       ]);
       coremoCore = c; coremoDrift = d;
     } catch { /* render whatever we have */ }
@@ -5524,7 +5523,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const cont = document.getElementById('coreperf-container');
     const time = document.getElementById('coreperf-gen-time');
     if (cont) cont.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading the Core Momentum track record…</p></div>`;
-    let d; try { d = await fetch('/api/tracker?op=coreperf').then(r => r.json()); } catch { d = null; }
+    let d; try { d = await fetchJSON('/api/tracker?op=coreperf'); } catch { d = null; }
     renderCorePerf(cont, d);
     if (time) time.textContent = 'updated ' + timeAgo(new Date());
   }
@@ -5601,8 +5600,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading Overheated names…</p></div>`;
     try {
       const [sig, book] = await Promise.all([
-        fetch('/api/tracker?op=fadesignals&scope=large').then(r => r.json()).catch(() => null),
-        fetch('/api/tracker?op=fadebook').then(r => r.json()).catch(() => null),
+        fetchJSON('/api/tracker?op=fadesignals&scope=large').catch(() => null),
+        fetchJSON('/api/tracker?op=fadebook').catch(() => null),
       ]);
       renderFade(sig, book);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Overheated names.</p></div>`; }
@@ -5702,8 +5701,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Reading the market climate…</p></div>`;
     try {
       const [t, book] = await Promise.all([
-        fetch('/api/tracker?op=trend').then(r => r.json()).catch(() => null),
-        fetch('/api/tracker?op=trendbook').then(r => r.json()).catch(() => null),
+        fetchJSON('/api/tracker?op=trend').catch(() => null),
+        fetchJSON('/api/tracker?op=trendbook').catch(() => null),
       ]);
       renderTrendRider(t, book);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Trend Rider.</p></div>`; }
@@ -5831,9 +5830,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!silent) el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning movers…</p></div>`;
     try {
       const [t, book, timingBook] = await Promise.all([
-        fetch('/api/tracker?op=daytrade').then(r => r.json()),
-        fetch('/api/tracker?op=daytradebook').then(r => r.json()).catch(() => null),
-        fetch('/api/tracker?op=timingbook').then(r => r.json()).catch(() => null),
+        fetchJSON('/api/tracker?op=daytrade'),
+        fetchJSON('/api/tracker?op=daytradebook').catch(() => null),
+        fetchJSON('/api/tracker?op=timingbook').catch(() => null),
       ]);
       renderDaytrade(t, book, timingBook);
     } catch { if (!silent) el.innerHTML = `<div class="mom-status error"><p>Could not load Day Trade.</p></div>`; }
@@ -6166,8 +6165,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning for names that are a buy on both horizons…</p></div>`;
     try {
       const [t, book] = await Promise.all([
-        fetch('/api/tracker?op=aligned').then(r => r.json()),
-        fetch('/api/tracker?op=alignedbook').then(r => r.json()).catch(() => null),
+        fetchJSON('/api/tracker?op=aligned'),
+        fetchJSON('/api/tracker?op=alignedbook').catch(() => null),
       ]);
       renderAligned(t, book);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Dual Confirmed.</p></div>`; }
@@ -6247,7 +6246,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning for put-selling setups…</p></div>`;
     try {
-      const t = await fetch('/api/tracker?op=putsell').then(r => r.json());
+      const t = await fetchJSON('/api/tracker?op=putsell');
       renderPutSell(t);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Options Moves.</p></div>`; }
   }
@@ -6315,8 +6314,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning today's unscheduled gappers…</p></div>`;
     try {
       const [t, book] = await Promise.all([
-        fetch('/api/tracker?op=gapgo' + (ggSkipFade ? '&skipfade=1' : '')).then(r => r.json()),
-        fetch('/api/tracker?op=gapgobook').then(r => r.json()).catch(() => null),
+        fetchJSON('/api/tracker?op=gapgo' + (ggSkipFade ? '&skipfade=1' : '')),
+        fetchJSON('/api/tracker?op=gapgobook').catch(() => null),
       ]);
       renderGapGo(t, book);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Gap &amp; Go.</p></div>`; }
@@ -6468,8 +6467,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Reading the tape…</p></div>`;
     try {
       const [t, book] = await Promise.all([
-        fetch('/api/tracker?op=downday').then(r => r.json()),
-        fetch('/api/tracker?op=downdaybook').then(r => r.json()).catch(() => null),
+        fetchJSON('/api/tracker?op=downday'),
+        fetchJSON('/api/tracker?op=downdaybook').catch(() => null),
       ]);
       renderDownDay(t, book);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Down-Day Mode.</p></div>`; }
@@ -6605,8 +6604,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning today's gap-downs…</p></div>`;
     try {
       const [t, book] = await Promise.all([
-        fetch('/api/tracker?op=gapdown').then(r => r.json()),
-        fetch('/api/tracker?op=gapdownbook').then(r => r.json()).catch(() => null),
+        fetchJSON('/api/tracker?op=gapdown'),
+        fetchJSON('/api/tracker?op=gapdownbook').catch(() => null),
       ]);
       renderGapDown(t, book);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Gap-Down.</p></div>`; }
@@ -6688,8 +6687,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning for coiled setups…</p></div>`;
     try {
       const [t, book] = await Promise.all([
-        fetch(`/api/tracker?op=coil&scope=${coilScope}&limit=24`).then(r => r.json()),
-        fetch('/api/tracker?op=coilbook').then(r => r.json()).catch(() => null),
+        fetchJSON(`/api/tracker?op=coil&scope=${coilScope}&limit=24`),
+        fetchJSON('/api/tracker?op=coilbook').catch(() => null),
       ]);
       renderCoil(t, book);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Coil Radar.</p></div>`; }
@@ -6784,8 +6783,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Running 5-strategy scan…</p></div>`;
     try {
       const [t, book] = await Promise.all([
-        fetch('/api/tracker?op=confluence').then(r => r.json()),
-        fetch('/api/tracker?op=confluencebook').then(r => r.json()).catch(() => null),
+        fetchJSON('/api/tracker?op=confluence'),
+        fetchJSON('/api/tracker?op=confluencebook').catch(() => null),
       ]);
       renderConfluence(t, book);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Confluence.</p></div>`; }
@@ -7580,7 +7579,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     set(spinner);                 // always (re)show the spinner into the current host
     if (st.loading) return;       // a fetch is already in flight; the spinner is showing
     st.loading = true;
-    try { const d = await fetch(url).then(r => r.json()); st.data = d; set(render(d)); }
+    try { const d = await fetchJSON(url); st.data = d; set(render(d)); }
     catch { set(_panelErr); } finally { st.loading = false; }
   }
   const rqSpinner = `<div class="sb-secgroup"><div class="sb-secgroup-h">🎯 Ranking quality — do higher scores win?</div><div class="mom-status"><div class="mom-spinner"></div><p>Checking whether higher scores actually produce better outcomes…</p></div></div>`;
@@ -7743,7 +7742,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (ensureMaturityMap._p) return ensureMaturityMap._p;
     ensureMaturityMap._p = (async () => {
       try {
-        const d = await fetch('/api/tracker?op=maturity').then(r => r.json());
+        const d = await fetchJSON('/api/tracker?op=maturity');
         maturityData = d;
         maturityMap = {};
         (d.strategies || []).forEach(s => { if (s.section) maturityMap[s.section] = { grade: s.grade, meta: d.gradeMeta }; });
@@ -7828,7 +7827,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (maturityData && !force) { renderEvidence(maturityData); return; }
     host.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Grading strategies…</p></div>`;
     try {
-      const d = await fetch('/api/tracker?op=maturity' + (force ? '&_cb=' + Date.now() : '')).then(r => r.json());
+      const d = await fetchJSON('/api/tracker?op=maturity' + (force ? '&_cb=' + Date.now() : ''));
       maturityData = d;
       maturityMap = {};
       (d.strategies || []).forEach(s => { if (s.section) maturityMap[s.section] = { grade: s.grade, meta: d.gradeMeta }; });
@@ -7897,7 +7896,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (baselinesData && !force) { renderBaselines(baselinesData); return; }
     if (!baselinesData) host.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Assembling baselines…</p></div>`;
     try {
-      const d = await fetch('/api/tracker?op=baselines' + (force ? '&_cb=' + Date.now() : '')).then(r => r.json());
+      const d = await fetchJSON('/api/tracker?op=baselines' + (force ? '&_cb=' + Date.now() : ''));
       baselinesData = d;
       renderBaselines(d);
     } catch { host.innerHTML = `<div class="dt-note" style="border-left-color:var(--red)">Couldn't load baselines.</div>`; }
@@ -7910,7 +7909,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     baselinesComputing = true;
     renderBaselines(baselinesData || { ok: true, baselines: [], summary: {}, verdict: 'Computing…' });
     try {
-      const r = await fetch('/api/tracker?op=research&scope=large').then(r => r.json());
+      const r = await fetchJSON('/api/tracker?op=research&scope=large');
       if (r && r.ok === false && r.error) { /* rate-limited or failed — fall through to reload */ }
     } catch { /* ignore — reload shows whatever persisted */ }
     baselinesComputing = false;
@@ -8560,7 +8559,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   let _dualBookPromise = null;
   function dualBook() {
     if (!_dualBookPromise) {
-      _dualBookPromise = fetch('/api/tracker?op=dualreadbook').then(r => r.json()).catch(() => null);
+      _dualBookPromise = fetchJSON('/api/tracker?op=dualreadbook').catch(() => null);
     }
     return _dualBookPromise;
   }
