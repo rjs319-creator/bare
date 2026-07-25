@@ -3681,6 +3681,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   let pulseLoaded = false, pulseRefining = false;
   function ensurePulse() { if (!pulseLoaded) { pulseLoaded = true; runPulseUI(false); } }
 
+  // Both pulse stages make a LIVE bounded LLM call when the 4h cache has lapsed (gather:
+  // Haiku + web_search ~30-45s, refine: Fable ~35s), so they legitimately outrun fetchJSON's
+  // 20s default — which aborted every cold load into "Could not load Market Pulse".
+  // Sit ABOVE the 60s serverless wall: the server always bounds itself first and returns its
+  // own last-known-good fallback, so this only fires if the request is genuinely wedged.
+  const PULSE_FETCH_TIMEOUT_MS = 70000;
+
   // 🔥 Momentum Ignition — acceleration-ranked momentum view (loadIgnition renders op=ignition).
   let ignitionLoaded = false;
   function ensureIgnition() {
@@ -3766,25 +3773,44 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   async function runPulseUI(force) {
     const el = document.getElementById('pulse-container');
     if (!el) return;
-    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Re-scanning' : 'Scanning'} X · StockTwits · Reddit · finance YouTube… <span class="dt-dim">(can take ~20s)</span></p></div>`;
+    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Re-scanning' : 'Scanning'} X · StockTwits · Reddit · finance YouTube… <span class="dt-dim">(cached reads are instant; a fresh scan takes ~40s)</span></p></div>`;
     try {
-      const p = await fetchJSON('/api/tracker?op=pulse' + (force ? '&force=1' : ''));
+      const p = await fetchJSON('/api/tracker?op=pulse' + (force ? '&force=1' : ''), { timeoutMs: PULSE_FETCH_TIMEOUT_MS });
       renderPulse(p);
       // STAGE 2: if we got the Haiku draft (not yet Fable-refined), upgrade it in the
       // background — the draft is already useful, and Fable sharpens the read a few sec later.
-      if (p && p.ok && p.stage !== 'refined' && p.persisted) refinePulseUI(force);
-    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Market Pulse.</p></div>`; }
+      // Gate on the GENERATION we are displaying, not on `p.persisted`: that flag is a
+      // read-back confirmation that false-negatives under Blob propagation lag (the write
+      // landed, the read-back still saw the old doc) — which silently cost us the Fable pass.
+      // The server is already defensive (no draft → needsDraft; newer gather → superseded),
+      // so the only thing the client must enforce is that it never renders a DIFFERENT
+      // generation over the draft on screen.
+      if (p && p.ok && p.stage !== 'refined') refinePulseUI(force, p.generation);
+    } catch {
+      el.innerHTML = `<div class="mom-status error"><p>Could not load Market Pulse.</p>`
+        + `<p class="dt-dim">The live scan may still be finishing on the server — retry in ~30s and it will usually serve from cache.</p>`
+        + `<button class="btn" id="pulse-retry-btn">Retry</button></div>`;
+      const retry = document.getElementById('pulse-retry-btn');
+      if (retry) retry.onclick = () => runPulseUI(false);
+    }
   }
-  async function refinePulseUI(force) {
+  const clearRefineChip = () => { const c = document.getElementById('pulse-refine-chip'); if (c) c.innerHTML = ''; };
+
+  // `expectedGeneration` is the generation currently rendered on screen. A refine result for
+  // any OTHER generation is discarded rather than drawn: if a draft failed to persist, the
+  // server still holds the PREVIOUS refined doc and answers `alreadyRefined` with it — which
+  // would otherwise paint stale cards over the fresher draft the user is looking at.
+  async function refinePulseUI(force, expectedGeneration) {
     if (pulseRefining) return;
     pulseRefining = true;
     const chip = document.getElementById('pulse-refine-chip');
     if (chip) chip.innerHTML = `<span class="pulse-refining">🧠 Fable is sharpening the read…</span>`;
     try {
-      const p = await fetchJSON('/api/tracker?op=pulserefine' + (force ? '&force=1' : ''));
-      if (p && p.ok && p.stage === 'refined') renderPulse(p);
-      else if (chip) chip.innerHTML = '';   // refine failed → keep the draft, drop the chip
-    } catch { const c = document.getElementById('pulse-refine-chip'); if (c) c.innerHTML = ''; }
+      const p = await fetchJSON('/api/tracker?op=pulserefine' + (force ? '&force=1' : ''), { timeoutMs: PULSE_FETCH_TIMEOUT_MS });
+      const sameGeneration = !expectedGeneration || !p?.generation || p.generation === expectedGeneration;
+      if (p && p.ok && p.stage === 'refined' && sameGeneration) renderPulse(p);
+      else clearRefineChip();   // refine failed, or answered for another generation → keep the draft
+    } catch { clearRefineChip(); }
     finally { pulseRefining = false; }
   }
   // ── Vocabularies (derived STATES from the server, rendered as visual chips) ──────────
