@@ -16,6 +16,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadOrbitLab } from './orbit-lab.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { loadCern, eventName as cernEventName } from './cern.js';
+  import { mountVerdict } from './evidence-badge.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
 
   // Tapping a "💰 flow" badge on any screener card jumps to the Options tab.
@@ -372,6 +373,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     SECTION_IDS.forEach(s => document.getElementById(s)?.classList.toggle('tab-active', s === sub));
     document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('active', el.dataset.tab === top));
     injectHowto(sub); // prepend the novice "how to use" guide once (no-op if already there / no config)
+    // Put this tab's OWN earned verdict on the tab, under the heading. One hook covers
+    // every section, so a strategy the app has graded Disabled can never present pick
+    // cards without saying so. The Events tab renders its own richer, engine-specific
+    // banner from the same grade, so it opts out here rather than showing two.
+    if (sub !== 'events') mountVerdict(sub);
     renderHubSubnav(top, sub);
     if (typeof updateTapeBadge === 'function') updateTapeBadge(top === 'candidates' ? sub : null);
     if (sub === 'quickhit' && typeof ensureQuickHit === 'function') ensureQuickHit();

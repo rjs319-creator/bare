@@ -15,7 +15,8 @@
 // by the app's single grader (lib/maturity gradeTrack, surfaced on op=cerndecay), so the
 // Events tab, the Evidence tab and the Leaderboard cannot disagree about the same record.
 import { esc } from './format.js';
-import { fetchJSON, OPTIONAL_TIMEOUT_MS } from './fetch-json.js';
+import { fetchJSON } from './fetch-json.js';
+import { gradeFace, loadGrades } from './evidence-badge.js';
 
 // Plain-English name + "what actually happened" for every event type, so a novice
 // never meets a raw SCREAMING_SNAKE enum. Keys mirror lib/cern.js EVENT_TYPES.
@@ -31,15 +32,9 @@ const EVENT = {
 export const eventName = t => (EVENT[t] ? EVENT[t].name : String(t || '').replace(/_/g, ' ').toLowerCase());
 const eventWhat = t => (EVENT[t] ? EVENT[t].what : 'A forced-flow event — someone had to trade regardless of price.');
 
-// Plain-English face of the app's maturity grades. The canonical grade word stays in
-// the tooltip so a card can always be traced back to the Evidence tab's verdict.
-const GRADE = {
-  validated: { icon: '✅', label: 'Proven', cls: 'ok' },
-  promising: { icon: '🟡', label: 'Promising', cls: 'prov' },
-  experimental: { icon: '🧪', label: 'Untested', cls: 'wait' },
-  disabled: { icon: '⛔', label: 'Losing money so far', cls: 'bad' },
-};
-const gradeOf = v => GRADE[(v && v.grade) || 'experimental'] || GRADE.experimental;
+// Grade wording lives in ./evidence-badge.js — one vocabulary for the whole app, so a
+// "Losing money so far" chip here means exactly what it means on every other tab.
+const gradeOf = v => gradeFace((v && v.grade) || 'experimental');
 // A type only counts as scored when the server actually returned a resolved record.
 // Guarded rather than assumed so an older/partial payload degrades to "not scored yet"
 // instead of rendering `null%` on a card a beginner might act on.
@@ -54,22 +49,23 @@ export async function loadCern(container, metaEl) {
   try {
     // State + per-type decay/grade + the app-wide evidence verdict, in parallel.
     // Everything but the state is optional — the tab still renders without them.
-    const [state, decay, maturity] = await Promise.all([
+    // Grades come from the shared memoised loader, so this costs no extra request.
+    const [state, decay, grades] = await Promise.all([
       fetchJSON('/api/tracker?op=cern'),
       fetchJSON('/api/tracker?op=cerndecay').catch(() => null),
-      fetchJSON('/api/tracker?op=maturity', { timeoutMs: OPTIONAL_TIMEOUT_MS }).catch(() => null),
+      loadGrades(),
     ]);
     if (!state || !state.ok) {
       container.innerHTML = `<div class="mom-status error"><p>${esc((state && state.error) || 'The event engine is unavailable right now.')}</p></div>`;
       return;
     }
-    render(container, metaEl, state, decay, maturity);
+    render(container, metaEl, state, decay, grades);
   } catch {
     container.innerHTML = `<div class="mom-status error"><p>Could not load the event engine.</p></div>`;
   }
 }
 
-function render(container, metaEl, state, decay, maturity) {
+function render(container, metaEl, state, decay, grades) {
   if (!state.configured) {
     container.innerHTML = `<div class="mom-status"><p>${esc(state.note || 'The event engine has not run yet.')} It runs once a day after the close — check back after the next run.</p></div>`;
     if (metaEl) metaEl.textContent = '· not yet initialized';
@@ -82,7 +78,7 @@ function render(container, metaEl, state, decay, maturity) {
   const act = [...trade, ...probe];
   const watch = open.filter(o => o.action === 'LOG_ONLY');
 
-  container.innerHTML = statusBanner(state, types, maturity)
+  container.innerHTML = statusBanner(state, types, grades)
     + whatThisIs()
     + alertsPanel(state)
     + actionableSection(act, types)
@@ -99,8 +95,8 @@ function render(container, metaEl, state, decay, maturity) {
 // One banner, worst-case honest. Prefers the app-wide Evidence verdict for the
 // tab (single source of truth); falls back to the per-type records when the
 // maturity payload is unavailable.
-function statusBanner(state, types, maturity) {
-  const verdict = (maturity && (maturity.strategies || []).find(s => s.id === 'events')) || null;
+function statusBanner(state, types, grades) {
+  const verdict = (grades && grades.events) || null;
   const graded = Object.entries(types).filter(([, v]) => scored(v));
   const losing = graded.filter(([, v]) => v.grade === 'disabled');
   const proven = graded.filter(([, v]) => v.grade === 'validated');
