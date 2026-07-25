@@ -165,6 +165,8 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'daytrade') return runDaytrade(req, res);
   if (req.query.op === 'lifecycle') return require('../lib/lifecycle-routes').runLifecycle(req, res);
   if (req.query.op === 'lifecyclegrade') return require('../lib/lifecycle-routes').runLifecycleGrade(req, res);
+  if (req.query.op === 'discover') return require('../lib/intraday-discovery').runDiscover(req, res);
+  if (req.query.op === 'daytradealerts') return require('../lib/daytrade-alerts').runDaytradeAlerts(req, res);
   if (req.query.op === 'survival') return require('../lib/survival-eval').runSurvival(req, res);
   if (req.query.op === 'swingsearchlog') return require('../lib/swing-search-ledger').runSwingSearchLog(req, res);
   if (req.query.op === 'swingsearchgrade') return require('../lib/swing-search-ledger').runSwingSearchGrade(req, res);
