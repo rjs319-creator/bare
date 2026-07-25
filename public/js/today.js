@@ -5,7 +5,7 @@
 // events, and data-freshness. The engine lives in lib/decision.js (server) — this
 // module only renders, so there is no client/server scoring skew.
 import { esc } from './format.js';
-import { fetchJSON } from './fetch-json.js';
+import { fetchJSON, HEAVY_TIMEOUT_MS, OPTIONAL_TIMEOUT_MS } from './fetch-json.js';
 
 const HORIZONS = [
   ['intraday', '⚡ Intraday', 'gaps · momentum · VWAP/ORB — same-session'],
@@ -450,6 +450,11 @@ function renderPairs(host, m) {
 
 const TODAY_CACHE_KEY = 'today.cc.v1';
 
+// op=today self-fetches 12 sources in parallel (each bounded server-side at 12s) and measures
+// 11-13s cold — the scoreboard source alone takes ~10.3s, leaving almost nothing under the 20s
+// default. maturity/challenger are optional overlays sharing the Promise.all, so they take the
+// tighter OPTIONAL budget: a stalled overlay must not hold the board (op=challenger is 12.7s).
+
 // Rebuild the evidence-grade map from an op=maturity payload.
 function applyGrades(mat) {
   GRADES = {};
@@ -481,9 +486,9 @@ export async function loadCommandCenter(container) {
   // 2) Fetch fresh in the background; swap in when it arrives.
   let p = null, mat = null, chal = null;
   try { [p, mat, chal] = await Promise.all([
-    fetchJSON('/api/tracker?op=today'),
-    fetchJSON('/api/tracker?op=maturity').catch(() => null),
-    fetchJSON('/api/tracker?op=challenger').catch(() => null), // shadow — optional
+    fetchJSON('/api/tracker?op=today', { timeoutMs: HEAVY_TIMEOUT_MS }),
+    fetchJSON('/api/tracker?op=maturity', { timeoutMs: OPTIONAL_TIMEOUT_MS }).catch(() => null),
+    fetchJSON('/api/tracker?op=challenger', { timeoutMs: OPTIONAL_TIMEOUT_MS }).catch(() => null), // shadow — optional
   ]); } catch { p = null; }
 
   if (p && p.ok) {

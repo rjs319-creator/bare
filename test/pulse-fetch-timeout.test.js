@@ -16,8 +16,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const APP_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app.js'), 'utf8');
-const FETCH_JSON_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'fetch-json.js'), 'utf8');
+const readJs = f => fs.readFileSync(path.join(__dirname, '..', 'public', 'js', f), 'utf8');
+const APP_JS = readJs('app.js');
+const FETCH_JSON_JS = readJs('fetch-json.js');
 const PULSE_ROUTES = fs.readFileSync(path.join(__dirname, '..', 'lib', 'pulse-routes.js'), 'utf8');
 
 const numFrom = (src, name) => {
@@ -43,7 +44,7 @@ test('both pulse fetch call sites pass an explicit timeoutMs override', () => {
 
 test('the pulse client timeout exceeds BOTH server-side LLM bounds', () => {
   // Arrange
-  const clientMs = numFrom(APP_JS, 'PULSE_FETCH_TIMEOUT_MS');
+  const clientMs = numFrom(FETCH_JSON_JS, 'HEAVY_TIMEOUT_MS');
   const gatherMs = numFrom(PULSE_ROUTES, 'GATHER_TIMEOUT_MS');
   const refineMs = numFrom(PULSE_ROUTES, 'REFINE_TIMEOUT_MS');
 
@@ -56,7 +57,7 @@ test('the pulse client timeout exceeds BOTH server-side LLM bounds', () => {
 test('the pulse client timeout sits above the 60s serverless wall', () => {
   // Arrange
   const VERCEL_WALL_MS = 60000;
-  const clientMs = numFrom(APP_JS, 'PULSE_FETCH_TIMEOUT_MS');
+  const clientMs = numFrom(FETCH_JSON_JS, 'HEAVY_TIMEOUT_MS');
 
   // Assert: past the wall the platform itself terminates the function, so the client abort
   // should only ever fire for a genuinely wedged request — never race a live generation.
