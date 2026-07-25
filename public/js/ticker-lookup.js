@@ -67,6 +67,10 @@ let extras = { ticker: null, options: undefined, social: undefined };
 // paintWhyNow(). undefined = loading, null = failed, object = loaded.
 let whynow = { ticker: null, data: undefined };
 
+// Technical Structure & Pattern Intelligence (op=patternsearch) — SHADOW/descriptive.
+// undefined = loading, null = failed, object = loaded report.
+let patterns = { ticker: null, data: undefined };
+
 // Verdict level → presentation. Mirrors the signal-banner colour language.
 const WN_VERDICT = {
   constructive: { cls: 'constructive', icon: '✅' },
@@ -348,6 +352,77 @@ function sectionNote(title, note) {
   return `<div class="tkl-sec"><div class="tkl-mtitle">${title}</div><div class="tkl-mnone">${esc(note)}</div></div>`;
 }
 
+// ── Technical Structure & Pattern Intelligence (op=patternsearch) ──
+// SHADOW / descriptive. Similarity is chart-shape agreement, NOT a probability; actionability
+// requires live-confirmed-fresh data (the fail-closed decision layer decides the action word).
+
+const PAT_ACTION_LABEL = {
+  ACTIONABLE_NOW: 'Buy triggered', RESEARCH_ONLY: 'Research only', WAIT_FOR_TRIGGER: 'Wait for trigger',
+  FORMING: 'Forming — watch', WATCH: 'Watch', NO_ACTION_STALE: 'No action (stale)', DO_NOT_CHASE: 'Do not chase',
+  STALLING: 'Stalling', FAILED: 'Failed', EXIT_INVALIDATED: 'Exit / invalidated', EXPIRED: 'Expired', MANAGE_POSITION: 'Manage',
+};
+const pctOr = (v) => (typeof v === 'number' && isFinite(v) ? Math.round(v * 100) + '%' : '—');
+const numOr = (v) => (typeof v === 'number' && isFinite(v) ? v : '—');
+
+async function loadPatterns(tk) {
+  patterns = { ticker: tk, data: undefined };
+  paintPatterns();
+  try {
+    const j = await fetchJSON('/api/tracker?op=patternsearch&ticker=' + encodeURIComponent(tk));
+    if (curTicker !== tk) return;
+    patterns = { ticker: tk, data: (j && j.report) ? j.report : null };
+  } catch { if (curTicker === tk) patterns = { ticker: tk, data: null }; }
+  paintPatterns();
+}
+
+function paintPatterns() {
+  const el = body && body.querySelector('#tkl-patterns');
+  if (!el) return;
+  const title = '📐 Technical Structure &amp; Pattern Intelligence <span class="tkl-shadow-tag">shadow · descriptive</span>';
+  if (patterns.data === undefined) { el.innerHTML = sectionLoading(title); return; }
+  const r = patterns.data;
+  if (!r || r.ok === false || !r.horizons) {
+    el.innerHTML = sectionNote(title, r && r.reason === 'insufficient-history' ? 'Not enough price history for a reliable read.' : 'No clear chart structure detected right now.');
+    return;
+  }
+  const order = [['intraday', 'Intraday'], ['swing', 'Swing'], ['longterm', 'Long-term']];
+  const cards = order.map(([k, lbl]) => patHorizonCard(lbl, r.horizons[k])).join('');
+  const align = (typeof r.timeframeAlignment === 'number') ? `<div class="tkl-fine">Timeframe alignment: ${Math.round(r.timeframeAlignment * 100)}% agree on ${esc(r.primary ? r.primary.direction : '—')}.</div>` : '';
+  el.innerHTML = `<div class="tkl-sec tkl-patterns"><div class="tkl-mtitle">${title}</div>${cards || '<div class="tkl-mnone">No pattern on any horizon.</div>'}${align}
+    <div class="tkl-fine">Similarity = chart-shape agreement, <b>not</b> a win probability. A setup is only actionable when it is live, confirmed and fresh.</div></div>`;
+}
+
+function patHorizonCard(label, d) {
+  if (!d) return `<div class="hzp"><span class="hzp-hz">${esc(label)}</span> <span class="hzp-none">no clear pattern</span></div>`;
+  const sim = d.similarity || {};
+  const plan = d.plan || {};
+  const pred = d.prediction || {};
+  const action = plan.action || 'WATCH';
+  const dir = d.direction === 'SHORT' ? 'short' : 'long';
+  const calib = pred.available && pred.calibrated
+    ? `Target-first ${pctOr(pred.targetBeforeStop)} <span class="hzp-ok">calibrated, n=${pred.effectiveSampleSize}</span>`
+    : (pred.available ? `Target-first ${pctOr(pred.targetBeforeStop)} <span class="hzp-warn">model-estimate, not calibrated</span>` : '<span class="hzp-warn">no calibrated estimate</span>');
+  const lift = (typeof pred.incrementalLift === 'number') ? ` · lift vs baseline ${(pred.incrementalLift * 100).toFixed(0)}%` : ' · lift unproven';
+  const tier = sim.matchTier || 'NONE';
+  return `<div class="hzp">
+    <div class="hzp-head"><span class="hzp-hz">${esc(label)}</span> <span class="hzp-label">${esc(d.patternLabel || '—')}</span>
+      <span class="hzp-dir ${dir}">${esc(d.direction || '')}</span>
+      <span class="hzp-phase">${esc(d.phase || '')}</span>
+      <span class="hzp-action a-${esc(action)}">${esc(PAT_ACTION_LABEL[action] || action)}</span></div>
+    <div class="hzp-novice">${esc(d.noviceExplanation || '')}</div>
+    <div class="hzp-metrics">Match <b>${esc(tier)}</b> (${numOr(sim.combined)}) · Trigger ${numOr(plan.trigger)} · Stop ${numOr(plan.stop)} · Target ${numOr(plan.target)} · R:R ${numOr(plan.rewardRisk)} · ${calib}${lift}</div>
+    <details class="hzp-expert"><summary>Expert detail</summary>
+      <div class="hzp-exp">
+        <div>Similarity — path ${numOr(sim.pathCorrelation)} · geom ${numOr(sim.geometrySimilarity)} · DTW ${numOr(sim.dtwSimilarity)} · vol ${numOr(sim.volumeSimilarity)} · ctx ${numOr(sim.contextSimilarity)} ${sim.calibratedThreshold ? '' : '<i>(descriptive tier)</i>'}</div>
+        <div>Analogs — raw ${d.analogs ? d.analogs.rawCount : 0}, effN ${d.analogs ? d.analogs.effectiveSampleSize : 0}, resolved ${d.analogs ? d.analogs.resolvedCount : 0}</div>
+        <div>Barrier — stop-first ${pctOr(pred.stopBeforeTarget)} · timeout ${pctOr(pred.timeout)} · fail ${pctOr(pred.failureProbability)} · ${esc(pred.calibrationStatus || 'n/a')}</div>
+        <div>Context — regime ${esc((d.context || {}).marketRegime || '—')} · RS ${esc((d.context || {}).relativeStrength || '—')} · liquidity ${esc((d.context || {}).liquidity || '—')} · vol pctile ${numOr((d.context || {}).volPercentile)}</div>
+        <div>Invalidation: ${esc(d.plan && d.plan.stop != null ? ('below/above ' + d.plan.stop) : '—')} · model ${esc(d.modelVersion || '')}</div>
+      </div>
+    </details>
+  </div>`;
+}
+
 // ── WHY NOW — the composed FOR/AGAINST case + honest track record ──
 
 // A signal's track record → a chip. Never a fabricated probability: it's the app's
@@ -567,6 +642,7 @@ function renderBody(data) {
     <div id="tkl-evidence"></div>
     ${horizonSection(data)}
     <div id="tkl-chart"></div>
+    <div id="tkl-patterns"></div>
     <div id="tkl-breakdown"></div>
     <div id="tkl-flow"></div>
     <div id="tkl-social"></div>
@@ -578,6 +654,7 @@ function renderBody(data) {
   catch { chartPanel.innerHTML = `<div class="chart-err">Chart unavailable.</div>`; }
 
   paintWhyNow();  // fill the WHY NOW block + breakdown from state
+  paintPatterns(); // 📐 Technical Structure & Pattern Intelligence (from state; survives refresh)
   paintExtras();  // fill options/social from state (loading first time, data on refresh)
   loadEvidenceStock(ticker);  // 🧾 Evidence & Thesis panel (op=evidencestock), async fill
 
@@ -612,9 +689,11 @@ export function openTickerLookup(ticker) {
   whynow = { ticker: tk, data: undefined };
   body.innerHTML = `<div class="tkl-head"><span class="tkl-tk">📈 ${esc(tk)}</span></div>
     <div class="chart-loading"><div class="mom-spinner"></div>Loading live price, chart &amp; signal for ${esc(tk)}…</div>`;
+  patterns = { ticker: tk, data: undefined };
   load(tk);
   loadExtras(tk);   // options flow + social mentions — once per open, not on refresh
   loadWhyNow(tk);   // composed WHY NOW case + track record — once per open
+  loadPatterns(tk); // technical structure & pattern intelligence — once per open
   // Keep it live while open — /api/chart is cached 60s server-side, so cheap.
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = setInterval(() => load(tk, true), 60 * 1000);

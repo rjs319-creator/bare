@@ -2993,3 +2993,28 @@
 .tkl-ev-cl { padding: 4px 0; border-top: 1px solid var(--border); line-height: 1.4; }
 .tkl-ev-dup { color: var(--text-muted); font-size: 0.66rem; }
 @media (max-width: 560px) { #thx-container { grid-template-columns: 1fr; } }
+
+    /* ── Chart Pattern Intelligence (search section + Pattern Radar) ── */
+    .tkl-shadow-tag { font-size:0.55rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); border:1px solid var(--border); border-radius:6px; padding:1px 5px; margin-left:6px; }
+    .hzp { border:1px solid var(--border); border-radius:8px; padding:8px 10px; margin:8px 0; }
+    .hzp-head { display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:0.72rem; }
+    .hzp-hz { font-weight:700; color:var(--text-muted); min-width:64px; }
+    .hzp-label { font-weight:600; }
+    .hzp-none { color:var(--text-dim); font-size:0.7rem; }
+    .hzp-dir { font-size:0.58rem; font-weight:700; padding:1px 6px; border-radius:5px; }
+    .hzp-dir.long { background:rgba(34,197,94,.14); color:#22c55e; }
+    .hzp-dir.short { background:rgba(239,68,68,.14); color:#ef4444; }
+    .hzp-phase { font-size:0.58rem; color:var(--text-muted); border:1px solid var(--border); border-radius:5px; padding:1px 5px; }
+    .hzp-action { font-size:0.6rem; font-weight:700; padding:1px 6px; border-radius:5px; margin-left:auto; background:var(--border); color:var(--text-dim); }
+    .hzp-action.a-ACTIONABLE_NOW { background:rgba(34,197,94,.2); color:#22c55e; }
+    .hzp-action.a-RESEARCH_ONLY, .hzp-action.a-WAIT_FOR_TRIGGER { background:rgba(250,204,21,.16); color:#eab308; }
+    .hzp-action.a-FAILED, .hzp-action.a-EXIT_INVALIDATED, .hzp-action.a-NO_ACTION_STALE, .hzp-action.a-DO_NOT_CHASE { background:rgba(239,68,68,.14); color:#ef4444; }
+    .hzp-novice { font-size:0.72rem; color:var(--text); line-height:1.45; margin:6px 0; }
+    .hzp-metrics { font-size:0.64rem; color:var(--text-muted); line-height:1.5; }
+    .hzp-ok { color:#22c55e; } .hzp-warn { color:#eab308; }
+    .hzp-expert { margin-top:5px; }
+    .hzp-expert summary { cursor:pointer; color:var(--accent,#7c5cff); font-size:0.64rem; list-style:none; }
+    .hzp-exp { font-size:0.62rem; color:var(--text-muted); line-height:1.6; margin-top:5px; }
+    .pr-bucket { margin:14px 0; }
+    .pr-bucket h3 { font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin:0 0 8px; }
+    .pr-empty { color:var(--text-dim); font-size:0.78rem; padding:14px; text-align:center; }
