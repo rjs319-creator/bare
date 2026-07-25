@@ -3,7 +3,7 @@
 // this only renders. Honest banner: EOD data, no real-time / no LULD.
 
 import { esc } from './format.js';
-import { fetchJSON } from './fetch-json.js';
+import { fetchJSON, HEAVY_TIMEOUT_MS } from './fetch-json.js';
 
 const STAGE_CLASS = { Watch: 'ig-watch', Ignition: 'ig-ign', Pressure: 'ig-press', Extended: 'ig-ext' };
 let STATE = { cards: [], sort: 'score', dir: -1, stage: 'all' };
@@ -12,7 +12,7 @@ export async function loadIgnition(container) {
   if (!container) return;
   container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Ranking momentum by acceleration…</p></div>`;
   try {
-    const ig = await fetchJSON('/api/tracker?op=ignition').catch(() => null);
+    const ig = await fetchJSON('/api/tracker?op=ignition', { timeoutMs: HEAVY_TIMEOUT_MS }).catch(() => null);
     renderIgnition(container, ig);
   } catch { container.innerHTML = `<div class="mom-status error"><p>Could not load Momentum Ignition.</p></div>`; }
 }

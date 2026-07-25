@@ -1,5 +1,5 @@
   import { esc, fmtMoney, timeAgo } from './format.js';
-  import { fetchJSON } from './fetch-json.js';
+  import { fetchJSON, HEAVY_TIMEOUT_MS } from './fetch-json.js';
   import { startLivePrices as startScreenerLive, stopLivePrices as stopScreenerLive, LIVE_SCREENERS } from './live-price.js';
   import { startFlowBadges, setFlowNav, FLOW_BADGE_TABS } from './flow-badge.js';
   import { initCommandPalette, openPalette, revealTicker } from './command-palette.js';
@@ -3682,11 +3682,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function ensurePulse() { if (!pulseLoaded) { pulseLoaded = true; runPulseUI(false); } }
 
   // Both pulse stages make a LIVE bounded LLM call when the 4h cache has lapsed (gather:
-  // Haiku + web_search ~30-45s, refine: Fable ~35s), so they legitimately outrun fetchJSON's
-  // 20s default — which aborted every cold load into "Could not load Market Pulse".
-  // Sit ABOVE the 60s serverless wall: the server always bounds itself first and returns its
-  // own last-known-good fallback, so this only fires if the request is genuinely wedged.
-  const PULSE_FETCH_TIMEOUT_MS = 70000;
+  // Haiku + web_search ~30-45s, refine: Fable ~35s) — far past the 20s default, which aborted
+  // every cold load into "Could not load Market Pulse". Uses the shared HEAVY budget.
 
   // 🔥 Momentum Ignition — acceleration-ranked momentum view (loadIgnition renders op=ignition).
   let ignitionLoaded = false;
@@ -3775,7 +3772,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Re-scanning' : 'Scanning'} X · StockTwits · Reddit · finance YouTube… <span class="dt-dim">(cached reads are instant; a fresh scan takes ~40s)</span></p></div>`;
     try {
-      const p = await fetchJSON('/api/tracker?op=pulse' + (force ? '&force=1' : ''), { timeoutMs: PULSE_FETCH_TIMEOUT_MS });
+      const p = await fetchJSON('/api/tracker?op=pulse' + (force ? '&force=1' : ''), { timeoutMs: HEAVY_TIMEOUT_MS });
       renderPulse(p);
       // STAGE 2: if we got the Haiku draft (not yet Fable-refined), upgrade it in the
       // background — the draft is already useful, and Fable sharpens the read a few sec later.
@@ -3806,7 +3803,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const chip = document.getElementById('pulse-refine-chip');
     if (chip) chip.innerHTML = `<span class="pulse-refining">🧠 Fable is sharpening the read…</span>`;
     try {
-      const p = await fetchJSON('/api/tracker?op=pulserefine' + (force ? '&force=1' : ''), { timeoutMs: PULSE_FETCH_TIMEOUT_MS });
+      const p = await fetchJSON('/api/tracker?op=pulserefine' + (force ? '&force=1' : ''), { timeoutMs: HEAVY_TIMEOUT_MS });
       const sameGeneration = !expectedGeneration || !p?.generation || p.generation === expectedGeneration;
       if (p && p.ok && p.stage === 'refined' && sameGeneration) renderPulse(p);
       else clearRefineChip();   // refine failed, or answered for another generation → keep the draft

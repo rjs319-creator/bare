@@ -7,7 +7,7 @@
 // show nothing — that is a feature, not an empty state to apologize for.
 
 import { esc } from './format.js';
-import { fetchJSON } from './fetch-json.js';
+import { fetchJSON, HEAVY_TIMEOUT_MS } from './fetch-json.js';
 import { evidencePanelHtml, wireEvidencePanel } from './evolve-evidence.js';
 
 const DEC_CLASS = { TRADE_CANDIDATE: 'ev-trade', PROBE: 'ev-probe', WATCH: 'ev-watch', ABSTAIN: 'ev-abstain' };
@@ -19,8 +19,8 @@ export async function loadEvolve(container) {
   container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Composing specialists & calibrating…</p></div>`;
   try {
     const [ev, health] = await Promise.all([
-      fetchJSON('/api/tracker?op=evolve').catch(() => null),
-      fetchJSON('/api/tracker?op=evolvehealth').catch(() => null),
+      fetchJSON('/api/tracker?op=evolve', { timeoutMs: HEAVY_TIMEOUT_MS }).catch(() => null),
+      fetchJSON('/api/tracker?op=evolvehealth', { timeoutMs: HEAVY_TIMEOUT_MS }).catch(() => null),
     ]);
     renderEvolve(container, ev, health);
   } catch (e) {

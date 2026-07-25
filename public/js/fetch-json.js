@@ -8,7 +8,28 @@
 // Throws on: abort (timeout), network failure, or a non-2xx status. Callers keep their own
 // try/catch (or `.catch(() => null)` for optional sources) exactly as before.
 
-const DEFAULT_TIMEOUT_MS = 20000;
+// Fine for the ~110 sub-second reads: fails a genuinely stalled request fast enough that the
+// tab recovers instead of hanging. NOT safe for endpoints that do real server-side work — see
+// HEAVY_TIMEOUT_MS.
+export const DEFAULT_TIMEOUT_MS = 20000;
+
+// For a tab's PRIMARY payload when the endpoint does real work (self-fetches, LLM calls, wide
+// scans). Measured cold on prod: atlasx 15.4s, omega 13.6s, swingmonitor 13.3s, challenger
+// 12.7s, ignition 11.9s, evolve 11.5s, today 11-13s, scoreboard 10.5s, pulse gather 29s.
+// Against the 20s default those either fail outright or sit on a few seconds of headroom.
+//
+// The value sits ABOVE the 60s function wall (vercel.json maxDuration) on purpose: every one of
+// these endpoints already bounds ITSELF (per-source AbortSignal, LLM timeouts, last-known-good
+// fallbacks), and the platform kills the function at 60s regardless. A client abort below that
+// can only ever fire while the server is still legitimately working — it cannot save the user
+// any time, it just replaces a real answer (or an honest stale-fallback) with a false error.
+export const HEAVY_TIMEOUT_MS = 70000;
+
+// For OPTIONAL enrichment that shares a Promise.all with a primary payload. Promise.all waits
+// for a rejected-then-caught promise to SETTLE, so an optional call's timeout is the primary
+// render's worst-case delay. These must degrade (render without the overlay) rather than hold
+// the board hostage for the full heavy budget.
+export const OPTIONAL_TIMEOUT_MS = 30000;
 
 /**
  * @param {string} url

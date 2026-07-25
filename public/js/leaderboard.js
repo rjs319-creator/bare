@@ -4,7 +4,7 @@
 // 3-month backtest, presents both honestly, and is the ongoing validation surface
 // that feeds the self-improving Opportunities ranking.
 import { esc } from './format.js';
-import { fetchJSON } from './fetch-json.js';
+import { fetchJSON, HEAVY_TIMEOUT_MS, OPTIONAL_TIMEOUT_MS } from './fetch-json.js';
 
 const L = (term, txt) => `<span class="learn-term" data-learn="${term}">${txt}</span>`;
 
@@ -80,9 +80,9 @@ export async function loadLeaderboard(container) {
   let sb, bt, lb;
   try {
     [sb, bt, lb] = await Promise.all([
-      fetchJSON('/api/tracker?op=scoreboard'),
-      fetchJSON('/api/backtest?scope=large&months=3').catch(() => null),
-      fetchJSON('/api/tracker?op=leaderboard').catch(() => null),
+      fetchJSON('/api/tracker?op=scoreboard', { timeoutMs: HEAVY_TIMEOUT_MS }),
+      fetchJSON('/api/backtest?scope=large&months=3', { timeoutMs: OPTIONAL_TIMEOUT_MS }).catch(() => null),
+      fetchJSON('/api/tracker?op=leaderboard', { timeoutMs: OPTIONAL_TIMEOUT_MS }).catch(() => null),
     ]);
   } catch { sb = null; }
   if (!sb) { container.innerHTML = `<div class="dt-note">Couldn't load the leaderboard right now.</div>`; return; }
