@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { computeDecayCurves } = require('../lib/cern-decay');
+const { computeDecayCurves, gradeEventType } = require('../lib/cern-decay');
 const { forwardReturn, spyForwardReturn } = require('../lib/apex-routes');
 
 const FNS = { forwardReturn, spyForwardReturn };
@@ -91,4 +91,60 @@ test('computeDecayCurves: an isolated positive day in a negative curve is NOT a 
 test('computeDecayCurves: no picks → empty types map', () => {
   const out = computeDecayCurves([], new Map(), SPY_FLAT, FNS);
   assert.deepEqual(out.types, {});
+});
+
+// ── Evidence grade per event type ────────────────────────────────────────────
+// The Events tab presents a plain-English trust verdict per event type. It must
+// come from the app's ONE grader (lib/maturity gradeTrack) so the Events tab, the
+// Evidence tab and the Leaderboard can never disagree about the same record.
+
+test('gradeEventType: no resolved events is Experimental, never a verdict', () => {
+  // Arrange / Act
+  const g = gradeEventType(0, null, 0);
+  // Assert
+  assert.equal(g.grade, 'experimental');
+  assert.match(g.gradeReason, /accruing/i);
+});
+
+test('gradeEventType: a big losing record earns Disabled', () => {
+  // Arrange — 54 resolved, −1.24% vs SPY (the real LOCKUP_EXPIRY record).
+  const n20 = 54, beats = 20;
+  // Act
+  const g = gradeEventType(n20, -1.24, beats);
+  // Assert
+  assert.equal(g.grade, 'disabled');
+  assert.match(g.gradeReason, /Underperforms the market over 54/);
+});
+
+test('gradeEventType: a tiny winning record cannot outrank a big losing one', () => {
+  // Arrange — the n=3 / 100%-win artifact that put CERN atop the Leaderboard.
+  const tiny = gradeEventType(3, 16.85, 3);
+  const big = gradeEventType(54, -1.24, 20);
+  // Assert — the fluke stays Experimental (no verdict), it does not earn Validated.
+  assert.equal(tiny.grade, 'experimental');
+  assert.match(tiny.gradeReason, /Only 3 resolved/);
+  assert.equal(big.grade, 'disabled');
+});
+
+test('gradeEventType: a genuinely strong record earns Validated', () => {
+  // Arrange — 30 resolved, +4% vs SPY, beat the market 80% of the time.
+  const g = gradeEventType(30, 4, 24);
+  // Assert
+  assert.equal(g.grade, 'validated');
+});
+
+test('computeDecayCurves: attaches the earned grade, beat-rate and final excess per type', () => {
+  // Arrange — one pick that beats a flat SPY by 10% at the full window.
+  const hist = new Map([['AAA', [
+    { date: '2026-01-01', close: 100 },
+    { date: '2026-01-02', close: 110 },
+  ]]]);
+  const picks = [{ date: '2026-01-01', tier: 'INDEX_DELETE', ticker: 'AAA', entry: null, short: false }];
+  // Act
+  const out = computeDecayCurves(picks, hist, SPY_FLAT, FNS, { maxDay: 1, minSample: 1, minTrust: 1 });
+  const t = out.types.INDEX_DELETE;
+  // Assert — the record is surfaced, but 1 sample earns no verdict.
+  assert.equal(t.finalExcess, 10);
+  assert.equal(t.beatMktRate, 100);
+  assert.equal(t.grade, 'experimental');
 });

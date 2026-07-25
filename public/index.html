@@ -383,29 +383,33 @@
   <div class="cx-help-backdrop" id="ev-help-modal" hidden>
     <div class="cx-help-card" role="dialog" aria-modal="true" aria-label="How to use the Events tab">
       <button class="cx-help-x" id="ev-help-close" aria-label="Close">✕</button>
-      <h2>⚡ CERN — forced-flow events</h2>
-      <p class="cx-help-lead">A different bet from every other tab. The screeners hunt <i>momentum</i>; CERN hunts <b>forced flow</b> — moments when someone <i>has</i> to trade regardless of price (a fund dumping a deleted index name, tax-loss selling in December, a margin spiral). Forced selling overshoots, then reverts. CERN measures the dislocation, checks the flow is <b>uninformed</b> (no news/earnings/attention behind it), and learns how much reverts.</p>
+      <h2>⚡ Events — when someone <i>has</i> to sell</h2>
+      <p class="cx-help-lead">Every other tab looks for stocks going up. This one looks for the opposite situation: a moment when somebody was <b>forced to sell no matter what the price was</b>. An index fund must dump a stock the day it's dropped from the index. IPO insiders all become free to sell on the same date. A fund being cashed out has to sell everything it owns. That kind of selling isn't about the company being worse — it's about someone needing out — so the price can fall further than it should, and sometimes springs back. This tab hunts those moments and, crucially, keeps score of whether the bounce actually happens.</p>
 
-      <div class="cx-help-rule">⭐ <b>This is a learning system first, a trading system second.</b> It logs and resolves <b>every</b> qualifying event whether it trades or not — so it learns from 100% of the world while risking capital on a fraction. Months 0–3 will be mostly <b>LOG_ONLY / PROBE</b> (paper). That isn't it failing — that's the archive filling and the model earning its confidence.</div>
+      <div class="cx-help-rule">⭐ <b>Read the banner at the top first.</b> It tells you, in one line, whether this engine has earned any trust yet. Right now most of what you'll see is the engine <i>learning</i>, not the engine <i>recommending</i>. That is the honest state, not a bug — and it's why almost nothing here carries a real position size.</div>
 
-      <h3>🎯 The three decision types</h3>
+      <h3>🗂 The three groups of cards</h3>
       <ul class="cx-help-ul">
-        <li><b>TRADE</b> — passed every gate (completion, absorption, posterior P(profit)≥65%, ship-gate) and is sized with ¼-Kelly. Rare early.</li>
-        <li><b>PROBE</b> — a paper position the engine takes to <i>learn</i> a promising-but-uncertain event type (Thompson-sampled exploration budget).</li>
-        <li><b>LOG_ONLY</b> — logged and resolved for learning, no position. Watching these resolve is how you learn to trust (or distrust) it.</li>
+        <li><b>🎯 Would act on</b> — cleared every internal check and got a position size. These are the only ones the engine is actually putting a number behind.</li>
+        <li><b>🧪 Test positions</b> — paper only. The engine takes these to <i>find out</i> whether an event type works, not because it believes in this particular stock.</li>
+        <li><b>📋 Only watching</b> (collapsed) — recorded so the engine can check later how they turned out. <b>These are not suggestions.</b> They're kept out of the way on purpose; open the section only if you're curious how the engine learns.</li>
       </ul>
 
-      <h3>🧠 The posteriors panel</h3>
-      <p class="cx-help-p">Each event type shows <b>κ (kappa)</b> — the fraction of the dislocation it has learned reverts — with its uncertainty (±sd) and the number of resolved events (n). High κ + low sd + high n = a trusted edge. A <b>drifted</b> type (struck through) means the world changed and the engine auto-shrank its sizing until the evidence re-tightens. <b>Candidate</b> alerts are recurring unexplained reversions the engine wants you to name as new event types.</p>
+      <h3>🔍 How to read a card</h3>
+      <ul class="cx-help-ul">
+        <li><b>Look at the trust chip first</b> (✅ Proven / 🟡 Promising / 🧪 Untested / ⛔ Losing money so far). It's the same grade this event type carries on the Evidence tab — earned from its own resolved results, not assigned by hand.</li>
+        <li><b>Then read reward vs risk</b>, not the target. A "+18% target" beside a "−38% stop" is a plan where you lose more than twice what you'd make when it goes wrong. The card says so when the ratio is under 1:1.</li>
+        <li><b>Then the track record line</b> — how past events of this same type actually turned out versus the S&P 500. If it says none have been scored yet, there is genuinely nothing behind the confidence numbers.</li>
+      </ul>
 
       <h3>🚫 What to keep in mind</h3>
       <ul class="cx-help-ul">
-        <li><b>Real size is gated</b> behind a posterior t-stat ≥ 2 per event type — it will not bet big on a hunch.</li>
-        <li><b>All seven types are live</b>: margin spirals + tax-loss selling (auto-detected from price/volume), plus index add/delete, lockup expiries, fund fire-sales and sell-side downgrades (calendar/flow/ratings feeds).</li>
-        <li><b>Fire-sales &amp; downgrades are proxies</b> (honest): real ETF creation/redemption flow isn't on our data tier, so a fund's heavy-volume drawdown stands in for redemptions; and an analyst downgrade is a softer, part-sentiment "forced flow." In both cases the gates + counterfactual logging sort the signal from the noise.</li>
-        <li><b>Two data gaps</b> (honest): attention is proxied by a volume spike, and estimate-revisions aren't wired yet — so the "uninformed" check is good but not perfect.</li>
+        <li><b>The suggested size is a model output, not advice</b> — until an event type has a resolved record, that percentage is a guess dressed up as a number.</li>
+        <li><b>All seven event types are live</b>: margin spirals and tax-loss selling are spotted from price and volume; index changes, lock-up expiries, fund fire-sales and analyst downgrades come from calendar, flow and ratings feeds.</li>
+        <li><b>Fire-sales and downgrades are approximations.</b> Real fund inflow/outflow data isn't available on our data plan, so a fund's heavy-volume slump stands in for it; and an analyst downgrade is a softer kind of "forced" than an index deletion.</li>
+        <li><b>Two known gaps</b>: crowd attention is approximated, and analyst estimate revisions aren't wired in — so the "was there real news behind this drop?" check is good, not perfect.</li>
       </ul>
-      <p class="cx-help-foot">The moat is the dataset this builds, not any single trade. Let it log, watch the κ posteriors move, and trust it only once they've earned it.</p>
+      <p class="cx-help-foot">The value here is the record being built, not any single card. Watch the track-record section: when an event type's grade moves up to Promising or Proven, that's the point it has earned attention.</p>
     </div>
   </div>
 

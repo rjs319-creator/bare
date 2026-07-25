@@ -1721,6 +1721,41 @@
     .cx-decay-n { font-size: 0.6rem; color: var(--text-dim); margin-left: auto; }
     .cx-decay-chart { max-width: 340px; }
     .cx-decay-empty { font-size: 0.64rem; color: var(--text-dim); padding: 6px 0; }
+
+    /* ⚡ Events (CERN) — novice-first view (public/js/cern.js) */
+    .ev-banner { border-radius: 12px; padding: 13px 16px; margin-bottom: 14px; border: 1px solid var(--border); background: var(--card); }
+    .ev-banner.ok   { border-color: #10d98a55; background: var(--green-dim); }
+    .ev-banner.bad  { border-color: #ef505055; background: var(--red-dim); }
+    .ev-banner.prov { border-color: #06c4d444; background: rgba(6,196,212,0.08); }
+    .ev-banner.wait { border-color: #f0a83244; background: var(--amber-dim); }
+    .ev-banner-hd { font-size: 0.92rem; font-weight: 800; color: var(--text); margin-bottom: 5px; }
+    .ev-banner-bd { font-size: 0.72rem; color: var(--text-dim); line-height: 1.55; }
+    .ev-banner-bd + .ev-banner-bd { margin-top: 5px; }
+    .ev-explain { font-size: 0.74rem; color: var(--text-dim); line-height: 1.62; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 15px; margin-bottom: 16px; }
+    .ev-explain b { color: var(--text); }
+    .ev-sec-head { font-size: 0.86rem; font-weight: 800; color: var(--text); margin: 20px 0 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+    .ev-sec-sub { font-size: 0.66rem; font-weight: 500; color: var(--text-dim); }
+    .ev-card { display: flex; flex-direction: column; gap: 8px; }
+    .ev-card.ev-muted { opacity: 0.72; }
+    .ev-card-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .ev-evt { font-size: 0.7rem; font-weight: 700; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; }
+    .ev-what { font-size: 0.7rem; color: var(--text-dim); line-height: 1.55; }
+    .ev-read { font-size: 0.72rem; color: var(--text); line-height: 1.5; font-weight: 600; }
+    .ev-rr { font-size: 0.7rem; font-weight: 700; color: var(--text-dim); }
+    .ev-rr.warn { color: var(--amber); }
+    .ev-line { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.68rem; line-height: 1.5; border-top: 1px solid var(--border); padding-top: 7px; }
+    .ev-k { color: var(--text-dim); font-weight: 700; min-width: 108px; }
+    .ev-v { color: var(--text); flex: 1; min-width: 180px; }
+    .ev-dim { color: var(--text-dim); font-weight: 400; }
+    .ev-pos { color: var(--green); } .ev-neg { color: var(--red); }
+    .ev-decay-txt { font-size: 0.68rem; color: var(--text-dim); margin-bottom: 7px; }
+    .ev-more { margin-top: 20px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 15px; }
+    .ev-more > summary { cursor: pointer; font-size: 0.8rem; font-weight: 800; color: var(--text); list-style: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+    .ev-more > summary::-webkit-details-marker { display: none; }
+    .ev-more > summary::before { content: '▸'; color: var(--text-dim); }
+    .ev-more[open] > summary::before { content: '▾'; }
+    .ev-more-note { font-size: 0.68rem; color: var(--text-dim); line-height: 1.6; margin: 9px 0 12px; }
+    .ev-more-note b { color: var(--text); }
     .bt-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
     .bt-m { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.72rem; padding: 6px 0; border-top: 1px solid var(--border); }
     .bt-m span { color: var(--text-dim); font-weight: 700; }

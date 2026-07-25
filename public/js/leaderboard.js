@@ -12,7 +12,17 @@ const ALGO_NAME = {
   'screener|Breakout': '🔎 Breakout', 'screener|Setup': '🔎 Breakout · Setup', 'screener|Early': '🔎 Breakout · Early',
   'Ghost|GHOST': '👻 Ghost · heavy accum', 'Ghost|STALKING': '👻 Ghost · stalking',
   'momentum|StrongBuy': '🔥 Momentum · buy', 'momentum|StrongSell': '🔥 Momentum · short',
+  'CERN|INDEX_DELETE': '⚡ CERN · index deletion', 'CERN|INDEX_ADD_FADE': '⚡ CERN · index addition (fade)',
+  'CERN|LOCKUP_EXPIRY': '⚡ CERN · IPO lock-up expiry', 'CERN|FORCED_DOWNGRADE': '⚡ CERN · analyst downgrade',
+  'CERN|FIRE_SALE': '⚡ CERN · fund fire-sale', 'CERN|TAX_LOSS': '⚡ CERN · tax-loss selling',
+  'CERN|MARGIN_SPIRAL': '⚡ CERN · margin spiral',
 };
+
+// Minimum resolved picks before a live forward record can claim a verdict or a medal.
+// Mirrors lib/maturity MIN_PROMISING — without it a 3-pick, 100%-win fluke wins the
+// board outright (CERN|INDEX_ADD_FADE did exactly that: "+16.85% avg, 100% win, n3"
+// took 🥇 while the same engine's 54-pick record was losing money).
+export const MIN_RANKED_N = 8;
 const BT_TIER = { 'screener|Breakout': 'Breakout', 'screener|Setup': 'Setup', 'screener|Early': 'Early' };
 
 function bestHorizon(h) {
@@ -32,18 +42,23 @@ export function buildBoard(groups, btSummary, confAlgos) {
     const live = bestHorizon(g.horizons);
     const bt = btSummary && BT_TIER[key] ? btSummary[BT_TIER[key]] : null;
     const score = bt ? bt.avgAlpha : (live ? live.avg : null);
-    return { key, name: ALGO_NAME[key] || key, live, bt, score, n: bt ? bt.n : (live ? live.n : 0), hasData: score != null };
+    const n = bt ? bt.n : (live ? live.n : 0);
+    return { key, name: ALGO_NAME[key] || key, live, bt, score, n, hasData: score != null, ranked: score != null && n >= MIN_RANKED_N };
   });
   // Confluence strategies (cached backtest): excess vs SPY ≈ alpha, beatRate ≈ win.
   for (const [k, a] of Object.entries(confAlgos || {})) {
     if (a.excess == null) continue;
-    rows.push({ key: k, name: a.name, conf: a, score: a.excess, n: a.n || 0, hasData: true });
+    const n = a.n || 0;
+    rows.push({ key: k, name: a.name, conf: a, score: a.excess, n, hasData: true, ranked: n >= MIN_RANKED_N });
   }
-  return rows.sort((a, b) => (b.hasData - a.hasData) || ((b.score ?? -99) - (a.score ?? -99)));
+  // Thin-sample rows sort BELOW every properly-evidenced row regardless of how good
+  // their point estimate looks — a lucky handful of picks must not top the board.
+  return rows.sort((a, b) => (b.ranked - a.ranked) || (b.hasData - a.hasData) || ((b.score ?? -99) - (a.score ?? -99)));
 }
 
 function verdict(row) {
   if (!row.hasData) return ['building', 'var(--text-dim)', 'no resolved picks yet'];
+  if (!row.ranked) return ['building', 'var(--text-dim)', `only ${row.n} resolved — too few to rank (needs ${MIN_RANKED_N})`];
   const bt = row.bt, live = row.live, cf = row.conf;
   if (cf) {
     const tag = `${cf.excess > 0 ? '+' : ''}${cf.excess}% excess, ${cf.beatRate}% beat (floor ${cf.wilsonLo}%, n${cf.n})`;
@@ -68,7 +83,7 @@ function row(r, i) {
   const live = r.live;
   const liveStr = live ? `<span class="lb-live">live: ${live.avg > 0 ? '+' : ''}${live.avg}% · ${live.winRate}% win <span class="dt-dim">(${live.horizon}, n${live.n})</span></span>` : `<span class="dt-dim">live: building</span>`;
   return `<div class="lb-row">`
-    + `<div class="lb-rank">${r.hasData ? (MEDAL[i] || (i + 1)) : '·'}</div>`
+    + `<div class="lb-rank">${r.ranked ? (MEDAL[i] || (i + 1)) : '·'}</div>`
     + `<div class="lb-mid"><div class="lb-name">${esc(r.name)}</div>`
     + `<div class="lb-detail" style="color:${col}">${detail}</div>${liveStr}</div>`
     + `<div class="lb-verdict" style="color:${col}">${vk}</div></div>`;
@@ -92,7 +107,7 @@ export async function loadLeaderboard(container) {
   let html = `<div class="rot-panel"><div class="rot-head">🏆 Which algos are actually working?</div>`
     + `<div class="rot-sub">The app's screener strategies, ranked by realized performance — the trailing <b>3-month ${L('backtest', 'backtest')}</b> ${L('beatRate', 'alpha')} where available, plus each algo's <b>live</b> forward record as it matures. This is the validation surface that re-weights the ${L('selflearning', 'Opportunities')} ranking.</div></div>`;
   html += board.map(row).join('');
-  html += `<div class="dt-note" style="margin-top:10px">⚠️ <b>Honest read:</b> most strategies sit at or below SPY out-of-sample (the project's recurring finding) — the leaderboard exists to surface the few that hold up and to keep grading them. Ranks update as live picks mature toward the full 3-month horizon.</div>`;
+  html += `<div class="dt-note" style="margin-top:10px">⚠️ <b>Honest read:</b> most strategies sit at or below SPY out-of-sample (the project's recurring finding) — the leaderboard exists to surface the few that hold up and to keep grading them. Ranks update as live picks mature toward the full 3-month horizon. A strategy needs <b>${MIN_RANKED_N} resolved picks</b> before it can be ranked at all: a handful of lucky picks is not a track record, however good the average looks.</div>`;
   if (!withData) html += `<div class="dt-dim" style="margin-top:8px">Live records are still maturing; the 3-month backtest column fills the gap.</div>`;
   container.innerHTML = html;
 }
