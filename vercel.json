@@ -10,6 +10,6 @@
     "api/tracker.js":  { "maxDuration": 60 }
   },
   "crons": [
-    { "path": "/api/warm", "schedule": "0 13 * * *" }
+    { "path": "/api/warm", "schedule": "0 22 * * *" }
   ]
 }

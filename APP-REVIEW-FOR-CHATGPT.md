@@ -40,7 +40,7 @@ dashboard with a falsifiable self-tracking layer**, not a profitable trading sys
   entire architecture: there are only **11 `api/*.js` entry files**, and *dozens* of logical
   endpoints are multiplexed through them via an `?op=<name>` query param that dispatches into
   `lib/*-routes.js` modules. (e.g. `api/tracker.js` alone handles ~100 ops.)
-- **Cron constraint — Hobby caps crons at once/day.** A single daily cron `/api/warm` (13:00 UTC)
+- **Cron constraint — Hobby caps crons at once/day.** A single daily cron `/api/warm` (22:00 UTC, post-close)
   warms caches AND triggers all the daily logging/snapshot ops in sequence, under a 60s
   `maxDuration` budget (late ops risk being skipped if it runs long).
 - **Data feeds:** Yahoo Finance (candles `/v8/chart`, option chains `/v7/options` w/ cookie+crumb

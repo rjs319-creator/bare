@@ -111,7 +111,7 @@ Each has existing machinery to borrow — none needs a new engine or function.
 
 ## 5. Data-Feasibility Ledger (gates every module)
 
-**Overall:** this is a **daily / end-of-day dashboard**, not real-time. Stated in `lib/provenance.js:5-7`; every `SOURCE_META` entry is `realtime:false`. **One cron/day** (`vercel.json`: `/api/warm` at `0 13 * * *`, Hobby once/day cap), `maxDuration 60s`, **11/12 serverless functions used**.
+**Overall:** this is a **daily / end-of-day dashboard**, not real-time. Stated in `lib/provenance.js:5-7`; every `SOURCE_META` entry is `realtime:false`. **One cron/day** (`vercel.json`: `/api/warm` at `0 22 * * *`, Hobby once/day cap), `maxDuration 60s`, **11/12 serverless functions used**.
 
 | Feature | Available? | Source | Latency / cadence | EOD or intraday |
 |---|---|---|---|---|
