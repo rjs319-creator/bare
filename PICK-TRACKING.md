@@ -32,7 +32,7 @@ of the app is unaffected.
 
 ## Day-to-day
 
-Hands-off. The daily cron (`/api/warm`, 13:00 UTC ≈ 9 AM ET) warms caches then logs that
+Hands-off. The daily cron (`/api/warm`, 22:00 UTC ≈ 6 PM ET, post-close) warms caches then logs that
 day's picks. Weekends are skipped to avoid duplicate cohorts.
 
 - Screener entry price = the pick's close at scan time.

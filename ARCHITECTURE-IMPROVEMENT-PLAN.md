@@ -29,7 +29,7 @@ Branch `harden/security-batch1` — 4 batches shipped, **561/561 `node --test` g
 
 ## 0. Repository assessment
 
-A single-user momentum/regime **dashboard** (explicitly not an alpha engine — see `APP-REVIEW-FOR-CHATGPT.md` §6). Vanilla-JS no-build frontend, Node ESM Vercel serverless backend, Vercel Blob JSON storage, one daily cron. Constraints are real and respected: 11 `api/*.js` files fit the Hobby 12-function cap by multiplexing ~130 logical ops through `?op=` into `lib/*-routes.js`; a single 13:00-UTC cron does ~48 jobs under a 60s budget.
+A single-user momentum/regime **dashboard** (explicitly not an alpha engine — see `APP-REVIEW-FOR-CHATGPT.md` §6). Vanilla-JS no-build frontend, Node ESM Vercel serverless backend, Vercel Blob JSON storage, one daily cron. Constraints are real and respected: 11 `api/*.js` files fit the Hobby 12-function cap by multiplexing ~130 logical ops through `?op=` into `lib/*-routes.js`; a single 22:00-UTC (post-close) cron does ~48 jobs under a 60s budget.
 
 **The codebase is in better shape than its size suggests.** The good foundations found during audit:
 
