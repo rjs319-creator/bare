@@ -4962,7 +4962,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   document.getElementById('sharp-refresh-btn')?.addEventListener('click', runSharpUI);
 
   // ── 🔔 ALERTS — durable Predict feed + unread badge + opt-in browser notifications ──
-  const ALERT_ICON = { sharp: '🕵️', stance: '🧭', crowd: '🎲' };
+  const ALERT_ICON = { sharp: '🕵️', stance: '🧭', crowd: '🎲', daytrade: '⚡' };
   const ALERT_COL = { high: 'var(--red)', med: 'var(--amber,#f59e0b)', low: 'var(--text-dim)' };
   let alertsLoaded = false, alertItems = [];
   const getSeen = () => { try { return +localStorage.getItem('notifySeen') || 0; } catch { return 0; } };
@@ -5810,13 +5810,22 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const el = document.getElementById('dt-container');
     if (!el) return;
     if (!silent) el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning movers…</p></div>`;
+    // Fire-and-forget: advance the broad-universe discovery scan (CDN-coalesced at ~45s so
+    // concurrent viewers share one execution). Its output reaches the board on the NEXT
+    // op=daytrade pull — no need to block this render on it.
+    try { fetchJSON('/api/tracker?op=discover').catch(() => null); } catch {}
     try {
-      const [t, book, timingBook] = await Promise.all([
+      const [t, book, timingBook, dtAlerts] = await Promise.all([
         fetchJSON('/api/tracker?op=daytrade'),
         fetchJSON('/api/tracker?op=daytradebook').catch(() => null),
         fetchJSON('/api/tracker?op=timingbook').catch(() => null),
+        fetchJSON('/api/tracker?op=daytradealerts').catch(() => null),
       ]);
+      renderDaytrade._alerts = (dtAlerts && dtAlerts.ok && dtAlerts.alerts) || [];
       renderDaytrade(t, book, timingBook);
+      // New Day-Trade transitions land in the shared 🔔 feed — refresh the unread badge and
+      // (opt-in) surface browser notifications while the page is open.
+      fetchAlerts().then(items => { paintAlertBadge(); maybeNotify(items); }).catch(() => {});
     } catch { if (!silent) el.innerHTML = `<div class="mom-status error"><p>Could not load Day Trade.</p></div>`; }
   }
   // 🟢 Timing-light ACCOUNTABILITY scorecard — the grade's own forward track record.
@@ -5839,11 +5848,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function renderDaytrade(t, book, timingBook) {
     const el = document.getElementById('dt-container');
     if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Day Trade unavailable.</p></div>`; return; }
-    const REG = { 'risk-on': ['#22c55e', 'RISK-ON', 'Hunt momentum'], neutral: ['#eab308', 'NEUTRAL', 'Be selective'], 'risk-off': ['#ef4444', 'RISK-OFF', 'Stand down — momentum fails here'] };
+    const REG = { 'risk-on': ['#22c55e', 'RISK-ON', 'Hunt momentum'], neutral: ['#eab308', 'NEUTRAL', 'Be selective'], 'risk-off': ['#ef4444', 'RISK-OFF', 'Caution — multi-day momentum has failed here; intraday evidence is unproven'] };
     const [rc, rlbl, rdesc] = REG[t.regime] || REG.neutral;
-    const banner = `<div class="rot-panel" style="border-color:${rc}55"><div class="rot-head" style="color:${rc}">Regime: ${rlbl}</div><div class="rot-sub">${rdesc}. Forward horizon ~${t.horizon} sessions. Picks are logged daily and the engine learns which names' momentum actually continues.</div></div>`;
+    const regimeNote = t.regime === 'risk-off' && t.regimePolicy && !t.regimePolicy.suppressedNow
+      ? ` <span class="dt-dim">Honesty note: the "momentum fails in risk-off" finding comes from the app's MULTI-DAY swing research — there is no Day-Trade-specific evidence that hiding intraday setups helps, so the lists stay visible with this warning instead of being suppressed.</span>` : '';
+    const banner = `<div class="rot-panel" style="border-color:${rc}55"><div class="rot-head" style="color:${rc}">Regime: ${rlbl}</div><div class="rot-sub">${rdesc}. Forward horizon ~${t.horizon} sessions. Picks are logged daily and the engine learns which names' momentum actually continues.${regimeNote}</div></div>`;
     // Inline market-tape badge (momentum favors trending tapes, struggles in chop).
-    const TAPE = { trending: ['📈', 'Trending tape', 'momentum continuation is favored — the ideal tape for these setups'], choppy: ['🌊', 'Choppy / ranging tape', 'momentum stalls and reverses here — be selective and tighten stops'], mixed: ['🤝', 'Mixed tape', 'no clear edge for momentum — be selective'], riskoff: ['🛑', 'Risk-off tape', 'momentum fails — stand down on new longs'] };
+    const TAPE = { trending: ['📈', 'Trending tape', 'momentum continuation is favored — the ideal tape for these setups'], choppy: ['🌊', 'Choppy / ranging tape', 'momentum stalls and reverses here — be selective and tighten stops'], mixed: ['🤝', 'Mixed tape', 'no clear edge for momentum — be selective'], riskoff: ['🛑', 'Risk-off tape', 'be cautious on new longs — multi-day momentum has failed here (intraday evidence unproven)'] };
     const [ti, tlbl, tdesc] = TAPE[t.condition] || TAPE.mixed;
     const fav = t.condition === 'trending', bad = t.condition === 'choppy' || t.condition === 'riskoff';
     const tapeBadge = `<div class="dt-note" style="border-left-color:${fav ? 'var(--green)' : bad ? 'var(--amber,#f59e0b)' : 'var(--border-hi)'}"><b>${ti} ${tlbl}.</b> ${tdesc} ${t.condition && t.condition !== 'mixed' ? `<span class="dt-dim">(momentum is a trend-following style — it ${fav ? '✓ suits' : '⚠ does not suit'} today's tape.)</span>` : ''}</div>`;
@@ -5869,7 +5880,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       <div class="tr-howto-head">📖 How to use this — in plain English</div>
       <ol>
         <li><b>What this is.</b> A list of stocks making a <b>big move TODAY on unusually heavy volume</b> — the day's "movers."</li>
-        <li><b>Check the regime first.</b> <b style="color:#22c55e">Risk-On</b>/<b style="color:#eab308">Neutral</b> = these setups are worth watching. <b style="color:#ef4444">Risk-Off</b> = the list is hidden — stand down (momentum fails in scary markets).</li>
+        <li><b>Check the regime first.</b> <b style="color:#22c55e">Risk-On</b>/<b style="color:#eab308">Neutral</b> = these setups are worth watching. <b style="color:#ef4444">Risk-Off</b> = extra caution — the app's <b>multi-day</b> tests say momentum entries do badly here (intraday impact unproven, so the list stays visible with a warning).</li>
         <li><b>Pick your entry.</b> 📈 <b>Opening-range breakout</b> (the tested config) = next session, wait ~30 min, buy <b>only if it breaks the opening-range high</b> — don't chase the open · ↩️ <b>Pullback</b> = instead wait to buy lower on a dip. Each shows 🛑 <b>Stop</b> (2.5×ATR — sell here if wrong) and 🏁 <b>Target</b> (1:2, take profit).</li>
         <li><b>Size by risk, not by gut.</b> Shares ≈ (1% of your account) ÷ (Entry − Stop). Example: $10k account, risk $100, Entry $10 / Stop $9 → ~100 shares.</li>
         <li><b>Always confirm on a chart</b> (TradingView: MACD / RSI) before buying. This is a <b>watchlist, not advice</b>.</li>
@@ -5915,7 +5926,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     };
     // Same-session buy language (the pullback "buy a dip" entry, or the green ORB emphasis) is
     // shown ONLY for live-actionable names — never beside a stale or retired recommendation.
-    const isLiveActionable = r => r.lifecycleState === 'ACTIONABLE_NOW' || r.lifecycleState === 'REVERSAL_RECLAIM' || (r.lifecycleState == null && r.currentSessionFresh == null);
+    // FAIL CLOSED: a row with MISSING lifecycle fields is NOT actionable (the old legacy
+    // fallback let unvalidated rows carry buy language — that hole is closed).
+    const isLiveActionable = r => r.actionable === true || r.lifecycleState === 'ACTIONABLE_NOW' || r.lifecycleState === 'REVERSAL_RECLAIM';
     const card = (r, i) => `<div class="dt-card" data-ticker="${esc(r.ticker)}" data-stop="${orb(r) ? orb(r).stop : (r.stop != null ? r.stop : '')}" data-actionable="${isLiveActionable(r) ? '1' : '0'}">
         <div class="dt-card-top">
           <span>${rankChip(i)} ${lifeBadge(r)} ${carryBadge(r)} ${relBadge(r)} <b>${esc(r.ticker)}</b>${r.preferred ? ' <span class="dt-star" title="Top-half by rank — the experimental config\'s preferred selection">⭐</span>' : ''}${tierBadge(r)} <span class="dt-sec">${esc(r.sector || '')}</span></span>
@@ -5928,10 +5941,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
         <div class="chart-panel" data-chart-panel style="display:none"></div>
       </div>`;
+    const suppressedNow = !!(t.regimePolicy && t.regimePolicy.suppressedNow);
     const list = (title, rows, sub, extra) => {
-      if (t.riskOff) return `<div class="rot-panel"><div class="rot-head">${title}</div><div class="rot-sub">🛑 Risk-off — suppressed (these setups underperform in risk-off; validated).</div></div>`;
+      if (suppressedNow) return `<div class="rot-panel"><div class="rot-head">${title}</div><div class="rot-sub">🛑 Risk-off — suppressed by the active regime policy (its evidence gate has passed).</div></div>`;
+      const riskOffWarn = t.riskOff ? `<div class="dt-note" style="border-left-color:var(--red)"><b>🛑 Risk-off context.</b> The app's <b>multi-day</b> research says momentum entries underperform here; that finding has <b>not</b> been validated for intraday setups, so the list stays visible — treat it with extra caution and smaller size.</div>` : '';
       const body = (rows || []).map(card).join('');
-      return `<div class="rot-panel"><div class="rot-head">${title}</div><div class="rot-sub">${sub}</div>${extra || ''}${body || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No movers right now.</span></div>'}</div>`;
+      return `<div class="rot-panel"><div class="rot-head">${title}</div><div class="rot-sub">${sub}</div>${riskOffWarn}${extra || ''}${body || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No movers right now.</span></div>'}</div>`;
     };
     const ml = list('🚀 Momentum &amp; Liquid ($5–$50)', t.momentumLiquid, 'Liquid names up &gt;5% on &gt;1.5× relative volume, ranked by the volume anomaly + learned tilt. <b>⭐ = top-half by rank</b> — the experimental config\'s preferred picks.');
     const betaNote = `<div class="dt-note"><b>β ≈ 2 — beta-neutral check:</b> these small caps swing ~2× the market. In 5y tests the edge is <b>real stock-picking alpha</b> (it barely changes when market beta is removed: +1.7% → +1.5%), but it's a <b>low-hit-rate, big-winner</b> profile (~48–49% win rate) — so <b>size small</b>. Advanced traders isolate the alpha by hedging ~2× the position in short SPY.</div>`;
@@ -5965,7 +5980,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     let track;
     if (book && book.resolved >= 10) {
       const row = (n, s) => s && s.n ? `<div class="bt-ic-row"><span>${n} <span style="color:var(--text-dim)">${s.n}</span></span><span>exc ${s.avgExc > 0 ? '+' : ''}${s.avgExc}%</span><span>${L('beatRate', 'beat')} ${s.beatRate}% <span style="color:var(--text-dim)">(${L('wilsonLB', 'LB')} ${s.wilsonLo}%)</span></span></div>` : '';
-      track = `<div class="rot-panel"><div class="rot-head">📊 Live track record — forward ${t.horizon}-session excess vs SPY</div>${row('🚀 Momentum-Liquid', book.byScan.momentum_liquid)}${row('💥 Explosive-Small', book.byScan.explosive_small)}${row('All picks', book.overall)}<div class="bt-ic-row" style="border-top:1px solid var(--border);margin-top:4px"><span></span><span></span><span>${book.resolved} resolved · ${book.stillOpen} open</span></div></div>`;
+      track = `<div class="rot-panel"><div class="rot-head">📊 Live track record — forward ${t.horizon}-session excess vs SPY</div>${row('🚀 Momentum-Liquid', book.byScan.momentum_liquid)}${row('💥 Explosive-Small', book.byScan.explosive_small)}${row('All picks', book.overall)}<div class="bt-ic-row" style="border-top:1px solid var(--border);margin-top:4px"><span></span><span></span><span>${book.resolved} resolved · ${book.stillOpen} open</span></div><div class="rot-sub" style="margin-top:6px"><b>Model status:</b> runner/dud scores are a <b>deterministic baseline</b> (uncalibrated research scores — no probability claims). A learned model trains in shadow on the graded lifecycle episodes and can only replace the baseline after the pre-registered out-of-sample promotion gate passes.${t.lifecycle ? ` <span class="dt-dim">Lifecycle: ${t.lifecycle.tracked} tracked · ${t.lifecycle.transitions} transitions this cycle · durable ${t.lifecycle.durable ? '✓' : '✗ (no Blob — state resets per request)'}</span>` : ''}</div></div>`;
     } else {
       track = `<div class="rot-panel rot-panel-pending"><div class="rot-head">📊 Live track record — building…</div><div class="rot-sub">${book ? `${book.stillOpen || 0} open, ${book.resolved || 0} resolved` : ''}. Each pick is scored ~${t.horizon} sessions later; accrues automatically via the daily cron.</div></div>`;
     }
@@ -5974,11 +5989,45 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // + valid thesis + valid plan). A stale prior-session mover can NEVER appear here.
     const best = (t.bestOpportunities || []);
     const lanes = t.lanes || {};
-    const bestCard = (o, i) => `<div class="dt-best-card" data-ticker="${esc(o.ticker)}" data-stop="${o.orb ? o.orb.stop : (o.stop != null ? o.stop : '')}" data-actionable="1" style="border-color:#22c55e55">
-        <div class="dt-best-top"><span class="dt-best-rank">#${o.rank ?? (i + 1)}</span> ${lifeBadge(o)} ${carryBadge(o)} <b>${esc(o.ticker)}</b> <span class="dt-relscore" title="Within-pool relative-strength percentile (0–100) — ordering, NOT a probability">${o.relScore}</span> <span class="dt-sec">${esc(o.source)}${o.tier === 'B' ? ' · B' : ''}</span></div>
-        <div class="dt-card-sub"><span data-dt-daychg>${o.pctChange >= 0 ? '+' : ''}${o.pctChange}%</span> today · RVOL ${o.relVol}×${rvMark} · <span class="dt-dim">${esc(o.why)}</span></div>
+    // Runner/dud research-score chip — deterministic ordering scores, NEVER probabilities.
+    const scoreChip = o => (o.runnerScore == null && o.dudScore == null) ? '' :
+      `<span class="dt-relscore" style="border:1px solid var(--border)" title="Runner / dud RESEARCH scores (0–100, deterministic evidence blend — NOT calibrated probabilities). Runner = continuation evidence; Dud = independent failure evidence.">🏃${o.runnerScore ?? '–'} · 💀${o.dudScore ?? '–'}</span>`;
+    // Expandable expert-evidence block: features, residuals, plan provenance, versions.
+    const expertBlock = o => {
+      const rows = [
+        ['VWAP', o.currentVwap != null ? '$' + o.currentVwap + (o.aboveVwap === true ? ' (above)' : o.aboveVwap === false ? ' (below)' : '') : null],
+        ['15-min move', o.mom15 != null ? (o.mom15 * 100).toFixed(2) + '%' : null],
+        ['Residual vs SPY', o.residualVsSpy != null ? o.residualVsSpy + '%' : null],
+        ['Time-of-day RVOL', o.timeOfDayRelVol != null ? o.timeOfDayRelVol + '×' : null],
+        ['Extension', o.extensionAtr != null ? o.extensionAtr + ' ATR above VWAP' : null],
+        ['Remaining R:R', o.remainingRR != null ? String(o.remainingRR) : null],
+        ['Intraday bar as-of', o.intradayBarAsOf ? new Date(o.intradayBarAsOf).toLocaleTimeString() : null],
+        ['Quote as-of', o.quoteAsOf ? new Date(o.quoteAsOf).toLocaleTimeString() : null],
+        ['Plan basis', o.planBasis || null],
+        ['Plan expires', o.planExpiresAt ? new Date(o.planExpiresAt).toLocaleTimeString() : null],
+        ['Score basis', o.scoreBasis || null],
+        ['Spread / halt', o.execution ? `${o.execution.spreadStatus || 'unknown'} / ${o.execution.haltStatus || 'unknown'} (unknown ≠ favorable)` : null],
+        ['Setup id', o.setupId || null],
+      ].filter(r => r[1] != null);
+      if (!rows.length) return '';
+      return `<details class="dt-dim" style="font-size:10.5px;margin-top:4px"><summary style="cursor:pointer">🔬 Expert evidence</summary>${rows.map(r => `<div>· ${r[0]}: <b>${esc(String(r[1]))}</b></div>`).join('')}</details>`;
+    };
+    // Plan line — an ACTIONABLE card shows the LIVE recomputed plan (never the stale daily
+    // levels); a non-actionable card shows only the next-session ORB reference.
+    const planLine = o => {
+      if (isLiveActionable(o) && o.livePlan) {
+        const p = o.livePlan;
+        return `<div class="dt-card-plan">⚡ <b>Live plan</b> <span class="dt-dim">(recomputed ${p.computedAt ? new Date(p.computedAt).toLocaleTimeString() : 'now'}${p.expiresAt ? ' · expires ' + new Date(p.expiresAt).toLocaleTimeString() : ''})</span> — entry <b>$${p.entry}</b>${p.trigger != null ? ` <span class="dt-dim">(trigger $${p.trigger})</span>` : ''} · 🛑 <b>$${p.stop}</b> <span class="dt-dim">(−${p.riskPct}%)</span> · 🏁 <b>$${p.target}</b> <span class="dt-dim">1:${p.rr}</span></div>`;
+      }
+      if (o.orb) return `<div class="dt-card-plan">📈 <b>ORB reference</b> <span class="dt-dim">(from the ${esc(o.planAsOf || o.candidateAsOf || 'detection')} setup — NOT a live plan)</span> break &gt;<b>$${o.orb.trigger}</b> · 🛑 <b>$${o.orb.stop}</b> · 🏁 <b>$${o.orb.target}</b> <span class="dt-dim">1:${o.orb.rr}</span></div>`;
+      return '';
+    };
+    const bestCard = (o, i) => `<div class="dt-best-card" data-ticker="${esc(o.ticker)}" data-stop="${isLiveActionable(o) && o.livePlan ? o.livePlan.stop : (o.stop != null ? o.stop : '')}" data-actionable="${isLiveActionable(o) ? '1' : '0'}" style="border-color:${isLiveActionable(o) ? '#22c55e55' : '#eab30844'}">
+        <div class="dt-best-top"><span class="dt-best-rank">#${o.rank ?? (i + 1)}</span> ${lifeBadge(o)} ${carryBadge(o)} ${scoreChip(o)} <b>${esc(o.ticker)}</b> ${o.relScore != null ? `<span class="dt-relscore" title="Within-pool relative-strength percentile (0–100) — ordering, NOT a probability">${o.relScore}</span>` : ''} <span class="dt-sec">${esc(o.source || o.scan || '')}${o.tier === 'B' ? ' · B' : ''}</span></div>
+        <div class="dt-card-sub"><span data-dt-daychg>${o.pctChange >= 0 ? '+' : ''}${o.pctChange}%</span> today${o.relVol != null ? ` · RVOL ${o.relVol}×${rvMark}` : ''}${o.why ? ` · <span class="dt-dim">${esc(o.why)}</span>` : ''}</div>
         ${freshLine(o)}
-        ${o.orb ? `<div class="dt-card-plan">📈 <b>ORB</b> break &gt;<b>$${o.orb.trigger}</b> · 🛑 <b>$${o.orb.stop}</b> · 🏁 <b>$${o.orb.target}</b> <span class="dt-dim">1:${o.orb.rr}</span></div>` : (o.stop ? `<div class="dt-card-plan">🛑 <b>$${o.stop}</b> · 🏁 <b>$${o.target}</b>${o.rr != null ? ` <span class="dt-dim">1:${o.rr}</span>` : ''}</div>` : '')}
+        ${planLine(o)}
+        ${expertBlock(o)}
       </div>`;
     const bestSubtitle = `<b>Live-validated buys only.</b> Every card here cleared the <b>current-session actionable gate</b> — fresh 5-minute evidence, a valid thesis, and a valid plan — then the fade-avoidance filter (carry above the ~49% beat-SPY base rate, not an overextended blow-off, no dilution/M&amp;A pop) and carry ranking. A stale prior-session mover (yesterday's candle) <b>cannot</b> appear here no matter how bullish it looked — it drops to the <b>Prior-Session Watchlist</b> below. On a day with no live-actionable setup this is <b>empty</b> — the honest answer, not a bug. Still not a winner-predictor: tradeable 3-session continuation is ~a coin-flip; this avoids the traps and refuses to show a "buy now" that already failed.`;
     const bestEmptyMsg = t.session && t.session !== 'regular'
@@ -5990,7 +6039,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <div class="rot-head" style="color:#f59e0b">⚡ Actionable Now <span class="dt-dim">(0)</span></div>
         <div class="rot-sub">${bestEmptyMsg}</div>
       </div>`;
-    const bestSection = t.riskOff ? '' : (!best.length ? bestEmpty : `<div class="rot-panel" style="border-color:#22c55e66;background:#22c55e0d">
+    const bestSection = suppressedNow ? '' : (!best.length ? bestEmpty : `<div class="rot-panel" style="border-color:#22c55e66;background:#22c55e0d">
         <div class="rot-head" style="color:#22c55e">⚡ Actionable Now <span class="dt-dim">(${best.length})</span></div>
         <div class="rot-sub">${bestSubtitle}</div>
         <div class="dt-best-grid">${best.map(bestCard).join('')}</div>
@@ -5998,19 +6047,54 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
     // 🎯 Armed / Waiting for Trigger — live-validated setups that have NOT triggered yet.
     const armedRows = lanes.armed || [];
-    const armedSection = (t.riskOff || !armedRows.length) ? '' : `<div class="rot-panel" style="border-color:#eab30855">
+    const armedSection = (suppressedNow || !armedRows.length) ? '' : `<div class="rot-panel" style="border-color:#eab30855">
         <div class="rot-head" style="color:#eab308">🎯 Armed — waiting for the trigger <span class="dt-dim">(${armedRows.length})</span></div>
         <div class="rot-sub">Setup complete and live-validated, but <b>not yet triggered</b>. This is "wait for the break," <b>not</b> "buy now."</div>
         <div class="dt-best-grid">${armedRows.map(bestCard).join('')}</div>
       </div>`;
 
-    // 🗂 Retired Today — names that INVALIDATED intraday. Kept (never silently removed) for
-    // honesty + forward grading. A down name is a FAILED setup, not a discounted original buy.
+    // Compact non-buy lane card (retired / prior-session / extended context rows).
     const laneCard = o => `<div class="dt-best-card" style="border-color:#64748b44">
         <div class="dt-best-top">${lifeBadge(o)} <b>${esc(o.ticker)}</b> <span class="dt-sec">${esc(o.sector || o.source || '')}</span></div>
         <div class="dt-card-sub dt-dim" style="font-size:11px">detected <b>$${o.originalPrice ?? o.last}</b>${o.candidateAsOf ? ' · ' + esc(o.candidateAsOf) : ''}${o.currentPrice != null && o.currentPrice !== (o.originalPrice ?? o.last) ? ` · now <b>$${o.currentPrice}</b>` : ''}${o.lossFromDetectionPct != null && o.lossFromDetectionPct < 0 ? ` · <span style="color:var(--red)">${o.lossFromDetectionPct}% since</span>` : ''}</div>
         ${o.explanation ? `<div class="dt-card-sub">${esc(o.explanation)}</div>` : ''}
       </div>`;
+
+    // 🛰 Igniting — broad-universe change-detector anomalies (Stage-A discovery): names
+    // starting to accelerate RIGHT NOW, including ones absent from every daily shortlist.
+    // Watch candidates only — they must clear the same live gate as everything else.
+    const discRows = (t.discovery && t.discovery.anomalies) || [];
+    const discCov = t.discovery && t.discovery.coverage;
+    const discCard = o => `<div class="dt-best-card" data-ticker="${esc(o.ticker)}" data-actionable="0" style="border-color:#38bdf844">
+        <div class="dt-best-top">${lifeBadge(o)} <b>${esc(o.ticker)}</b> <span class="dt-sec">${esc(o.sector || '')}</span></div>
+        <div class="dt-card-sub">${o.pctChange != null ? `<span data-dt-daychg>${o.pctChange >= 0 ? '+' : ''}${o.pctChange}%</span> today` : ''}${o.excessPct != null ? ` · <span class="dt-dim">${o.excessPct >= 0 ? '+' : ''}${o.excessPct}% vs SPY</span>` : ''}${o.cusum != null ? ` · <span class="dt-dim" title="One-sided CUSUM change-detector statistic — how abnormally fast this name is accelerating vs its own volatility">CUSUM ${o.cusum}</span>` : ''}${o.relVol != null ? ` · RVOL ${o.relVol}×` : ''}</div>
+        ${freshLine(o)}
+      </div>`;
+    const discSection = discRows.length ? `<div class="rot-panel" style="border-color:#38bdf855">
+        <div class="rot-head" style="color:#38bdf8">🛰 Igniting — early abnormal movement <span class="dt-dim">(${discRows.length})</span></div>
+        <div class="rot-sub"><b>Not a buy list.</b> A broad scan of the full liquid universe (~${t.discovery.universe || '?'} names${discCov ? `, provider ${esc(discCov.provider || '?')}${discCov.volumeAvailable === false ? ', price-only — volume unavailable from this provider' : ''}` : ''}) flags names whose <b>acceleration is statistically abnormal for their own volatility</b> — often before they'd clear the +2% "building" floor. Each must still pass the same live validation (fresh bar + quote + trigger + structure) to become actionable. What must happen next: hold above VWAP and break the opening-range high on participation; what invalidates: VWAP loss, fade back into the range.</div>
+        <div class="dt-best-grid">${discRows.slice(0, 12).map(discCard).join('')}</div>
+      </div>` : '';
+
+    // 🚀 Too Extended — real strength, unacceptable chase. Visible, explicitly not a buy.
+    const extRows = lanes.tooExtended || [];
+    const extSection = extRows.length ? `<div class="rot-panel" style="border-color:#f59e0b55">
+        <div class="rot-head" style="color:#f59e0b">🚀 Too Extended — real move, bad entry <span class="dt-dim">(${extRows.length})</span></div>
+        <div class="rot-sub">Genuinely strong, but <b>too far above VWAP</b> (in ATR terms) to enter without chasing. Wait for a pullback or a fresh base; chasing here is where the fade research says the losses live.</div>
+        <div class="dt-best-grid">${extRows.slice(0, 12).map(laneCard).join('')}</div>
+      </div>` : '';
+
+    // ⚡ Today's Day-Trade alert feed (transition alerts, deduped server-side).
+    const dtAlerts = (renderDaytrade._alerts || []);
+    const alertRow = a => `<div class="bt-ic-row"><span>${a.kind === 'entry' ? '⚡' : a.kind === 'retire' ? '🛑' : a.kind === 'revive' ? '🔁' : '⚠️'} <b>${esc(a.ticker)}</b> <span class="dt-dim">${esc(a.atET || '')}</span></span><span class="dt-dim">${esc((a.transition && a.transition.to) || '')}</span><span class="dt-dim">${a.plan ? `$${a.plan.entry} / 🛑$${a.plan.stop} / 🏁$${a.plan.target}` : (a.explanation ? esc(a.explanation).slice(0, 60) : '')}</span></div>`;
+    const alertsSection = dtAlerts.length ? `<div class="rot-panel" style="border-color:#a855f755">
+        <div class="rot-head" style="color:#c084fc">🔔 Today's transition alerts <span class="dt-dim">(${dtAlerts.length})</span></div>
+        <div class="rot-sub">Every lifecycle <b>transition</b> alerted today — entries, retirements (with the exact invalidation reason), chase warnings and revivals. Each fires <b>once per setup</b> (server-deduplicated); they also land in the 🔔 Alerts feed and, if enabled, as browser notifications while the app is open. <span class="dt-dim">No background push exists when the app is closed — alerts accrue and deliver on next open (honest limitation of this deployment).</span></div>
+        ${dtAlerts.slice(0, 20).map(alertRow).join('')}
+      </div>` : '';
+
+    // 🗂 Retired Today — names that INVALIDATED intraday. Kept (never silently removed) for
+    // honesty + forward grading. A down name is a FAILED setup, not a discounted original buy.
     const retiredRows = lanes.retiredToday || [];
     const retiredSection = retiredRows.length ? `<div class="rot-panel" style="border-color:#ef444444">
         <div class="rot-head" style="color:#ef4444">🗂 Retired Today <span class="dt-dim">(${retiredRows.length})</span></div>
@@ -6025,7 +6109,16 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <div class="rot-sub">Discovered on a <b>completed prior-session bar</b> (the daily scan runs off a cache built pre-open). These are <b>historical discovery only — not live buys right now.</b> The live quote is overlaid, but the setup describes an earlier session; a name here needs <b>fresh current-session evidence</b> to become actionable. This is where yesterday's big mover sits until it re-proves itself today.</div>
         <div class="dt-best-grid">${priorRows.slice(0, 30).map(laneCard).join('')}</div>
       </div>` : '';
-    el.innerHTML = banner + tapeBadge + pacedBanner + bestSection + armedSection + retiredSection + priorSection + configBanner + howto + ml + es + runSection + expList + track + timingScorecard(timingBook) +
+    // 🔁 Missed / Revived audit lane — retired names that later ran (false retirements) and
+    // revived setups; measured, not hidden.
+    const missedRows = [...retiredRows, ...(lanes.priorSessionWatch || [])].filter(o => o.falseRetirement);
+    const revivedRows = best.filter(o => (o.reasonCodes || []).includes('REVIVED'));
+    const missedSection = (missedRows.length || revivedRows.length) ? `<div class="rot-panel" style="border-color:#a855f744">
+        <div class="rot-head" style="color:#c084fc">🔁 Missed / Revived — audit lane <span class="dt-dim">(${missedRows.length + revivedRows.length})</span></div>
+        <div class="rot-sub">Retired names that subsequently became strong runners (<b>false retirements</b> — the retirement rules' error rate, measured honestly) and setups that re-qualified with a <b>new</b> plan.</div>
+        <div class="dt-best-grid">${[...missedRows.slice(0, 8).map(laneCard), ...revivedRows.slice(0, 8).map((o, i) => bestCard(o, i))].join('')}</div>
+      </div>` : '';
+    el.innerHTML = banner + tapeBadge + pacedBanner + bestSection + armedSection + discSection + extSection + alertsSection + retiredSection + missedSection + priorSection + configBanner + howto + ml + es + runSection + expList + track + timingScorecard(timingBook) +
       `<div class="fade-caveats"><b>How to use.</b> Today's relative-volume + momentum movers (the EOD version of the Finviz day-trade scans), regime-gated and self-learning. <b>Honest validation</b> (5y, forward 3-session excess vs SPY): large-cap momentum-chasing does <b>not</b> beat the market (it mean-reverts, −1.3% out-of-sample); explosive small-caps carry a <b>positive average excess</b> (~+1.7–2.3% in risk-on/neutral) but a <b>sub-50% hit-rate</b> — a few big runners carry it, and it dies in risk-off. So treat these as a <b>ranked movers watchlist</b>, not a win-rate edge; the per-stock learner tilts toward names whose momentum actually continues and drops the rest. <b>The 🧪 experimental config above</b> (opening-range-breakout entry + 2.5×ATR stop + top-half selection) is the one variant that tested out-of-sample positive on <b>real intraday execution</b> — but it <b>failed formal deflation</b> (deflated Sharpe 0.59), so it's a paper-trading lead to confirm forward, not a proven edge. Confirm entries in TradingView (MACD / RSI / Smart-Money). Research, not advice.</div>`;
     // Wire each card's chart toggle (reuses the shared /api/chart canvas renderer)
     // and start live-price polling for the recommended names.
@@ -6075,7 +6168,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     let el = cont.querySelector('.dt-price-asof');
     if (!el) { el = document.createElement('div'); el.className = 'dt-price-asof'; cont.insertBefore(el, cont.firstChild); }
     const t = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    el.innerHTML = `<span class="live-dot"></span>Live prices · updated ${t} · list refreshes every 15 min`;
+    el.innerHTML = `<span class="live-dot"></span>Live prices · updated ${t} · list re-validates every 60 s`;
   }
   // Session-aware display for a /api/price quote on the day-trade-style price
   // nodes. q.price is ALREADY the current print (extended in pre/post, last

@@ -86,13 +86,23 @@ test('closesBelowVwapStreak: counts consecutive tail closes below the running VW
 // ── intraday `ev` → lifecycle integration ────────────────────────────────────
 test('a fully-green intraday feature set drives the lifecycle to ACTIONABLE_NOW', () => {
   const f = buildIntradayFeatures({ todayBars: risingToday(), priorSessions: [priorFlat()], spyTodayBars: priorFlat(), now: NOW, dailyAtr: 3, plan: { entry: 101, stop: 100, target: 110 } });
-  const ev = intradayEv({ ticker: 'ABC', candidateDate: '2026-07-08' }, f, { now: NOW });
+  // The strict actionability pair: a recent intraday bar AND a recent quote.
+  const ev = intradayEv({ ticker: 'ABC', candidateDate: '2026-07-08' }, f, { now: NOW, quote: { price: 103, asOf: NOW } });
   assert.equal(ev.aboveVwap, true);
   assert.equal(ev.triggerConfirmed, true);
   assert.equal(ev.relVolOk, true);
   assert.equal(ev.freshness.freshnessStatus, 'FRESH_TODAY');   // intraday bars ⇒ current-session fresh
+  assert.equal(ev.actionableFresh, true);
   const rec = advanceLifecycle(null, { strategy: 'daytrade', ...ev });
   assert.equal(rec.state, STATES.ACTIONABLE_NOW);
+});
+
+test('the same fully-green feature set WITHOUT a quote fails closed (bar alone is not enough)', () => {
+  const f = buildIntradayFeatures({ todayBars: risingToday(), priorSessions: [priorFlat()], spyTodayBars: priorFlat(), now: NOW, dailyAtr: 3, plan: { entry: 101, stop: 100, target: 110 } });
+  const ev = intradayEv({ ticker: 'ABC', candidateDate: '2026-07-08' }, f, { now: NOW });   // no quote
+  assert.equal(ev.actionableFresh, false);
+  const rec = advanceLifecycle(null, { strategy: 'daytrade', ...ev });
+  assert.notEqual(rec.state, STATES.ACTIONABLE_NOW);
 });
 
 test('an intraday breakout failure drives the lifecycle to FAILED', () => {
