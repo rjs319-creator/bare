@@ -51,3 +51,27 @@ test('buildIgnition skips names without enough candle history (no fabrication)',
   const out = R.buildIgnition([{ ticker: 'ZZZ', sources: ['daytrade'] }], { ZZZ: [{ date: '2026-01-01', close: 10, high: 10, low: 10, volume: 1 }] }, {});
   assert.strictEqual(out.cards.length, 0);
 });
+
+// ── Candle-pool width vs shortlist size ──────────────────────────────────────
+// op=ignition fetches one 6-month candle series per shortlisted name. With the pool
+// at 6 and the shortlist at 60 that was 10 sequential rounds against Yahoo and cost
+// ~6-7s at origin — the whole request. The two constants have to move together, so
+// this pins the relationship rather than the number: raising SHORTLIST_MAX later
+// without widening the pool would silently reintroduce the stall.
+test('the candle pool covers the shortlist in at most 3 rounds', () => {
+  // Arrange
+  const { SHORTLIST_MAX, FETCH_CONCURRENCY } = require('../lib/ignition-routes');
+
+  // Act
+  const rounds = Math.ceil(SHORTLIST_MAX / FETCH_CONCURRENCY);
+
+  // Assert
+  assert.ok(rounds <= 3, `${SHORTLIST_MAX} names at concurrency ${FETCH_CONCURRENCY} = ${rounds} sequential fetch rounds`);
+});
+
+test('the candle pool stays within the width already proven safe elsewhere', () => {
+  // lib/apex-routes uses 24 against the same fetchDailyHistory endpoint (PR #206).
+  // Going wider than the proven pool risks rate-limiting rather than saving time.
+  const { FETCH_CONCURRENCY } = require('../lib/ignition-routes');
+  assert.ok(FETCH_CONCURRENCY <= 24, `pool ${FETCH_CONCURRENCY} exceeds the proven 24`);
+});
