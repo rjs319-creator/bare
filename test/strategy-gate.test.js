@@ -17,10 +17,29 @@ test('isTradeEligible: only production strategies are trade-eligible', () => {
   assert.equal(gate.isTradeEligible('rej', registry), false);
 });
 
-test('statusOf: omitted maturity defaults to production (validated backbone)', () => {
+// quant-redesign-3: the historic fail-OPEN default ('omitted maturity ⇒ production')
+// was the audit's headline defect (H1) — an author could grant live-trade eligibility
+// by doing nothing. Omission now fails CLOSED like every other unknown state; the
+// backbone screeners carry EXPLICIT maturity: 'production' in the registry instead.
+test('statusOf: omitted maturity fails CLOSED to shadow (never silently production)', () => {
   const registry = [{ id: 'core' }];   // no maturity field
-  assert.equal(gate.statusOf('core', registry), 'production');
-  assert.equal(gate.isTradeEligible('core', registry), true);
+  assert.equal(gate.statusOf('core', registry), 'shadow');
+  assert.equal(gate.isTradeEligible('core', registry), false);
+});
+
+test('every registry entry carries an EXPLICIT, valid maturity (no defaults in play)', () => {
+  const { STRATEGY_REGISTRY } = require('../lib/strategy-registry');
+  for (const e of STRATEGY_REGISTRY) {
+    assert.ok(gate.STATUSES.includes(e.maturity), `${e.id} must declare explicit maturity, got ${e.maturity}`);
+  }
+});
+
+test('every SIGNAL registry entry carries a scoringVersion (governance version guard input)', () => {
+  const { STRATEGY_REGISTRY } = require('../lib/strategy-registry');
+  for (const e of STRATEGY_REGISTRY.filter(x => x.kind === 'signal')) {
+    assert.ok(typeof e.scoringVersion === 'string' && e.scoringVersion.length > 0,
+      `${e.id} must declare scoringVersion`);
+  }
 });
 
 test('statusOf: unregistered id fails CLOSED (shadow), never trade-eligible', () => {

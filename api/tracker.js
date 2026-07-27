@@ -83,6 +83,8 @@ const PRIVILEGED_OPS = new Set([
   'pulsegrade',
   // ATLAS-X shadow ledger WRITES (build+persist episodes/ledger/predictions; grade terminals).
   'atlasxlog', 'atlasxresolve',
+  // Pre-move inventory shadow cross-section capture (immutable daily WRITE).
+  'premovelog',
   // Swing-search shadow ledger WRITES (log the daily swing cross-section PIT / grade forward outcomes).
   'swingsearchlog', 'swingsearchgrade',
   // Evidence Consensus & Thesis Change engine — the daily snapshot build makes LLM extraction
@@ -93,7 +95,7 @@ const PRIVILEGED_OPS = new Set([
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
-  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'failuremodel', 'complab', 'challengereval', 'router', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward', 'evidencediag',
+  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'leadtime2', 'failuremodel', 'complab', 'challengereval', 'router', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward', 'evidencediag',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -201,6 +203,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'pulsegrade') return runPulseGrade(req, res);
   if (req.query.op === 'pulseepisodes') return runPulseEpisodes(req, res);
   if (req.query.op === 'leadtime') return require('../lib/leadtime-routes').runLeadTime(req, res);
+  if (req.query.op === 'leadtime2') return require('../lib/leadtime2-routes').runLeadTime2(req, res);
   if (req.query.op === 'failuremodel') return require('../lib/failure-model-routes').runFailureModel(req, res);
   if (req.query.op === 'complab') return require('../lib/component-lab-routes').runComponentLabRoute(req, res);
   if (req.query.op === 'readthrough') return require('../lib/readthrough-routes').runReadThrough(req, res);
@@ -348,6 +351,8 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'orbitcontrols') return require('../lib/orbit-ml-routes').runOrbitControls(req, res);
 
   // ATLAS-X — shadow swing challenger (weight-0). Read board + cron-only writers.
+  if (req.query.op === 'premove') return require('../lib/premove-routes').runPremove(req, res);
+  if (req.query.op === 'premovelog') return require('../lib/premove-routes').runPremoveLog(req, res);
   if (req.query.op === 'atlasx') return require('../lib/atlasx-routes').runAtlasX(req, res);
   if (req.query.op === 'atlasxlog') return require('../lib/atlasx-routes').runAtlasXLog(req, res);
   if (req.query.op === 'atlasxresolve') return require('../lib/atlasx-routes').runAtlasXResolve(req, res);

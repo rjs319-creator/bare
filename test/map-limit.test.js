@@ -73,8 +73,9 @@ const APEX = fs.readFileSync(path.join(__dirname, '..', 'lib', 'apex-routes.js')
 const scoreboardBody = () => {
   const start = APEX.indexOf('async function runScoreboard(');
   assert.ok(start > -1, 'runScoreboard not found');
-  // Up to the first-appearance dedup, which is where the loading phase ends.
-  const end = APEX.indexOf('const firstSeen = new Map();', start);
+  // Up to the episode dedup (quant-redesign-3 replaced the first-appearance Map),
+  // which is where the loading phase ends.
+  const end = APEX.indexOf('const firstSeen = createEpisodeMap(', start);
   assert.ok(end > start, 'could not bound the runScoreboard load phase');
   return APEX.slice(start, end);
 };

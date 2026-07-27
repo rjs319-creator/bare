@@ -483,6 +483,12 @@ module.exports = async function handler(req, res) {
     // breakout candidates — so surface the top accumulation names regardless of
     // whether they're breaking out. This is what makes the 👻 Ghost tab a real
     // full-universe accumulation scan instead of a re-rank of the breakout pool.
+    // Each row carries the POINT-IN-TIME fields the downstream pre-move pipeline
+    // needs (decision price, levels, liquidity, pillar snapshot, cutoff, scope) —
+    // previously only display fields survived, which stranded standalone
+    // quiet-accumulation names from every decision/learning path. Missing data is
+    // MARKED missing (explicit `missing` list), never imputed.
+    const ghostDataCutoff = (spyCandles && spyCandles.length) ? spyCandles[spyCandles.length - 1].date : null;
     const ghostTop = valid
       .map(c => ({ c, g: ghostByTicker[c.ticker] }))
       .filter(x => x.g && x.g.tier !== 'PASS')
@@ -494,6 +500,26 @@ module.exports = async function handler(req, res) {
         levels: c.levels || null, ghost: g,
         insider: c.insider || null, fundamentals: c.fundamentals || null,
         whynow: whyNowFor(c, g, null),
+        // Point-in-time provenance for the pre-move pipeline (Phase 1):
+        status: c.status || null,
+        capTier: c.capTier || null,
+        dollarVol: (c.factors && Number.isFinite(c.factors.dollarVol)) ? c.factors.dollarVol : null,
+        liqTier: isMicro ? 'micro' : (isBiotech ? 'biotech' : (isSmallScope ? 'small' : 'liquid')),
+        featureSnapshot: { pct: c.pct || null, quant: c.quant || null, metrics: c.metrics ? {
+          pivot: c.metrics.pivot, accumRatio: c.metrics.accumRatio, udVol: c.metrics.udVol,
+          adrPct: c.metrics.adrPct, pctFrom52wHigh: c.metrics.pctFrom52wHigh,
+        } : null },
+        universeScope: scope,
+        universeSize: valid.length,
+        dataCutoff: ghostDataCutoff,
+        inBreakoutResults: breakoutSet.has(c.ticker),
+        missing: [
+          ...(c.levels ? [] : ['levels']),
+          ...((c.factors && Number.isFinite(c.factors.dollarVol)) ? [] : ['dollarVol']),
+          ...(c.fundamentals ? [] : ['fundamentals']),
+          ...(c.insider ? [] : ['insider']),
+          ...(ghostDataCutoff ? [] : ['dataCutoff']),
+        ],
       }));
 
     // ── Conviction score (Edge Book · Sleeve A) — the regime-gated ranker the

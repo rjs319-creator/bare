@@ -1,0 +1,684 @@
+{
+  "counts": {
+    "signals": 18,
+    "byHorizon": {
+      "intraday": 4,
+      "swing": 7,
+      "position": 5,
+      "portfolio": 2
+    }
+  },
+  "top": [
+    {
+      "id": "screener:swing:AAA",
+      "ticker": "AAA",
+      "source": "screener",
+      "sources": [
+        "screener"
+      ],
+      "section": "screener",
+      "horizon": "swing",
+      "side": "long",
+      "tier": "Setup",
+      "state": "detected",
+      "rank": 1,
+      "score": 99.1,
+      "rawConfidence": 82,
+      "expectancyTilt": 1.109,
+      "evidenceMult": 1.09,
+      "regimeFit": 1,
+      "executionQuality": 1,
+      "costTier": "liquid",
+      "costPenalty": 0.991,
+      "scoringVersion": "screener-v1"
+    },
+    {
+      "id": "coremo:portfolio:MMM",
+      "ticker": "MMM",
+      "source": "coremo",
+      "sources": [
+        "coremo"
+      ],
+      "section": "CoreMomentum",
+      "horizon": "portfolio",
+      "side": "long",
+      "tier": "Core",
+      "state": "detected",
+      "rank": 2,
+      "score": 90,
+      "rawConfidence": 100,
+      "expectancyTilt": 1,
+      "evidenceMult": 1,
+      "regimeFit": 1,
+      "executionQuality": 1,
+      "costTier": "liquid",
+      "costPenalty": 1,
+      "scoringVersion": "coremo-v1"
+    },
+    {
+      "id": "biotech:swing:AGIO",
+      "ticker": "AGIO",
+      "source": "biotech",
+      "sources": [
+        "biotech"
+      ],
+      "section": "Biotech",
+      "horizon": "swing",
+      "side": "long",
+      "tier": "Hot",
+      "state": "detected",
+      "rank": 3,
+      "score": 85.9,
+      "rawConfidence": 85,
+      "expectancyTilt": 1,
+      "evidenceMult": 1.09,
+      "regimeFit": 1,
+      "executionQuality": 1,
+      "costTier": "biotech",
+      "costPenalty": 1,
+      "scoringVersion": "biotech-v1"
+    },
+    {
+      "id": "gapgo:intraday:AAA",
+      "ticker": "AAA",
+      "source": "gapgo",
+      "sources": [
+        "gapgo"
+      ],
+      "section": "GapGo",
+      "horizon": "intraday",
+      "side": "long",
+      "tier": "STRONG",
+      "state": "detected",
+      "rank": 4,
+      "score": 85,
+      "rawConfidence": 75,
+      "expectancyTilt": 1.054,
+      "evidenceMult": 1.09,
+      "regimeFit": 1,
+      "executionQuality": 1,
+      "costTier": "liquid",
+      "costPenalty": 0.982,
+      "scoringVersion": "gapgo-v1"
+    },
+    {
+      "id": "coil:swing:DDD",
+      "ticker": "DDD",
+      "source": "coil",
+      "sources": [
+        "coil"
+      ],
+      "section": "coil",
+      "horizon": "swing",
+      "side": "long",
+      "tier": "high",
+      "state": "detected",
+      "rank": 5,
+      "score": 70.5,
+      "rawConfidence": 80,
+      "expectancyTilt": 1,
+      "evidenceMult": 1,
+      "regimeFit": 1,
+      "executionQuality": 1,
+      "costTier": "liquid",
+      "costPenalty": 0.979,
+      "scoringVersion": "coil-v1"
+    },
+    {
+      "id": "readthrough:position:EEE",
+      "ticker": "EEE",
+      "source": "readthrough",
+      "sources": [
+        "readthrough"
+      ],
+      "section": "ReadThrough",
+      "horizon": "position",
+      "side": "long",
+      "tier": "Fresh",
+      "state": "detected",
+      "rank": 6,
+      "score": 63,
+      "rawConfidence": 70,
+      "expectancyTilt": 1,
+      "evidenceMult": 1,
+      "regimeFit": 1,
+      "executionQuality": 1,
+      "costTier": "liquid",
+      "costPenalty": 1,
+      "scoringVersion": "ReadThrough-v1"
+    },
+    {
+      "id": "anomaly:position:FFF",
+      "ticker": "FFF",
+      "source": "anomaly",
+      "sources": [
+        "anomaly"
+      ],
+      "section": "Anomaly",
+      "horizon": "position",
+      "side": "long",
+      "tier": "ACCUMULATION",
+      "state": "detected",
+      "rank": 7,
+      "score": 54,
+      "rawConfidence": 60,
+      "expectancyTilt": 1,
+      "evidenceMult": 1,
+      "regimeFit": 1,
+      "executionQuality": 1,
+      "costTier": "liquid",
+      "costPenalty": 1,
+      "scoringVersion": "Anomaly-v1"
+    },
+    {
+      "id": "screener:swing:SML",
+      "ticker": "SML",
+      "source": "screener",
+      "sources": [
+        "screener"
+      ],
+      "section": "screener",
+      "horizon": "swing",
+      "side": "long",
+      "tier": "Setup",
+      "state": "detected",
+      "rank": 8,
+      "score": 53.4,
+      "rawConfidence": 66,
+      "expectancyTilt": 1.109,
+      "evidenceMult": 1,
+      "regimeFit": 1,
+      "executionQuality": 0.764,
+      "costTier": "small",
+      "costPenalty": 0.976,
+      "scoringVersion": "screener-v1"
+    },
+    {
+      "id": "crossasset:position:HHH",
+      "ticker": "HHH",
+      "source": "crossasset",
+      "sources": [
+        "crossasset"
+      ],
+      "section": "CrossAsset",
+      "horizon": "position",
+      "side": "long",
+      "tier": "LEAD",
+      "state": "detected",
+      "rank": 9,
+      "score": 52.2,
+      "rawConfidence": 58,
+      "expectancyTilt": 1,
+      "evidenceMult": 1,
+      "regimeFit": 1,
+      "executionQuality": 1,
+      "costTier": "liquid",
+      "costPenalty": 1,
+      "scoringVersion": "CrossAsset-v1"
+    },
+    {
+      "id": "downday:swing:RVL",
+      "ticker": "RVL",
+      "source": "downday",
+      "sources": [
+        "downday"
+      ],
+      "section": "DownDay",
+      "horizon": "swing",
+      "side": "long",
+      "tier": "EMERGING",
+      "state": "detected",
+      "rank": 10,
+      "score": 49.9,
+      "rawConfidence": 62,
+      "expectancyTilt": 1.056,
+      "evidenceMult": 1,
+      "regimeFit": 1,
+      "executionQuality": 0.847,
+      "costTier": "small",
+      "costPenalty": 0.938,
+      "scoringVersion": "downday-v1"
+    }
+  ],
+  "horizons": {
+    "intraday": [
+      {
+        "id": "gapgo:intraday:AAA",
+        "ticker": "AAA",
+        "source": "gapgo",
+        "sources": [
+          "gapgo"
+        ],
+        "section": "GapGo",
+        "horizon": "intraday",
+        "side": "long",
+        "tier": "STRONG",
+        "state": "detected",
+        "rank": 4,
+        "score": 85,
+        "rawConfidence": 75,
+        "expectancyTilt": 1.054,
+        "evidenceMult": 1.09,
+        "regimeFit": 1,
+        "executionQuality": 1,
+        "costTier": "liquid",
+        "costPenalty": 0.982,
+        "scoringVersion": "gapgo-v1"
+      },
+      {
+        "id": "daytrade:intraday:DTX",
+        "ticker": "DTX",
+        "source": "daytrade",
+        "sources": [
+          "daytrade"
+        ],
+        "section": "daytrade",
+        "horizon": "intraday",
+        "side": "long",
+        "tier": "A",
+        "state": "detected",
+        "rank": 12,
+        "score": 49,
+        "rawConfidence": 55,
+        "expectancyTilt": 1,
+        "evidenceMult": 1,
+        "regimeFit": 1,
+        "executionQuality": 1,
+        "costTier": "liquid",
+        "costPenalty": 0.989,
+        "scoringVersion": "daytrade-v2"
+      },
+      {
+        "id": "daytrade:intraday:CCC",
+        "ticker": "CCC",
+        "source": "daytrade",
+        "sources": [
+          "daytrade"
+        ],
+        "section": "daytrade",
+        "horizon": "intraday",
+        "side": "long",
+        "tier": "B",
+        "state": "detected",
+        "rank": 13,
+        "score": 48.9,
+        "rawConfidence": 55,
+        "expectancyTilt": 1,
+        "evidenceMult": 1,
+        "regimeFit": 1,
+        "executionQuality": 1,
+        "costTier": "liquid",
+        "costPenalty": 0.987,
+        "scoringVersion": "daytrade-v2"
+      },
+      {
+        "id": "gapdown:intraday:ZZZ",
+        "ticker": "ZZZ",
+        "source": "gapdown",
+        "sources": [
+          "gapdown"
+        ],
+        "section": "GapDown",
+        "horizon": "intraday",
+        "side": "short",
+        "tier": "STRONG",
+        "state": "detected",
+        "rank": 16,
+        "score": 36.3,
+        "rawConfidence": 60,
+        "expectancyTilt": 1,
+        "evidenceMult": 1.09,
+        "regimeFit": 0.6,
+        "executionQuality": 1,
+        "costTier": "liquid",
+        "costPenalty": 0.997,
+        "scoringVersion": "gapdown-v1"
+      }
+    ],
+    "swing": [
+      {
+        "id": "screener:swing:AAA",
+        "ticker": "AAA",
+        "source": "screener",
+        "sources": [
+          "screener"
+        ],
+        "section": "screener",
+        "horizon": "swing",
+        "side": "long",
+        "tier": "Setup",
+        "state": "detected",
+        "rank": 1,
+        "score": 99.1,
+        "rawConfidence": 82,
+        "expectancyTilt": 1.109,
+        "evidenceMult": 1.09,
+        "regimeFit": 1,
+        "executionQuality": 1,
+        "costTier": "liquid",
+        "costPenalty": 0.991,
+        "scoringVersion": "screener-v1"
+      },
+      {
+        "id": "biotech:swing:AGIO",
+        "ticker": "AGIO",
+        "source": "biotech",
+        "sources": [
+          "biotech"
+        ],
+        "section": "Biotech",
+        "horizon": "swing",
+        "side": "long",
+        "tier": "Hot",
+        "state": "detected",
+        "rank": 3,
+        "score": 85.9,
+        "rawConfidence": 85,
+        "expectancyTilt": 1,
+        "evidenceMult": 1.09,
+        "regimeFit": 1,
+        "executionQuality": 1,
+        "costTier": "biotech",
+        "costPenalty": 1,
+        "scoringVersion": "biotech-v1"
+      },
+      {
+        "id": "coil:swing:DDD",
+        "ticker": "DDD",
+        "source": "coil",
+        "sources": [
+          "coil"
+        ],
+        "section": "coil",
+        "horizon": "swing",
+        "side": "long",
+        "tier": "high",
+        "state": "detected",
+        "rank": 5,
+        "score": 70.5,
+        "rawConfidence": 80,
+        "expectancyTilt": 1,
+        "evidenceMult": 1,
+        "regimeFit": 1,
+        "executionQuality": 1,
+        "costTier": "liquid",
+        "costPenalty": 0.979,
+        "scoringVersion": "coil-v1"
+      },
+      {
+        "id": "screener:swing:SML",
+        "ticker": "SML",
+        "source": "screener",
+        "sources": [
+          "screener"
+        ],
+        "section": "screener",
+        "horizon": "swing",
+        "side": "long",
+        "tier": "Setup",
+        "state": "detected",
+        "rank": 8,
+        "score": 53.4,
+        "rawConfidence": 66,
+        "expectancyTilt": 1.109,
+        "evidenceMult": 1,
+        "regimeFit": 1,
+        "executionQuality": 0.764,
+        "costTier": "small",
+        "costPenalty": 0.976,
+        "scoringVersion": "screener-v1"
+      },
+      {
+        "id": "downday:swing:RVL",
+        "ticker": "RVL",
+        "source": "downday",
+        "sources": [
+          "downday"
+        ],
+        "section": "DownDay",
+        "horizon": "swing",
+        "side": "long",
+        "tier": "EMERGING",
+        "state": "detected",
+        "rank": 10,
+        "score": 49.9,
+        "rawConfidence": 62,
+        "expectancyTilt": 1.056,
+        "evidenceMult": 1,
+        "regimeFit": 1,
+        "executionQuality": 0.847,
+        "costTier": "small",
+        "costPenalty": 0.938,
+        "scoringVersion": "downday-v1"
+      },
+      {
+        "id": "downday:swing:HOT",
+        "ticker": "HOT",
+        "source": "downday",
+        "sources": [
+          "downday"
+        ],
+        "section": "DownDay",
+        "horizon": "swing",
+        "side": "short",
+        "tier": "WATCH",
+        "state": "detected",
+        "rank": 17,
+        "score": 30.7,
+        "rawConfidence": 58,
+        "expectancyTilt": 1,
+        "evidenceMult": 1,
+        "regimeFit": 0.6,
+        "executionQuality": 1,
+        "costTier": "liquid",
+        "costPenalty": 0.981,
+        "scoringVersion": "downday-v1"
+      },
+      {
+        "id": "screener:swing:BBB",
+        "ticker": "BBB",
+        "source": "screener",
+        "sources": [
+          "screener"
+        ],
+        "section": "screener",
+        "horizon": "swing",
+        "side": "long",
+        "tier": "Early",
+        "state": "detected",
+        "rank": 18,
+        "score": 20.5,
+        "rawConfidence": 60,
+        "expectancyTilt": 1,
+        "evidenceMult": 1,
+        "regimeFit": 1,
+        "executionQuality": 0.4,
+        "costTier": "micro",
+        "costPenalty": 0.947,
+        "scoringVersion": "screener-v1"
+      }
+    ],
+    "position": [
+      {
+        "id": "readthrough:position:EEE",
+        "ticker": "EEE",
+        "source": "readthrough",
+        "sources": [
+          "readthrough"
+        ],
+        "section": "ReadThrough",
+        "horizon": "position",
+        "side": "long",
+        "tier": "Fresh",
+        "state": "detected",
+        "rank": 6,
+        "score": 63,
+        "rawConfidence": 70,
+        "expectancyTilt": 1,
+        "evidenceMult": 1,
+        "regimeFit": 1,
+        "executionQuality": 1,
+        "costTier": "liquid",
+        "costPenalty": 1,
+        "scoringVersion": "ReadThrough-v1"
+      },
+      {
+        "id": "anomaly:position:FFF",
+        "ticker": "FFF",
+        "source": "anomaly",
+        "sources": [
+          "anomaly"
+        ],
+        "section": "Anomaly",
+        "horizon": "position",
+        "side": "long",
+        "tier": "ACCUMULATION",
+        "state": "detected",
+        "rank": 7,
+        "score": 54,
+        "rawConfidence": 60,
+        "expectancyTilt": 1,
+        "evidenceMult": 1,
+        "regimeFit": 1,
+        "executionQuality": 1,
+        "costTier": "liquid",
+        "costPenalty": 1,
+        "scoringVersion": "Anomaly-v1"
+      },
+      {
+        "id": "crossasset:position:HHH",
+        "ticker": "HHH",
+        "source": "crossasset",
+        "sources": [
+          "crossasset"
+        ],
+        "section": "CrossAsset",
+        "horizon": "position",
+        "side": "long",
+        "tier": "LEAD",
+        "state": "detected",
+        "rank": 9,
+        "score": 52.2,
+        "rawConfidence": 58,
+        "expectancyTilt": 1,
+        "evidenceMult": 1,
+        "regimeFit": 1,
+        "executionQuality": 1,
+        "costTier": "liquid",
+        "costPenalty": 1,
+        "scoringVersion": "CrossAsset-v1"
+      },
+      {
+        "id": "secondwave:position:GGG",
+        "ticker": "GGG",
+        "source": "secondwave",
+        "sources": [
+          "secondwave"
+        ],
+        "section": "SecondWave",
+        "horizon": "position",
+        "side": "long",
+        "tier": "PRIMED",
+        "state": "detected",
+        "rank": 11,
+        "score": 49.5,
+        "rawConfidence": 55,
+        "expectancyTilt": 1,
+        "evidenceMult": 1,
+        "regimeFit": 1,
+        "executionQuality": 1,
+        "costTier": "liquid",
+        "costPenalty": 1,
+        "scoringVersion": "SecondWave-v1"
+      },
+      {
+        "id": "toneshift:position:III",
+        "ticker": "III",
+        "source": "toneshift",
+        "sources": [
+          "toneshift"
+        ],
+        "section": "ToneShift",
+        "horizon": "position",
+        "side": "long",
+        "tier": "BRIGHTENING",
+        "state": "detected",
+        "rank": 14,
+        "score": 46.8,
+        "rawConfidence": 52,
+        "expectancyTilt": 1,
+        "evidenceMult": 1,
+        "regimeFit": 1,
+        "executionQuality": 1,
+        "costTier": "liquid",
+        "costPenalty": 1,
+        "scoringVersion": "ToneShift-v1"
+      }
+    ],
+    "portfolio": [
+      {
+        "id": "coremo:portfolio:MMM",
+        "ticker": "MMM",
+        "source": "coremo",
+        "sources": [
+          "coremo"
+        ],
+        "section": "CoreMomentum",
+        "horizon": "portfolio",
+        "side": "long",
+        "tier": "Core",
+        "state": "detected",
+        "rank": 2,
+        "score": 90,
+        "rawConfidence": 100,
+        "expectancyTilt": 1,
+        "evidenceMult": 1,
+        "regimeFit": 1,
+        "executionQuality": 1,
+        "costTier": "liquid",
+        "costPenalty": 1,
+        "scoringVersion": "coremo-v1"
+      },
+      {
+        "id": "coremo:portfolio:NNN",
+        "ticker": "NNN",
+        "source": "coremo",
+        "sources": [
+          "coremo"
+        ],
+        "section": "CoreMomentum",
+        "horizon": "portfolio",
+        "side": "long",
+        "tier": "Core",
+        "state": "detected",
+        "rank": 15,
+        "score": 45,
+        "rawConfidence": 50,
+        "expectancyTilt": 1,
+        "evidenceMult": 1,
+        "regimeFit": 1,
+        "executionQuality": 1,
+        "costTier": "liquid",
+        "costPenalty": 1,
+        "scoringVersion": "coremo-v1"
+      }
+    ]
+  },
+  "portfolio": {
+    "picks": [
+      "screener:swing:AAA",
+      "coremo:portfolio:MMM",
+      "biotech:swing:AGIO",
+      "coil:swing:DDD",
+      "readthrough:position:EEE",
+      "anomaly:position:FFF",
+      "screener:swing:SML"
+    ]
+  },
+  "opportunity": {
+    "decision": "normal",
+    "score": 75.9,
+    "qualifyingCount": 10,
+    "maxExposurePct": 100
+  }
+}
