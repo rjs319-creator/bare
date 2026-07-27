@@ -74,7 +74,7 @@ function opportunityBanner(o) {
     + `<div class="td-opp-head"><span class="td-opp-badge">${icon} <b>${esc(label)}</b></span>`
     + `<span class="td-opp-metrics">density <b>${o.score}</b>/100 · max exposure <b>${o.maxExposurePct}%</b>`
     + (o.qualifyingCount != null ? ` · <b>${o.qualifyingCount}</b> qualify` : '')
-    + (o.expectedBestEdgeAfterCostsPct != null ? ` · best net edge <b>${pct(o.expectedBestEdgeAfterCostsPct)}</b>` : '') + `</span></div>`
+    + (((o.bestNetTargetMovePct ?? o.expectedBestEdgeAfterCostsPct)) != null ? ` · best net move to target <b>${pct(o.bestNetTargetMovePct ?? o.expectedBestEdgeAfterCostsPct)}</b>` : '') + `</span></div>`
     + (reasons ? `<ul class="td-opp-why">${reasons}</ul>` : '')
     + `<div class="td-opp-avail td-dim">Available: ${esc(avail)}</div>`
     + `</div>`;

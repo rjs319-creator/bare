@@ -108,3 +108,48 @@ test('routeWeights is deterministic', () => {
   const b = R.routeWeights([health('a'), health('b', { id: 'b' })], {});
   assert.deepEqual(a, b);
 });
+
+// ── quant-redesign-3: binding risk-cap budgets ───────────────────────────────
+test('budgets: any missing input fails CLOSED to 0 (no flattering default constants)', () => {
+  const out = R.computeStrategyBudgets([
+    { id: 'a', family: 'fa', baseBudget: 0.2, governanceWeight: 1, health: 'STRONG',
+      regimeCompatibility: 0.8, calibrationQuality: null, independentContribution: 0.9, executionConfidence: 1 },
+  ]);
+  assert.equal(out.budgets[0].budget, 0);
+  assert.equal(out.budgets[0].inputsValid, false);
+  assert.ok(out.budgets[0].missingInputs.includes('calibrationQuality'));
+  assert.equal(out.bindingReady, false);
+  assert.equal(out.cash, 1);
+});
+
+test('budgets: cap-only — the final budget never exceeds the validated base budget', () => {
+  const out = R.computeStrategyBudgets([
+    { id: 'a', family: 'fa', baseBudget: 0.2, governanceWeight: 1, health: 'STRONG',
+      regimeCompatibility: 1, calibrationQuality: 1, independentContribution: 1, executionConfidence: 1 },
+  ]);
+  assert.ok(out.budgets[0].budget <= 0.2 + 1e-9);
+  assert.equal(out.budgets[0].inputsValid, true);
+  assert.equal(out.bindingReady, true);
+});
+
+test('budgets: multipliers only ever REDUCE, freed capital goes to cash', () => {
+  const out = R.computeStrategyBudgets([
+    { id: 'a', family: 'fa', baseBudget: 0.4, governanceWeight: 0.5, health: 'SUPPORTED',
+      regimeCompatibility: 0.5, calibrationQuality: 0.8, independentContribution: 0.7, executionConfidence: 1 },
+  ]);
+  const b = out.budgets[0].budget;
+  assert.ok(b < 0.4 && b > 0);
+  assert.ok(Math.abs(out.cash - (1 - b)) < 1e-6);
+});
+
+test('budgets: a correlated family shares one collective cap, excess surrendered to cash', () => {
+  const mk = (id) => ({ id, family: 'trend', baseBudget: 0.4, governanceWeight: 1, health: 'STRONG',
+    regimeCompatibility: 1, calibrationQuality: 1, independentContribution: 1, executionConfidence: 1 });
+  const out = R.computeStrategyBudgets([mk('a'), mk('b'), mk('c')]);
+  const famSum = out.budgets.reduce((s, r) => s + r.budget, 0);
+  // 4-dp rounding on each member can overshoot the cap by ≤ n×5e-5 — that is display
+  // precision, not a cap breach.
+  assert.ok(famSum <= 0.5 + 1e-3, 'family sum must respect the collective cap');
+  assert.deepEqual(out.cappedFamilies, ['trend']);
+  assert.ok(out.cash >= 0.5 - 1e-3);
+});

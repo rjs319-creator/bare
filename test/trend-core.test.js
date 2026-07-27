@@ -55,3 +55,12 @@ test('returns null when no price-trend engine reported', () => {
 test('PRICE_TREND_ENGINES excludes ghost (volume-accum is its own domain)', () => {
   assert.equal(PRICE_TREND_ENGINES.includes('ghost'), false);
 });
+
+// quant-redesign-3 guard: this list claimed to "match lib/decision.js SOURCE_FAMILY" but
+// had drifted (listed a non-existent 'breakout' id, omitted gapgo/daytrade/coil). Pin
+// the alignment both ways so it cannot drift silently again.
+test('PRICE_TREND_ENGINES matches SOURCE_FAMILY priceTrend ids exactly', () => {
+  const { SOURCE_FAMILY } = require('../lib/decision');
+  const familyIds = Object.keys(SOURCE_FAMILY).filter(k => SOURCE_FAMILY[k] === 'priceTrend').sort();
+  assert.deepEqual([...PRICE_TREND_ENGINES].sort(), familyIds);
+});

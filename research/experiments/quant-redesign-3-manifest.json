@@ -1,0 +1,44 @@
+{
+  "manifest": "quant-redesign-3",
+  "createdAt": "2026-07-25",
+  "kind": "governance-redesign (no alpha claim, no model fitting)",
+  "hypothesis": "The live recommendation/allocation layer fails OPEN in specific joints (maturity default, per-adapter gating, missing-governance clearance, cheapest-unknown costs, first-appearance-forever episodes, borrowless shorts, dead version guard); making each fail CLOSED — feature-gated, with a shadow comparison — improves cost-net decision honesty without manufacturing a better-looking backtest.",
+  "codeVersions": {
+    "baselineCommit": "f7fd6fb",
+    "eligibility": "eligibility-v1",
+    "contracts": "contracts-v1",
+    "episodes": "sb-episodes-v1",
+    "router": "algo-router-v1 (+computeStrategyBudgets)",
+    "governance": "gov-v1",
+    "maturity": "maturity-v1 (net-first, independent-dates, strict contract metric)"
+  },
+  "features": "none fitted — this pass alters controls and measurement, not predictors",
+  "labels": {
+    "scoreboard": "forward returns at each strategy's contract metric; net channel = gross - roundTrip(tier) - borrow(tier, sessions) for shorts; real* = next-open entry for every pick",
+    "unchanged": "gross fields byte-compatible; net/real/dates fields additive"
+  },
+  "universe": "live forward ledgers (survivorship-unsafe; stamped everywhere)",
+  "dates": "prospective from 2026-07-25; historical ledger reprocessed deterministically under episode dedup (legacy view retained via ?dedup=first)",
+  "foldDesign": "not applicable (no model fitted); golden-fixture A/B on identical frozen inputs",
+  "baselines": {
+    "control": "pre-redesign behavior, frozen as test/fixtures/today-golden-baseline.json (immutable) and reproducible via DECISION_ELIGIBILITY_MODE=off, ?dedup=first, govDefault=1",
+    "proposed": "annotate default (byte-identical board + shadow report); enforce behind DECISION_ELIGIBILITY_MODE=enforce"
+  },
+  "passFailThresholds": {
+    "defaultModeRegression": "board ranks/scores byte-identical to baseline golden (PASS)",
+    "dayTradeFrozen": "daytrade normalized inputs + board rows byte-identical, annotate AND enforce (PASS)",
+    "fullSuite": "no existing test weakened; suite green (PASS: 2408/0 -> 2435/0)",
+    "enforcementSemantics": "shadow sources can neither originate nor boost; research cross-section ungated; missing/stale/version-mismatched governance => zero live influence (PASS, tested)"
+  },
+  "attemptedConfigurations": 1,
+  "attemptedConfigurationsNote": "No thresholds were searched or tuned; cooldowns/staleness windows were set a priori (contract cooldowns from each strategy's documented hold; governance staleness 7d = daily cron + weekend tolerance) and not iterated against outcomes.",
+  "randomSeed": null,
+  "promotions": "NONE — proof gates (survivorship-safe validation, calibration, prospective confirmation) remain unmet; all unproven effects stay shadow/weight-zero",
+  "artifacts": [
+    "docs/quant-redesign-3.md",
+    "test/fixtures/today-sources.js",
+    "test/fixtures/today-golden-baseline.json (immutable pre-redesign control)",
+    "test/fixtures/today-golden.json",
+    "scripts/capture-today-golden.js (reproduce: node scripts/capture-today-golden.js)"
+  ]
+}

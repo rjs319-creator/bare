@@ -144,17 +144,42 @@ test('governance: sitOut when no sleeve holds clearance to size', () => {
   assert.equal(a.governance.sitOut, true);
 });
 
-test('governance: an ungoverned sleeve defaults to full clearance (backward-compatible)', () => {
+// quant-redesign-3 (H8): missing governance means NO clearance, never full clearance.
+// The old "defaults to full clearance (backward-compatible)" contract was the audited
+// fail-open defect; it survives only behind the explicit legacy opt govDefault=1.
+test('governance FAIL-CLOSED: an ungoverned sleeve gets ZERO clearance', () => {
   const a = computeAllocation({ Good: GOOD, Alt: GOOD2 }, { minMonths: 6,
     govWeights: { Good: 0.5 } });  // Alt has no governance record
   const alt = a.governance.deployed.find(d => d.name === 'Alt');
-  assert.equal(alt.clearance, 1);          // defaults to full
+  assert.equal(alt.clearance, 0);          // fail closed
   assert.equal(alt.governed, false);
-  assert.equal(alt.deployedWeight, alt.cashAwareWeight);
+  assert.equal(alt.deployedWeight, 0);
+  assert.equal(a.governance.failClosed, true);
 });
 
-test('governance: absent entirely → applied:false, deploy equals cash-aware', () => {
+test('governance FAIL-CLOSED: absent entirely → zero deployment, capital held as cash', () => {
   const a = computeAllocation({ Good: GOOD, Alt: GOOD2 }, { minMonths: 6 });
   assert.equal(a.governance.applied, false);
-  a.governance.deployed.forEach(d => assert.equal(d.deployedWeight, d.cashAwareWeight));
+  a.governance.deployed.forEach(d => assert.equal(d.deployedWeight, 0));
+  assert.equal(a.governance.cashWeight, 100);
+  assert.equal(a.governance.sitOut, true);
+});
+
+test('governance legacy escape hatch (govDefault=1) reproduces the old fail-open behavior for comparison only', () => {
+  const a = computeAllocation({ Good: GOOD, Alt: GOOD2 }, { minMonths: 6, govDefault: 1,
+    govWeights: { Good: 0.5 } });
+  const alt = a.governance.deployed.find(d => d.name === 'Alt');
+  assert.equal(alt.clearance, 1);
+  assert.equal(alt.deployedWeight, alt.cashAwareWeight);
+  assert.equal(a.governance.failClosed, false);
+});
+
+test('router cap only ever REDUCES clearance (min with governance), never sizes up', () => {
+  const a = computeAllocation({ Good: GOOD, Alt: GOOD2 }, { minMonths: 6,
+    govWeights: { Good: 1, Alt: 0.5 }, routerCaps: { Good: 0.4, Alt: 0.9 } });
+  const good = a.governance.deployed.find(d => d.name === 'Good');
+  const alt = a.governance.deployed.find(d => d.name === 'Alt');
+  assert.equal(good.clearance, 0.4);   // router cut below governance
+  assert.equal(alt.clearance, 0.5);    // router above governance cannot size up
+  assert.equal(a.governance.routerCapApplied, true);
 });

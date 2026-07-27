@@ -18,7 +18,7 @@ test('strong fresh board with edge + good track → normal opportunity, high exp
   assert.equal(o.decision, 'normal');
   assert.ok(o.score >= OD.CONFIG.NORMAL_AT);
   assert.equal(o.maxExposurePct, 100);
-  assert.ok(o.expectedBestEdgeAfterCostsPct >= 8);
+  assert.ok(o.bestNetTargetMovePct >= 8);
 });
 
 test('§6 acceptance: ZERO qualifying names → no-trade regardless of score', () => {
@@ -107,13 +107,13 @@ test('best-pick edge is the TOP-ranked qualifying name, not a moonshot buried do
     sig({ ticker: 'MOON', cost: { known: true, netMovePct: 90 } }),
   ];
   const o = OD.computeOpportunityDensity(board, { regime: { riskOn: true } });
-  assert.equal(o.expectedBestEdgeAfterCostsPct, 5, 'headline = top-ranked pick edge, not the moonshot');
+  assert.equal(o.bestNetTargetMovePct, 5, 'headline = top-ranked pick edge, not the moonshot');
 });
 
-test('netEdgeOf prefers remaining-edge over the cost fallback', () => {
-  assert.equal(OD.netEdgeOf(sig({ remainingEdge: { rated: true, netRemainingPct: 3 }, cost: { known: true, netMovePct: 8 } })), 3);
-  assert.equal(OD.netEdgeOf(sig({ remainingEdge: null })), 8); // falls back to cost
-  assert.equal(OD.netEdgeOf({ }), null); // lead with no levels
+test('netTargetMoveOf prefers remaining-edge over the cost fallback', () => {
+  assert.equal(OD.netTargetMoveOf(sig({ remainingEdge: { rated: true, netRemainingPct: 3 }, cost: { known: true, netMovePct: 8 } })), 3);
+  assert.equal(OD.netTargetMoveOf(sig({ remainingEdge: null })), 8); // falls back to cost
+  assert.equal(OD.netTargetMoveOf({ }), null); // lead with no levels
 });
 
 test('a mediocre-but-real board lands in the middle bands (selective/reduced), not the extremes', () => {
