@@ -71,6 +71,43 @@ test('READY_FOR_EVALUATION requires the full pre-registered maturable sample', (
   assert.equal(report.verdict, null, 'READY still carries no verdict — evaluation is a separate, candle-verified step');
 });
 
+test('cohort classification: sampleKind wins, legacy boolean falls back, missing both = UNKNOWN with a warning', () => {
+  // Arrange — one of each labeling era, all maturable.
+  const date = '2026-06-01';
+  const report = assessIvRvSample({
+    archiveDays: [archiveDay(date, [['NEW_SEL', 0.4], ['NEW_CTL', 0.4], ['OLD_SEL', 0.4], ['LEGACY', 0.4]])],
+    coilDays: [{
+      date,
+      picks: [
+        { ticker: 'NEW_SEL', dailyVol: 0.02, sampleKind: 'selected' },
+        { ticker: 'NEW_CTL', dailyVol: 0.02, sampleKind: 'decile-stratified' },
+        { ticker: 'OLD_SEL', dailyVol: 0.02, selected: true },
+        { ticker: 'LEGACY', dailyVol: 0.02 },              // predates cohort labeling
+      ],
+    }],
+    asOf: '2026-07-28',
+  });
+
+  // Assert — never silently count an unlabeled row as selected.
+  assert.equal(report.totals.selectedUsable, 2);
+  assert.equal(report.totals.controlUsable, 1);
+  assert.equal(report.totals.unknownCohortUsable, 1);
+  assert.ok(report.warnings.some(w => /predate cohort labeling/.test(w)));
+});
+
+test('READY with a starved control cohort warns that the comparison is not runnable', () => {
+  const archiveDays = [], coilDays = [];
+  for (let i = 0; i < 30; i++) {
+    const date = `2026-05-${String(i + 1).padStart(2, '0')}`;
+    const names = Array.from({ length: 6 }, (_, k) => [`T${i}_${k}`, 0.4]);
+    archiveDays.push(archiveDay(date, names));
+    coilDays.push(coilDay(date, names.map(([t]) => [t, 0.02, true])));   // ALL selected, zero controls
+  }
+  const report = assessIvRvSample({ archiveDays, coilDays, asOf: '2026-07-28' });
+  assert.equal(report.status, 'READY_FOR_EVALUATION', 'the pre-registered bar itself is met');
+  assert.ok(report.warnings.some(w => /control cohort starved/.test(w)), 'but READY must not imply the comparison is runnable');
+});
+
 test('truncation is disclosed per day: archive cap and options coverage ride along', () => {
   const report = assessIvRvSample({
     archiveDays: [archiveDay('2026-07-01', [['AAA', 0.5]], { count: 140, withOptions: 96 })],

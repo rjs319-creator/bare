@@ -102,10 +102,14 @@ stale**. Much of the requested architecture already existed:
   monthly *rating counts* (tested 2026-07: NOT-CONFIRMED, t≈0.6). The Phase-8 EPS/revenue
   revision experiment is therefore **UNAVAILABLE** on current data; do not build a fake
   backtest against today's restated consensus.
-- **Coil × IV/RV verdict** — calendar-blocked, not schema-blocked. Useful joinable
-  history effectively starts 2026-07-01 (archive widening) / 2026-07-17 (capture-chain
-  fix); expect the ≥150-maturable bar around September 2026. op=ivrvsample now reports
-  the exact remaining gap.
+- **Coil × IV/RV verdict** — the LIVE sufficiency check (2026-07-28) surprised the
+  audit estimate: 646 Coil picks, 342 fully-usable joins, **163 maturable ≥ the 150
+  bar → READY_FOR_EVALUATION** already. BUT with two disclosed caveats: (a) the
+  maturable rows predate cohort labeling or are all selected — the **control cohort is
+  starved (0 usable controls)**, so the selected-vs-control comparison is not yet
+  runnable (op=ivrvsample now warns exactly this); (b) maturity is calendar-approximate
+  and must be re-verified against candles by the experiment itself. IV/RV *level*
+  studies are sample-ready; the controlled comparison needs control-side accrual.
 - Borrow/locate feeds, ETF creations/redemptions, OPRA trade-level options, verified
   supply-chain graph, alt-data panels, bond/CDS — unchanged: documented, not fabricated.
 - Point-in-time sector history (validFrom/validTo) — RLT's registered limitation stands;
@@ -136,10 +140,26 @@ repeatable general levers.
 ## Router readiness
 
 `bindingReady: false`, and it must stay false until (a) calibration quality and
-execution confidence are *measured* (not defaulted), and (b) a counterfactual harness
-shows router allocation beating equal-weight/static on identical episodes, cost-net.
-The rank-IC input now accrues from real ledger data on cron force runs; the
-counterfactual harness is designed (model: `lib/alerts-validation.js`) but not built.
+execution confidence are *measured* (not defaulted), and (b) the counterfactual
+evaluation shows router allocation beating equal weight on identical episodes,
+cost-net, with prospective confirmation. Both halves of (b) are now BUILT
+(second pass, same day): op=router force runs persist a per-day weight history
+(`router/history.json` — latest.json alone made replay impossible), and
+`op=routercf` evaluates router vs equal-weight vs best-recent-chaser vs cash on
+identical resolved ledger rows (gross-labeled, paired router−equal primary
+metric, no-lookahead chaser, abstention = cash). Status is INSUFFICIENT_HISTORY
+until ≥40 evaluated dates accrue prospectively; the report never carries a
+verdict or binding recommendation.
+
+## Adaptive-layer disclosure (second pass)
+
+The five self-adapting layers the audit flagged (apex Module-2 recalibrate,
+timing tune, dualread adapt, EVOLVE strength tilt, alerts-Fable promotion) are
+now DISCLOSED centrally: `lib/adaptive-layers.js` reads each layer's own state
+doc and the block rides on op=maturity and inside governance/latest.json —
+ACTIVE/DORMANT/UNKNOWN per layer, with `governanceConsulted: false` stated
+explicitly. This is visibility only; bringing them *under* governance remains
+open work.
 
 ## Validation
 
