@@ -27,8 +27,8 @@ export const gradeFace = g => GRADE[g] || GRADE.experimental;
 // Tab id → maturity strategy id. Most match by name; only the exceptions are listed,
 // so a new tab whose id matches its strategy id needs no entry here.
 const TAB_STRATEGY = {
-  coremo: 'momentum',
   picks: 'momentum',
+  rltlab: 'rlt',
   aligned: 'screener',
   patternradar: 'coil',
   atlas: 'atlasx',

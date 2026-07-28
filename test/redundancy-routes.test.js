@@ -15,14 +15,23 @@ test('loadRedundancyModel returns null with no Blob store (never throws)', async
   }
 });
 
-test('every mapped ledger section resolves to a decision-engine source key', () => {
+test('ledger sections resolve through the CANONICAL section→id map', () => {
   const D = require('../lib/decision');
-  for (const [section, source] of Object.entries(RR.SECTION_SOURCE)) {
+  // The sections buildRows can actually ingest today (picks + ghost ledgers) must
+  // resolve to sources the decision engine can address, else their measured
+  // credits could never match a live signal.
+  for (const section of ['screener', 'momentum', 'Ghost']) {
+    const source = RR.sourceForSection(section);
     assert.ok(source, `${section} must map to a source`);
-    // A mapped source must be addressable by the family map, else its measured credit
-    // could never be matched to a live signal.
     assert.ok(D.SOURCE_FAMILY[source], `source "${source}" (from section "${section}") is absent from SOURCE_FAMILY`);
   }
+  // THE regression the canonical map fixes: the old local table would have sent
+  // CERN rows to 'cern', a key no registry id matches — silently emptying that
+  // algorithm's series in every downstream join.
+  assert.equal(RR.sourceForSection('CERN'), 'events');
+  assert.equal(RR.sourceForSection('OMEGA'), 'omega');
+  // Unmapped sections still fall back to lowercase, honestly unmatched.
+  assert.equal(RR.sourceForSection('NotARealSection'), 'notarealsection');
 });
 
 test('the redundancy horizon matches the Scoreboard swing metric it is compared against', () => {

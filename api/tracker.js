@@ -30,7 +30,7 @@ const { runFadeOpt, runFadeSeed, runFadeSignals, runFadeTick, runFadeBook,
         runGapDown, runGapDownTick, runGapDownBook,
         runTiming, runTimingLog, runTimingBook, runTimingTune } = require('../lib/screener-routes');
 const { runAlertsIngest, runAlerts, runAlertsGrade, runAlertsAssess } = require('../lib/alerts-routes');
-const { runArchive, runBaseline, runInsiderIngest, runInsider, runFundBuild, runFundamentals,
+const { runArchive, runBaseline, runIvRvSample, runInsiderIngest, runInsider, runFundBuild, runFundamentals,
         runCernTickOp, runCern, runCernFsProbe, runCernLockProbe, runIntraCapture, runIntraday } = require('../lib/capture-routes');
 const { runTrack, runScoreboard, runApexLog, runGhostLog, runEdgeLog, runEdgeBook, runVReversal, runVReversalTest,
         runDrift, runRecalibrate, runResearchOp, runExitsOp, runEmergingOp, runLongShortOp, runPeadOp, runBackfillOp, runModel, runNarrative, runMoverStudyOp, runCernDecay, runRankQuality, runCongressOp, runRevisionsOp } = require('../lib/apex-routes');
@@ -83,8 +83,9 @@ const PRIVILEGED_OPS = new Set([
   'pulsegrade',
   // ATLAS-X shadow ledger WRITES (build+persist episodes/ledger/predictions; grade terminals).
   'atlasxlog', 'atlasxresolve',
-  // Pre-move inventory shadow cross-section capture (immutable daily WRITE).
-  'premovelog',
+  // Pre-move inventory shadow cross-section capture (immutable daily WRITE) +
+  // ghostobs outcome grading (grader-owned resolved-doc WRITE).
+  'premovelog', 'premoveresolve',
   // RLT shadow ledger WRITES (scan + persist episodes/cross-section/alerts; grade terminals).
   'rltlog', 'rltresolve',
   // Swing-search shadow ledger WRITES (log the daily swing cross-section PIT / grade forward outcomes).
@@ -247,6 +248,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'intracapture') return runIntraCapture(req, res);
   if (req.query.op === 'intraday') return runIntraday(req, res);
   if (req.query.op === 'baseline') return runBaseline(req, res);
+  if (req.query.op === 'ivrvsample') return runIvRvSample(req, res);
   if (req.query.op === 'insideringest') return runInsiderIngest(req, res);
   if (req.query.op === 'insider') return runInsider(req, res);
   if (req.query.op === 'fundbuild') return runFundBuild(req, res);
@@ -355,6 +357,7 @@ module.exports = async function handler(req, res) {
   // ATLAS-X — shadow swing challenger (weight-0). Read board + cron-only writers.
   if (req.query.op === 'premove') return require('../lib/premove-routes').runPremove(req, res);
   if (req.query.op === 'premovelog') return require('../lib/premove-routes').runPremoveLog(req, res);
+  if (req.query.op === 'premoveresolve') return require('../lib/premove-routes').runPremoveObsResolve(req, res);
   if (req.query.op === 'atlasx') return require('../lib/atlasx-routes').runAtlasX(req, res);
   if (req.query.op === 'atlasxlog') return require('../lib/atlasx-routes').runAtlasXLog(req, res);
   if (req.query.op === 'atlasxresolve') return require('../lib/atlasx-routes').runAtlasXResolve(req, res);
