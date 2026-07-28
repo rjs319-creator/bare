@@ -15,6 +15,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadSwingSupervisor } from './swing-supervisor.js';
   import { loadPremove } from './premove.js';
   import { loadOrbitLab } from './orbit-lab.js';
+  import { loadRltLab } from './rlt-lab.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { loadCern, eventName as cernEventName } from './cern.js';
   import { mountVerdict } from './evidence-badge.js';
@@ -35,7 +36,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     markets:    ['rotation', 'sectors', 'news', 'thesis', 'pulse', 'evolve'],
     predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     proof:      ['scoreboard', 'evidence', 'baselines', 'leaderboard', 'coreperf'],
-    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge', 'orbitlab'],
+    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge', 'orbitlab', 'rltlab'],
   };
   // Holding-horizon of each candidate/position sub-tab → drives the horizon dividers
   // in the sub-nav so the app is visibly separated by time horizon (the spec ask).
@@ -53,7 +54,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     quickhit: '⚡ Quick Hit', swingsup: '📋 Swing Supervisor', premove: '📡 Pre-Move', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', atlas: '🛰 ATLAS-X', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', patternradar: '📐 Pattern Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', thesis: '🧾 Thesis Changes', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
-    backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)',
+    backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)', rltlab: '🧭 Leadership (shadow)',
     leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', evidence: '🎖️ Evidence', baselines: '🧪 Baselines', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
   // Plain-English "what is this tab?" hovers for a novice investor — one line per
@@ -85,6 +86,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     fade: 'Overheated names that may be due to pull back (short/caution ideas).',
     gapdown: 'Stocks gapping DOWN hard on news and continuing lower — short setups (the mirror of Gap & Go). Best off red days; mind borrow costs.',
     orbitlab: 'ORBIT & ORBIT-ML — experimental residual-drift ranking systems running in shadow (zero weight, never affect the live rank). Shown here to accrue an honest out-of-sample track record; currently grade C with no durable edge.',
+    rltlab: 'Relative Leadership Transition — shadow system finding stocks BEGINNING to outperform their sector peers (rank change, not just high rank). Watch/armed/triggered states only; zero weight, never a buy signal, no probabilities until calibration is earned.',
     rotation: 'Which sectors money is rotating into and out of, week over week.',
     sectors: 'Sector performance heatmap — what’s leading and lagging.',
     momentum: 'Strong-buy and strong-sell momentum calls right now.',
@@ -393,6 +395,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'events' && typeof ensureCern === 'function') ensureCern();
     if (sub === 'edge' && typeof ensureEdge === 'function') ensureEdge();
     if (sub === 'orbitlab' && typeof ensureOrbitLab === 'function') ensureOrbitLab();
+    if (sub === 'rltlab' && typeof ensureRltLab === 'function') ensureRltLab();
     if (sub === 'evidence' && typeof ensureEvidence === 'function') ensureEvidence();
     if (sub === 'thesis' && typeof ensureThesis === 'function') ensureThesis();
     if (sub === 'baselines' && typeof ensureBaselines === 'function') ensureBaselines();
@@ -3768,6 +3771,19 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     loadOrbitLab(document.getElementById('orbitlab-container'));
   }
 
+  // 🧭 RLT (shadow) — read-only Research Lab panel over the Relative Leadership
+  // Transition shadow system (loadRltLab renders op=rlt). Weight-0, never affects
+  // the live rank — honest transition-inventory + abstention display only.
+  let rltLabLoaded = false;
+  function ensureRltLab() {
+    if (!rltLabLoaded) {
+      rltLabLoaded = true;
+      const btn = document.getElementById('rltlab-refresh-btn');
+      if (btn) btn.addEventListener('click', () => loadRltLab(document.getElementById('rltlab-container')));
+    }
+    loadRltLab(document.getElementById('rltlab-container'));
+  }
+
   // 🎯 OMEGA ENSEMBLE — the composed board (loadEnsemble renders the op=ensemble payload,
   // which is a pure projection of op=today + op=evolvehealth; no scoring client-side).
   let ensembleLoaded = false;
@@ -4008,11 +4024,24 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <div class="pulse-grid">${secItems.map(pulseCard).join('')}</div></div>`;
     }).join('');
 
+    // Concise sector-leadership context (measured by the RLT shadow scan; a
+    // labeled read-through, never a buy signal). Expert detail lives in the
+    // Research Lab "Leadership (shadow)" tab.
+    const sl = p.sectorLeadership;
+    const slLine = (label, arr, color) => (arr && arr.length ? `<span style="color:${color};font-weight:600">${label}:</span> ${esc(arr.join(', '))}` : '');
+    const sectorLeadHTML = sl ? `
+      <div class="pulse-tape"><div class="pulse-tape-title">🧭 Sector leadership (measured${sl.asOf ? ' · ' + esc(sl.asOf) : ''})</div>
+        <div style="font-size:.9em;color:#d1d1d6;padding:4px 2px;display:flex;flex-wrap:wrap;gap:12px">
+          ${[slLine('Leading', sl.leading, '#34c759'), slLine('Improving', sl.improving, '#5ac8fa'), slLine('Weakening', sl.weakening, '#ff9f0a')].filter(Boolean).join(' ') || '<span style="color:#8e8e93">no sector currently classifies as leading or improving</span>'}
+          <span style="color:#8e8e93">${sl.leadershipBreadth ? 'leadership ' + esc(sl.leadershipBreadth) : ''}${sl.emergingLeaderCount != null ? ' · ' + sl.emergingLeaderCount + ' improving leaders' : ''} · details in Research Lab → Leadership</span>
+        </div></div>` : '';
+
     el.innerHTML = `
       <div class="dt-note pulse-note"><b>📡 Attention lifecycle.</b> ${feedState} · <span title="Feed freshness" style="color:${fc}">${fe} ${fl}</span> ${staleWarn}
         <div class="pulse-counts">✅ ${p.verifiedThemes != null ? p.verifiedThemes : '—'} verified · ❓ ${p.unverifiedThemes != null ? p.unverifiedThemes : '—'} unverified themes</div>
         <div class="pulse-disc">${esc(p.disclaimer || '')}</div></div>
       <div class="pulse-tape"><div class="pulse-tape-title">⏱ The tape in 20 seconds</div><div class="pulse-tape-grid">${pulseTape(items)}</div></div>
+      ${sectorLeadHTML}
       ${pulseRecentlyChanged(p.recentlyChanged)}
       <div class="pulse-filters">${chips}</div>
       <div class="pulse-sections">${sectionsHTML}</div>`;

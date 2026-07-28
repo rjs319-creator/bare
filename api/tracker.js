@@ -85,6 +85,8 @@ const PRIVILEGED_OPS = new Set([
   'atlasxlog', 'atlasxresolve',
   // Pre-move inventory shadow cross-section capture (immutable daily WRITE).
   'premovelog',
+  // RLT shadow ledger WRITES (scan + persist episodes/cross-section/alerts; grade terminals).
+  'rltlog', 'rltresolve',
   // Swing-search shadow ledger WRITES (log the daily swing cross-section PIT / grade forward outcomes).
   'swingsearchlog', 'swingsearchgrade',
   // Evidence Consensus & Thesis Change engine — the daily snapshot build makes LLM extraction
@@ -95,7 +97,7 @@ const PRIVILEGED_OPS = new Set([
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
-  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'leadtime2', 'failuremodel', 'complab', 'challengereval', 'router', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward', 'evidencediag',
+  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'leadtime2', 'failuremodel', 'complab', 'challengereval', 'router', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward', 'rltwalkforward', 'evidencediag',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -357,6 +359,11 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'atlasxlog') return require('../lib/atlasx-routes').runAtlasXLog(req, res);
   if (req.query.op === 'atlasxresolve') return require('../lib/atlasx-routes').runAtlasXResolve(req, res);
   if (req.query.op === 'atlasxwalkforward') return require('../lib/atlasx-routes').runAtlasXWalkForward(req, res);
+  // RLT — shadow Relative Leadership Transition (weight-0). Read board + cron-only writers.
+  if (req.query.op === 'rlt') return require('../lib/rlt-routes').runRlt(req, res);
+  if (req.query.op === 'rltlog') return require('../lib/rlt-routes').runRltLog(req, res);
+  if (req.query.op === 'rltresolve') return require('../lib/rlt-routes').runRltResolve(req, res);
+  if (req.query.op === 'rltwalkforward') return require('../lib/rlt-routes').runRltWalkForward(req, res);
   if (req.query.op === 'promotionreadiness') return require('../lib/orbit-ml-routes').runPromotionReadiness(req, res);
   if (req.query.op === 'researchgrade') return require('../lib/research-grade-routes').runResearchGrade(req, res);
 
