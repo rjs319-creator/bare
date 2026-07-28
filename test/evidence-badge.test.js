@@ -92,10 +92,13 @@ test('verdictBannerHTML: renders the grade as a data attribute so a re-mount can
 });
 
 test('strategyIdFor: tabs that share a strategy map onto it; the rest pass through', () => {
-  // Arrange / Act / Assert — Core Momentum and Picks are both the momentum strategy.
+  // Arrange / Act / Assert — Picks is the momentum strategy's tab. Core Momentum is
+  // NOT: coremo is its own registered shadow strategy (section CoreMomentum), and
+  // mapping it onto production momentum put a "Proven" banner on a shadow book.
   const { strategyIdFor } = loadBadge();
-  assert.equal(strategyIdFor('coremo'), 'momentum');
+  assert.equal(strategyIdFor('coremo'), 'coremo');
   assert.equal(strategyIdFor('picks'), 'momentum');
+  assert.equal(strategyIdFor('rltlab'), 'rlt');
   assert.equal(strategyIdFor('atlas'), 'atlasx');
   assert.equal(strategyIdFor('options'), 'optionsflow');
   assert.equal(strategyIdFor('ghost'), 'ghost');       // no entry needed when ids match

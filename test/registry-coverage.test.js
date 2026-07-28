@@ -51,6 +51,78 @@ test('a section with logged picks grades from its pooled record, both tiers coun
   assert.ok(track.avgExcess > 1 && track.avgExcess < 2, `pooled average out of range: ${track.avgExcess}`);
 });
 
+// ---------------------------------------------------------------------------
+// The GENERAL invariant the Ignition hole (and later the Evidence hole) proved
+// necessary: every section the Scoreboard emits must resolve to a registered
+// strategy, and every bridge table must resolve both of its ends. Source-scanned
+// so a new `section: 'X'` emission cannot ship unregistered.
+// ---------------------------------------------------------------------------
+
+const fs = require('node:fs');
+const path = require('node:path');
+const { SECTION_TO_ID } = require('../lib/strategy-contracts');
+
+function emittedSections() {
+  const src = fs.readFileSync(path.join(__dirname, '../lib/apex-routes.js'), 'utf8');
+  const out = new Set();
+  // Both emission shapes runScoreboard uses: inline `section: 'X'` on a logged row,
+  // and the shared `sectionRows(days, 'X')` helper.
+  for (const m of src.matchAll(/section: '([A-Za-z]+)'/g)) out.add(m[1]);
+  for (const m of src.matchAll(/sectionRows\([A-Za-z]+, '([A-Za-z]+)'\)/g)) out.add(m[1]);
+  return out;
+}
+
+test('every Scoreboard section emitted by runScoreboard is a registered section', () => {
+  // Arrange
+  const registered = new Set(STRATEGY_REGISTRY.map(e => e.section).filter(Boolean));
+  const emitted = emittedSections();
+  assert.ok(emitted.size >= 15, `source scan looks broken — only found ${emitted.size} sections`);
+
+  // Act / Assert — an emitted-but-unregistered section escapes grading entirely.
+  for (const sec of emitted) {
+    assert.ok(registered.has(sec), `Scoreboard emits section '${sec}' with no registry entry — it gets no maturity grade, no Evidence row, no honesty banner`);
+  }
+});
+
+test('SECTION_TO_ID resolves both ends: registry sections in, registry ids out', () => {
+  const ids = new Set(STRATEGY_REGISTRY.map(e => e.id));
+  const registered = new Set(STRATEGY_REGISTRY.map(e => e.section).filter(Boolean));
+  for (const [section, id] of Object.entries(SECTION_TO_ID)) {
+    assert.ok(registered.has(section), `SECTION_TO_ID maps unknown section '${section}'`);
+    assert.ok(ids.has(id), `SECTION_TO_ID maps section '${section}' to unknown strategy id '${id}'`);
+  }
+});
+
+test('every emitted section resolves through SECTION_TO_ID — no silent default cooldowns', () => {
+  for (const sec of emittedSections()) {
+    assert.ok(SECTION_TO_ID[sec], `emitted section '${sec}' missing from SECTION_TO_ID — episode cooldown silently defaults`);
+  }
+});
+
+test('every evidence-badge tab mapping resolves to a registered strategy id', () => {
+  // The TAB_STRATEGY exceptions table is how a stale entry once wore production
+  // momentum's "Proven" banner on the shadow Core Momentum tab.
+  const src = fs.readFileSync(path.join(__dirname, '../public/js/evidence-badge.js'), 'utf8');
+  const block = src.match(/const TAB_STRATEGY = \{([\s\S]*?)\};/);
+  assert.ok(block, 'TAB_STRATEGY table not found in evidence-badge.js');
+  const ids = new Set(STRATEGY_REGISTRY.map(e => e.id));
+  const pairs = [...block[1].matchAll(/([A-Za-z]+):\s*'([A-Za-z-]+)'/g)];
+  assert.ok(pairs.length >= 4, 'TAB_STRATEGY scan looks broken');
+  for (const [, tab, id] of pairs) {
+    assert.ok(ids.has(id), `TAB_STRATEGY maps tab '${tab}' to unknown strategy id '${id}'`);
+  }
+  // A tab must never be re-pointed at a DIFFERENT strategy that has higher maturity
+  // than the tab's own registered strategy — that is exactly the coremo defect.
+  const byId = new Map(STRATEGY_REGISTRY.map(e => [e.id, e]));
+  for (const [, tab, id] of pairs) {
+    const own = byId.get(tab);
+    if (own && own.id !== id) {
+      assert.ok(!(own.maturity !== 'production' && byId.get(id).maturity === 'production'),
+        `tab '${tab}' is a registered ${own.maturity} strategy but wears production '${id}' verdict banner`);
+    }
+  }
+});
+
 test('Validated still requires beating the SECTOR, not just the market', () => {
   // Guards the bar Ignition clears: a strategy that beats SPY purely by riding a hot
   // sector must NOT be able to reach Validated on the back of this registration.
