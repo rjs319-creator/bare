@@ -281,6 +281,34 @@ liquid names — that is a different experiment, not a rescue of this one.
 Prospective shadow accrual continues via the daily cron; the promotion gate
 remains closed and nothing here supports opening it.
 
+### Real-data walk-forward — mid/small-cap run (2026-07-27, RECORDED NEGATIVE)
+
+The one untested rescue hypothesis from the first run — "leadership effects
+live down-cap" — tested with `op=rltwalkforward&band=small,mid` (band filter
+applied BEFORE the liquidity cap): 150 mid/small names ($2M–$100M median
+dollar volume), same 30 weekly dates, 4,461 events (24 evaluated dates,
+effective N 1,202, base rate 0.245):
+
+| ranker | meanIC | 90% CI | t | significant |
+|---|---|---|---|---|
+| control-random | −0.010 | [−0.038, +0.016] | −0.62 | no |
+| rank-level | +0.008 | [−0.033, +0.050] | 0.32 | no |
+| rank-acceleration | +0.006 | [−0.029, +0.039] | 0.28 | no |
+| residual-momentum | +0.008 | [−0.033, +0.050] | 0.32 | no |
+| fixed-transition | +0.004 | [−0.031, +0.039] | 0.19 | no |
+| rlt-ridge (fitted) | −0.016 | [−0.039, +0.010] | −1.06 | no |
+
+**Reading:** identical verdict down-cap — every CI straddles zero and the
+fitted model is again mildly negative. The down-cap rescue hypothesis is
+**rejected on this sample** (same caveats: single ~14-month window, one
+regime, survivorship-unsafe). Sector-relative leadership transition, as
+measured here, shows no ranking edge in either liquidity band of this app's
+universe. Remaining honest paths are prospective only: the daily shadow
+accrual (different, forward-looking sample) and the false-early-rate /
+lead-time study once cross-sections accrue. No further backtest variant on
+this same data window is justified — repeated re-slicing of one window is how
+false edges get manufactured.
+
 ## 14. Limitations
 
 1. Sector metadata is present-day (no PIT reclassification history) —
