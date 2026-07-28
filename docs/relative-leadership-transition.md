@@ -253,6 +253,34 @@ pipeline — promotion is impossible until they are (fail closed).
 **No claim of improved predictive power is made.** The system is a measurement
 and governance scaffold that can now earn (or refute) that claim prospectively.
 
+### Real-data walk-forward — first run (2026-07-27, RECORDED NEGATIVE)
+
+`op=rltwalkforward` on production cached candles: 150 most-liquid names,
+30 weekly decision dates over ~14 months, 4,500 events (24 evaluated dates
+after purging, effective N 1,210, base rate 0.204), sector-relative
+triple-barrier outcome, identical purged folds for every ranker:
+
+| ranker | meanIC | 90% CI | t | significant |
+|---|---|---|---|---|
+| control-random | +0.017 | [−0.014, +0.050] | 0.87 | no |
+| rank-level | +0.004 | [−0.046, +0.061] | 0.13 | no |
+| rank-acceleration | −0.012 | [−0.053, +0.030] | −0.49 | no |
+| residual-momentum | −0.000 | [−0.057, +0.060] | −0.01 | no |
+| fixed-transition | −0.007 | [−0.049, +0.043] | −0.23 | no |
+| rlt-ridge (fitted) | −0.045 | [−0.092, +0.002] | −1.59 | no |
+
+**Reading:** on this sample, NO leadership-transition feature — including
+plain sector-relative rank — shows any ranking edge; every CI straddles zero
+and the nominal "champion" is the random control. The fitted ridge is the
+worst performer (mild negative — the signature of fitting noise). This is
+consistent with the app's prior NSL finding that only raw momentum survived.
+Classification: **rejected on this sample** (single ~14-month window, one
+regime, top-150 liquid large-caps only, survivorship-unsafe). Leadership
+effects, if any, are more plausible in mid/small-caps than in the top-150 most
+liquid names — that is a different experiment, not a rescue of this one.
+Prospective shadow accrual continues via the daily cron; the promotion gate
+remains closed and nothing here supports opening it.
+
 ## 14. Limitations
 
 1. Sector metadata is present-day (no PIT reclassification history) —
