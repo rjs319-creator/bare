@@ -98,7 +98,7 @@ const PRIVILEGED_OPS = new Set([
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
-  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'leadtime2', 'failuremodel', 'complab', 'challengereval', 'router', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward', 'rltwalkforward', 'evidencediag',
+  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'leadtime2', 'failuremodel', 'complab', 'challengereval', 'router', 'routercf', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward', 'rltwalkforward', 'evidencediag',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -115,6 +115,8 @@ const SHARED_FORCE_OPS = new Set([
   // router: cached read public (the shadow health panel reads it); force=1 runs buildRows
   // (candle refetch per ledger ticker) — trusted only. The route also self-gates force.
   'router',
+  // routercf: same shape — anonymous reads serve the cached counterfactual report.
+  'routercf',
 ]);
 // Ingest endpoints: POST-only + their own token/secret gate inside the route.
 const INGEST_OPS = new Set(['insideringest', 'alertsingest']);
@@ -262,6 +264,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'redundancy') return require('../lib/redundancy-routes').runRedundancy(req, res);
   if (req.query.op === 'maturity') return require('../lib/maturity-routes').runMaturity(req, res);
   if (req.query.op === 'router') return require('../lib/algo-router-routes').runRouter(req, res);
+  if (req.query.op === 'routercf') return require('../lib/algo-router-routes').runRouterCounterfactual(req, res);
   if (req.query.op === 'baselines') return require('../lib/baselines-routes').runBaselines(req, res);
   if (req.query.op === 'recalibrate') return runRecalibrate(req, res);
   if (req.query.op === 'backfill') return runBackfillOp(req, res);
