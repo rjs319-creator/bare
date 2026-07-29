@@ -263,6 +263,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'rankquality') return runRankQuality(req, res);
   if (req.query.op === 'redundancy') return require('../lib/redundancy-routes').runRedundancy(req, res);
   if (req.query.op === 'maturity') return require('../lib/maturity-routes').runMaturity(req, res);
+  if (req.query.op === 'adaptivepolicy') return require('../lib/maturity-routes').runAdaptivePolicy(req, res);
   if (req.query.op === 'router') return require('../lib/algo-router-routes').runRouter(req, res);
   if (req.query.op === 'routercf') return require('../lib/algo-router-routes').runRouterCounterfactual(req, res);
   if (req.query.op === 'baselines') return require('../lib/baselines-routes').runBaselines(req, res);

@@ -151,15 +151,26 @@ metric, no-lookahead chaser, abstention = cash). Status is INSUFFICIENT_HISTORY
 until ≥40 evaluated dates accrue prospectively; the report never carries a
 verdict or binding recommendation.
 
-## Adaptive-layer disclosure (second pass)
+## Adaptive-layer disclosure AND control (second + third pass)
 
 The five self-adapting layers the audit flagged (apex Module-2 recalibrate,
 timing tune, dualread adapt, EVOLVE strength tilt, alerts-Fable promotion) are
-now DISCLOSED centrally: `lib/adaptive-layers.js` reads each layer's own state
-doc and the block rides on op=maturity and inside governance/latest.json —
-ACTIVE/DORMANT/UNKNOWN per layer, with `governanceConsulted: false` stated
-explicitly. This is visibility only; bringing them *under* governance remains
-open work.
+now both DISCLOSED and centrally REVOCABLE:
+
+- Disclosure (v1): `lib/adaptive-layers.js` reads each layer's own state doc;
+  the block rides on op=maturity and inside governance/latest.json. Live
+  finding on deploy: **dualread-adapt was ACTIVE** — an auto-promotion invisible
+  to governance until then.
+- Control (v2): a per-layer policy (`allow | freeze | disable`) in
+  `governance/adaptive-policy.json` (own doc — the daily governance rewrite
+  cannot clobber it), managed via `op=adaptivepolicy` (`?set=<layer>:<policy>`,
+  trusted-only, audited history). Every apply-site honors `disable` (reverts to
+  shipped behavior: apex presets, timing/dualread default weights, evolve
+  identity, alerts report pinned not-promoted) and every fit-site honors
+  `freeze`/`disable` (diagnostics still run and report, nothing new adopted).
+  Default `allow` — behavior byte-identical until a human sets a policy; an
+  absent/broken doc fails OPEN by design (a Blob outage must not change live
+  behavior) and is disclosed as the one deliberate fail-open gate.
 
 ## Validation
 
