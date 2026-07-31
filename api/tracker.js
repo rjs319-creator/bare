@@ -96,6 +96,9 @@ const PRIVILEGED_OPS = new Set([
   // GOV-DEMAND shadow vertical WRITES (USAspending collect + PIT prediction log / forward
   // outcome resolution). Cron/manual-with-bearer only.
   'govdemandtick', 'govdemandresolve',
+  // Day Trade scan runner (external-scheduler entry point — writes discovery state, dataset
+  // buckets and runner health) + dataset grading (per-ticker bar fetch fan-out + grade WRITE).
+  'daytradescan', 'datasetgrade',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
@@ -178,6 +181,15 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'discover') return require('../lib/intraday-discovery').runDiscover(req, res);
   if (req.query.op === 'daytradealerts') return require('../lib/daytrade-alerts').runDaytradeAlerts(req, res);
   if (req.query.op === 'survival') return require('../lib/survival-eval').runSurvival(req, res);
+  if (req.query.op === 'daytradescan') return require('../lib/daytrade-scan-runner').runScanRunner(req, res);
+  if (req.query.op === 'daytradescanhealth') return require('../lib/daytrade-scan-runner').runScanHealth(req, res);
+  if (req.query.op === 'daytradecapture') return require('../lib/runner-capture').runDaytradeCapture(req, res);
+  if (req.query.op === 'datasetgrade') {
+    const date = req.query.date || require('../lib/freshness').etDate(new Date());
+    const out = await require('../lib/intraday-dataset').gradeDatasetDay(date, { limit: parseInt(req.query.limit || '40', 10) || 40 });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json(out);
+  }
   if (req.query.op === 'swingsearchlog') return require('../lib/swing-search-ledger').runSwingSearchLog(req, res);
   if (req.query.op === 'swingsearchgrade') return require('../lib/swing-search-ledger').runSwingSearchGrade(req, res);
   if (req.query.op === 'swingsearchstatus') return require('../lib/swing-search-ledger').runSwingSearchStatus(req, res);
