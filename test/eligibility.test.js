@@ -110,7 +110,10 @@ test('enforce: shadow sources can neither ORIGINATE a board row nor BOOST one vi
     { id: 'screener', status: 'production', weight: 1, version: 'screener-v1' },
     { id: 'gapgo', status: 'production', weight: 1, version: 'gapgo-v1' },
   ]);
-  const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'enforce', governance: gov });
+  // nowMs pinned to the fixture epoch: freshGov pins savedAt, so an unpinned real
+  // clock makes the governance doc read as stale once the calendar moves on (this
+  // exact test started failing 6 days after it was written).
+  const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'enforce', governance: gov, nowMs: NOW });
   const boardSources = new Set(p.top.concat(...Object.values(p.horizons)).flatMap(x => x.sources || [x.source]));
   // Shadow/ungoverned sources must be absent everywhere on the tradeable board:
   for (const shadowSrc of ['gapdown', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'coremo', 'optionsflow', 'biotech', 'coil', 'downday']) {
@@ -127,7 +130,7 @@ test('enforce: shadow sources can neither ORIGINATE a board row nor BOOST one vi
 
 test('enforce: the research cross-section still records the FULL ungated candidate set (selection-bias guard)', () => {
   const gov = freshGov([{ id: 'screener', status: 'production', weight: 1, version: 'screener-v1' }]);
-  const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'enforce', governance: gov });
+  const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'enforce', governance: gov, nowMs: NOW });
   assert.ok(p.research && Array.isArray(p.research.predictions));
   const researchTickers = new Set(p.research.predictions.map(r => r.ticker));
   // A name enforcement excluded from the board must still be observed by research:
