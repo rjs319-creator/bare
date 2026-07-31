@@ -6110,16 +6110,38 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // Watch candidates only — they must clear the same live gate as everything else.
     const discRows = (t.discovery && t.discovery.anomalies) || [];
     const discCov = t.discovery && t.discovery.coverage;
+    // Early-signal research badge (SCOUT→PRIMED→IGNITION→EARLY_CONFIRMED). Watch language
+    // only — deterministic research states, never probabilities, never "buy".
+    const EARLY_BADGE = {
+      SCOUT: ['🔭 Scout', '#94a3b8'], PRIMED: ['🧨 Primed', '#38bdf8'],
+      IGNITION: ['🔥 Igniting', '#f59e0b'], EARLY_CONFIRMED: ['⚡ Early-Confirmed', '#22c55e'],
+    };
+    const earlyBadge = o => {
+      const b = o.earlyState && EARLY_BADGE[o.earlyState];
+      return b ? `<span class="dt-badge" style="border:1px solid ${b[1]}55;color:${b[1]};border-radius:4px;padding:0 5px;font-size:10px" title="Early-signal RESEARCH state (deterministic, uncalibrated) — a watch annotation, not a buy signal">${b[0]}</span>` : '';
+    };
+    const sigAge = o => o.discoveryAgeMin != null ? `<span class="dt-dim" title="Minutes since this name first tripped the change detector today — lower = earlier read">⏱ ${o.discoveryAgeMin}m ago</span>` : '';
     const discCard = o => `<div class="dt-best-card" data-ticker="${esc(o.ticker)}" data-actionable="0" style="border-color:#38bdf844">
-        <div class="dt-best-top">${lifeBadge(o)} <b>${esc(o.ticker)}</b> <span class="dt-sec">${esc(o.sector || '')}</span></div>
-        <div class="dt-card-sub">${o.pctChange != null ? `<span data-dt-daychg>${o.pctChange >= 0 ? '+' : ''}${o.pctChange}%</span> today` : ''}${o.excessPct != null ? ` · <span class="dt-dim">${o.excessPct >= 0 ? '+' : ''}${o.excessPct}% vs SPY</span>` : ''}${o.cusum != null ? ` · <span class="dt-dim" title="One-sided CUSUM change-detector statistic — how abnormally fast this name is accelerating vs its own volatility">CUSUM ${o.cusum}</span>` : ''}${o.relVol != null ? ` · RVOL ${o.relVol}×` : ''}</div>
+        <div class="dt-best-top">${lifeBadge(o)} ${earlyBadge(o)} <b>${esc(o.ticker)}</b> <span class="dt-sec">${esc(o.sector || '')}</span></div>
+        <div class="dt-card-sub">${o.pctChange != null ? `<span data-dt-daychg>${o.pctChange >= 0 ? '+' : ''}${o.pctChange}%</span> today` : ''}${o.excessPct != null ? ` · <span class="dt-dim">${o.excessPct >= 0 ? '+' : ''}${o.excessPct}% vs SPY</span>` : ''}${o.cusum != null ? ` · <span class="dt-dim" title="One-sided CUSUM change-detector statistic — how abnormally fast this name is accelerating vs its own volatility">CUSUM ${o.cusum}</span>` : ''}${o.relVol != null ? ` · RVOL ${o.relVol}×` : ''}${o.sessionBucket ? ` · <span class="dt-dim">${esc(o.sessionBucket)}</span>` : ''} ${sigAge(o)}</div>
+        ${o.earlyWhy && o.earlyWhy.length ? `<div class="dt-card-sub dt-dim" style="font-size:11px">why now: ${esc(o.earlyWhy.slice(0, 3).join(' · '))}</div>` : ''}
+        ${discCov && discCov.volumeAvailable === false ? `<div class="dt-card-sub" style="font-size:10px;color:#f59e0b">⚠ price-only provider — volume evidence unavailable</div>` : ''}
         ${freshLine(o)}
       </div>`;
+    const mergedN = t.discovery && t.discovery.mergedIntoScans;
     const discSection = discRows.length ? `<div class="rot-panel" style="border-color:#38bdf855">
-        <div class="rot-head" style="color:#38bdf8">🛰 Igniting — early abnormal movement <span class="dt-dim">(${discRows.length})</span></div>
-        <div class="rot-sub"><b>Not a buy list.</b> A broad scan of the full liquid universe (~${t.discovery.universe || '?'} names${discCov ? `, provider ${esc(discCov.provider || '?')}${discCov.volumeAvailable === false ? ', price-only — volume unavailable from this provider' : ''}` : ''}) flags names whose <b>acceleration is statistically abnormal for their own volatility</b> — often before they'd clear the +2% "building" floor. Each must still pass the same live validation (fresh bar + quote + trigger + structure) to become actionable. What must happen next: hold above VWAP and break the opening-range high on participation; what invalidates: VWAP loss, fade back into the range.</div>
+        <div class="rot-head" style="color:#38bdf8">🛰 Early Watch — abnormal acceleration <span class="dt-dim">(${discRows.length}${t.discovery.ranInline ? ' · fresh scan this cycle' : ''}${mergedN ? ` · +${mergedN} merged into scans` : ''})</span></div>
+        <div class="rot-sub"><b>Not a buy list.</b> A broad scan of the full liquid universe (~${t.discovery.universe || '?'} names${discCov ? `, provider ${esc(discCov.provider || '?')}${discCov.volumeAvailable === false ? ', price-only — volume unavailable from this provider' : ''}` : ''}${t.discovery.session === 'premarket' ? ', <b>premarket session</b> — separate baselines/thresholds' : ''}) flags names whose <b>acceleration is statistically abnormal for their own volatility</b> — often before they'd clear the +2% "building" floor. Badges (🔭 Scout → 🧨 Primed → 🔥 Igniting → ⚡ Early-Confirmed) are <b>pre-registered research states being measured for lead time — not calibrated probabilities and not entries</b>. Each name must still pass the same live validation (fresh bar + quote + trigger + structure) to become actionable. What must happen next: hold above VWAP and break the opening-range high on participation; what invalidates: VWAP loss, fade back into the range.</div>
         <div class="dt-best-grid">${discRows.slice(0, 12).map(discCard).join('')}</div>
       </div>` : '';
+    // 🧪 Expert diagnostics — Stage-2 selection lanes (who got deep validation and why, who
+    // was budget-rejected). Collapsed by default; expandable for experts.
+    const sel = t.stage2Selection;
+    const diagSection = sel ? `<details class="rot-panel" style="border-color:#33415555"><summary class="rot-head" style="cursor:pointer;color:#94a3b8">🧪 Stage-2 selection diagnostics <span class="dt-dim">(budget ${sel.budget}: ${(sel.selected || []).length} validated, ${(sel.rejected || []).length} rejected)</span></summary>
+        <div class="rot-sub">Deep live-validation budget by lane — management/revalidation protected, discovery guaranteed ${sel.reserves ? sel.reserves.DISCOVERY_RESERVE : '?'} slots + ${sel.reserves ? sel.reserves.ANOMALY_RESERVE : '?'} anomaly reserve. Candidates: ${Object.entries(sel.laneCounts || {}).map(([k, v]) => `${k} ${v}`).join(' · ')}.</div>
+        <div style="font-size:11px;line-height:1.7;padding:4px 8px">${(sel.selected || []).map(s => `<span style="display:inline-block;margin:1px 6px 1px 0"><b>${esc(s.ticker)}</b> <span class="dt-dim">${esc(s.lane)}${s.via && s.via.includes('reserve') ? '·R' : ''}</span></span>`).join('')}</div>
+        ${(sel.rejected || []).length ? `<div class="dt-dim" style="font-size:11px;padding:0 8px 6px">Budget-rejected: ${sel.rejected.slice(0, 15).map(r => esc(r.ticker)).join(', ')}${sel.rejected.length > 15 ? ` +${sel.rejected.length - 15} more` : ''}</div>` : ''}
+      </details>` : '';
 
     // 🚀 Too Extended — real strength, unacceptable chase. Visible, explicitly not a buy.
     const extRows = lanes.tooExtended || [];
@@ -6163,7 +6185,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <div class="rot-sub">Retired names that subsequently became strong runners (<b>false retirements</b> — the retirement rules' error rate, measured honestly) and setups that re-qualified with a <b>new</b> plan.</div>
         <div class="dt-best-grid">${[...missedRows.slice(0, 8).map(laneCard), ...revivedRows.slice(0, 8).map((o, i) => bestCard(o, i))].join('')}</div>
       </div>` : '';
-    el.innerHTML = banner + tapeBadge + pacedBanner + bestSection + armedSection + discSection + extSection + alertsSection + retiredSection + missedSection + priorSection + configBanner + howto + ml + es + runSection + expList + track + timingScorecard(timingBook) +
+    el.innerHTML = banner + tapeBadge + pacedBanner + bestSection + armedSection + discSection + diagSection + extSection + alertsSection + retiredSection + missedSection + priorSection + configBanner + howto + ml + es + runSection + expList + track + timingScorecard(timingBook) +
       `<div class="fade-caveats"><b>How to use.</b> Today's relative-volume + momentum movers (the EOD version of the Finviz day-trade scans), regime-gated and self-learning. <b>Honest validation</b> (5y, forward 3-session excess vs SPY): large-cap momentum-chasing does <b>not</b> beat the market (it mean-reverts, −1.3% out-of-sample); explosive small-caps carry a <b>positive average excess</b> (~+1.7–2.3% in risk-on/neutral) but a <b>sub-50% hit-rate</b> — a few big runners carry it, and it dies in risk-off. So treat these as a <b>ranked movers watchlist</b>, not a win-rate edge; the per-stock learner tilts toward names whose momentum actually continues and drops the rest. <b>The 🧪 experimental config above</b> (opening-range-breakout entry + 2.5×ATR stop + top-half selection) is the one variant that tested out-of-sample positive on <b>real intraday execution</b> — but it <b>failed formal deflation</b> (deflated Sharpe 0.59), so it's a paper-trading lead to confirm forward, not a proven edge. Confirm entries in TradingView (MACD / RSI / Smart-Money). Research, not advice.</div>`;
     // Wire each card's chart toggle (reuses the shared /api/chart canvas renderer)
     // and start live-price polling for the recommended names.

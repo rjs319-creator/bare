@@ -1,5 +1,12 @@
 # Day Trade — Early Runner & Dud Engine
 
+> **2026-07 predictive-discovery redesign**: see `DAYTRADE-PREDICTIVE.md` for the added
+> layer — canonical feature schema, discovery merge + lane-budgeted Stage-2, frozen live
+> plans (mechanical R:R fix), premarket discovery, early research states
+> (SCOUT/PRIMED/IGNITION/EARLY_CONFIRMED), PIT cross-sectional dataset + same-day labels,
+> runner-capture/miss-taxonomy reporting, and the external-scheduler scan runner
+> (`op=daytradescan` / `daytradescanhealth` / `daytradecapture` / `datasetgrade`).
+
 The Day Trade section is a **persistent intraday opportunity system**, not a daily-mover
 watchlist. One coherent server-authoritative pipeline:
 
@@ -60,7 +67,10 @@ liquid intraday universe
   advances it against fresh evidence, persists it back, emits alerts + transition snapshots.
   The page triggers this every 60 s (CDN 30 s).
 - **Broad discovery**: `GET /api/tracker?op=discover` — one Stage-A scan (the page fires it
-  on the same 60 s cadence; CDN 45 s coalesces viewers). RTH only.
+  on the same 60 s cadence; CDN 45 s coalesces viewers). Regular hours + premarket
+  (session-specific thresholds; interval state resets on session change). The board also
+  runs one inline scan per cycle when no fresh persisted result exists (same-cycle
+  consumption — no one-refresh delay).
 - **Alert log**: `GET /api/tracker?op=daytradealerts[&date=YYYY-MM-DD]`.
 - **Grading**: `GET /api/tracker?op=lifecyclegrade[&date=…]` — now also on the daily warm
   cron (`capture` chain), so each session's transition snapshots grade automatically
