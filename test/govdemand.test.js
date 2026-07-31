@@ -38,6 +38,20 @@ test('single-token patterns cannot false-positive on unrelated companies', () =>
   assert.equal(mapRecipient('GRANITE TELECOMMUNICATIONS LLC'), null); // NOT Granite Construction
 });
 
+test('prefix (^) patterns match distinctive-brand arms beyond the generic set', () => {
+  // Regression: the '^' flag was stripped by normalization in v1, silently
+  // demoting prefix patterns to exact-match (caught by the first live dry-run).
+  assert.equal(mapRecipient('RAYTHEON TECHNICAL SERVICES COMPANY LLC').ticker, 'RTX');
+  assert.equal(mapRecipient('TELEDYNE BROWN ENGINEERING, INC.').ticker, 'TDY');
+  assert.equal(mapRecipient('BOEING AEROSPACE OPERATIONS INC').ticker, 'BA');
+});
+
+test('dry-run-surfaced subsidiaries map with evidence', () => {
+  assert.equal(mapRecipient('CSRA LLC').ticker, 'GD');
+  assert.equal(mapRecipient('CSRA LLC', '2017-01-01'), null);   // pre-acquisition
+  assert.equal(mapRecipient('SCALED COMPOSITES, LLC').ticker, 'NOC');
+});
+
 test('unmapped recipients return null, never a guess', () => {
   assert.equal(mapRecipient('CARAHSOFT TECHNOLOGY CORP'), null);
   assert.equal(mapRecipient(''), null);
