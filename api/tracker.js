@@ -96,6 +96,9 @@ const PRIVILEGED_OPS = new Set([
   // GOV-DEMAND shadow vertical WRITES (USAspending collect + PIT prediction log / forward
   // outcome resolution). Cron/manual-with-bearer only.
   'govdemandtick', 'govdemandresolve',
+  // GRIDLOCK shadow vertical WRITES (PJM/EIA/NWS collect + event ledger + PIT candidate
+  // log / forward outcome resolution). Cron/manual-with-bearer only.
+  'gridlocktick', 'gridlockresolve',
   // Day Trade scan runner (external-scheduler entry point — writes discovery state, dataset
   // buckets and runner health) + dataset grading (per-ticker bar fetch fan-out + grade WRITE).
   'daytradescan', 'datasetgrade',
@@ -294,6 +297,14 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'govdemand') return require('../lib/govdemand-routes').runGovDemand(req, res);
   if (req.query.op === 'govdemandtick') return require('../lib/govdemand-routes').runGovDemandTick(req, res);
   if (req.query.op === 'govdemandresolve') return require('../lib/govdemand-routes').runGovDemandResolve(req, res);
+
+  // ⚡ GRIDLOCK — physical-constraint shadow vertical (weight-0, never changes a live ranking).
+  // gridlock/gridlockscenario are public reads (cached snapshot / pure arithmetic);
+  // gridlocktick/gridlockresolve are cron-only writers.
+  if (req.query.op === 'gridlock') return require('../lib/gridlock-routes').runGridlock(req, res);
+  if (req.query.op === 'gridlockscenario') return require('../lib/gridlock-routes').runGridlockScenario(req, res);
+  if (req.query.op === 'gridlocktick') return require('../lib/gridlock-routes').runGridlockTick(req, res);
+  if (req.query.op === 'gridlockresolve') return require('../lib/gridlock-routes').runGridlockResolve(req, res);
   if (req.query.op === 'revisions') return runRevisionsOp(req, res);
   if (req.query.op === 'alertsingest') return runAlertsIngest(req, res);
   if (req.query.op === 'alerts') return runAlerts(req, res);
