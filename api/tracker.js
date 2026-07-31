@@ -93,6 +93,9 @@ const PRIVILEGED_OPS = new Set([
   // Evidence Consensus & Thesis Change engine — the daily snapshot build makes LLM extraction
   // calls per active-attention name + writes the evidence ledger. Cron/manual-with-bearer only.
   'evidencetick',
+  // GOV-DEMAND shadow vertical WRITES (USAspending collect + PIT prediction log / forward
+  // outcome resolution). Cron/manual-with-bearer only.
+  'govdemandtick', 'govdemandresolve',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
@@ -276,6 +279,9 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'longshort') return runLongShortOp(req, res);
   if (req.query.op === 'pead') return runPeadOp(req, res);
   if (req.query.op === 'congress') return runCongressOp(req, res);
+  if (req.query.op === 'govdemand') return require('../lib/govdemand-routes').runGovDemand(req, res);
+  if (req.query.op === 'govdemandtick') return require('../lib/govdemand-routes').runGovDemandTick(req, res);
+  if (req.query.op === 'govdemandresolve') return require('../lib/govdemand-routes').runGovDemandResolve(req, res);
   if (req.query.op === 'revisions') return runRevisionsOp(req, res);
   if (req.query.op === 'alertsingest') return runAlertsIngest(req, res);
   if (req.query.op === 'alerts') return runAlerts(req, res);
