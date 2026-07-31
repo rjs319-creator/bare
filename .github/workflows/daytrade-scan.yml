@@ -1,0 +1,83 @@
+name: Day Trade intraday scan
+
+# EXTERNAL SCHEDULER for the Day Trade discovery engine (see DAYTRADE-PREDICTIVE.md).
+# Vercel Hobby has no intraday cron, so GitHub Actions plays scheduler:
+#
+#   • every 5 min, 08:00–21:55 UTC weekdays → op=daytradescan (one locked, idempotent
+#     scan cycle: Stage-A discovery + PIT dataset capture + health bookkeeping). The UTC
+#     window covers 04:00 ET premarket → 16:00 ET close in BOTH EDT and EST; off-session
+#     calls no-op server-side for pennies, and the runner's 40 s idempotency window +
+#     55 s lease make over-scheduling safe.
+#   • 23:00 UTC weekdays (after the 22:00 UTC daily warm cron has rebuilt the candle
+#     caches) → op=daytradecapture (runner-capture / miss-taxonomy report) + several
+#     bounded op=datasetgrade passes (attach strictly-after labels to the day's rows).
+#
+# HONESTY: GitHub cron is best-effort — real cadence is ~5–15 min with jitter, and
+# GitHub disables schedules in repos with no activity for 60 days. op=daytradescanhealth
+# reports actual gaps, so coverage claims stay factual.
+#
+# One-time setup: add repo secret CRON_SECRET (same value as the Vercel Production env
+# var). Until it exists, runs no-op with a warning instead of failing red every 5 min.
+
+on:
+  schedule:
+    - cron: '*/5 8-21 * * 1-5'   # intraday scan window (UTC)
+    - cron: '0 23 * * 1-5'       # post-close capture + dataset grading (UTC)
+  workflow_dispatch: {}
+
+env:
+  APP_URL: https://market-news-app-chi.vercel.app
+
+concurrency:
+  group: daytrade-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    # Runs on the 5-minute schedule and on manual dispatch; not on the post-close tick.
+    if: github.event.schedule != '0 23 * * 1-5'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Trigger one locked scan cycle
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::warning::CRON_SECRET repo secret not set — skipping scan. Add it (repo Settings → Secrets and variables → Actions) with the same value as the Vercel Production CRON_SECRET to enable intraday scanning."
+            exit 0
+          fi
+          code=$(curl -sS -o /tmp/scan.json -w '%{http_code}' --max-time 90 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/tracker?op=daytradescan")
+          cat /tmp/scan.json
+          if [ "$code" != "200" ]; then
+            echo "::error::op=daytradescan returned HTTP $code"
+            exit 1
+          fi
+
+  postclose:
+    # Post-close: capture report (public op) + bounded label-grading passes (privileged).
+    if: github.event.schedule == '0 23 * * 1-5'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Runner-capture / miss-taxonomy report
+        run: |
+          curl -sS --max-time 120 "$APP_URL/api/tracker?op=daytradecapture" | head -c 2000
+      - name: Grade the day's PIT dataset rows (bounded passes)
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::warning::CRON_SECRET repo secret not set — skipping dataset grading."
+            exit 0
+          fi
+          # Each pass grades ≤40 tickers; stop early once nothing remains.
+          for i in 1 2 3 4 5 6; do
+            out=$(curl -sS --max-time 120 -H "Authorization: Bearer $CRON_SECRET" \
+              "$APP_URL/api/tracker?op=datasetgrade&limit=40")
+            echo "pass $i: $out" | head -c 1000; echo
+            remaining=$(echo "$out" | sed -n 's/.*"remaining":\([0-9]*\).*/\1/p')
+            if [ "${remaining:-0}" = "0" ]; then echo "grading complete"; break; fi
+          done
