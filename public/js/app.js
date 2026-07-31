@@ -16,6 +16,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadPremove } from './premove.js';
   import { loadOrbitLab } from './orbit-lab.js';
   import { loadRltLab } from './rlt-lab.js';
+  import { loadGridlock } from './gridlock.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { loadCern, eventName as cernEventName } from './cern.js';
   import { mountVerdict } from './evidence-badge.js';
@@ -36,7 +37,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     markets:    ['rotation', 'sectors', 'news', 'thesis', 'pulse', 'evolve'],
     predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     proof:      ['scoreboard', 'evidence', 'baselines', 'leaderboard', 'coreperf'],
-    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge', 'orbitlab', 'rltlab'],
+    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge', 'orbitlab', 'rltlab', 'gridlock'],
   };
   // Holding-horizon of each candidate/position sub-tab → drives the horizon dividers
   // in the sub-nav so the app is visibly separated by time horizon (the spec ask).
@@ -54,7 +55,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     quickhit: '⚡ Quick Hit', swingsup: '📋 Swing Supervisor', premove: '📡 Pre-Move', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', atlas: '🛰 ATLAS-X', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', patternradar: '📐 Pattern Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', thesis: '🧾 Thesis Changes', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
-    backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)', rltlab: '🧭 Leadership (shadow)',
+    backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)', rltlab: '🧭 Leadership (shadow)', gridlock: '⚡ GRIDLOCK (shadow)',
     leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', evidence: '🎖️ Evidence', baselines: '🧪 Baselines', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
   // Plain-English "what is this tab?" hovers for a novice investor — one line per
@@ -87,6 +88,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     gapdown: 'Stocks gapping DOWN hard on news and continuing lower — short setups (the mirror of Gap & Go). Best off red days; mind borrow costs.',
     orbitlab: 'ORBIT & ORBIT-ML — experimental residual-drift ranking systems running in shadow (zero weight, never affect the live rank). Shown here to accrue an honest out-of-sample track record; currently grade C with no durable edge.',
     rltlab: 'Relative Leadership Transition — shadow system finding stocks BEGINNING to outperform their sector peers (rank change, not just high rank). Watch/armed/triggered states only; zero weight, never a buy signal, no probabilities until calibration is earned.',
+    gridlock: 'GRIDLOCK — shadow engine mapping PHYSICAL constraints (AI data-center power demand, plant retirements, turbine orders — PJM first) to companies with VERIFIED exposure. Decomposed research scores only; zero weight, no probabilities, never a buy signal.',
     rotation: 'Which sectors money is rotating into and out of, week over week.',
     sectors: 'Sector performance heatmap — what’s leading and lagging.',
     momentum: 'Strong-buy and strong-sell momentum calls right now.',
@@ -153,6 +155,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       read: `Each card shows the pattern, its direction, phase, a <b>match tier</b> (how closely the shape fits — this is <b>shape agreement, not a win rate</b>), and a trigger / stop / target plan. A "target-first" number is a <b>model estimate</b> unless it says <i>calibrated</i>. The buckets run Actionable Now → Near Trigger → Forming → Retesting → Too Extended → Failed Today → Strongest Matches → Research-Only.`,
       act: `Treat this as <b>context, not a buy list</b>. Only <b>Actionable Now</b> means live-confirmed-and-fresh; everything else is watch/wait. A strong shape with an <b>unproven edge</b> shows as <b>Research only</b>. Click a ticker for its full multi-timeframe read.`,
       catch: `<b>Shadow / descriptive.</b> Chart patterns are not certainty, and this layer does <b>not</b> change any live ranking. Similarity ≠ probability; a pattern's real edge is only trusted once enough forward outcomes resolve (shown under Evidence). Stale or failed setups are shown as such, never as buys.`,
+    },
+    gridlock: {
+      what: `A <b>shadow research</b> engine that starts from a <b>physical event</b> — a new AI data-center's power demand, a plant retirement, a record capacity auction, a turbine order — models the <b>regional grid constraint</b> it changes (PJM first), and maps it only to companies with <b>verified exposure</b> (filings/IR, never AI guesses). Most companies mentioned in the news are correctly classified as too indirect.`,
+      read: `The dashboard shows the region's <b>constraint-pressure score</b> (0–100, fully decomposed, missing inputs listed), the <b>event ledger</b> (deduped — five articles about one campus are ONE event), and <b>ranked candidates</b>: each card carries the causal chain, exposure role, decomposed scores, a not-yet-repriced read, and OMEGA-SWING's entry/stop/target if timing is defined. <b>Actionable</b> means every gate passed; everything else shows the exact gate that failed.`,
+      act: `Treat it as <b>research only</b> — weight-0, never a buy list, no win probabilities (nothing is calibrated). Use the scenario panel to stress the assumptions yourself; watch the <b>Gridlock section on the Scoreboard</b> to see whether Actionable names actually beat Tracked ones before trusting anything here.`,
+      catch: `<b>Shadow.</b> Region data may be missing (PJM/EIA keys are optional) — the score says exactly what it couldn't see rather than guessing. Seeded historical events are marked and are too old to be actionable by construction. All timing comes from OMEGA-SWING; GRIDLOCK adds no momentum math of its own.`,
     },
     omega: {
       what: `A shortlist of liquid stocks with <b>early-to-middle-stage momentum</b> that's likely to keep rising over the next <b>5–10 trading days</b>. It looks for sustainable continuation — strong relative strength, real multi-day volume, a smooth trend, a fresh catalyst, and a good entry — <b>not</b> stocks that already went vertical.`,
@@ -396,6 +404,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'edge' && typeof ensureEdge === 'function') ensureEdge();
     if (sub === 'orbitlab' && typeof ensureOrbitLab === 'function') ensureOrbitLab();
     if (sub === 'rltlab' && typeof ensureRltLab === 'function') ensureRltLab();
+    if (sub === 'gridlock' && typeof ensureGridlock === 'function') ensureGridlock();
     if (sub === 'evidence' && typeof ensureEvidence === 'function') ensureEvidence();
     if (sub === 'thesis' && typeof ensureThesis === 'function') ensureThesis();
     if (sub === 'baselines' && typeof ensureBaselines === 'function') ensureBaselines();
@@ -3782,6 +3791,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (btn) btn.addEventListener('click', () => loadRltLab(document.getElementById('rltlab-container')));
     }
     loadRltLab(document.getElementById('rltlab-container'));
+  }
+
+  // ⚡ GRIDLOCK (shadow) — physical-constraint & marginal-beneficiary board
+  // (loadGridlock renders op=gridlock). Weight-0, never affects the live rank.
+  let gridlockLoaded = false;
+  function ensureGridlock() {
+    if (!gridlockLoaded) {
+      gridlockLoaded = true;
+      const btn = document.getElementById('gridlock-refresh-btn');
+      if (btn) btn.addEventListener('click', () => loadGridlock(document.getElementById('gridlock-container')));
+    }
+    loadGridlock(document.getElementById('gridlock-container'));
   }
 
   // 🎯 OMEGA ENSEMBLE — the composed board (loadEnsemble renders the op=ensemble payload,
@@ -7466,12 +7487,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const scoreboardMeta       = document.getElementById('scoreboard-meta');
   let   lastScoreboard       = null;
 
-  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', Biotech: '🧬 Biotech Radar (Hot vs Watch)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)', DownDay: '🪁 Down-Day Bounce (Longs)', GapDown: '🐻 Gap-Down Continuation (Shorts)', daytrade: '⚡ Day Trade (A vs B)', coil: '🧬 Coil Radar (squeeze bands)', Ignition: '🔥 Momentum Ignition (Ignition vs Watch)', OMEGA: '💠 OMEGA-Swing (Prime vs Watch)', Evidence: '🧾 Evidence / Thesis Change (Strong vs Weak)' };
+  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', Biotech: '🧬 Biotech Radar (Hot vs Watch)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)', DownDay: '🪁 Down-Day Bounce (Longs)', GapDown: '🐻 Gap-Down Continuation (Shorts)', daytrade: '⚡ Day Trade (A vs B)', coil: '🧬 Coil Radar (squeeze bands)', Ignition: '🔥 Momentum Ignition (Ignition vs Watch)', OMEGA: '💠 OMEGA-Swing (Prime vs Watch)', Gridlock: '⚡ GRIDLOCK (Actionable vs Tracked)', Evidence: '🧾 Evidence / Thesis Change (Strong vs Weak)' };
   const SB_TIER_LABEL = { Breakout: 'Breakout', Setup: 'Setup', Early: 'Early', StrongBuy: 'Strong Buy', StrongSell: 'Strong Sell', GHOST: '👻 Ghost', STALKING: '🥷 Stalking', SHORT: 'Short', SHORT_LIGHT: 'Short (light)',
     WATCH: '👀 Watch (fresh turn)', EMERGING: '🌗 Emerging (turning)', CONFIRMED: '✅ Confirmed (late)',
     IGNITION: '🔥 Ignition (accelerating)',
     OMEGA_PRIME: '💠 Prime', OMEGA_QUALIFIED: '🟢 Qualified', OMEGA_WATCH: '👁 Watch',
     EV_STRONG: '🧾 Strong change', EV_MODERATE: '🧾 Moderate change', EV_WEAK: '🧾 Weak change',
+    Actionable: '✅ Actionable (all gates passed)', Tracked: '👀 Tracked (a gate failed — reason logged)',
     STRONG: '🔴 Strong (≥5% gap)', MODERATE: '🟠 Moderate (3–5% gap)',
     INDEX_DELETE: 'Index Delete', INDEX_ADD_FADE: 'Index Add (fade)', LOCKUP_EXPIRY: 'Lockup Expiry', TAX_LOSS: 'Tax-Loss Selling', FIRE_SALE: 'Fire Sale', MARGIN_SPIRAL: 'Margin Spiral', FORCED_DOWNGRADE: 'Forced Downgrade',
     Bullish: '📈 Bullish tone', Neutral: '➖ Neutral tone', Bearish: '📉 Bearish tone',
@@ -7504,6 +7526,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     GapDown: 'Gap-down continuation SHORTS (the mirror of Gap & Go): a name that gapped down hard on non-earnings news and kept falling. A win here means the stock dropped. The test: do bigger gap-downs (STRONG ≥5%) continue lower more than MODERATE? Costs not deducted — subtract borrow/slippage.',
     daytrade: 'Intraday momentum picks from the Day-Trade screener (A = strict quality, B = relaxed “building”). The test: does the A tier actually beat the B tier on forward returns? Scored in the score-decile check by its own relVol/gap ranker.',
     coil: 'Pre-explosion compression picks from Coil Radar, grouped by calibrated squeeze band. The test: do the tightest-squeeze bands actually break out more? Scored in the score-decile check by its own Bollinger-squeeze-rank model.',
+    Gridlock: 'Physical-constraint beneficiaries from GRIDLOCK (shadow). ACTIONABLE = cleared every gate (verified exposure + fresh event + regional data current + price confirms + OMEGA timing defined); TRACKED = a real beneficiary that failed a gate (reason logged). The test: do Actionable names beat Tracked ones — and beat their own SECTOR ETF? Weight-0 until this record earns promotion.',
     OMEGA: 'OMEGA-SWING 5–10 day continuation picks (💠 Prime / 🟢 Qualified / 👁 Watch). The test: do the Prime names actually beat Qualified and Watch — and beat the market — over 1–2 weeks? Each pick is sector- & market-relative and ranked by expected utility.',
   };
   const SB_HZ_HELP = 'Average return this many trading days after the pick. The green/red “vs S&P” line under it is the market-beating number: the pick’s return minus what the S&P 500 did over the same days.';
