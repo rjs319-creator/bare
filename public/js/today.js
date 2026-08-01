@@ -124,7 +124,9 @@ function breadthChip(sig) {
 function trackLine(sig) {
   const x = sig.expectancy;
   // Honest empty state — never invent a number when the sample is inadequate (#3).
-  if (!x || !x.known || !x.n) return `<span class="td-dim td-track">📊 no track record yet — insufficient data</span>`;
+  // Exact-horizon contract: a missing record at THIS horizon is BUILDING EVIDENCE — the
+  // server no longer substitutes another horizon's record (defect #8).
+  if (!x || !x.known || !x.n) return `<span class="td-dim td-track" title="No graded outcomes at this signal's exact ${esc((x && x.horizonKey) || '')} horizon contract yet. Other horizons' records are never substituted.">🧱 BUILDING EVIDENCE${x && x.horizonKey ? ` (${esc(x.horizonKey)})` : ''} — no exact-horizon record yet</span>`;
   const col = (x.avgExcess ?? 0) >= 0 ? 'td-pos' : 'td-neg';
   // Evidence-based metrics shown SEPARATELY (#3): success rate · mean-vs-market · median · sample.
   const parts = [];
@@ -215,7 +217,7 @@ function signalCard(sig, legend) {
     + `<span class="td-tk" data-live="${esc(sig.ticker)}">${esc(sig.ticker)}</span>`
     + `<span class="td-co">${esc(sig.company || sig.setup || '')}</span>`
     + `<span class="td-score" title="Composite: confidence × regime-fit × execution × validated-expectancy × independent-evidence">${sig.score}</span></div>`
-    + `<div class="td-chips"><span class="td-state ${scls}">${si} ${slbl}</span>`
+    + `<div class="td-chips">` + classChip(sig) + `<span class="td-state ${scls}">${si} ${slbl}</span>` + ageChip(sig)
     + (sig.side === 'short' ? `<span class="td-short" title="A short setup — profits if it falls (favored in risk-off)">🔻 SHORT</span>` : '')
     + familyChip(sig)
     + `<span class="td-setup">${esc(sig.setup || sig.source)}</span>`
@@ -227,6 +229,21 @@ function signalCard(sig, legend) {
     + levels(sig)
     + `<div class="td-foot">${trackLine(sig)}${eventChip(sig.event)}${sig.catalyst ? `<span class="td-cat" title="${esc(sig.catalyst)}">📰 catalyst</span>` : ''}</div>`
     + `</div>`;
+}
+
+// Unmistakable ACTIONABLE vs RESEARCH separation (governance §): research/shadow leads are
+// displayed and graded but are never implied recommendations.
+function classChip(sig) {
+  if (sig.evidenceClass === 'ACTIONABLE') return `<span class="td-class td-class-act" title="Evidence-cleared: explicitly production strategy with earned, current governance clearance.">✅ ACTIONABLE</span>`;
+  if (sig.evidenceClass === 'RESEARCH') return `<span class="td-class td-class-res" title="Research/shadow lead — shown and graded, but NOT an evidence-cleared recommendation. It cannot size a position.">🔬 RESEARCH</span>`;
+  return '';
+}
+// Lifecycle age from the immutable origin — a re-emitted pick shows its true age instead of
+// looking newly detected forever (defect #11).
+function ageChip(sig) {
+  if (!(sig.ageBars > 0)) return '';
+  const since = sig.detectedAt ? ` since ${esc(String(sig.detectedAt).slice(0, 10))}` : '';
+  return `<span class="td-age" title="Sessions since first detection (immutable origin${since}). Age drives early/ready/expired states — re-ranking never resets it.">⏳ ${sig.ageBars} bar${sig.ageBars === 1 ? '' : 's'}</span>`;
 }
 
 function lane(title, arr, legend) {
@@ -309,13 +326,21 @@ export function renderCommandCenter(container, p) {
     + [['quickhit', '⚡ Quick Hit'], ['opportunities', '⭐ Opportunities'], ['edge', '📓 Edge Book'], ['gameplan', '🗞️ Game Plan']]
       .map(([t, l]) => `<button class="td-rel" data-go="${t}">${l}</button>`).join('') + `</div>`;
 
-  // THE shortlist (#1b): one ranked top 5–10 across every screener and horizon, so the
-  // reader gets a single actionable list before drilling into the horizon buckets below.
-  const top = (p.top || []).slice(0, 10);
-  if (top.length) {
-    html += `<div class="td-top-plays"><div class="td-hz-h">⭐ Top ${top.length} plays `
-      + `<span class="td-dim">the single ranked shortlist across every screener &amp; horizon</span></div>`
-      + `<div class="td-top-grid">` + top.map(s => signalCard(s, legend)).join('') + `</div></div>`;
+  // PER-HORIZON shortlists — deliberately NOT one global list. A same-session exit and a
+  // quarterly hold answer different questions; each horizon is ranked within its own exact
+  // outcome contract and no cross-horizon "best overall" score exists.
+  const tbh = p.topByHorizon || {};
+  const hasTop = Object.values(tbh).some(l => l && l.length);
+  if (hasTop) {
+    html += `<div class="td-top-plays"><div class="td-hz-h">⭐ Top plays by horizon `
+      + `<span class="td-dim">ranked within each time frame — horizons are never mixed into one list</span></div>`;
+    for (const [key, title] of HORIZONS) {
+      const list = (tbh[key] || []).slice(0, 5);
+      if (!list.length) continue;
+      html += `<div class="td-hz-h" style="margin-top:6px">${title}</div>`
+        + `<div class="td-top-grid">` + list.map(s => signalCard(s, legend)).join('') + `</div>`;
+    }
+    html += `</div>`;
   }
 
   // Top-3 per horizon (#2 — never mixed).

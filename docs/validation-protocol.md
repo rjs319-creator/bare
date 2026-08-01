@@ -72,3 +72,37 @@ security-master version, universe policy, feature manifest, label version, fold 
 calibration params, cost model, code commit, seed, the **primary metric declared before evaluation**,
 results, and confidence intervals. Same script + same data ⇒ byte-identical results (verified by
 `test/research-slice.test.js`).
+
+## 8. Intraday dataset-survival addendum (predictive-redesign, 2026-07-31)
+
+The Day Trade learning loop now trains from the **full-universe PIT dataset**
+(`lib/intraday-dataset.js` → `lib/intraday-training.js`, `op=datasetsurvival`) instead of
+lifecycle first-entry episodes. Additional protocol requirements specific to that path:
+
+- **Inverse-probability weighting.** Ordinary negatives are kept at a deterministic
+  `sampleProb` (0.06); every training loss, calibration curve, Brier/ECE, base rate and
+  top-K estimate must be computed with weights `min(1/sampleProb, 50)` — and the unweighted
+  variants reported alongside so sampling effects are visible, never hidden.
+- **Version fail-closed.** Rows whose `datasetVersion` or labels whose `labelVersion`
+  mismatch the current schema are counted and excluded — never silently mixed.
+- **Two-stage utility target.** The primary actionable metric is expected cost-net utility
+  (`pTarget·reward − pStop·risk + pNeither·timeoutNet − costs` on the pre-registered
+  +1.0/−0.5 ATR barrier pair), not directional accuracy. Timeout returns come from the
+  training fold only.
+- **Mandatory comparators.** The deterministic severity score plus single-signal rankers
+  (cusum-alone, relVol-alone, dayPct-alone) — the fitted baseline must beat all of them
+  out-of-fold before any tree/LambdaRank challenger is even attempted.
+- **No probability display.** `pTarget`/`pStop` never leave the research payload as
+  percentages until out-of-fold calibration passes the pre-registered gate
+  (`lib/promotion-gate.js`: ECE ≤ 0.10, Brier ≤ 0.25, ≥400 episodes, ≥150 test episodes,
+  ≥3 folds, precision and net-return lift).
+
+## 9. Source-score calibration (open work)
+
+Today's per-source `rawConfidence` values are **heterogeneous heuristic ranks** (audit
+defect #10) and are treated as ranks in all display language. Converting them to
+comparable calibrated quantities requires, per source × exact contract: out-of-fold
+P(target-before-stop), P(severe loss), expected cost-net residual return, utility per unit
+risk, an uncertainty band and an effective independent sample size. That per-source graded
+sample is still accruing; until it exists, cross-source combination remains rank-based and
+no source's score may be presented as a probability.

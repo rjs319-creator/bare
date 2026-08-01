@@ -73,7 +73,10 @@ jobs:
             echo "::warning::CRON_SECRET repo secret not set — skipping dataset grading."
             exit 0
           fi
-          # Each pass grades ≤40 tickers; stop early once nothing remains.
+          # BACKLOG mode (no date param): each pass grades the oldest incomplete captured
+          # dates first (≤40 tickers per date, ≤3 dates per pass), so a day that fell short
+          # yesterday is retried until remaining=0, terminal, or past bar retention (~5d).
+          # The top-level "remaining" in the response is the whole backlog's remaining count.
           for i in 1 2 3 4 5 6; do
             out=$(curl -sS --max-time 120 -H "Authorization: Bearer $CRON_SECRET" \
               "$APP_URL/api/tracker?op=datasetgrade&limit=40")

@@ -1,6 +1,19 @@
 const { fetchWithTimeout } = require('../lib/http');
-// Momentum scanner — pulls the trending universe, runs the real-time technical
-// signal on each, and splits the names into Strong Buy vs Strong Sell.
+// INTRADAY MOMENTUM scanner (momentum-v2).
+//
+// UNIVERSE REDESIGN (predictive-redesign, defect #14): the universe is now PRICE/VOLUME-
+// DISCOVERED — Day Trade full-universe CUSUM discovery anomalies first, then the cached
+// screener cross-sections — never StockTwits trending. Social attention is retained ONLY
+// as an orthogonal annotation joined onto names the tape already surfaced (`social`
+// watcher count + `attentionRank`); it can neither originate a candidate nor break a tie.
+// If no price/volume universe is available the scanner reports an honestly EMPTY board
+// with a degraded note — it never silently falls back to social-only discovery.
+//
+// HORIZON HONESTY (defect #15): detection is 5-minute technicals — a same-session read.
+// The strategy contract is now `intraday` (graded on cost-net excess @1d, momentum-v2);
+// the daily swing levels shown are display context, clearly labeled, and the old 1-month
+// "position" grading no longer applies to this scanner. Evidence under momentum-v1's
+// mismatched contract stays in the ledger under its own version and is NOT inherited.
 //
 // Momentum alerts are meant to catch stocks *starting* to move, not ones that
 // have already run. So we pull daily bars for each survivor and (a) drop names
@@ -87,23 +100,65 @@ function thesisFrom(card) {
   return `Real-time price action is ${dir} (conf ${card.confidence}/10): ${top}.`;
 }
 
+const DEEP_SCAN_BUDGET = 14;   // deep 5-minute analyses per run (function time budget)
+
+// Price/volume-discovered candidate universe, deterministic priority order:
+//   1. Day Trade discovery anomalies (full-universe CUSUM) — strongest severity first.
+//   2. Cached screener cross-sections (large/small/micro) — the scored movers.
+// Returns [{ticker, company, priority, origin}] deduped, strongest first.
+function buildCandidateUniverse({ discovery, screens }) {
+  const seen = new Map();
+  const push = (ticker, company, priority, origin) => {
+    const t = String(ticker || '').toUpperCase();
+    if (!t) return;
+    const prev = seen.get(t);
+    if (!prev || priority > prev.priority) seen.set(t, { ticker: t, company: company || t, priority, origin });
+  };
+  for (const a of (discovery && discovery.anomalies) || []) {
+    push(a.ticker, a.company, 1000 + (Number.isFinite(a.cusum) ? a.cusum : 0), 'discovery');
+  }
+  for (const sJson of screens || []) {
+    if (!sJson) continue;
+    for (const c of sJson.results || []) {
+      const mag = Math.abs(Number.isFinite(c.pctChange) ? c.pctChange : 0);
+      push(c.ticker, c.company, mag, 'screener');
+    }
+  }
+  return [...seen.values()].sort((a, b) => (b.priority - a.priority) || (a.ticker < b.ticker ? -1 : 1));
+}
+
 module.exports = async function handler(req, res) {
+  // Price/volume universe (never social). Discovery is best-effort (store-gated).
+  let discovery = null;
+  try { discovery = await require('../lib/intraday-discovery').loadRecentDiscovery({ now: new Date() }); } catch { discovery = null; }
+  const screens = await Promise.all(['large', 'small', 'micro'].map(screenerJSON));
+  const universe = buildCandidateUniverse({ discovery, screens });
+
+  // Social attention: an ORTHOGONAL annotation only — joined by ticker, never a candidate
+  // source, never a ranking input. Its incremental value is untested → weight zero.
   const trending = await fetchTrendingStockTwits();
-  if (!trending.length) {
-    return res.status(200).json({ strongBuys: [], strongSells: [], scannedCount: 0, generatedAt: new Date().toISOString(), note: 'Trending data unavailable.' });
+  const attention = new Map(trending.map((t, i) => [String(t.symbol || '').toUpperCase(), { rank: i + 1, watchers: t.watchlist_count || 0, title: t.title || null }]));
+
+  if (!universe.length) {
+    return res.status(200).json({
+      strongBuys: [], strongSells: [], scannedCount: 0, universeCount: 0,
+      generatedAt: new Date().toISOString(), degraded: true,
+      universeNote: 'Price/volume universe unavailable (no fresh discovery scan and no cached screener cross-section). This scanner never falls back to social trending as a discovery universe — an empty board is the honest answer.',
+    });
   }
 
-  // Scan the top trending names with the live technical engine (parallel).
-  const candidates = trending.slice(0, 14);
+  // Deep-scan the strongest price/volume candidates with the live technical engine.
+  const candidates = universe.slice(0, DEEP_SCAN_BUDGET);
   const results = await Promise.all(candidates.map(async s => {
     try {
-      const r = await analyze(s.symbol, { light: true });
+      const r = await analyze(s.ticker, { light: true });
       if (!r) return null;
-      return { r, company: s.title || s.symbol, social: s.watchlist_count || 0 };
+      const att = attention.get(s.ticker) || null;
+      return { r, company: s.company, universeOrigin: s.origin, social: att ? att.watchers : 0, attentionRank: att ? att.rank : null };
     } catch { return null; }
   }));
 
-  const toCard = ({ r, company, social }) => {
+  const toCard = ({ r, company, social, attentionRank, universeOrigin }) => {
     const card = {
       ticker: r.ticker,
       company,
@@ -119,6 +174,8 @@ module.exports = async function handler(req, res) {
       afterHours: r.price.afterHours,
       marketState: r.marketState,
       social,
+      attentionRank: attentionRank ?? null,       // social attention — annotation, weight 0
+      universeOrigin: universeOrigin || null,     // 'discovery' | 'screener' (never 'social')
     };
     card.thesis = thesisFrom(card);
     return card;
@@ -170,7 +227,6 @@ module.exports = async function handler(req, res) {
   // of truth), so we just borrow it — no recomputation. It's a long-setup read, so
   // buy side only; a momentum name not in any screen simply gets no badge.
   try {
-    const screens = await Promise.all(['large', 'small', 'micro'].map(screenerJSON));
     const wn = {};
     for (const s of screens) {
       if (!s) continue;
@@ -185,7 +241,14 @@ module.exports = async function handler(req, res) {
     strongBuys,
     strongSells,
     scannedCount: valid.length,
+    universeCount: universe.length,
+    universeSources: { discovery: universe.filter(u => u.origin === 'discovery').length, screener: universe.filter(u => u.origin === 'screener').length },
     excludedExtended,
+    contract: { scoringVersion: 'momentum-v2', horizon: 'intraday', note: 'Same-session technical read; daily swing levels are display context. Scores are heuristic ranks, not probabilities.' },
     generatedAt: new Date().toISOString(),
   });
 };
+
+// Exported for tests: the universe builder is the contract under regression (price/volume
+// discovery only — social can never be a candidate source).
+module.exports.buildCandidateUniverse = buildCandidateUniverse;

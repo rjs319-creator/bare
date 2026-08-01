@@ -163,3 +163,38 @@ Authorization: Bearer $CRON_SECRET
   reserves, frozen R:R, same-cycle discovery, schema presence, missingness, session
   separation, strictly-after labels, conservative same-bar, deterministic sampling with
   preserved positives, fail-closed promotion, hidden probability language).
+
+## Addendum — learning loop completed (2026-07-31, predictive-redesign)
+
+The missing dataset→model connection is now implemented (see
+`docs/predictive-redesign-audit.md` for the audited defects):
+
+- **`lib/intraday-training.js`** — canonical dataset→model adapter: joins
+  `loadDatasetDay` ⋈ `loadDatasetGrades` ⋈ `sampleProb` ⋈ deep Stage-2 features
+  (nearest same-bucket lifecycle evaluation, ±5 min), including selected, REJECTED and
+  sampled ordinary candidates; dedup by ticker|decision-time; version fail-closed.
+  Two-stage shadow baseline (pTarget/pStop logistics + train-fold timeout return) with
+  **expected cost-net utility** as the primary target. `op=datasetsurvival`.
+- **IPW everywhere** — `weight = min(1/sampleProb, 50)` in training loss
+  (`survival-model.js weighted:true`), Brier/ECE/reliability/base-rate/precision@k/top-k
+  (`survival-metrics.js`); weighted AND unweighted reported.
+- **Two-tier features** — `BROAD_FIELDS`/`datasetRowFeatures` for every captured row;
+  deep `MODEL_FEATURES` joined when a Stage-2 evaluation exists (`featureTier` marks it).
+  Missingness indicators throughout; missing is never zero.
+- **Capture integrity** — the 400-row cap now uses deterministic anomaly-severity priority
+  (input order can never decide survival; `droppedByReason` persisted); a bucket may be
+  upgraded only by a ≥25%-more-complete capture with a `superseded` audit trail.
+- **Grading backlog** — `lib/intraday-backlog.js`: per-date cursor, oldest-incomplete-first
+  retries until remaining=0 / terminal / past the ~5-day bar-retention window; per-ticker
+  fetch-fail rotation with a terminal attempt ceiling; `ungradeable`/`incompatibleRows`
+  visibly reported (a day can no longer claim complete with unlabeled rows).
+  `op=datasetgrade` without a date runs backlog mode (the workflow already calls it so).
+- **Scheduler honesty** — target cadence is config-driven (`DAYTRADE_SCAN_INTERVAL_MS`,
+  default = the deployed 5-minute GitHub cadence); misses count only scannable session
+  minutes (EST/EDT-safe, premarket-aware), reset per ET date; `op=daytradescanhealth` now
+  reports `stale`/`never-succeeded` (naming the silent-CRON_SECRET failure mode) plus the
+  grading-backlog summary.
+
+Evaluation status is unchanged and honest: the PIT dataset accrues prospectively; the
+harness reports `insufficient-data` and its promotion gate fails closed until the
+pre-registered thresholds are met. No probability is displayed anywhere.
