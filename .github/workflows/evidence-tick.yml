@@ -15,7 +15,12 @@ name: Evidence tick (Thesis Changes)
 on:
   schedule:
     - cron: '30 22 * * 1-5'   # 30 min after the 22:00 UTC warm burst has drained
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Set to 1 to run even when the market is closed (weekend verification)"
+        required: false
+        default: ''
 
 env:
   APP_URL: https://market-news-app-chi.vercel.app
@@ -37,9 +42,11 @@ jobs:
             echo "::warning::CRON_SECRET repo secret not set — skipping evidence tick. Add it (repo Settings → Secrets and variables → Actions) with the same value as the Vercel Production CRON_SECRET."
             exit 0
           fi
+          FORCE=""
+          if [ "${{ github.event.inputs.force }}" = "1" ]; then FORCE="&force=1"; fi
           code=$(curl -sS -o /tmp/tick.json -w '%{http_code}' --max-time 90 \
             -H "Authorization: Bearer $CRON_SECRET" \
-            "$APP_URL/api/tracker?op=evidencetick")
+            "$APP_URL/api/tracker?op=evidencetick$FORCE")
           cat /tmp/tick.json; echo
           if [ "$code" != "200" ]; then
             echo "::error::op=evidencetick returned HTTP $code"
