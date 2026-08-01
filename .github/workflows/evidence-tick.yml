@@ -1,0 +1,47 @@
+name: Evidence tick (Thesis Changes)
+
+# EXTERNAL SCHEDULER for op=evidencetick (Evidence Consensus & Thesis Change engine).
+# It used to run as a root chain inside the 22:00 UTC /api/warm burst, where every
+# chain fires concurrently — altprobes alone drains ~450 sequential FMP calls — so
+# the tick's 14 FMP/Finnhub news fetches were rate-limited into "noNews" daily and
+# the Thesis Changes tab stayed empty. Running 30 min later lands in a quiet window.
+#
+# The op itself is idempotent per day (rewrites evidence/<date>.json) and no-ops on
+# weekends/holidays server-side, so best-effort GitHub cron jitter is harmless.
+#
+# One-time setup: repo secret CRON_SECRET (same value as the Vercel Production env
+# var) — already required by daytrade-scan.yml.
+
+on:
+  schedule:
+    - cron: '30 22 * * 1-5'   # 30 min after the 22:00 UTC warm burst has drained
+  workflow_dispatch: {}
+
+env:
+  APP_URL: https://market-news-app-chi.vercel.app
+
+concurrency:
+  group: evidence-tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Run one evidence tick
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::warning::CRON_SECRET repo secret not set — skipping evidence tick. Add it (repo Settings → Secrets and variables → Actions) with the same value as the Vercel Production CRON_SECRET."
+            exit 0
+          fi
+          code=$(curl -sS -o /tmp/tick.json -w '%{http_code}' --max-time 90 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/tracker?op=evidencetick")
+          cat /tmp/tick.json; echo
+          if [ "$code" != "200" ]; then
+            echo "::error::op=evidencetick returned HTTP $code"
+            exit 1
+          fi
