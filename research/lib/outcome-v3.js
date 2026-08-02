@@ -13,7 +13,9 @@
 //   confirmed_delisted — authoritative delisting inside the horizon. Label-ready
 //                        under the configured treatment (haircut only for
 //                        bankruptcy-like reasons; a rename/acquisition/merger is
-//                        never automatically haircut).
+//                        never automatically haircut; documented per-share
+//                        proceeds override; an UNVERIFIED reason withholds the
+//                        label by default — see unknownReasonPolicy).
 //   pending            — security confirmed/prospectively observed active and
 //                        the horizon has not elapsed. NULL training label.
 //   unresolved         — stale tail, unknown identity, conflicting status,
@@ -36,14 +38,32 @@ const DAY = 86400000;
 const PENDING_GRACE_DAYS = 10;
 const ENTRY_STALE_DAYS = 10;
 const DELISTING_HAIRCUT = 0.30;        // Shumway (1997) — bankruptcy-like reasons only
+// Max calendar gap between the last observed bar and the confirmed delisting
+// date for the delisting to EXPLAIN the series truncation. A confirmed
+// delisting far beyond the last bar means the series ended for some OTHER
+// reason (cache truncation, vendor gap) and the intervening prices are
+// unobserved — that outcome fails closed instead of wearing a stale partial
+// return as its label.
+const DELIST_TRUNCATION_MAX_DAYS = 45;
 
-// Delisting reason categories and their configured treatment.
-//   haircut  — terminal-penalty treatment applies
-//   carry    — terminal observation carries (acquisition proceeds, rename continuity)
+// Delisting reason categories and their configured treatment (versioned policy:
+// fwd-outcome-v3).
+//   haircut  — Shumway-style terminal penalty (bankruptcy-like reasons ONLY)
+//   carry    — terminal observation carries (rename/exchange continuity, and
+//              acquisitions when no documented proceeds exist; documented
+//              proceeds — delisting.terminalValue per share — take precedence)
+// An UNKNOWN reason category is governed by opts.unknownReasonPolicy:
+//   'exclude' (default) — the delisting is confirmed but the label is withheld
+//                         (labelReady=false): haircutting an unidentified
+//                         acquisition repeats the v2 defect, and carrying an
+//                         unidentified bankruptcy inflates it. Fail closed.
+//   'haircut' | 'carry' — explicit sensitivity-study overrides; every use must
+//                         be disclosed in the consuming artifact's provenance.
 const REASON_TREATMENT = Object.freeze({
   bankruptcy: 'haircut', liquidation: 'haircut', delinquency: 'haircut', regulatory: 'haircut',
   acquisition: 'carry', merger: 'carry', rename: 'carry', 'exchange-move': 'carry', 'going-private': 'carry',
 });
+const UNKNOWN_REASON_POLICIES = Object.freeze(['exclude', 'haircut', 'carry']);
 
 const STATUS = Object.freeze(['mature', 'confirmed_delisted', 'pending', 'unresolved', 'no_fill']);
 
@@ -64,6 +84,7 @@ function delistingConfirmation(security) {
     date: d.date, source: d.source,
     confirmedAt: d.confirmedAt || null, sourcePublishedAt: d.sourcePublishedAt || null,
     reason: d.reason || null, reasonCategory: d.reasonCategory || null,
+    terminalValue: Number.isFinite(d.terminalValue) ? d.terminalValue : null,
     provenance: d.provenance,
   };
 }
@@ -120,14 +141,20 @@ function forwardOutcomeV3({ series, dateMs, bars, security = null, opts = {} }) 
   const entry = { ...base, entryDate: isoDate(entryBar.ms) };
   if (dateMs - entryBar.ms > ENTRY_STALE_DAYS * DAY) return { ...entry, reason: 'stale-entry-bar' };
 
-  const conf = delistingConfirmation(security);
+  let conf = delistingConfirmation(security);
+  let delistedAfterCutoff = false;
 
-  // CONFLICTING STATUS fails closed: bars trading AFTER a confirmed delisting
-  // date contradict the master — neither source is trusted.
   if (conf) {
     const delistMs = Date.parse(conf.date);
     const lastMs = series[series.length - 1].ms;
-    if (Number.isFinite(delistMs) && lastMs >= delistMs + DAY) {
+    // A delisting confirmed AFTER the data cutoff means the security was still
+    // listed throughout our data era: for labeling purposes it is an active
+    // security whose later fate is out of scope (pending/unresolved paths).
+    if (Number.isFinite(delistMs) && delistMs > dataCutoffMs) {
+      conf = null; delistedAfterCutoff = true;
+    } else if (Number.isFinite(delistMs) && lastMs >= delistMs + DAY) {
+      // CONFLICTING STATUS fails closed: bars trading AFTER a confirmed
+      // delisting date contradict the master — neither source is trusted.
       return { ...entry, reason: 'conflicting-status: bars after confirmed delisting date', confirmation: conf };
     }
   }
@@ -163,19 +190,46 @@ function forwardOutcomeV3({ series, dateMs, bars, security = null, opts = {} }) 
     const delistMs = Date.parse(conf.date);
     const inHorizon = Number.isFinite(delistMs) && delistMs > entryBar.ms;
     if (inHorizon) {
-      const treatment = REASON_TREATMENT[conf.reasonCategory]
-        || (conf.reasonCategory ? 'haircut' : (opts.haircutUnknownReason === false ? 'carry' : 'haircut'));
-      const adjustment = treatment === 'haircut' ? -haircut : 0;
+      // The delisting must EXPLAIN the truncation: if the series ends long
+      // before the confirmed delisting date, the security kept trading through
+      // an unobserved gap (cache truncation / vendor gap) and the last cached
+      // bar is NOT a terminal observation. Fail closed.
+      if (delistMs - lastBar.ms > DELIST_TRUNCATION_MAX_DAYS * DAY) {
+        return { ...partial, reason: 'series-ends-before-delisting-data-gap', confirmation: conf };
+      }
+      const unknownPolicy = opts.unknownReasonPolicy ?? 'exclude';
+      if (!UNKNOWN_REASON_POLICIES.includes(unknownPolicy)) {
+        return { ...partial, reason: `invalid-unknownReasonPolicy:${unknownPolicy}`, confirmation: conf };
+      }
+      const known = !!REASON_TREATMENT[conf.reasonCategory];
+      if (!known && unknownPolicy === 'exclude') {
+        // Confirmed delisting, unverified reason: an unidentified acquisition
+        // must not be haircut and an unidentified bankruptcy must not carry —
+        // the label is withheld until the reason is verified.
+        return {
+          ...partial, status: 'confirmed_delisted', confirmation: conf,
+          delistingTreatment: 'excluded:unknown-reason',
+          reason: 'authoritative-delisting-unverified-reason-fails-closed',
+        };
+      }
+      const treatment = known ? REASON_TREATMENT[conf.reasonCategory] : unknownPolicy;
+      // Documented per-share proceeds (acquisition cash-out, liquidation
+      // distribution) override the generic treatment entirely.
+      const proceeds = Number.isFinite(conf.terminalValue) && conf.terminalValue >= 0 ? conf.terminalValue : null;
+      const adjustment = proceeds != null ? null : (treatment === 'haircut' ? -haircut : 0);
+      const adjusted = proceeds != null
+        ? proceeds / entryBar.close - 1
+        : (1 + rawReturn) * (1 + adjustment) - 1;
       return {
         ...partial, status: 'confirmed_delisted',
         confirmation: conf,
-        delistingTreatment: conf.reasonCategory
-          ? `${treatment}:${conf.reasonCategory}`
-          : `${treatment}:unknown-reason-default`,
-        delistingAdjustment: adjustment,
-        adjustedReturn: (1 + rawReturn) * (1 + adjustment) - 1,
+        delistingTreatment: proceeds != null
+          ? `proceeds:${conf.reasonCategory || 'unknown-reason'}`
+          : `${treatment}:${conf.reasonCategory || `unknown-reason-policy-${unknownPolicy}`}`,
+        delistingAdjustment: proceeds != null ? +(adjusted - rawReturn).toFixed(10) : adjustment,
+        adjustedReturn: adjusted,
         labelReady: true,
-        trainingLabel: (1 + rawReturn) * (1 + adjustment) - 1,
+        trainingLabel: adjusted,
         reason: 'authoritative-delisting-in-horizon',
       };
     }
@@ -187,9 +241,10 @@ function forwardOutcomeV3({ series, dateMs, bars, security = null, opts = {} }) 
   //    not elapsed → pending. Everything else → unresolved. A stale tail with
   //    no authoritative record is UNRESOLVED — never 'delisted'.
   const tailAgeDays = (dataCutoffMs - lastBar.ms) / DAY;
-  const observedActive = security
+  const observedActive = (security
     && (security.status === 'active'
-      || (Number.isFinite(security.observedActiveThrough) && security.observedActiveThrough >= dataCutoffMs - PENDING_GRACE_DAYS * DAY));
+      || (Number.isFinite(security.observedActiveThrough) && security.observedActiveThrough >= dataCutoffMs - PENDING_GRACE_DAYS * DAY)))
+    || delistedAfterCutoff;   // listed throughout our data era — active for labeling purposes
   if (observedActive && tailAgeDays <= PENDING_GRACE_DAYS) {
     return { ...partial, status: 'pending', reason: 'horizon-not-elapsed' };
   }
@@ -202,8 +257,28 @@ function forwardOutcomeV3({ series, dateMs, bars, security = null, opts = {} }) 
   return { ...partial, reason: 'stale-tail-unconfirmed-disappearance' };
 }
 
+// THE training-boundary assertion. Every consumer that turns an outcome into a
+// training/calibration/grading label must go through this: it throws — never
+// returns null — on any outcome that is not label-ready, so a pending or
+// unresolved value can never silently enter a fit.
+const TRAINABLE_STATUSES = Object.freeze(['mature', 'confirmed_delisted']);
+function assertTrainable(outcome) {
+  if (!outcome || typeof outcome !== 'object') throw new Error('assertTrainable: not an outcome object');
+  if (!TRAINABLE_STATUSES.includes(outcome.status)) {
+    throw new Error(`assertTrainable: status '${outcome.status}' may never train (reason: ${outcome.reason})`);
+  }
+  if (outcome.labelReady !== true) {
+    throw new Error(`assertTrainable: outcome not label-ready (status ${outcome.status}, reason: ${outcome.reason})`);
+  }
+  if (!Number.isFinite(outcome.trainingLabel)) {
+    throw new Error(`assertTrainable: non-finite trainingLabel (status ${outcome.status})`);
+  }
+  return outcome.trainingLabel;
+}
+
 module.exports = {
   OUTCOME_POLICY_VERSION, INTERVAL_SEMANTICS, STATUS, REASON_TREATMENT,
+  UNKNOWN_REASON_POLICIES, TRAINABLE_STATUSES, DELIST_TRUNCATION_MAX_DAYS,
   PENDING_GRACE_DAYS, ENTRY_STALE_DAYS, DELISTING_HAIRCUT, DAY,
-  forwardOutcomeV3, delistingConfirmation, adjustmentBasisOf,
+  forwardOutcomeV3, delistingConfirmation, adjustmentBasisOf, assertTrainable,
 };

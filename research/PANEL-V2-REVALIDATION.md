@@ -32,6 +32,13 @@ the pending pool and pushed into the delisted-labeled training set.
 None of these were promoted (all verdicts were no-edge/provisional), so no live
 behavior changes; but their **numbers should not be quoted** until re-run.
 
+> **STATUS 2026-08-02 (later the same day): UNBLOCKED.** `secmaster-v3.json`
+> was built from the pitdata-v3 export merged with an FMP+SEC-EDGAR historical
+> reconstruction (890 confirmed delistings, reasons evidence-joined; see
+> `research/DATA-FOUNDATION-V3-BUILD-2026-08.md`), and `panel-features-v3.json`
+> now exists (778 dead names included). The `nonlinear-ml-panel` and `pead-sue`
+> reruns are recorded in `research/data/evidence/` — neither verdict flipped.
+
 ## How to revalidate
 
 1. Build the authoritative master: `node research/16-secmaster-v3.js`
