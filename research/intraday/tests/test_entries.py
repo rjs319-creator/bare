@@ -28,6 +28,17 @@ def test_orb_breakout_and_nofill():
     assert entries.opening_range_breakout(flat) is None
 
 
+def test_orb_gap_through_fills_at_open_not_trigger():
+    # OR high = 10.5, but the trigger bar OPENS at 10.9 — a buy-stop at 10.5 cannot
+    # fill at 10.5; it fills at the (worse) open. The old always-at-trigger fill was
+    # optimistic on exactly these strongest-momentum days.
+    first = [bar(10, 10.5, 9.9, 10.2) for _ in range(6)] + [bar(10.9, 11.2, 10.8, 11.0)]
+    assert entries.opening_range_breakout(first) == (10.9, 6)
+    # Open exactly AT the trigger also fills at the open (stop is already elected).
+    at_level = [bar(10, 10.5, 9.9, 10.2) for _ in range(6)] + [bar(10.5, 10.9, 10.4, 10.8)]
+    assert entries.opening_range_breakout(at_level) == (10.5, 6)
+
+
 def test_hold_30():
     green = [bar(10, 10.3, 9.9, 10.1) for _ in range(6)] + [bar(10.1, 10.4, 10.0, 10.3)]
     assert entries.hold_30(green) == (10.3, 6)
@@ -54,3 +65,21 @@ def test_simulate_at_entry_on_last_bar_time_exits():
     window = [bar(10, 10.1, 9.9, 10), bar(10, 10.2, 9.9, 10.15)]
     r = simulate_at(window, entry_price=10.15, start_idx=2, stop=9, target=12, cost=ZERO)
     assert r.exit_reason == "time"           # nothing left to manage
+
+
+def test_simulate_at_entry_bar_stop_check_is_conservative():
+    # Entry bar (idx 1) reverses to 8.9 <= stop 9 AFTER the 10.1 fill. Without the
+    # check the reversal is invisible and the trade rides to the 12 target; with it,
+    # the stop is charged on the entry bar (bias against the strategy).
+    window = [bar(10, 10.1, 9.9, 10), bar(10.05, 10.2, 8.9, 9.2), bar(9.2, 12.5, 9.1, 12)]
+    loose = simulate_at(window, entry_price=10.1, start_idx=2, stop=9, target=12, cost=ZERO)
+    assert loose.exit_reason == "target"     # old optimistic path
+    tight = simulate_at(window, entry_price=10.1, start_idx=2, stop=9, target=12, cost=ZERO,
+                        entry_bar_stop_check=True)
+    assert tight.exit_reason == "stop"
+    assert tight.bars_held == 0
+    # Entry bar holds above the stop -> the check changes nothing.
+    calm = [bar(10, 10.1, 9.9, 10), bar(10.05, 10.2, 9.8, 10.1), bar(10.1, 12.5, 10.0, 12)]
+    same = simulate_at(calm, entry_price=10.1, start_idx=2, stop=9, target=12, cost=ZERO,
+                       entry_bar_stop_check=True)
+    assert same.exit_reason == "target"

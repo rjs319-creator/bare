@@ -35,7 +35,7 @@ HERE = os.path.dirname(__file__)
 PANEL = os.path.join(HERE, "data", "panel-features.json")
 
 RAW_FEATS = ["m61","m91","m121","m181","m63","m93","m122","acc","r21","r5","v63","ra","vs"]
-TARGET = "f21"                      # 1-month fwd (delisting-aware in the panel build)
+TARGET = "f21"                      # 1-month fwd, panel-v2 (fwd-outcome-v2): mature or Shumway-adjusted-delisted only; pending/unresolved are null -> NaN, dropped by the isfinite filter in load()
 N_GROUPS = 8                        # CPCV month-groups
 PURGE = 1                          # months purged each side of a test block (>= fwd horizon in months)
 

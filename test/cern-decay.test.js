@@ -126,11 +126,14 @@ test('gradeEventType: a tiny winning record cannot outrank a big losing one', ()
   assert.equal(big.grade, 'disabled');
 });
 
-test('gradeEventType: a genuinely strong record earns Validated', () => {
-  // Arrange — 30 resolved, +4% vs SPY, beat the market 80% of the time.
+test('gradeEventType: a strong but GROSS-ONLY record caps at Promising (fail closed)', () => {
+  // Arrange — 30 resolved, +4% vs SPY, beat the market 80% of the time — but CERN's
+  // decay outcomes carry no cost-net channel, and a gross-only record can never earn
+  // the Validated promotion grade (lib/maturity gradeTrack basis rule).
   const g = gradeEventType(30, 4, 24);
   // Assert
-  assert.equal(g.grade, 'validated');
+  assert.equal(g.grade, 'promising');
+  assert.match(g.gradeReason, /cost-net|net-of-cost/i);
 });
 
 test('computeDecayCurves: attaches the earned grade, beat-rate and final excess per type', () => {

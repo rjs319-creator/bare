@@ -27,9 +27,9 @@ const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) =
 function spearman(xs, ys) { const n = xs.length; if (n < 5) return null; const rk = a => { const idx = a.map((v, i) => [v, i]).sort((p, q) => p[0] - q[0]); const r = new Array(a.length); idx.forEach(([, i], k) => r[i] = k); return r; }; const rx = rk(xs), ry = rk(ys), m = (n - 1) / 2; let nu = 0, dx = 0, dy = 0; for (let i = 0; i < n; i++) { const a = rx[i] - m, b = ry[i] - m; nu += a * b; dx += a * a; dy += b * b; } return (dx && dy) ? nu / Math.sqrt(dx * dy) : null; }
 const pctl = arr => { const idx = arr.map((v, i) => [v, i]).sort((p, q) => p[0] - q[0]); const r = new Array(arr.length); idx.forEach(([, i], k) => r[i] = k / (arr.length - 1)); return r; };
 
-// recipe: (rows) -> {sym, score} list over eligible rows (already fwd/dl-filtered)
+// recipe: (rows) -> {sym, score} list over eligible rows (fwd-finite filtered)
 function recipe(name, rows) {
-  const ok = rows.filter(r => r[FWD] != null && r[DL] === 0 && r.m121 != null);
+  const ok = rows.filter(r => Number.isFinite(r[FWD]) && r.m121 != null); // panel-v2: f is mature OR Shumway-adjusted delisted (keep!); null = pending/unresolved
   if (ok.length < 50) return null;
   let pool = ok, scoreOf;
   if (name === 'base') scoreOf = r => r.m121;

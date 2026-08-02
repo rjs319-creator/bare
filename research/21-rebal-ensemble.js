@@ -19,7 +19,7 @@ const stableCore = r => { const f = r.filter(x => x.cap >= 800e6 && x.cap < 5e9 
 
 // scored pool for a cross-section (sector-neutral 12-1), with fwd field
 function scored(rows, fwd, dl) {
-  const ok = stableCore(rows).filter(r => r[fwd] != null && r[dl] === 0 && r.m121 != null);
+  const ok = stableCore(rows).filter(r => Number.isFinite(r[fwd]) && r.m121 != null); // panel-v2: f is mature OR Shumway-adjusted delisted (keep!); null = pending/unresolved
   if (ok.length < 40) return null;
   const bs = {}; for (const r of ok) (bs[r.sec] || (bs[r.sec] = [])).push(r.m121);
   const md = {}; for (const s in bs) md[s] = median(bs[s]);

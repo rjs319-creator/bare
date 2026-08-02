@@ -1,5 +1,15 @@
 # Alpha Research — Fable 5 proposals + empirical validation (2026-07-01)
 
+> 🛑 **CONTAMINATED LABELS (2026-08-02).** Every number derived from `panel-features.json` (v1) or
+> a direct `pit.fwdReturn` v1 call is invalidated by the forward-label flaw fixed in
+> `research/MIGRATION-FWD-OUTCOME-2026-08.md`: active-but-unmatured name-months near the end of the
+> grid were mislabeled as delistings, and truncated partial returns leaked into forward labels.
+> Affected here: **N1** (28-mlrank GBM/Ridge/momentum), **S1** (30-sizing overlays), **S2**
+> (31-multisleeve "THE ONE WIN"), **S3** (32-hardened bootstrap CI), **F1** (24-sue SUE ICs), the
+> short-interest ICs (26-si), and the biased-panel momentum+reversal composite row. Do not cite any
+> of these until regenerated from panel-v2 (`fwd-outcome-v2`). Sections built on the intraday rig or
+> the survivorship-free 52/04 path (which had correct active-guards) are unaffected.
+
 > ⚠️ **PARTIALLY SUPERSEDED (2026-07-31).** The mom_12_1 control result below (IC 0.035,
 > t=2.16) predates the full PIT security master; the later survivorship-complete pass
 > (`research/MOMENTUM-SURVIVORSHIP-FREE-2026-07.md`) measured momentum rank-IC ≈ 0 on both
@@ -215,3 +225,51 @@ shipped configuration is already the better one. Full writeup:
 
 **Net Round 5:** the shipped Gap & Go meta-label is at the ceiling of its features;
 neither interactions nor gap-cause conditioning beat it OOS. No `gapgo.js` change.
+
+---
+
+## 2026-08-02 addendum — panel-v2 (fwd-outcome-v2) reruns of the contaminated sections
+
+The forward-label flaw (see `research/MIGRATION-FWD-OUTCOME-2026-08.md`) was fixed and the panel
+rebuilt: 76,674 name-months, labels only where mature or verifiably delisted (Shumway-adjusted),
+345 genuine 21d delistings vs the ~1,769 fake ones the v1 panel carried in its final month alone.
+Re-measured on the clean panel (contaminated numbers above remain struck):
+
+**N1 (28-mlrank, CPCV + purged walk-forward).** GBM OOS IC −0.004 / Ridge −0.024 / raw mom_12_1
++0.013. GBM−Ridge IC delta +0.0198 (t=+4.92, 82% of 28 paths, PBO proxy 18%) — the nonlinear model
+DOES carry incremental structure over the linear model on identical features. But on the honest
+non-overlapping expanding walk-forward the GBM long-short runs ann. Sharpe +0.52 with **Deflated
+Sharpe 0.51 — far below the 0.95 promotion bar** (Ridge 0.18, momentum 0.10). **Verdict: no live
+ML.** The GBM stays research-only; the bar for shipping remains a WF DSR ≥ 0.95 plus incremental
+economic lift over both Ridge and the 12-1 momentum benchmark on the same folds.
+
+**S1 (30-sizing).** The v1 "disciplined sizing lifts Sharpe" framing does not survive: on clean
+labels the regime-gate DESTROYS the momentum book (fixed +0.43 → regime-gated −0.14 Sharpe;
+combined regime+vol-target −0.33). Vol-targeting alone still cuts maxDD (−32% → −20%) at lower
+Sharpe. Overlay conclusions from v1 are retired.
+
+**S2 (31-multisleeve).** Directionally intact — MOM×GAP corr −0.26, inverse-vol OOS Sharpe +1.30
+vs best single sleeve — but see S3.
+
+**S3 (32-hardened).** Unchanged verdict, now on clean labels: after capacity caps + costs the
+combined-minus-best-single Sharpe advantage has median −0.19 with 90% CI [−1.00, +0.46] —
+**FRAGILE; the combined book is ~the GAP sleeve.** The v1 "+0.51 upper CI" framing stands retired.
+
+**Momentum control (52, rerun under fwd-outcome-v2).** Rank-IC ≈ 0 on both universes (21d free
+−0.008, survivor −0.004; 63d free −0.005, survivor +0.006); survivorship return bias +0.10%/21d,
++0.40%/63d. 12-1 momentum remains the REQUIRED benchmark for swing research (now auto-appended by
+`lib/research/harness.runExperiment`) and remains NOT a live winner on this universe.
+
+**Gap ORB execution realism (exp08 rerun).** With stop-through-trigger fills (gap-through fills at
+the bar open) and a conservative entry-bar stop check, the ≥5% unscheduled-gap ORB primary is
+essentially unchanged (n=450, exp +1.888%/trade net, OOS +1.888%, 4/4 years, DSR 0.992, PBO 0.457;
+small-gap null −0.65%). The prior verdict was NOT an artifact of optimistic fills. It remains a
+forward-tracked challenger graded on the app's prospective gap ledger — which is now COST-NET
+(tier by logged ADV) and honestly labeled a daily-close proxy until intraday fills are verified.
+
+**F1 (24-sue) + short interest (26-si), rerun on fwd-outcome-v2 labels.** Verdicts unchanged in
+direction: SUE remains redundant/dead as an addition (mom+fund IC 0.0266 → +SUE 0.0174, delta
+−0.0092 vs the +0.005 ship bar; all signal concentrated in 2021), and SI%shares remains a
+significant SHORT-SIDE avoid-flag (yearly ICs −0.03..−0.11 through 2024, +0.06 flip in the 2025
+junk-bounce; DTC squeeze-fuel still fails, Q5−Q1 −1.06%). Both now measured with delisting-adjusted,
+pending-safe labels.

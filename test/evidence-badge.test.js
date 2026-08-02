@@ -117,3 +117,19 @@ test('every grade in the app vocabulary has a plain-English face and advice', ()
     assert.ok(v.advice.length > 0, `${g} has no advice line`);
   }
 });
+
+test('the record line discloses its cost basis (net vs gross)', () => {
+  // Arrange — same numbers, different basis. Net says costs are counted; gross must
+  // say they are not AND that Proven is out of reach on a gross-only record.
+  const { verdictFor } = loadBadge();
+  const stats = { excessN: 40, avgExcess: 2.1, beatMktRate: 64 };
+
+  // Act
+  const net = verdictFor({ id: 'x', grade: 'validated', stats: { ...stats, basis: 'net' } });
+  const gross = verdictFor({ id: 'x', grade: 'promising', stats: { ...stats, basis: 'gross' } });
+
+  // Assert
+  assert.match(net.record, /Costs .* already subtracted/);
+  assert.match(gross.record, /Before trading costs/);
+  assert.match(gross.record, /not call Proven/);
+});

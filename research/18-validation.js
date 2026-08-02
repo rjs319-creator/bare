@@ -19,7 +19,7 @@ const sd = a => { if (a.length < 2) return null; const m = mean(a); return Math.
 const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 
 function selectSet(name, rows) {
-  const ok = rows.filter(r => r[FWD] != null && r[DL] === 0 && r.m121 != null);
+  const ok = rows.filter(r => Number.isFinite(r[FWD]) && r.m121 != null); // panel-v2: f is mature OR Shumway-adjusted delisted (keep!); null = pending/unresolved
   if (ok.length < 50) return null;
   let pool = ok, scoreOf;
   if (name === 'base') scoreOf = r => r.m121;

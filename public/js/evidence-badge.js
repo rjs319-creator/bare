@@ -63,10 +63,16 @@ export function verdictFor(strategy) {
   const hasRecord = Number.isFinite(st.avgExcess) && st.excessN > 0;
 
   // The record in one beginner-legible sentence. "Beats the market 43% of the time"
-  // is the number that matters and the one the raw reason buries.
+  // is the number that matters and the one the raw reason buries. The BASIS matters
+  // just as much: cost-net means trading friction is already subtracted; gross means
+  // it is not — and a gross-only record can never be graded Proven.
+  const basisNote = st.basis === 'net'
+    ? ' Costs (spread + slippage) are already subtracted.'
+    : (st.basis === 'gross' ? ' Before trading costs — a record this app will not call Proven until costs are counted.' : '');
   const record = hasRecord
     ? `Over ${st.excessN} past pick${st.excessN === 1 ? '' : 's'} that have run their course, this averaged `
       + `${st.avgExcess >= 0 ? '+' : ''}${st.avgExcess}% against the S&P 500 and beat it ${st.beatMktRate}% of the time.`
+      + basisNote
     : null;
 
   // What a beginner should actually do about it.

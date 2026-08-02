@@ -28,6 +28,7 @@ def mom_monthly(cost_bps_per_mo=15.0):
     panel = json.load(open(PANEL))["panel"]
     out = {}
     for ym, rows in panel.items():
+        # panel-v2 f21: mature or Shumway-adjusted delisted; pending/unresolved are null (json -> None), dropped here
         r = [(x.get("m121"), x.get("f21")) for x in rows
              if x.get("m121") is not None and x.get("f21") is not None]
         if len(r) < 30: continue

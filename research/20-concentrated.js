@@ -18,7 +18,7 @@ const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) =
 function spearman(xs, ys) { const n = xs.length; if (n < 5) return null; const rk = a => { const idx = a.map((v, i) => [v, i]).sort((p, q) => p[0] - q[0]); const r = new Array(a.length); idx.forEach(([, i], k) => r[i] = k); return r; }; const rx = rk(xs), ry = rk(ys), m = (n - 1) / 2; let nu = 0, dx = 0, dy = 0; for (let i = 0; i < n; i++) { const a = rx[i] - m, b = ry[i] - m; nu += a * b; dx += a * a; dy += b * b; } return (dx && dy) ? nu / Math.sqrt(dx * dy) : null; }
 
 function bookOf(rows) {
-  const ok = rows.filter(r => r[FWD] != null && r[DL] === 0 && r.m121 != null);
+  const ok = rows.filter(r => Number.isFinite(r[FWD]) && r.m121 != null); // panel-v2: f is mature OR Shumway-adjusted delisted (keep!); null = pending/unresolved
   if (ok.length < MIN_SLICE) return null;
   const bs = {}; for (const r of ok) (bs[r.sec] || (bs[r.sec] = [])).push(r.m121);
   const md = {}; for (const s in bs) md[s] = median(bs[s]); const score = r => r.m121 - md[r.sec];

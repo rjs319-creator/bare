@@ -52,15 +52,28 @@ test('independenceFor takes the minimum measured credit across siblings', () => 
 
 // ── regimeCompatFor: current regime bucket ranked among the three ────────────
 test('regimeCompatFor scores high when the algo paid in the CURRENT regime', () => {
-  // Algo made money in risk-on, lost in risk-off.
-  const series = [
-    { date: 'a', excess: 3 }, { date: 'b', excess: 2 }, { date: 'c', excess: 4 }, // risk-on
-    { date: 'd', excess: -3 }, { date: 'e', excess: -2 }, { date: 'f', excess: -4 }, // risk-off
-  ];
-  const reg = { a: 'risk-on', b: 'risk-on', c: 'risk-on', d: 'risk-off', e: 'risk-off', f: 'risk-off' };
+  // Algo made money in risk-on, lost in risk-off — ≥8 DISTINCT dates per bucket
+  // (the statistical-sufficiency gate; fewer distinct dates must return null).
+  const series = [];
+  const reg = {};
+  for (let i = 0; i < 8; i++) {
+    const on = `on${i}`, off = `off${i}`;
+    series.push({ date: on, excess: 3 + (i % 3) }, { date: off, excess: -3 - (i % 3) });
+    reg[on] = 'risk-on'; reg[off] = 'risk-off';
+  }
   const macroLU = { at: (d) => ({ regime: reg[d] }) };
   assert.equal(RR.regimeCompatFor(series, macroLU, 'risk-on'), 1);   // best bucket → 1
   assert.equal(RR.regimeCompatFor(series, macroLU, 'risk-off'), 0);  // worst bucket → 0
+});
+
+test('regimeCompatFor fails closed below the distinct-date bar even with many picks', () => {
+  // 9 picks but only 3 distinct same-regime dates → not statistically sufficient → null.
+  const series = [];
+  const reg = {};
+  for (let i = 0; i < 9; i++) { const d = `d${i % 3}`; series.push({ date: d, excess: 2 }); reg[d] = 'risk-on'; }
+  for (let i = 0; i < 8; i++) { const d = `x${i}`; series.push({ date: d, excess: -1 }); reg[d] = 'risk-off'; }
+  const macroLU = { at: (d) => ({ regime: reg[d] }) };
+  assert.equal(RR.regimeCompatFor(series, macroLU, 'risk-on'), null);
 });
 
 test('regimeCompatFor returns null when the current bucket has too little history', () => {

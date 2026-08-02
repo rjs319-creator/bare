@@ -83,16 +83,28 @@ def simulate_long(session_bars: list, planned_entry: float, stop: Optional[float
 
 
 def simulate_at(window: list, entry_price: float, start_idx: int, stop: Optional[float] = None,
-                target: Optional[float] = None, cost: CostModel = CostModel()) -> TradeResult:
+                target: Optional[float] = None, cost: CostModel = CostModel(),
+                entry_bar_stop_check: bool = False) -> TradeResult:
     """Manage a position whose entry has ALREADY been decided (price + the bar index
     after which management begins) — used by entry-timing rules (entries.py). `window`
-    is the full flattened hold window; `start_idx` is the first management bar."""
+    is the full flattened hold window; `start_idx` is the first management bar.
+
+    entry_bar_stop_check=True closes an optimistic gap: the remainder of the ENTRY
+    bar (window[start_idx-1]) used to be invisible to management, so a same-bar
+    reversal through the stop was never charged. Bar data can't order the entry fill
+    vs the bar's low, so — consistent with the module's bias-against-the-strategy
+    doctrine — if the entry bar's low sits at/under the stop, count it as stopped.
+    The target is NOT checked on the entry bar (that would be the optimistic side)."""
     slip = cost.slippage_bps / 1e4
     comm = cost.commission_bps / 1e4
     entry = entry_price * (1 + slip)
     risk = (entry - stop) if stop is not None else None
     if risk is not None and risk <= 0:
         return TradeResult(False, "no_fill", entry, 0, 0, 0, 0)
+
+    if (entry_bar_stop_check and stop is not None and start_idx > 0
+            and window[start_idx - 1]["low"] <= stop):
+        return _result("stop", entry, stop * (1 - slip), 0, risk, comm)
 
     mgmt = window[start_idx:]
     if not mgmt:                              # entered on the final bar — nothing to manage
