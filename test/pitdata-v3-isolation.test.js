@@ -50,7 +50,7 @@ test('every v3 artifact that could claim safety is structurally pinned false', (
 
 test('the pitdata warm chain is shadow-only and the v3 steps ride it (no new live chain)', () => {
   const { CHAINS, ROOT_CHAINS } = require('../lib/warm-chains');
-  assert.deepEqual(CHAINS.pitdata, ['op=pitdata&view=collect', 'op=pitdata&view=v3collect', 'op=pitdata&view=v3health']);
+  assert.deepEqual(CHAINS.pitdata, ['op=pitdata&view=collect', 'op=pitdata&view=v3collect', 'op=pitdata&view=v3collect', 'op=pitdata&view=v3collect', 'op=pitdata&view=v3health']);
   assert.ok(ROOT_CHAINS.includes('pitdata'));
   for (const [name, steps] of Object.entries(CHAINS)) {
     if (name === 'pitdata') continue;
