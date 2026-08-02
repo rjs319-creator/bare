@@ -27,6 +27,28 @@ const path = require('path');
 const pit = require('./lib/pit');
 
 const DATA = path.join(__dirname, 'data');
+// SUE_LABELS=v3: identical study, labels from fwd-outcome-v3 (authoritative
+// security master; stale tails unresolved→dropped, acquisitions never haircut).
+// Requires research/data/secmaster-v3.json; output goes to sue-v3.json so the
+// recorded v2 artifact is never overwritten. Default stays v2, byte-identical.
+const LABELS_V3 = process.env.SUE_LABELS === 'v3';
+const OV3 = LABELS_V3 ? require('./lib/outcome-v3') : null;
+const MASTER_V3 = LABELS_V3
+  ? JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'secmaster-v3.json'), 'utf8'))
+  : null;
+const OUT_FILE = LABELS_V3 ? 'sue-v3.json' : 'sue.json';
+function fwdLabel(ps, d, bars, sym) {
+  if (!LABELS_V3) {
+    const fwd = pit.fwdReturn(ps, d, bars);
+    return fwd ? { fwd: fwd.outcome.adjustedReturn, delisted: fwd.delistedWithin ? 1 : 0 } : null;
+  }
+  const o = OV3.forwardOutcomeV3({
+    series: ps, dateMs: d, bars,
+    security: MASTER_V3.records[sym] || null,
+    opts: { dataCutoffMs: pit.DATA_CUTOFF_MS, securityMasterVersion: MASTER_V3.version },
+  });
+  return o.labelReady ? { fwd: o.trainingLabel, delisted: o.status === 'confirmed_delisted' ? 1 : 0 } : null;
+}
 const LAG = 45 * pit.DAY;
 const DRIFT = 63;                                   // forward window (trading days)
 const MIN_PRIOR_SD = 6;                             // seasonal diffs needed for a stable sigma
@@ -125,9 +147,9 @@ function fundAsOf(qs, asOf) {
       const i = pa.idx, sh = pit.asOfShares(ss, d); if (!sh) continue;
       const cap = pa.close * sh; if (cap < pit.CAP_LO || cap > pit.CAP_HI || pa.adv < pit.ADV_FLOOR) continue;
       const su = sueAsOf(qs, d, 'eps'); if (!su) continue;
-      // fwd-outcome-v2: pending/unresolved return null (fail closed); a genuine
-      // delisting's label is the haircut-ADJUSTED return, not the raw truncated path.
-      const fwd = pit.fwdReturn(ps, d, DRIFT); if (!fwd) continue;
+      // Label contract per SUE_LABELS: v2 fwdReturn (default) or fwd-outcome-v3
+      // (authoritative master; unlabelable rows drop, never fabricate).
+      const fwd = fwdLabel(ps, d, DRIFT, sym); if (!fwd) continue;
       const suNi = sueAsOf(qs, d, 'ni');
       const row = {
         s: sym, cap,
@@ -135,7 +157,7 @@ function fundAsOf(qs, asOf) {
         sueNi: suNi ? suNi.sue : null,
         mom: ratio(ps, i, 252, 21),
         fund: fundAsOf(qs, d),
-        fwd: fwd.outcome.adjustedReturn, delisted: fwd.delistedWithin ? 1 : 0,
+        fwd: fwd.fwd, delisted: fwd.delisted,
       };
       const ym = new Date(d).toISOString().slice(0, 7); (byMonth[ym] || (byMonth[ym] = [])).push(row);
     }
@@ -202,7 +224,7 @@ function fundAsOf(qs, asOf) {
   const RN = all.filter(r => Number.isFinite(r.sueNi) && Number.isFinite(r.fwd));
   console.log(`\nrobustness (netIncome-based SUE): IC ${spearman(RN.map(r => r.sueNi), RN.map(r => r.fwd))?.toFixed(4)}  (n=${RN.length})`);
 
-  fs.writeFileSync(path.join(DATA, 'sue.json'), JSON.stringify({
+  fs.writeFileSync(path.join(DATA, OUT_FILE), JSON.stringify({
     generatedAt: new Date().toISOString(), n: all.length, months: months.length,
     f1: { icPooled: icAll, icMonthlyMean: mIC, tStat: tIC, decileSpread: dret(9) - dret(0) },
     f2: { smallIC: spearman(small.map(r => r.sue), small.map(r => r.fwd)), largeIC: spearman(large.map(r => r.sue), large.map(r => r.fwd)) },
