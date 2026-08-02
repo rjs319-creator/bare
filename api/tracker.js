@@ -105,13 +105,15 @@ const PRIVILEGED_OPS = new Set([
   // Peer Propagation + News Underreaction shadow ledger WRITES (persist latest board /
   // append immutable daily picks). Cron/manual-with-bearer only.
   'peerproplog', 'underreactionlog',
+  // Expectation-Gap regime challenger WRITE (persist latest + RISK_REDUCE-day ledger).
+  'expgaplog',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
   'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'leadtime2', 'failuremodel', 'complab', 'challengereval', 'router', 'routercf', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward', 'rltwalkforward', 'evidencediag', 'datasetsurvival',
-  'peerprop', 'peerpropwf', 'underreaction',
+  'peerprop', 'peerpropwf', 'underreaction', 'targetcompare', 'expgap',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -420,6 +422,12 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'underreactionlog') return require('../lib/underreaction-routes').runUnderreactionLog(req, res);
   // Volume/capacity forecast for one ticker — cheap bounded read (execution context, not alpha).
   if (req.query.op === 'volforecast') return require('../lib/volforecast-routes').runVolForecast(req, res);
+  // Target comparison — which LEARNING TARGET transfers best on real graded outcomes
+  // (one fixed economic metric, identical purged folds; cached=1 serves the report).
+  if (req.query.op === 'targetcompare') return require('../lib/target-compare-routes').runTargetCompare(req, res);
+  // Expectation-Gap regime challenger — reduce-only shadow read + cron-only ledger writer.
+  if (req.query.op === 'expgap') return require('../lib/expgap-routes').runExpGap(req, res);
+  if (req.query.op === 'expgaplog') return require('../lib/expgap-routes').runExpGapLog(req, res);
   if (req.query.op === 'promotionreadiness') return require('../lib/orbit-ml-routes').runPromotionReadiness(req, res);
   if (req.query.op === 'researchgrade') return require('../lib/research-grade-routes').runResearchGrade(req, res);
 
