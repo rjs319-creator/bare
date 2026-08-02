@@ -56,10 +56,12 @@ function maxRet(ps, i, n) { if (i - n < 0) return null; let mx = -Infinity; for 
       const rec = si[sd0][sym]; if (!rec || !(rec.si > 0)) continue;
       const dtc = Number(rec.dtc); const sipct = rec.si / sh;
       if (!Number.isFinite(sipct)) continue;
+      // fwd-outcome-v2: pending/unresolved return null (fail closed); delistings
+      // enter at the haircut-ADJUSTED return instead of the raw truncated path.
       const fwd = pit.fwdReturn(ps, d, DRIFT); if (!fwd) continue;
       joined++;
       const ym = new Date(d).toISOString().slice(0, 7);
-      (byMonth[ym] || (byMonth[ym] = [])).push({ s: sym, cap, sipct, dtc: Number.isFinite(dtc) ? dtc : null, mom: ratio(ps, i, 252, 21), max21: maxRet(ps, i, 21), fwd: fwd.ret });
+      (byMonth[ym] || (byMonth[ym] = [])).push({ s: sym, cap, sipct, dtc: Number.isFinite(dtc) ? dtc : null, mom: ratio(ps, i, 252, 21), max21: maxRet(ps, i, 21), fwd: fwd.outcome.adjustedReturn });
     }
     // (b) squeeze: intra-cache spike-ups with prior DTC known → 21d continuation.
     // Guard split-adjustment artifacts: a >25% single-day close move that reverses

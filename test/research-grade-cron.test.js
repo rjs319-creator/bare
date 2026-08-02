@@ -59,7 +59,12 @@ test('grading rides its own invocation, not the decision chain', () => {
 
 test('per-run work stays bounded', () => {
   assert.ok(RG.MAX_DAYS_PER_RUN > 0 && RG.MAX_DAYS_PER_RUN <= 5);
-  assert.ok(RG.MAX_TICKERS > 0 && RG.MAX_TICKERS <= 300);
+  // The invariant this test defends is a bounded YAHOO FAN-OUT per run. Since the
+  // coverage fix, candles are cache-first: MAX_TICKERS bounds free cache lookups
+  // (so it may be generous — it exists so a pathological snapshot can't melt the
+  // grader), while LIVE_FETCH_CAP is the real per-day network budget.
+  assert.ok(RG.MAX_TICKERS > 0 && RG.MAX_TICKERS <= 500);
+  assert.ok(RG.LIVE_FETCH_CAP > 0 && RG.LIVE_FETCH_CAP <= 60);
 });
 
 test('the chain step resolves to the real tracker op', () => {

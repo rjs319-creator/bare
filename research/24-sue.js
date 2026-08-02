@@ -125,6 +125,8 @@ function fundAsOf(qs, asOf) {
       const i = pa.idx, sh = pit.asOfShares(ss, d); if (!sh) continue;
       const cap = pa.close * sh; if (cap < pit.CAP_LO || cap > pit.CAP_HI || pa.adv < pit.ADV_FLOOR) continue;
       const su = sueAsOf(qs, d, 'eps'); if (!su) continue;
+      // fwd-outcome-v2: pending/unresolved return null (fail closed); a genuine
+      // delisting's label is the haircut-ADJUSTED return, not the raw truncated path.
       const fwd = pit.fwdReturn(ps, d, DRIFT); if (!fwd) continue;
       const suNi = sueAsOf(qs, d, 'ni');
       const row = {
@@ -133,7 +135,7 @@ function fundAsOf(qs, asOf) {
         sueNi: suNi ? suNi.sue : null,
         mom: ratio(ps, i, 252, 21),
         fund: fundAsOf(qs, d),
-        fwd: fwd.ret, delisted: fwd.delistedWithin ? 1 : 0,
+        fwd: fwd.outcome.adjustedReturn, delisted: fwd.delistedWithin ? 1 : 0,
       };
       const ym = new Date(d).toISOString().slice(0, 7); (byMonth[ym] || (byMonth[ym] = [])).push(row);
     }
