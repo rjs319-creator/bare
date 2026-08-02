@@ -188,7 +188,7 @@ test('delisted ingestion carries an authoritative confirmation; renames link old
 test('a plan-gated 402 page truncates the feed WITH a recorded limitation instead of wedging the run', async () => {
   const deps = memDeps([
     { match: '/stock-list', reply: page(STOCK) },
-    { match: 'page=0', reply: page(Array.from({ length: 100 }, (_, i) => ({ symbol: `D${i}`, delistedDate: '2020-01-01', ipoDate: '2010-01-01' }))) },
+    { match: 'page=0', reply: page(Array.from({ length: 1000 }, (_, i) => ({ symbol: `D${i}`, delistedDate: '2020-01-01', ipoDate: '2010-01-01' }))) },
     { match: 'page=1', reply: { ok: false, status: 402, body: { _raw: "The values for 'page' can only be 0 based on your current subscription." } } },
     { match: '/symbol-change', reply: page([]) },
   ]);
@@ -197,14 +197,42 @@ test('a plan-gated 402 page truncates the feed WITH a recorded limitation instea
   assert.ok(done, 'run STILL completes — a plan gate must not block prospective accumulation');
   const manifest = [...deps.blobs.entries()].find(([p]) => p.startsWith('pitdata/v3/runs/'))[1];
   assert.equal(manifest.completenessStatus, 'complete-with-limitations', 'no reader can mistake this for full coverage');
-  assert.equal(manifest.limitations.length, 1);
-  assert.match(manifest.limitations[0].bodyNote, /page' can only be 0/);
+  const trunc = manifest.limitations.find((l) => /TRUNCATED/.test(l.note));
+  assert.ok(trunc, 'truncation limitation recorded');
+  assert.match(trunc.bodyNote, /page' can only be 0/);
+  assert.equal(manifest.rowCounts['delisted:0'], 1000, 'the one allowed page captured at max limit');
   assert.ok(manifest.requestedPages.includes('delisted:1'));
   assert.equal(manifest.completedPages.includes('delisted:1'), false, 'gated page never counted as collected');
   // The reconciliation gate sees the truncation and honestly fails all-pages.
   const REC = require('../lib/pitdata/v3/reconcile');
   const report = REC.reconcileV3({ latestRun: manifest, now: Date.UTC(2026, 7, 3) });
   assert.equal(report.gates.allPagesCollected, false);
+});
+
+test('delisted page 0 is requested at the max limit, falling back to 100 when the plan gates the big limit', async () => {
+  const gateMsg = { ok: false, status: 402, body: { _raw: 'limit refused on your current subscription' } };
+  const deps = memDeps([
+    { match: '/stock-list', reply: page(STOCK) },
+    { match: 'limit=1000', reply: gateMsg },
+    { match: 'limit=100', reply: page(DELISTED) },
+    { match: '/symbol-change', reply: page([]) },
+  ]);
+  const outs = await runToCompletion(deps);
+  assert.ok(outs.some((o) => o.did && o.did.runComplete));
+  const manifest = [...deps.blobs.entries()].find(([p]) => p.startsWith('pitdata/v3/runs/'))[1];
+  assert.ok(manifest.limitations.some((l) => /falling back to limit=100/.test(l.note)));
+  assert.equal(manifest.rowCounts['delisted:0'], 1, 'fallback page recorded');
+});
+
+test('newrun=1 recovery: a fresh SAME-DAY run starts with a new runId after a completed one', async () => {
+  const deps = memDeps(basicResponses());
+  await runToCompletion(deps);
+  assert.equal((await C.collectStepV3(deps)).did.step, 'idle-until-tomorrow');
+  const out = await C.collectStepV3(deps, { forceNewRun: true });
+  assert.ok(out.ok);
+  assert.notEqual(out.did && out.did.step, 'idle-until-tomorrow', 'recovery run starts');
+  const state = deps.blobs.get(S.P.state(C.COLLECTOR_ID));
+  assert.equal(state.activeRun.runId, 'run-2026-08-03-0002', 'append-only: NEW runId, previous run untouched');
 });
 
 test('missing API key fails closed — never an empty result', async () => {
