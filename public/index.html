@@ -1045,7 +1045,7 @@
       </select>
       <button class="scr-hc" id="scr-hc-toggle">🎯 High-Conviction</button>
       <button class="scr-hc" id="scr-emerg-toggle" title="Early movers only: names at the START of a momentum-emergence leg (fresh RS leadership + accumulation, not yet extended). Catches the RKLB-style early mover; cannot catch oversold-bounce/squeeze spikes like FCEL.">🌱 Emerging</button>
-      <button class="scr-hc" id="scr-model-toggle" title="Rank by the learned model's win-probability">🤖 Model</button>
+      <button class="scr-hc" id="scr-model-toggle" title="Rank by the learned model's score (a ranking score, not a calibrated win probability)">🤖 Model</button>
       <button class="scr-hc" id="scr-hidesi-toggle" title="Hide names with high short interest (SI ≥ 20% of shares or ≥ 7 days-to-cover). Research: high short interest is a significant NEGATIVE forward-return predictor (t=−3.76) — but short-side and regime-fragile (it inverted in the 2025 squeeze), so this is an OPT-IN soft avoidance filter, off by default.">🩳 Hide High SI</button>
     </div>
     <div class="scr-hc-def">
@@ -1071,7 +1071,7 @@
           <li><b>Momentum (3-mo ≥ X%)</b> — only show names already up at least X% over the last 3 months. <b>+11% = "top-quartile"</b>, the level our own study found best concentrates big movers. Use it to skip laggards and keep only names with real momentum behind them.</li>
           <li><b>🎯 High-Conviction</b> — only setups that match the edges our backtest actually proved out-of-sample. Use it when you want quality over quantity.</li>
           <li><b>🌱 Emerging</b> — early movers just <i>starting</i> a leg up (fresh leadership + accumulation, not yet stretched). Use it to get in early, RKLB-style. <i>Note: it can't catch oversold-bounce/squeeze spikes like FCEL — those launch from weakness and aren't predictable here.</i></li>
-          <li><b>🤖 Model</b> — re-orders the list by a learned win-probability model instead of the default score. Use it to see which names the model likes most.</li>
+          <li><b>🤖 Model</b> — re-orders the list by a learned model score instead of the default score. The number is a rank (0–100), not a calibrated win probability. Use it to see which names the model likes most.</li>
         </ul>
         <p class="scr-help-h">A simple way to start:</p>
         <ol>

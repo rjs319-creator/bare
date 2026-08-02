@@ -2670,7 +2670,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (c.emergingLeader) tags.push(['emerg', '🌱 Emerging Leader']);
     if (isHighConviction(c)) tags.push(['hc', '🎯 High-Conviction']);
     const _md = getModel(scopeOf(c));
-    if (_md && _md.oosAUC >= MODEL_RELIABLE) { const wp = modelProb(c); if (wp != null) tags.push(['model', `🤖 ${wp}%`]); }
+    // Model output is a learned RANKING score (0-100 sigmoid), shown without a % sign:
+    // the AUC gate proves it can order names, not that its level is a calibrated probability.
+    if (_md && _md.oosAUC >= MODEL_RELIABLE) { const wp = modelProb(c); if (wp != null) tags.push(['model', `🤖 model ${wp}/100`]); }
     if (mm.rsNewHigh) tags.push(['rsnh', '📈 RS New High']);
     if (mm.vcpContractions >= 2) tags.push(['vcp', `VCP ${mm.vcpContractions}×`]);
     if (mm.longBase) tags.push(['lbase', `${mm.baseWeeks}wk base`]);
@@ -5719,7 +5721,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         </div>
         <div class="fade-card-stats">
           <span title="Historical avg market-lag for this name, net of costs">hist. lag ${exp}</span>
-          <span title="Engine confidence the edge is positive">confidence ${Math.round((r.conviction || 0) * 100)}%</span>
+          <span title="Backtested posterior that this name's cool-off edge is positive, from its OWN history — NOT a calibrated live probability">edge posterior ${Math.round((r.conviction || 0) * 100)} /100 (backtested)</span>
           <span title="Times this name has set up before">${r.n || 0} priors</span>
           <details class="fade-adv"><summary>advanced ▸ short trade</summary>
             <div class="fade-adv-body">Short ${esc(r.ticker)} @ ~${ref.entry ?? '—'}, market-neutral vs SPY, hold ~${sig.holdSessions} sessions. Suggested weight ${r.sizePct}%. Reference stop ${ref.stop ?? '—'} / target ${ref.target ?? '—'} (the validated trade is the timed hold — don't manage the stop tightly).</div>
@@ -5738,7 +5740,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       ${trackHtml}
       ${gated ? '' : `<div class="fade-list">${cards || '<div class="mom-status"><p>No overheated names clearing the bar right now.</p></div>'}</div>`}
       <div class="fade-caveats">
-        <b>How to read this.</b> A high <b>cool-off score</b> means the engine, from this stock’s own past, expects it to lag the market over the next month. <b>Confidence</b> is how sure it is the edge is real. The engine <b>learns continuously</b> — names whose tops stop reverting are dropped automatically.
+        <b>How to read this.</b> A high <b>cool-off score</b> means the engine, from this stock’s own past, expects it to lag the market over the next month. <b>Edge posterior</b> is a backtested estimate that the edge is positive — it comes from the name’s own history, not from calibrated live outcomes, so treat it as a rank, not a promise. The engine <b>learns continuously</b> — names whose tops stop reverting are dropped automatically.
         <br><b>Honest caveats.</b> The edge is real but <b>modest</b> (~+1%/month market-neutral on the top names, net of costs) and only works in <b>risk-on/neutral</b> markets. The "hist. lag" figures are back-tested averages and run optimistic — the <b>live track record above</b> is the number to trust as it fills in. This is research, not financial advice.
       </div>`;
 
@@ -7069,7 +7071,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       <div class="tr-howto-head">📖 What this is — in plain English</div>
       <ol>
         <li><b>The idea.</b> Most screeners show stocks <b>already moving</b>. This shows the opposite: <b>quiet, "coiled" stocks BEFORE they explode</b> — volatility squeezed, volume dried up, price flat (not already run up).</li>
-        <li><b>The %.</b> Each name shows the <b>calibrated chance of an abnormal upside break in ~${t.horizonDays} sessions</b> — an <i>honest, backtested number</i> (base rate ~${t.baseRatePct}%), <b>not a hyped "80%"</b>. Top-decile coils break ~1.9× as often as the least-coiled.</li>
+        <li><b>The %.</b> Each name shows the <b>historical decile base rate of an abnormal upside break in ~${t.horizonDays} sessions</b> — an empirical rate from a ~2-year study of today's universe (overall base rate ~${t.baseRatePct}%), <b>not a hyped "80%" and not a calibrated live probability</b> (the study is survivorship-unsafe and carries no per-decile sample size). Top-decile coils break ~1.9× as often as the least-coiled.</li>
         <li><b>How to use it.</b> A coil says a name is <b>primed</b>, not that it <i>will</i> pop — the trigger is usually news/earnings this price model can't see. Use it as a <b>watchlist</b>: set alerts, confirm the breakout on a chart, then act. This is a watchlist, not advice.</li>
       </ol></div>`;
     const card = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
@@ -7079,10 +7081,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         </div>
         <div class="dt-card-sub" style="display:flex;align-items:center;gap:8px;margin:4px 0 6px">
           <span style="font-size:1.4em;font-weight:800;color:${coilBandColor(r.band)}">${r.abnormalExpansionPct != null ? r.abnormalExpansionPct : r.explodeProbPct}%</span>
-          <span class="dt-dim">chance of an <b>abnormal move</b> (~${t.horizonDays}d, calibrated) · ${r.lift}× base · <b style="color:${coilBandColor(r.band)}">${esc((r.band || '').toUpperCase())} coil</b> (D${r.decile || ''}/10)</span>
+          <span class="dt-dim">historical rate of an <b>abnormal move</b> (~${t.horizonDays}d, decile base rate — not a calibrated probability) · ${r.lift}× base · <b style="color:${coilBandColor(r.band)}">${esc((r.band || '').toUpperCase())} coil</b> (D${r.decile || ''}/10)</span>
         </div>
         <div class="dt-card-plan">📈 <b>Breakout plan</b> <span class="dt-dim">(buy the break, not the quiet)</span> — now <b data-dt-price>$${r.price}</b> <span data-dt-change class="dt-dim">prev close</span> &nbsp;·&nbsp; enter above <b>$${r.entry}</b> &nbsp;·&nbsp; 🛑 stop <b>$${r.stop}</b> <span class="dt-dim">(−${r.riskPct}%)</span> &nbsp;·&nbsp; 🎯 target <b>$${r.target}</b> <span class="dt-dim">(+${r.rewardPct}%, R:R 1:${r.rr})</span></div>
-        ${r.executable ? `<div class="dt-card-sub" style="margin-top:4px" title="Executable trade-plan odds from a transparent barrier model — UNCALIBRATED (not a validated win rate). Kept separate from the abnormal-move rate above, which is the only calibrated number.">
+        ${r.executable ? `<div class="dt-card-sub" style="margin-top:4px" title="Executable trade-plan odds from a transparent barrier model — UNCALIBRATED (not a validated win rate). Kept separate from the abnormal-move base rate above, which is an empirical study number.">
           <span class="dt-dim">🎲 <b>trade-plan odds</b> (uncalibrated model): fill ${Math.round(r.executable.pTrigger * 100)}% · target-before-stop <b>${Math.round(r.executable.pTargetBeforeStopGivenFill * 100)}%</b> · net exp. <b>${r.executable.expectedNetR >= 0 ? '+' : ''}${r.executable.expectedNetR}R</b> ${r.executable.expectedNetR < 0 ? '<span style="color:#f87171">(negative after costs)</span>' : ''}</span>
         </div>` : ''}
         <div class="dt-card-sub"><span class="dt-dim">squeeze ${r.metrics.squeezePctile}th pctile · vol ${r.metrics.hvPctile}th pctile · base ${r.metrics.rangeTightPct}% · ATR ${r.metrics.atrRatio}× · 20d ${r.metrics.ret20Pct >= 0 ? '+' : ''}${r.metrics.ret20Pct}%</span></div>
@@ -7096,7 +7098,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       <div style="margin:10px 0">${scopeBtns}</div>
       <div class="rot-panel" style="border-color:#a855f755;background:#a855f70d">
         <div class="rot-head" style="color:#c084fc">🧬 ${t.namesScanned} names scanned · the most-coiled ${t.picks.length}, ranked #1..N by coil strength</div>
-        <div class="rot-sub">Ranked by <b>coil strength</b> — the signal validated to concentrate breaks. The % is the calibrated chance of an <b>abnormal</b> upside break (≥2.5× its own volatility) in ~${t.horizonDays} sessions. Each card shows the breakout plan (enter / stop / target).</div>
+        <div class="rot-sub">Ranked by <b>coil strength</b> — the signal validated to concentrate breaks. The % is the historical decile base rate of an <b>abnormal</b> upside break (≥2.5× its own volatility) in ~${t.horizonDays} sessions — an empirical study number, not a calibrated live probability. Each card shows the breakout plan (enter / stop / target).</div>
       </div>
       <div class="dt-grid" style="margin-top:10px">${(t.picks || []).map(card).join('')}</div>
       ${btPanel}
@@ -7550,7 +7552,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     Gridlock: 'Physical-constraint beneficiaries from GRIDLOCK (shadow). ACTIONABLE = cleared every gate (verified exposure + fresh event + regional data current + price confirms + OMEGA timing defined); TRACKED = a real beneficiary that failed a gate (reason logged). The test: do Actionable names beat Tracked ones — and beat their own SECTOR ETF? Weight-0 until this record earns promotion.',
     OMEGA: 'OMEGA-SWING 5–10 day continuation picks (💠 Prime / 🟢 Qualified / 👁 Watch). The test: do the Prime names actually beat Qualified and Watch — and beat the market — over 1–2 weeks? Each pick is sector- & market-relative and ranked by expected utility.',
   };
-  const SB_HZ_HELP = 'Average return this many trading days after the pick. The green/red “vs S&P” line under it is the market-beating number: the pick’s return minus what the S&P 500 did over the same days.';
+  const SB_HZ_HELP = 'Average return this many trading days after the pick. The green/red “vs S&P” line under it is the vs-market number: the pick’s return minus what the S&P 500 did over the same days (it is often negative).';
 
   // Regime filter — split every track record by the macro regime live at each
   // pick's trigger (the project's one validated edge lever). 'all' = unsplit.
@@ -8519,7 +8521,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     card.style.animationDelay = `${idx * 70}ms`;
     card.innerHTML = `
         <div class="alert-top">
-          <div class="alert-rank ${side}">${c.confidence}</div>
+          <div class="alert-rank ${side}" title="Evidence strength /10 — a heuristic count of agreeing indicators, NOT a probability">${c.confidence}</div>
           <div class="alert-title">
             <div class="alert-ticker">${esc(c.ticker)}</div>
             <div class="alert-company">${esc(c.company)}</div>
@@ -8545,7 +8547,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
         <div class="alert-meta">
           ${lv ? `<span class="alert-rr">R/R ${esc(lv.riskReward)}</span>` : ''}
-          <span class="alert-conf">Conf: ${c.confidence}/10</span>
+          <span class="alert-conf" title="Heuristic indicator-agreement strength — NOT a probability or win rate">Evidence: ${c.confidence}/10</span>
           ${c.rsi != null ? `<span class="alert-tf">RSI ${c.rsi}</span>` : ''}
           ${c.pctFromSMA20 != null ? `<span class="alert-tf">${c.pctFromSMA20 >= 0 ? '+' : ''}${c.pctFromSMA20}% vs 20d SMA</span>` : ''}
         </div>
