@@ -39,6 +39,9 @@ function basicResponses() {
     { match: '/stock-list', reply: page(STOCK) },
     { match: '/delisted-companies', reply: page(DELISTED) },
     { match: '/symbol-change', reply: page([]) },
+    { match: 'company_tickers', reply: { ok: true, status: 200, body: {} } },
+    { match: 'profile?symbol=AAPL', reply: page([{ symbol: 'AAPL', cik: '0000320193', ipoDate: '1980-12-12', isEtf: false, sector: 'Tech', country: 'US', currency: 'USD' }]) },
+    { match: 'profile?symbol=SPY', reply: page([{ symbol: 'SPY', isEtf: true, country: 'US', currency: 'USD' }]) },
   ];
 }
 
@@ -232,7 +235,136 @@ test('newrun=1 recovery: a fresh SAME-DAY run starts with a new runId after a co
   assert.ok(out.ok);
   assert.notEqual(out.did && out.did.step, 'idle-until-tomorrow', 'recovery run starts');
   const state = deps.blobs.get(S.P.state(C.COLLECTOR_ID));
-  assert.equal(state.activeRun.runId, 'run-2026-08-03-0002', 'append-only: NEW runId, previous run untouched');
+  assert.equal(state.runSeq, 2, 'append-only: a second runId was issued');
+  assert.ok([...deps.blobs.keys()].some((p) => p.includes('run-2026-08-03-0002')), 'recovery run manifest exists beside the first');
+});
+
+const SEC_MAP = { 0: { cik_str: 320193, ticker: 'AAPL', title: 'Apple Inc.' } };
+const AAPL_PROFILE = [{
+  symbol: 'AAPL', cik: '0000320193', ipoDate: '1980-12-12', exchangeShortName: 'NASDAQ',
+  sector: 'Technology', industry: 'Consumer Electronics', country: 'US', currency: 'USD',
+  isEtf: false, isFund: false, isAdr: false, mktCap: 3e12,
+}];
+
+test('identity enrichment: SEC CIK map + profile sweep lift a ticker-only listing to medium confidence WITHOUT changing its id', async () => {
+  const deps = memDeps([
+    { match: '/stock-list', reply: page(STOCK) },
+    { match: '/delisted-companies', reply: page([]) },
+    { match: '/symbol-change', reply: page([]) },
+    { match: 'company_tickers', reply: { ok: true, status: 200, body: SEC_MAP } },
+    { match: 'profile?symbol=AAPL', reply: page(AAPL_PROFILE) },
+    { match: 'profile?symbol=SPY', reply: page([{ symbol: 'SPY', isEtf: true, currency: 'USD', country: 'US' }]) },
+  ]);
+  const outs = await runToCompletion(deps);
+  const done = outs.find((o) => o.did && o.did.runComplete);
+  assert.ok(done && done.did.sweepComplete, 'profile sweep completed for this tiny universe');
+  const shard = deps.blobs.get(S.P.listings('A'));
+  const aapl = Object.values(shard.listings).find((l) => l.symbol === 'AAPL');
+  assert.ok(aapl.listingId.startsWith('pitv3:tk:'), 'id assigned once at first observation, NEVER rewritten by enrichment');
+  assert.equal(aapl.identity.cik, '320193', 'SEC map set the CIK first');
+  assert.equal(aapl.identity.ipoDate, '1980-12-12', 'profile supplied the listing start');
+  assert.equal(aapl.identityConfidence, 'medium', 'low → medium once CIK+IPO known');
+  assert.ok(aapl.instrumentType.some((iv) => iv.value === 'common_stock'), 'profile corroboration flips stock-unverified → common_stock');
+  assert.ok(aapl.classification.some((iv) => iv.value.sector === 'Technology' && iv.value.currency === 'USD'));
+  // The ETF is typed as etf, never common stock.
+  const sShard = deps.blobs.get(S.P.listings('S'));
+  const spy = Object.values(sShard.listings).find((l) => l.symbol === 'SPY');
+  assert.ok(spy.instrumentType.every((iv) => iv.value !== 'common_stock'));
+});
+
+test('enriched listing now passes the common-stock universe policy end to end', async () => {
+  const deps = memDeps([
+    { match: '/stock-list', reply: page(STOCK) },
+    { match: '/delisted-companies', reply: page([]) },
+    { match: '/symbol-change', reply: page([]) },
+    { match: 'company_tickers', reply: { ok: true, status: 200, body: SEC_MAP } },
+    { match: 'profile?symbol=AAPL', reply: page(AAPL_PROFILE) },
+    { match: 'profile?symbol=SPY', reply: page([{ symbol: 'SPY', isEtf: true }]) },
+  ]);
+  await runToCompletion(deps);
+  const U = require('../lib/pitdata/v3/universe');
+  const listingShards = {};
+  for (const k of S.SHARD_KEYS) { const d = deps.blobs.get(S.P.listings(k)); if (d) listingShards[k] = d; }
+  const snap = U.buildUniverseSnapshot({
+    effectiveAt: '2026-08-04T00:00:00.000Z', knownAt: '2026-08-04T00:00:00.000Z',
+    listingShards, marketDataFor: () => ({ close: 200, marketCap: 3e12, advDollar: 1e9 }),
+  });
+  assert.equal(snap.counts.selected, 1, 'AAPL selected after enrichment');
+  assert.equal(snap.selected[0].symbol, 'AAPL');
+  assert.equal(snap.selected[0].identityConfidence, 'medium');
+});
+
+test('profile sweep cursor: budget-limited batch resumes NEXT run where it stopped; 4xx symbols are skipped not wedged', async () => {
+  // 3 listings needing enrichment; per-run budget effectively limited by a 429
+  // stop after the first success on day 1.
+  let day1 = true;
+  const deps = memDeps([
+    { match: '/stock-list', reply: page([{ symbol: 'AAA', exchangeShortName: 'NYSE', type: 'stock' }, { symbol: 'BBB', exchangeShortName: 'NYSE', type: 'stock' }, { symbol: 'CCC', exchangeShortName: 'NYSE', type: 'stock' }]) },
+    { match: '/delisted-companies', reply: page([]) },
+    { match: '/symbol-change', reply: page([]) },
+    { match: 'company_tickers', reply: { ok: true, status: 200, body: {} } },
+    { match: 'profile?symbol=AAA', reply: page([{ symbol: 'AAA', cik: '1', ipoDate: '2000-01-01', isEtf: false, sector: 'X', country: 'US', currency: 'USD' }]) },
+    { match: 'profile?symbol=BBB', reply: () => (day1 ? { ok: false, status: 429, body: null } : { ok: false, status: 404, body: null }) },
+    { match: 'profile?symbol=CCC', reply: page([{ symbol: 'CCC', cik: '3', ipoDate: '2001-01-01', isEtf: false, sector: 'Y', country: 'US', currency: 'USD' }]) },
+  ]);
+  const outs1 = await runToCompletion(deps);
+  const d1 = outs1.find((o) => o.did && o.did.runComplete).did;
+  assert.equal(d1.enriched, 1, 'day 1: AAA enriched, then 429 stopped the sweep');
+  assert.match(d1.stoppedBy, /http-429/);
+  assert.equal(d1.sweepComplete, false);
+  const state1 = deps.blobs.get(S.P.state(C.COLLECTOR_ID));
+  assert.equal(state1.profileCursor.shard, 'B', 'cursor HELD at the failed symbol');
+
+  day1 = false;
+  deps.advanceDays(1);
+  const outs2 = await runToCompletion(deps);
+  const d2 = outs2.find((o) => o.did && o.did.runComplete).did;
+  assert.equal(d2.skipped4xx, 1, 'day 2: BBB 404 → skipped (recorded, nothing written), sweep continues');
+  assert.equal(d2.enriched, 1, 'CCC enriched');
+  assert.equal(d2.sweepComplete, true, 'sweep finished without wedging on the dead ticker');
+  const bShard = deps.blobs.get(S.P.listings('B'));
+  const bbb = Object.values(bShard.listings).find((l) => l.symbol === 'BBB');
+  assert.equal(bbb.identity.cik, null, 'nothing fabricated for the failed symbol');
+});
+
+test('enrich-only runs: same-day calls after the full run advance the sweep instead of idling; idle only once the sweep completes', async () => {
+  let block = true;   // day-1 sweep stops at BBB via 429 → incomplete
+  const deps = memDeps([
+    { match: '/stock-list', reply: page([{ symbol: 'AAA', exchangeShortName: 'NYSE', type: 'stock' }, { symbol: 'BBB', exchangeShortName: 'NYSE', type: 'stock' }]) },
+    { match: '/delisted-companies', reply: page([]) },
+    { match: '/symbol-change', reply: page([]) },
+    { match: 'company_tickers', reply: { ok: true, status: 200, body: {} } },
+    { match: 'profile?symbol=AAA', reply: page([{ symbol: 'AAA', cik: '1', ipoDate: '2000-01-01', isEtf: false, sector: 'X', country: 'US', currency: 'USD' }]) },
+    { match: 'profile?symbol=BBB', reply: () => (block ? { ok: false, status: 429, body: null } : page([{ symbol: 'BBB', cik: '2', ipoDate: '2001-01-01', isEtf: false, sector: 'Y', country: 'US', currency: 'USD' }])) },
+  ]);
+  const outs1 = await runToCompletion(deps);
+  const d1 = outs1.find((o) => o.did && o.did.runComplete).did;
+  assert.equal(d1.sweepComplete, false);
+  block = false;
+  const enrich = await C.collectStepV3(deps);   // SAME day — must NOT idle
+  assert.equal(enrich.did.step, 'profiles');
+  assert.equal(enrich.did.runComplete, true);
+  assert.equal(enrich.did.sweepComplete, true, 'enrich-only run finished the sweep');
+  const state = deps.blobs.get(S.P.state(C.COLLECTOR_ID));
+  assert.equal(state.runsCompleted, 2, 'the enrich batch is its own append-only run');
+  const idle = await C.collectStepV3(deps);
+  assert.equal(idle.did.step, 'idle-until-tomorrow', 'idle only once the sweep is complete');
+});
+
+test('SEC map conflict: a different CIK claim is preserved as a candidate, never overwritten', async () => {
+  const deps = memDeps([
+    { match: '/stock-list', reply: page([{ symbol: 'DUPC', exchangeShortName: 'NYSE', type: 'stock' }]) },
+    { match: '/delisted-companies', reply: page([]) },
+    { match: '/symbol-change', reply: page([]) },
+    { match: 'company_tickers', reply: { ok: true, status: 200, body: { 0: { cik_str: 999, ticker: 'DUPC' } } } },
+    { match: 'profile?symbol=DUPC', reply: page([{ symbol: 'DUPC', cik: '111', ipoDate: '2010-01-01', isEtf: false, country: 'US', currency: 'USD', sector: 'Z' }]) },
+  ]);
+  await runToCompletion(deps);
+  const shard = deps.blobs.get(S.P.listings('D'));
+  const l = Object.values(shard.listings).find((x) => x.symbol === 'DUPC');
+  assert.equal(l.identity.cik, '999', 'first-set CIK (SEC) retained');
+  // Profile's competing CIK never silently replaces it — identity.cik unchanged.
+  assert.equal(l.identity.cik === '111', false);
 });
 
 test('missing API key fails closed — never an empty result', async () => {
