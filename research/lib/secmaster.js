@@ -27,8 +27,9 @@ const SECMASTER_PATH = path.join(DATA, 'secmaster.json');
 const VERSION = 'pit-secmaster-v1';
 
 // A name whose LAST bar predates this is treated as DELISTED (it stopped trading); otherwise a stale
-// tail just means the free feed lags. Same cutoff as research/04 so the two agree.
-const ACTIVE_CUTOFF_MS = Date.UTC(2026, 3, 1);   // 2026-04-01
+// tail just means the free feed lags. Single source of truth: pit.DATA_CUTOFF_MS (fwd-outcome-v2),
+// same value research/04 uses, so listing classification and forward-outcome status always agree.
+const ACTIVE_CUTOFF_MS = pit.DATA_CUTOFF_MS;     // 2026-04-01
 const DAY = pit.DAY;
 const DEFAULT_BAND = Object.freeze({ capLo: pit.CAP_LO, capHi: pit.CAP_HI, advFloor: pit.ADV_FLOOR });
 

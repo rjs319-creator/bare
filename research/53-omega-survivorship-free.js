@@ -79,14 +79,17 @@ function benchFwd(candles, dateISO, bars) {
   const e = candles[i].close; return e > 0 ? candles[tgt].close / e - 1 : null;
 }
 // Survivorship-free forward residual FROM THE EXECUTABLE FILL. Entry = the T+1 fill; exit = close
-// `bars` sessions after the signal, or the LAST bar if the name delisted inside the window (with
-// the Shumway haircut). Never returns pending — a dead name's truncated path IS its outcome.
-function fwdResidual(candles, signalIdx, fillPrice, bars, benchRet) {
+// `bars` sessions after the signal, or the LAST bar if the name DELISTED inside the window (with
+// the Shumway haircut). fwd-outcome-v2 discipline: a truncated path counts as a delisting ONLY
+// when the name verifiably stopped trading (active=false, i.e. last bar predates the data cutoff);
+// an active name whose window hasn't elapsed is PENDING → null (fail closed), never a haircut.
+function fwdResidual(candles, signalIdx, fillPrice, bars, benchRet, active = false) {
   if (!(fillPrice > 0)) return null;
   const tgt = signalIdx + bars;
   let exit, delisted = false;
   if (tgt < candles.length) exit = candles[tgt].close;
   else {
+    if (active) return null;                                    // pending, not a delisting
     const last = candles[candles.length - 1];
     if (candles.length - 1 <= signalIdx) return null;           // no forward data at all
     exit = last.close; delisted = true;

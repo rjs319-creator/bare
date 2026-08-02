@@ -40,17 +40,99 @@ function asOfPriceAdv(series, dateMs) {
   return { idx, close: series[idx].close, adv: c ? sum / c : 0, stale: (dateMs - series[idx].ms) > 10 * DAY };
 }
 
-// Forward return over `bars` trading days from the bar at/just-before dateMs.
-// If the window runs past the last bar (the name stopped trading), returns the
-// partial return + delistedWithin=true so the caller can apply a delisting rule.
-function fwdReturn(series, dateMs, bars) {
-  const idx = idxAsOf(series, dateMs); if (idx < 0) return null;
-  const entry = series[idx].close; if (!(entry > 0)) return null;
+// ── forward-outcome contract (fwd-outcome-v2) ────────────────────────────────
+// The v1 fwdReturn conflated three different situations whenever the requested
+// target bar ran past the cached series: a genuine delisting inside the horizon,
+// an ACTIVE name whose outcome simply hasn't matured yet, and a stale/unknown
+// series. That mislabeled recent active name-months as "delistings" (and let
+// unmatured partial returns leak into labels). v2 makes the distinction explicit
+// and fails closed on ambiguity.
+const OUTCOME_POLICY_VERSION = 'fwd-outcome-v2';
+// Canonical dataset known-good-through date. A name whose last bar is at/after
+// (cutoff − grace) is treated as still trading; one whose last bar is more than
+// DELIST_CONFIRM before it is confirmed to have stopped trading. The zone in
+// between is ambiguous (free-feed lag vs a fresh delisting) → unresolved.
+const DATA_CUTOFF_MS = Date.UTC(2026, 3, 1);          // 2026-04-01, same as secmaster
+const PENDING_GRACE_DAYS = 10;                        // matches the asOfPriceAdv stale guard
+const DELIST_CONFIRM_DAYS = 30;
+const DELISTING_HAIRCUT = 0.30;                       // Shumway (1997) terminal penalty
+const ENTRY_STALE_DAYS = 10;
+
+const isoDate = ms => new Date(ms).toISOString().slice(0, 10);
+
+// Full-provenance forward outcome over `bars` trading days from the bar at/just-
+// before dateMs. ALWAYS returns an object; callers must branch on `status`:
+//   mature     — the full horizon is observed; adjustedReturn === rawReturn.
+//   delisted   — the name verifiably stopped trading inside the horizon;
+//                rawReturn is the partial path, adjustedReturn applies the
+//                delisting haircut. Usable as a label under the stated policy.
+//   pending    — the name is still active and the horizon hasn't elapsed;
+//                adjustedReturn is null. NEVER usable as a label.
+//   unresolved — stale/ambiguous/unknown data; adjustedReturn is null. Fail closed.
+function forwardOutcome(series, dateMs, bars, opts = {}) {
+  const dataCutoffMs = opts.dataCutoffMs ?? DATA_CUTOFF_MS;
+  const haircut = opts.delistingHaircut ?? DELISTING_HAIRCUT;
+  const base = {
+    status: 'unresolved', horizonBars: bars, observedBars: 0,
+    entryDate: null, entryIndex: null, expectedExitIndex: null, expectedExitDate: null,
+    actualExitDate: null, rawReturn: null, adjustedReturn: null, delistingAdjustment: null,
+    reason: null, dataCutoff: isoDate(dataCutoffMs),
+    securityMasterVersion: opts.securityMasterVersion ?? null,
+    outcomePolicyVersion: OUTCOME_POLICY_VERSION,
+  };
+  if (!Array.isArray(series) || !series.length || !Number.isFinite(dateMs) || !(bars > 0)) {
+    return { ...base, reason: 'invalid-input' };
+  }
+  const idx = idxAsOf(series, dateMs);
+  if (idx < 0) return { ...base, reason: 'no-bar-at-or-before-date' };
+  const entryBar = series[idx];
+  if (!(entryBar.close > 0)) return { ...base, reason: 'non-positive-entry-price' };
+  const entry = { ...base, entryDate: isoDate(entryBar.ms), entryIndex: idx, expectedExitIndex: idx + bars };
+  if (dateMs - entryBar.ms > ENTRY_STALE_DAYS * DAY) {
+    return { ...entry, reason: 'stale-entry-bar' };
+  }
   const tgt = idx + bars;
-  if (tgt < series.length) return { ret: series[tgt].close / entry - 1, delistedWithin: false };
-  const last = series[series.length - 1];
-  if (last.ms <= series[idx].ms) return null;          // no forward data at all
-  return { ret: last.close / entry - 1, delistedWithin: true }; // ran out of bars → name stopped trading
+  if (tgt < series.length) {
+    const exitBar = series[tgt];
+    if (!(exitBar.close > 0)) return { ...entry, reason: 'non-positive-exit-price' };
+    const rawReturn = exitBar.close / entryBar.close - 1;
+    return {
+      ...entry, status: 'mature', observedBars: bars,
+      expectedExitDate: isoDate(exitBar.ms), actualExitDate: isoDate(exitBar.ms),
+      rawReturn, adjustedReturn: rawReturn, delistingAdjustment: 0, reason: 'horizon-observed',
+    };
+  }
+  // Window runs past the cached series — decide WHY before touching the partial path.
+  const lastBar = series[series.length - 1];
+  const observedBars = (series.length - 1) - idx;
+  if (observedBars <= 0) return { ...entry, reason: 'no-forward-bars' };
+  if (!(lastBar.close > 0)) return { ...entry, observedBars, reason: 'non-positive-exit-price' };
+  const rawReturn = lastBar.close / entryBar.close - 1;
+  const partial = { ...entry, observedBars, actualExitDate: isoDate(lastBar.ms), rawReturn };
+  const tailAgeDays = (dataCutoffMs - lastBar.ms) / DAY;
+  if (tailAgeDays <= PENDING_GRACE_DAYS) {
+    // Still trading at the data cutoff: the outcome simply hasn't matured.
+    return { ...partial, status: 'pending', reason: 'horizon-not-elapsed' };
+  }
+  if (tailAgeDays >= DELIST_CONFIRM_DAYS) {
+    // Confirmed stopped trading inside the horizon → genuine delisting.
+    return {
+      ...partial, status: 'delisted', delistingAdjustment: -haircut,
+      adjustedReturn: (1 + rawReturn) * (1 - haircut) - 1, reason: 'stopped-trading-before-cutoff',
+    };
+  }
+  return { ...partial, reason: 'stale-tail-ambiguous' };
+}
+
+// Legacy shape, now FAIL-CLOSED: only mature and verified-delisted outcomes
+// produce a value; pending/unresolved return null (they are not labels).
+// `ret` stays the RAW path return (v1 callers apply their own delisting rule);
+// the full contract rides along as `.outcome`.
+function fwdReturn(series, dateMs, bars, opts) {
+  const o = forwardOutcome(series, dateMs, bars, opts);
+  if (o.status === 'mature') return { ret: o.rawReturn, delistedWithin: false, status: o.status, outcome: o };
+  if (o.status === 'delisted') return { ret: o.rawReturn, delistedWithin: true, status: o.status, outcome: o };
+  return null;
 }
 
 function monthEnds(fromYM, toYM) {
@@ -59,4 +141,8 @@ function monthEnds(fromYM, toYM) {
   return out;
 }
 
-module.exports = { DAY, LAG, CAP_LO, CAP_HI, ADV_FLOOR, CACHE, fetchSymbol, sharesSeries, priceSeries, asOfShares, asOfPriceAdv, fwdReturn, monthEnds };
+module.exports = {
+  DAY, LAG, CAP_LO, CAP_HI, ADV_FLOOR, CACHE,
+  OUTCOME_POLICY_VERSION, DATA_CUTOFF_MS, PENDING_GRACE_DAYS, DELIST_CONFIRM_DAYS, DELISTING_HAIRCUT,
+  fetchSymbol, sharesSeries, priceSeries, asOfShares, asOfPriceAdv, forwardOutcome, fwdReturn, monthEnds,
+};
