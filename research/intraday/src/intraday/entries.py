@@ -21,12 +21,19 @@ def next_open(first: list) -> Optional[Tuple[float, int]]:
 
 def opening_range_breakout(first: list, k: int = K_30M) -> Optional[Tuple[float, int]]:
     """Wait out the first 30 min; enter only if price breaks the opening-range high
-    (momentum confirmation). Entry at the OR high; no fill if it never breaks."""
+    (momentum confirmation). Realistic stop-through-trigger fill: a resting buy-stop
+    at the OR high fills AT the trigger only when the bar trades through it from
+    below; if the trigger bar OPENS at/above the level (gap-through), the stop fills
+    at that bar's open — a strictly worse price. The old behaviour (always fill at
+    the OR high) was optimistic on exactly the strongest-momentum days."""
     if len(first) <= k:
         return None
     or_high = max(b["high"] for b in first[:k])
     for i in range(k, len(first)):
-        if first[i]["high"] >= or_high:
+        b = first[i]
+        if b["open"] >= or_high:
+            return (b["open"], i)
+        if b["high"] >= or_high:
             return (or_high, i)
     return None
 

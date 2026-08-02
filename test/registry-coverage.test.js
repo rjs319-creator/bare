@@ -126,8 +126,9 @@ test('every evidence-badge tab mapping resolves to a registered strategy id', ()
 test('Validated still requires beating the SECTOR, not just the market', () => {
   // Guards the bar Ignition clears: a strategy that beats SPY purely by riding a hot
   // sector must NOT be able to reach Validated on the back of this registration.
-  const beatsBoth = gradeTrack({ excessN: 173, avgExcess: 1.51, beatMktRate: 58, secExcN: 160, avgSecExcess: 0.99, beatSecRate: 48 });
-  const sectorBeta = gradeTrack({ excessN: 173, avgExcess: 1.51, beatMktRate: 58, secExcN: 160, avgSecExcess: -0.4, beatSecRate: 48 });
+  // Cost-net channel present (validated is unreachable on a gross-only record).
+  const beatsBoth = gradeTrack({ excessN: 173, avgExcess: 1.51, beatMktRate: 58, netExcessN: 173, avgNetExcess: 1.31, netBeatMktRate: 58, secExcN: 160, avgSecExcess: 0.99, beatSecRate: 48 });
+  const sectorBeta = gradeTrack({ excessN: 173, avgExcess: 1.51, beatMktRate: 58, netExcessN: 173, avgNetExcess: 1.31, netBeatMktRate: 58, secExcN: 160, avgSecExcess: -0.4, beatSecRate: 48 });
 
   assert.equal(beatsBoth.grade, 'validated');
   assert.equal(sectorBeta.grade, 'promising');

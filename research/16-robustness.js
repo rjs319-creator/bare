@@ -20,7 +20,7 @@ function spearman(xs, ys) { const n = xs.length; if (n < 5) return null; const r
 
 // EW top-quintile long-only return for one cross-section + the IC
 function periodLong(rows, sig) {
-  const v = rows.filter(r => r[sig] != null && r[FWD] != null && r[DL] === 0);
+  const v = rows.filter(r => r[sig] != null && Number.isFinite(r[FWD])); // panel-v2: f is mature OR Shumway-adjusted delisted (keep!); null = pending/unresolved
   if (v.length < 40) return null;
   const ic = spearman(v.map(r => r[sig]), v.map(r => r[FWD]));
   const ord = [...v].sort((a, b) => a[sig] - b[sig]); const k = Math.max(1, Math.floor(ord.length * FRAC));

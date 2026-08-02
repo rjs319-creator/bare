@@ -36,6 +36,7 @@ def momentum_book_returns(panel):
     """Monthly return of an equal-weight long top-decile 12-1 momentum book."""
     out = {}
     for ym, rows in panel.items():
+        # panel-v2 f21: mature or Shumway-adjusted delisted; pending/unresolved are null (json -> None), dropped here
         r = [(x.get("m121"), x.get("f21")) for x in rows
              if x.get("m121") is not None and x.get("f21") is not None]
         if len(r) < 30:

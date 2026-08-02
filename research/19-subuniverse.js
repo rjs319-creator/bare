@@ -21,7 +21,7 @@ function spearman(xs, ys) { const n = xs.length; if (n < 5) return null; const r
 
 // within-slice sector-neutral 12-1 book for one cross-section (rows already sliced)
 function bookOf(rows) {
-  const ok = rows.filter(r => r[FWD] != null && r[DL] === 0 && r.m121 != null);
+  const ok = rows.filter(r => Number.isFinite(r[FWD]) && r.m121 != null); // panel-v2: f is mature OR Shumway-adjusted delisted (keep!); null = pending/unresolved
   if (ok.length < MIN_SLICE) return null;
   const bs = {}; for (const r of ok) (bs[r.sec] || (bs[r.sec] = [])).push(r.m121);
   const md = {}; for (const s in bs) md[s] = median(bs[s]);

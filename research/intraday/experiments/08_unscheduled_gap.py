@@ -65,7 +65,11 @@ def orb_trade(symbol: str, date: str, atr_val: float):
     entry_px, idx = hit
     window = [b for d in days for b in sess[d]]
     stop = entry_px - ATR_MULT * atr_val
-    return simulate_at(window, entry_px, idx + 1, stop, entry_px + RR * (entry_px - stop), COST)
+    # Execution realism: gap-through triggers fill at the bar open (entries.py) and the
+    # entry bar's own low can stop the trade out (entry_bar_stop_check) — both bias
+    # AGAINST the strategy, per the rig's doctrine.
+    return simulate_at(window, entry_px, idx + 1, stop, entry_px + RR * (entry_px - stop), COST,
+                       entry_bar_stop_check=True)
 
 
 def build_signals(cfg):

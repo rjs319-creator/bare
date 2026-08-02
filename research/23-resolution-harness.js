@@ -28,16 +28,17 @@ const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
   for (const T of COHORTS) {
     const rows = P.panel[T]; if (!rows) { console.error('missing', T); continue; }
     const fwdOf = new Map(rows.map(r => [r.s, r.f63]));         // real 63-session forward return
+    // panel-v2: f63 is mature OR Shumway-adjusted delisted (already haircut); pending/unresolved rows are null.
     const { book } = core.buildBook(rows.map(toFeat), held);
     const q = qLabel(T);
     let resolvedN = 0;
     for (const x of book) {
       const f = fwdOf.get(x.ticker);
       signals.push({ quarter: q, date: T, ticker: x.ticker });
-      if (f != null) { resolved[`${x.ticker}|${T}`] = { outcome: 'EXPIRED', r: f }; resolvedN++; }  // time-hold exit
+      if (Number.isFinite(f)) { resolved[`${x.ticker}|${T}`] = { outcome: 'EXPIRED', r: f }; resolvedN++; }  // time-hold exit
     }
     // passive benchmark = equal-weight 63-session return of the whole in-band universe that month
-    benchByQ[q] = mean(rows.map(r => r.f63).filter(v => v != null));
+    benchByQ[q] = mean(rows.map(r => r.f63).filter(v => Number.isFinite(v)));
     held = new Set(book.map(x => x.ticker));
     console.log(`cohort ${T} (${q}): book ${book.length}, resolved ${resolvedN}`);
   }

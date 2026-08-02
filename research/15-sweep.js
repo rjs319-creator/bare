@@ -43,7 +43,7 @@ function onePhase(panel, months, sig, rb, frac, wmode, offset) {
   const idxs = months.map((_, i) => i).filter(i => i % rb.step === offset);
   const rets = [], bench = [], ics = []; let prevW = new Map(), turns = [];
   for (const mi of idxs) {
-    const rows = panel[months[mi]].filter(r => r[rb.fwd] != null && r[rb.dl] === 0); // clean fwd (matches baseline)
+    const rows = panel[months[mi]].filter(r => Number.isFinite(r[rb.fwd])); // panel-v2: f is mature OR Shumway-adjusted delisted (keep!); null = pending/unresolved
     if (rows.length < 40) continue;
     bench.push(mean(rows.map(r => r[rb.fwd])));
     const sv = rows.filter(r => r[sig] != null);

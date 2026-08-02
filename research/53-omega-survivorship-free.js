@@ -170,8 +170,8 @@ function main() {
       // Weighted market+sector benchmark (fold sector weight into market when the ETF is absent).
       const bench10 = spy10 == null ? null : (secBench != null ? 0.6 * spy10 + 0.4 * secBench : spy10);
       const bench5 = spy5 == null ? null : (secBench != null ? 0.6 * spy5 + 0.4 * benchFwd(secFull, dateISO, 5) : spy5);
-      const l10 = fwdResidual(p.candles, cIdx, fill, 10, bench10);
-      const l5 = fwdResidual(p.candles, cIdx, fill, 5, bench5);
+      const l10 = fwdResidual(p.candles, cIdx, fill, 10, bench10, p.active);
+      const l5 = fwdResidual(p.candles, cIdx, fill, 5, bench5, p.active);
       if (!l10 || l10.residual == null) continue;
       rows.push({
         date: dateISO, sym: p.sym, active: p.active, score: card.score, tier: card.tier, utility: card.utility,

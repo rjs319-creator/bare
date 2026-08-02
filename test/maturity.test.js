@@ -9,11 +9,21 @@ test('gradeTrack: no resolved picks → experimental (accruing)', () => {
   assert.equal(g.grade, 'experimental');
 });
 
-test('gradeTrack: significant positive over big sample → validated', () => {
-  // 40 resolved, beats 70% (28/40) → Wilson lo > 50%, avg excess positive.
-  const g = M.gradeTrack({ excessN: 40, avgExcess: 2.4, beatMktRate: 70 });
+test('gradeTrack: significant positive over big sample → validated (cost-net channel)', () => {
+  // 40 resolved NET of costs, beats 70% (28/40) → Wilson lo > 50%, avg excess positive.
+  const g = M.gradeTrack({ excessN: 40, avgExcess: 2.6, beatMktRate: 72,
+    netExcessN: 40, avgNetExcess: 2.4, netBeatMktRate: 70 });
   assert.equal(g.grade, 'validated');
   assert.ok(g.stats.beatLo > 50);
+  assert.equal(g.stats.basis, 'net');
+});
+
+test('gradeTrack: a gross-only record can NEVER earn validated (fail closed on basis)', () => {
+  // Same strength, but no net channel → the ceiling is promising, with an explicit reason.
+  const g = M.gradeTrack({ excessN: 40, avgExcess: 2.4, beatMktRate: 70 });
+  assert.equal(g.grade, 'promising');
+  assert.match(g.reason, /cost-net|net-of-cost/i);
+  assert.equal(g.stats.basis, 'gross');
 });
 
 test('gradeTrack: significant negative over big sample → disabled', () => {
@@ -50,7 +60,9 @@ test('gradeTrack: beats SPY but NOT its sector → promising, not validated (sec
 });
 
 test('gradeTrack: beats BOTH market and sector → validated', () => {
-  const g = M.gradeTrack({ excessN: 40, avgExcess: 2.4, beatMktRate: 70, secExcN: 40, avgSecExcess: 1.8, beatSecRate: 62 });
+  const g = M.gradeTrack({ excessN: 40, avgExcess: 2.4, beatMktRate: 70,
+    netExcessN: 40, avgNetExcess: 2.1, netBeatMktRate: 68,
+    secExcN: 40, avgSecExcess: 1.8, beatSecRate: 62 });
   assert.equal(g.grade, 'validated');
   assert.match(g.reason, /its sector/);
 });
@@ -97,7 +109,7 @@ test('gradeStrategy: core backbone stays out of the lab even when unproven', () 
 
 test('gradeStrategy: overlay graduates out of the lab once Validated', () => {
   const entry = { id: 'events', label: 'CERN', kind: 'signal', section: 'CERN', horizon: 'position', core: false };
-  const summary = { groups: [{ section: 'CERN', tier: 'FORCED_DOWNGRADE', horizons: { '1m': { excessN: 40, avgExcess: 3, beatMktRate: 72 } } }] };
+  const summary = { groups: [{ section: 'CERN', tier: 'FORCED_DOWNGRADE', horizons: { '1m': { excessN: 40, avgExcess: 3, beatMktRate: 72, netExcessN: 40, avgNetExcess: 2.7, netBeatMktRate: 70 } } }] };
   const g = M.gradeStrategy(entry, summary);
   assert.equal(g.grade, 'validated');
   assert.equal(g.inLab, false);
@@ -110,7 +122,7 @@ test('classifyStrategies: sorts strongest-first with a per-grade tally', () => {
     { id: 'b', label: 'B', kind: 'signal', section: 'B', horizon: 'swing', core: true },  // validated
     { id: 'c', label: 'C', kind: 'informational' },                                        // informational
   ];
-  const summary = { generatedAt: 'x', groups: [{ section: 'B', tier: 'T', horizons: { '5d': { excessN: 30, avgExcess: 2, beatMktRate: 70 } } }] };
+  const summary = { generatedAt: 'x', groups: [{ section: 'B', tier: 'T', horizons: { '5d': { excessN: 30, avgExcess: 2, beatMktRate: 70, netExcessN: 30, avgNetExcess: 1.7, netBeatMktRate: 67 } } }] };
   const out = M.classifyStrategies(summary, registry);
   assert.equal(out.strategies[0].id, 'b'); // validated ranks first
   assert.equal(out.counts.validated, 1);
