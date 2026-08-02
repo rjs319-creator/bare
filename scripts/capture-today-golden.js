@@ -24,4 +24,4 @@ const out = path.join(__dirname, '..', 'test', 'fixtures', which);
 const payload = buildToday(SOURCES, null, null, null);
 const golden = project(payload);
 fs.writeFileSync(out, JSON.stringify(golden, null, 2) + '\n');
-process.stdout.write(`wrote ${out}: top=${golden.top.length} signals=${golden.counts.signals}\n`);
+process.stdout.write(`wrote ${out}: signals=${golden.counts.signals}\n`);

@@ -23,18 +23,30 @@ test('costTierFor: a biotech section overrides the dollar-volume tier', () => {
   assert.strictEqual(t.tier, 'biotech');
 });
 
-test('costTierFor: UNKNOWN dollar-volume assumes the CHEAPEST tier, never the worst', () => {
-  // A missing feed must never bury a name — same philosophy as executionQuality's
-  // "unknown is neutral, not thin". We charge the cheapest defensible cost and flag it.
+test('costTierFor: UNKNOWN dollar-volume assumes the CONSERVATIVE tier, never the cheapest', () => {
+  // CONTRACT CHANGE (predictive-redesign, defect #13): the old rule assumed 'liquid' for a
+  // missing feed, so unknown-liquidity names paid the SMALLEST modeled friction and
+  // out-ranked measured peers — missing data as a favorable assumption. Unknown now takes
+  // the documented conservative middle tier, flagged `assumed` so the UI never implies a
+  // measurement, and the eligibility layer separately refuses to size such names.
   const t = C.costTierFor({ liquidity: { price: 40 } });
-  assert.strictEqual(t.tier, 'liquid');
+  assert.strictEqual(t.tier, 'small');
+  assert.strictEqual(t.assumed, true);
+  assert.match(t.basis, /conservative/i);
+});
+
+test('costTierFor: no liquidity block at all still degrades safely (conservative, flagged)', () => {
+  const t = C.costTierFor({});
+  assert.strictEqual(t.tier, 'small');
   assert.strictEqual(t.assumed, true);
 });
 
-test('costTierFor: no liquidity block at all still degrades safely', () => {
-  const t = C.costTierFor({});
-  assert.strictEqual(t.tier, 'liquid');
-  assert.strictEqual(t.assumed, true);
+test('costTierFor: unknown liquidity can never be the cheapest tier while a measured-liquid peer exists', () => {
+  const unknown = C.costTierFor({ liquidity: { price: 40 } });
+  const measured = C.costTierFor({ liquidity: { dollarVol: 5e7 } });
+  const { roundTripCostPct } = require('../lib/costs');
+  assert.ok(roundTripCostPct(unknown.tier) > roundTripCostPct(measured.tier),
+    'unknown pays strictly more modeled friction than measured-liquid');
 });
 
 // ── the cost model ──────────────────────────────────────────────────────────

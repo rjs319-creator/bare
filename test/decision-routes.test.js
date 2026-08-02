@@ -118,14 +118,19 @@ test('buildToday: horizon buckets are disjoint and regime/sectors populated', ()
   assert.equal(p.regime.label, 'Risk-on');
   assert.equal(p.sectors.leading[0].name, 'Technology');
   assert.equal(p.counts.byHorizon.swing, p.horizons.swing.length);
-  // Every top signal has a rank, score, state, evidence, and a hold window.
-  for (const s of p.top) { assert.ok(s.rank >= 1); assert.ok('score' in s); assert.ok(s.state); assert.ok(s.evidence); assert.ok(s.holdWindow); }
+  // Every shortlisted signal has a rank, score, state, evidence, and a hold window.
+  for (const s of Object.values(p.topByHorizon).flat()) { assert.ok(s.rank >= 1); assert.ok('score' in s); assert.ok(s.state); assert.ok(s.evidence); assert.ok(s.holdWindow); }
 });
 
-test('buildToday: top shortlist is the single ranked list, capped at 10 and rank-ordered', () => {
+test('buildToday: NO global cross-horizon top list — per-horizon shortlists only (defect #9)', () => {
   const p = buildToday({ screener: SCREENER, gapgo: GAPGO, daytrade: DAYTRADE, coil: COIL, sectors: SECTORS, scoreboard: SCOREBOARD, ai: AI });
-  assert.ok(p.top.length <= 10);
-  for (let i = 1; i < p.top.length; i++) assert.ok(p.top[i - 1].rank <= p.top[i].rank); // ascending rank
+  assert.ok(!('top' in p), 'the single global cross-horizon shortlist must not exist');
+  assert.ok(p.topByHorizon && typeof p.topByHorizon === 'object');
+  for (const [h, list] of Object.entries(p.topByHorizon)) {
+    assert.ok(list.length <= 5, `${h} shortlist capped`);
+    for (const s of list) assert.equal(s.horizon, h, 'a shortlist never contains another horizon');
+    for (let i = 1; i < list.length; i++) assert.ok(list[i - 1].rank <= list[i].rank);
+  }
   assert.ok(p.lanes.resolved !== undefined); // resolved lane always present (rendered on Today)
 });
 
@@ -196,7 +201,9 @@ test('buildToday: attaches the adversarial failure model as SHADOW without reord
   }
   // SHADOW-SAFETY: the board is still ordered by the winner score, NOT by the failure-adjusted
   // score — the ranking is unchanged by the failure model.
-  for (let i = 1; i < p.top.length; i++) assert.ok(p.top[i - 1].score >= p.top[i].score, 'top ranked by winner score, not failure-adjusted');
+  for (const list of Object.values(p.topByHorizon)) {
+    for (let i = 1; i < list.length; i++) assert.ok(list[i - 1].score >= list[i].score, 'shortlists ranked by winner score, not failure-adjusted');
+  }
 });
 
 test('classifyEarnings: binary inside window, scheduled beyond, passed if negative', () => {

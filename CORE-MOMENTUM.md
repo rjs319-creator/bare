@@ -1,5 +1,13 @@
 # Core Momentum — survivorship-safe small/mid sector-neutral 12-1 sleeve
 
+> ⚠️ **STALE-EVIDENCE NOTICE (2026-07-31, predictive-redesign audit).** The forward-IR
+> expectation (≈0.8–1.2), the win 0.62 / PF 1.4 baseline, and the "forward screeners can
+> ignore survivorship bias" argument below are SUPERSEDED by the July 2026 survivorship-
+> complete research pass: `research/MOMENTUM-SURVIVORSHIP-FREE-2026-07.md` found momentum
+> rank-IC ≈ 0 on both universes. `coremo` is registered SHADOW (weight-0) and must earn its
+> own prospective, cost-net record before any actionable use. This document is kept for the
+> implementation reference only; docs/predictive-redesign-audit.md records the authority order.
+
 A research-validated momentum screener wired into the app's existing ledger + drift
 machinery. It is the deployable output of the `research/` investigation (steps 14–21;
 `research/momentum_score.py` is the Python reference, this is the JS port).

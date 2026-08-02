@@ -63,9 +63,16 @@ test('SAFETY: optionsflow + putsell are registered SHADOW (not trade-eligible)',
 });
 
 test('the backbone screeners remain trade-eligible (behavior preserved)', () => {
-  for (const id of ['screener', 'momentum', 'gapgo', 'daytrade', 'coil', 'ghost', 'biotech', 'downday']) {
+  for (const id of ['screener', 'gapgo', 'daytrade', 'coil', 'ghost', 'biotech', 'downday']) {
     assert.equal(gate.isTradeEligible(id), true, `${id} must stay trade-eligible`);
   }
+});
+
+test('momentum-v2 reset to SHADOW: the rebuilt contract (intraday, price/volume universe) does not inherit v1 evidence', () => {
+  // Predictive-redesign defects #14/#15: the scanner was rebuilt (universe + horizon), so
+  // its production maturity — earned under the mismatched momentum-v1 1m contract — resets.
+  assert.equal(gate.statusOf('momentum'), 'shadow');
+  assert.equal(gate.isTradeEligible('momentum'), false);
 });
 
 test('PROMOTION_GATE documents the bar and is frozen (not editable at runtime)', () => {

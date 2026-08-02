@@ -7472,14 +7472,19 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
 
   function renderMomentum(data) {
-    let { strongBuys = [], strongSells = [], scannedCount, excludedExtended = 0, generatedAt } = data;
+    let { strongBuys = [], strongSells = [], scannedCount, universeCount, excludedExtended = 0, generatedAt, degraded, universeNote } = data;
     // Hide tiers disabled on the scoreboard (kept logged + scored server-side).
     if (isSignalDisabled('momentum', 'StrongBuy'))  strongBuys = [];
     if (isSignalDisabled('momentum', 'StrongSell')) strongSells = [];
     renderMomentumRegime(); // show the bearish-regime warning banner if applicable
     if (generatedAt) momentumGenTime.textContent = `Updated ${new Date(generatedAt).toLocaleTimeString()}`;
-    momentumMeta.textContent = `· ${scannedCount || 0} trending names scanned · early movers only`
-      + (excludedExtended ? ` · ${excludedExtended} extended filtered` : '');
+    // momentum-v2: the universe is price/volume-discovered (discovery + screeners) — social
+    // attention is only an annotation. Same-session read; scores are heuristic ranks.
+    momentumMeta.textContent = degraded
+      ? `· price/volume universe unavailable — honest empty board (never social-only)`
+      : `· ${scannedCount || 0} of ${universeCount || scannedCount || 0} price/volume-discovered names deep-scanned · same-session read · early movers only`
+        + (excludedExtended ? ` · ${excludedExtended} extended filtered` : '');
+    if (degraded && universeNote) momentumMeta.title = universeNote;
 
     const cols = document.createElement('div');
     cols.className = 'mom-columns';

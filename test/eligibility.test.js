@@ -98,8 +98,11 @@ test('annotate (default): board unchanged, every active signal carries an eligib
   const off = buildToday(SOURCES, null, null, null, { eligibilityMode: 'off' });
   const ann = buildToday(SOURCES, null, null, null, {});
   assert.equal(ann.counts.signals, off.counts.signals);
-  assert.deepEqual(ann.top.map(x => x.id), off.top.map(x => x.id));
-  assert.ok(ann.top.every(x => x.eligibility && typeof x.eligibility.tradeEligible === 'boolean'));
+  const flatTop = (pl) => Object.values(pl.topByHorizon).flat();
+  assert.deepEqual(flatTop(ann).map(x => x.id), flatTop(off).map(x => x.id));
+  assert.ok(flatTop(ann).every(x => x.eligibility && typeof x.eligibility.tradeEligible === 'boolean'));
+  assert.ok(flatTop(ann).every(x => x.evidenceClass === 'ACTIONABLE' || x.evidenceClass === 'RESEARCH'),
+    'every card carries the unmistakable ACTIONABLE vs RESEARCH class');
   assert.ok(ann.governanceGate && ann.governanceGate.mode === 'annotate');
   assert.ok(ann.governanceGate.shadowComparison);
   assert.equal(off.governanceGate, null);
@@ -114,7 +117,7 @@ test('enforce: shadow sources can neither ORIGINATE a board row nor BOOST one vi
   // clock makes the governance doc read as stale once the calendar moves on (this
   // exact test started failing 6 days after it was written).
   const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'enforce', governance: gov, nowMs: NOW });
-  const boardSources = new Set(p.top.concat(...Object.values(p.horizons)).flatMap(x => x.sources || [x.source]));
+  const boardSources = new Set(Object.values(p.topByHorizon).flat().concat(...Object.values(p.horizons)).flatMap(x => x.sources || [x.source]));
   // Shadow/ungoverned sources must be absent everywhere on the tradeable board:
   for (const shadowSrc of ['gapdown', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'coremo', 'optionsflow', 'biotech', 'coil', 'downday']) {
     assert.ok(!boardSources.has(shadowSrc), `${shadowSrc} must not reach the enforced board`);
