@@ -16,6 +16,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadPremove } from './premove.js';
   import { loadOrbitLab } from './orbit-lab.js';
   import { loadRltLab } from './rlt-lab.js';
+  import { loadPeerLab } from './peer-lab.js';
   import { loadGridlock } from './gridlock.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { loadCern, eventName as cernEventName } from './cern.js';
@@ -37,7 +38,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     markets:    ['rotation', 'sectors', 'news', 'thesis', 'pulse', 'evolve'],
     predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     proof:      ['scoreboard', 'evidence', 'baselines', 'leaderboard', 'coreperf'],
-    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge', 'orbitlab', 'rltlab', 'gridlock'],
+    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge', 'orbitlab', 'rltlab', 'gridlock', 'peerlab'],
   };
   // Holding-horizon of each candidate/position sub-tab → drives the horizon dividers
   // in the sub-nav so the app is visibly separated by time horizon (the spec ask).
@@ -55,7 +56,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     quickhit: '⚡ Quick Hit', swingsup: '📋 Swing Supervisor', premove: '📡 Pre-Move', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', atlas: '🛰 ATLAS-X', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', patternradar: '📐 Pattern Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', thesis: '🧾 Thesis Changes', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
-    backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)', rltlab: '🧭 Leadership (shadow)', gridlock: '⚡ GRIDLOCK (shadow)',
+    backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)', rltlab: '🧭 Leadership (shadow)', gridlock: '⚡ GRIDLOCK (shadow)', peerlab: '🕸 Peers (shadow)',
     leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', evidence: '🎖️ Evidence', baselines: '🧪 Baselines', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
   // Plain-English "what is this tab?" hovers for a novice investor — one line per
@@ -88,6 +89,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     gapdown: 'Stocks gapping DOWN hard on news and continuing lower — short setups (the mirror of Gap & Go). Best off red days; mind borrow costs.',
     orbitlab: 'ORBIT & ORBIT-ML — experimental residual-drift ranking systems running in shadow (zero weight, never affect the live rank). Shown here to accrue an honest out-of-sample track record; currently grade C with no durable edge.',
     rltlab: 'Relative Leadership Transition — shadow system finding stocks BEGINNING to outperform their sector peers (rank change, not just high rank). Watch/armed/triggered states only; zero weight, never a buy signal, no probabilities until calibration is earned.',
+    peerlab: 'Peer Propagation — shadow engine flagging stocks whose PEERS and historical leaders have moved while their own price has not yet reacted. Early/confirming stages only; zero weight, never a buy signal, no probabilities until out-of-fold calibration is earned.',
     gridlock: 'GRIDLOCK — shadow engine mapping PHYSICAL constraints (AI data-center power demand, plant retirements, turbine orders — PJM first) to companies with VERIFIED exposure. Decomposed research scores only; zero weight, no probabilities, never a buy signal.',
     rotation: 'Which sectors money is rotating into and out of, week over week.',
     sectors: 'Sector performance heatmap — what’s leading and lagging.',
@@ -404,6 +406,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'edge' && typeof ensureEdge === 'function') ensureEdge();
     if (sub === 'orbitlab' && typeof ensureOrbitLab === 'function') ensureOrbitLab();
     if (sub === 'rltlab' && typeof ensureRltLab === 'function') ensureRltLab();
+    if (sub === 'peerlab' && typeof ensurePeerLab === 'function') ensurePeerLab();
     if (sub === 'gridlock' && typeof ensureGridlock === 'function') ensureGridlock();
     if (sub === 'evidence' && typeof ensureEvidence === 'function') ensureEvidence();
     if (sub === 'thesis' && typeof ensureThesis === 'function') ensureThesis();
@@ -3791,6 +3794,19 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (btn) btn.addEventListener('click', () => loadRltLab(document.getElementById('rltlab-container')));
     }
     loadRltLab(document.getElementById('rltlab-container'));
+  }
+
+  // 🕸 Peer Propagation (shadow) — read-only Research Lab panel (loadPeerLab
+  // renders op=peerprop + the cached walk-forward report). Weight-0, never
+  // affects the live rank — early/confirming propagation inventory only.
+  let peerLabLoaded = false;
+  function ensurePeerLab() {
+    if (!peerLabLoaded) {
+      peerLabLoaded = true;
+      const btn = document.getElementById('peerlab-refresh-btn');
+      if (btn) btn.addEventListener('click', () => loadPeerLab(document.getElementById('peerlab-container')));
+    }
+    loadPeerLab(document.getElementById('peerlab-container'));
   }
 
   // ⚡ GRIDLOCK (shadow) — physical-constraint & marginal-beneficiary board
