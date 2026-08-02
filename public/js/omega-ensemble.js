@@ -99,7 +99,7 @@ function rankingTable(rows) {
         <thead><tr>
           <th>#</th><th>Name</th><th>Horizon</th>
           <th title="validated expectancy x confidence x regime x execution x independent evidence x cost">Composite</th>
-          <th title="the composite is a RANK, not a probability">2/5/10d probability</th>
+          <th title="the composite is a RANK, not a probability">2/5/10d probability (not calibrated)</th>
           <th>Cost · evidence · track record</th>
         </tr></thead>
         <tbody>${rows.map(rankRow).join('')}</tbody>

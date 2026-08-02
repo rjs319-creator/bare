@@ -57,7 +57,7 @@ function renderEvolve(container, ev, health) {
 
 function intro(ev) {
   return `<div class="ev-intro">
-    <b>What this is.</b> EVOLVE doesn't invent a new alpha model — this app's own multi-year research showed the raw signals are thin and fragile. Instead it treats the app's existing engines as <b>specialists</b>, learns <b>which one works in which market regime</b> from resolved triple-barrier outcomes, and reports a <b>calibrated probability</b> that a name hits its upside barrier before its downside barrier — never a vanity 0–100 score. It abstains when the edge, sample, data, or regime don't support a call.
+    <b>What this is.</b> EVOLVE doesn't invent a new alpha model — this app's own multi-year research showed the raw signals are thin and fragile. Instead it treats the app's existing engines as <b>specialists</b>, learns <b>which one works in which market regime</b> from resolved triple-barrier outcomes, and reports a <b>probability</b> that a name hits its upside barrier before its downside barrier — calibrated against resolved outcomes once the ledger matures (the model-health strip below says which state it is in) — never a vanity 0–100 score. It abstains when the edge, sample, data, or regime don't support a call.
   </div>`;
 }
 
@@ -97,11 +97,11 @@ function horizonColumn(h, ev) {
   const meta = (ev.horizonMeta && ev.horizonMeta[h]) || {};
   const cards = (ev.byHorizon && ev.byHorizon[h]) || [];
   const title = `${meta.label || h} <span class="ev-col-bar">+${Math.round((meta.up || 0) * 100)}% before −${Math.round((meta.down || 0) * 100)}% · ≤${meta.window}d</span>`;
-  const body = cards.length ? cards.map(card).join('') : `<div class="ev-col-empty">No ${esc(h)} candidates clear the bar.</div>`;
+  const body = cards.length ? cards.map((c) => card(c, ev.modelHealth || {})).join('') : `<div class="ev-col-empty">No ${esc(h)} candidates clear the bar.</div>`;
   return `<div class="ev-col"><div class="ev-col-head">${title}</div>${body}</div>`;
 }
 
-function card(c) {
+function card(c, health = {}) {
   const dm = c.decisionMeta || {};
   const cls = DEC_CLASS[c.decision] || '';
   const prob = c.probability != null ? `${Math.round(c.probability * 100)}%` : '–';
@@ -117,7 +117,9 @@ function card(c) {
     <div class="ev-card-head">
       <span class="ev-tk" data-ticker="${esc(c.ticker)}">${esc(c.ticker)}</span>
       <span class="ev-dec">${dm.icon || ''} ${esc(dm.label || c.decision)}</span>
-      <span class="ev-prob" title="calibrated P(upside barrier first); breakeven ${be}">${prob}</span>
+      <span class="ev-prob" title="${health.calibrated
+        ? `calibrated P(upside barrier first); breakeven ${be}`
+        : `model P(upside barrier first) — NOT yet calibrated (resolved ledger still accruing); breakeven ${be}`}">${prob}</span>
       <span class="ev-toggle">▾</span>
     </div>
     <div class="ev-card-sub">

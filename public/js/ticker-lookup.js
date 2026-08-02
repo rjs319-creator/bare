@@ -415,7 +415,7 @@ function patHorizonCard(label, d) {
       <div class="hzp-exp">
         <div>Similarity — path ${numOr(sim.pathCorrelation)} · geom ${numOr(sim.geometrySimilarity)} · DTW ${numOr(sim.dtwSimilarity)} · vol ${numOr(sim.volumeSimilarity)} · ctx ${numOr(sim.contextSimilarity)} ${sim.calibratedThreshold ? '' : '<i>(descriptive tier)</i>'}</div>
         <div>Analogs — raw ${d.analogs ? d.analogs.rawCount : 0}, effN ${d.analogs ? d.analogs.effectiveSampleSize : 0}, resolved ${d.analogs ? d.analogs.resolvedCount : 0}</div>
-        <div>Barrier — stop-first ${pctOr(pred.stopBeforeTarget)} · timeout ${pctOr(pred.timeout)} · fail ${pctOr(pred.failureProbability)} · ${esc(pred.calibrationStatus || 'n/a')}</div>
+        <div>Barrier ${pred.calibrated ? `<span class="hzp-ok">(calibrated, n=${pred.effectiveSampleSize})</span>` : '<span class="hzp-warn">(model-estimate, not calibrated)</span>'} — stop-first ${pctOr(pred.stopBeforeTarget)} · timeout ${pctOr(pred.timeout)} · fail ${pctOr(pred.failureProbability)} · ${esc(pred.calibrationStatus || 'n/a')}</div>
         <div>Context — regime ${esc((d.context || {}).marketRegime || '—')} · RS ${esc((d.context || {}).relativeStrength || '—')} · liquidity ${esc((d.context || {}).liquidity || '—')} · vol pctile ${numOr((d.context || {}).volPercentile)}</div>
         <div>Invalidation: ${esc(d.plan && d.plan.stop != null ? ('below/above ' + d.plan.stop) : '—')} · model ${esc(d.modelVersion || '')}</div>
       </div>

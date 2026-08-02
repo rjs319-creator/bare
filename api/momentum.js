@@ -97,7 +97,7 @@ async function fetchTrendingStockTwits() {
 function thesisFrom(card) {
   const dir = card.action === 'STRONG_BUY' ? 'bullish' : 'bearish';
   const top = (card.reasons || []).slice(0, 3).join('; ');
-  return `Real-time price action is ${dir} (conf ${card.confidence}/10): ${top}.`;
+  return `Real-time price action is ${dir} (evidence ${card.confidence}/10 — indicator agreement, not a probability): ${top}.`;
 }
 
 const DEEP_SCAN_BUDGET = 14;   // deep 5-minute analyses per run (function time budget)
@@ -164,6 +164,7 @@ module.exports = async function handler(req, res) {
       company,
       action: r.live.action,
       confidence: r.live.confidence,
+      evidenceStrength: r.live.confidence,   // same value, honest name — heuristic agreement count, NOT a probability
       reasons: r.live.reasons,
       levels: r.live.levels,
       rsi: r.live.rsi,

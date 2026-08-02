@@ -329,6 +329,9 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'runmanifest') return require('../lib/provenance-routes').runRunManifest(req, res);
   if (req.query.op === 'secmasterbuild') return require('../lib/provenance-routes').runSecMasterBuild(req, res);
   if (req.query.op === 'provenance') return require('../lib/provenance-routes').runProvenance(req, res);
+  if (req.query.op === 'hypotheses') return require('../lib/hypothesis-routes').runHypotheses(req, res);
+  if (req.query.op === 'datahealth') return require('../lib/data-health-routes').runDataHealth(req, res);
+  if (req.query.op === 'pitdata') return require('../lib/pitdata-routes').runPitData(req, res);
   if (req.query.op === 'leaderboard') return runLeaderboard(req, res);
   if (req.query.op === 'leaderboardtick') return runLeaderboardTick(req, res);
   if (req.query.op === 'corebuild') return runCoreBuild(req, res);
