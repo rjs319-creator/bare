@@ -102,12 +102,16 @@ const PRIVILEGED_OPS = new Set([
   // Day Trade scan runner (external-scheduler entry point — writes discovery state, dataset
   // buckets and runner health) + dataset grading (per-ticker bar fetch fan-out + grade WRITE).
   'daytradescan', 'datasetgrade',
+  // Peer Propagation + News Underreaction shadow ledger WRITES (persist latest board /
+  // append immutable daily picks). Cron/manual-with-bearer only.
+  'peerproplog', 'underreactionlog',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
   'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'leadtime2', 'failuremodel', 'complab', 'challengereval', 'router', 'routercf', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward', 'rltwalkforward', 'evidencediag',
+  'peerprop', 'peerpropwf', 'underreaction',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -400,6 +404,16 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'rltlog') return require('../lib/rlt-routes').runRltLog(req, res);
   if (req.query.op === 'rltresolve') return require('../lib/rlt-routes').runRltResolve(req, res);
   if (req.query.op === 'rltwalkforward') return require('../lib/rlt-routes').runRltWalkForward(req, res);
+  // Peer Propagation — SHADOW (weight-0). Read board + cron-only ledger writer +
+  // walk-forward with built-in falsifications (reversed edges / random peers).
+  if (req.query.op === 'peerprop') return require('../lib/peerprop-routes').runPeerProp(req, res);
+  if (req.query.op === 'peerproplog') return require('../lib/peerprop-routes').runPeerPropLog(req, res);
+  if (req.query.op === 'peerpropwf') return require('../lib/peerprop-routes').runPeerPropWalkforward(req, res);
+  // News Underreaction — SHADOW, prospective-only (no backfill op exists on purpose).
+  if (req.query.op === 'underreaction') return require('../lib/underreaction-routes').runUnderreaction(req, res);
+  if (req.query.op === 'underreactionlog') return require('../lib/underreaction-routes').runUnderreactionLog(req, res);
+  // Volume/capacity forecast for one ticker — cheap bounded read (execution context, not alpha).
+  if (req.query.op === 'volforecast') return require('../lib/volforecast-routes').runVolForecast(req, res);
   if (req.query.op === 'promotionreadiness') return require('../lib/orbit-ml-routes').runPromotionReadiness(req, res);
   if (req.query.op === 'researchgrade') return require('../lib/research-grade-routes').runResearchGrade(req, res);
 
