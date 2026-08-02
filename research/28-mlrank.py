@@ -32,7 +32,10 @@ from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.linear_model import Ridge
 
 HERE = os.path.dirname(__file__)
-PANEL = os.path.join(HERE, "data", "panel-features.json")
+# PANEL_FILE env override: rerun the identical study on a different panel
+# vintage (e.g. panel-features-v3.json, fwd-outcome-v3 labels) without touching
+# the recorded default. Default stays panel-v2 for byte-identical reruns.
+PANEL = os.environ.get("PANEL_FILE") or os.path.join(HERE, "data", "panel-features.json")
 
 RAW_FEATS = ["m61","m91","m121","m181","m63","m93","m122","acc","r21","r5","v63","ra","vs"]
 TARGET = "f21"                      # 1-month fwd, panel-v2 (fwd-outcome-v2): mature or Shumway-adjusted-delisted only; pending/unresolved are null -> NaN, dropped by the isfinite filter in load()
