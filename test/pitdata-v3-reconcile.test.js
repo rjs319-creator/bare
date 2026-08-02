@@ -74,6 +74,70 @@ test('excessive low-confidence identity FAILS reconciliation (defect 9 fixed)', 
   assert.ok(report.failedGates.includes('lowConfidenceIdentity'));
 });
 
+// ── universe-relevant identity gating ─────────────────────────────────────────
+function worldWith(listings) {
+  const listingShards = {}, aliasShards = {};
+  const aliasShardFor = (k) => (aliasShards[k] ||= { aliases: {} });
+  let i = 0;
+  for (const spec of listings) {
+    for (let k = 0; k < spec.n; k++) {
+      const sym = `${spec.prefix}${i++}`;
+      const { listing } = I.upsertListingV3((listingShards[S.shardKeyFor(sym)] ||= { listings: {} }), aliasShardFor, {
+        symbol: sym,
+        cik: spec.lowConf ? null : String(100000 + i),
+        ipoDate: spec.lowConf ? null : '2015-01-01',
+        exchange: spec.exchange === undefined ? 'NASDAQ' : spec.exchange,
+        status: 'active',
+        instrumentType: spec.instrumentType === undefined ? 'common_stock' : spec.instrumentType,
+        sector: 'X', industry: 'Y',
+        country: spec.country === undefined ? 'US' : spec.country,
+        currency: 'USD',
+        observedAt: OBS, provenance: 'prospective_live', source: 't',
+      });
+      if (spec.stripClassification) { listing.classification = []; listing.instrumentType = []; listing.identity.exchange = null; }
+    }
+  }
+  return { listingShards, aliasShards };
+}
+
+test('positively-excluded junk (OTC / foreign / ETF) leaves the identity denominator — the gate becomes reachable', () => {
+  const w = worldWith([
+    { prefix: 'G', n: 2000, lowConf: false },                                  // enriched US common
+    { prefix: 'O', n: 5000, lowConf: true, exchange: 'OTC' },                  // positively off-exchange
+    { prefix: 'F', n: 5000, lowConf: true, country: 'DE' },                    // positively foreign
+    { prefix: 'E', n: 5000, lowConf: true, instrumentType: 'etf' },            // positively non-common
+  ]);
+  const base = bigWorld();
+  const report = REC.reconcileV3({ ...base, listingShards: w.listingShards, aliasShards: w.aliasShards });
+  assert.equal(report.counts.universeRelevant, 2000);
+  assert.equal(report.counts.relevantLowConfidence, 0);
+  assert.equal(report.gates.lowConfidenceIdentity, true, 'gate passes on the relevant subset');
+  assert.ok(report.fractions.lowConfidence > 0.8, 'full-space fraction still reported honestly');
+  assert.equal(report.fractions.relevantLowConfidence, 0);
+});
+
+test('unknown-everything listings STAY in the denominator — enrichment cannot be skipped, only completed', () => {
+  const w = worldWith([
+    { prefix: 'G', n: 2000, lowConf: false },
+    { prefix: 'U', n: 1500, lowConf: true, exchange: null, instrumentType: null, country: null, stripClassification: true },   // nothing known
+  ]);
+  const base = bigWorld();
+  const report = REC.reconcileV3({ ...base, listingShards: w.listingShards, aliasShards: w.aliasShards });
+  assert.equal(report.counts.universeRelevant, 3500, 'unknowns remain relevant (fail closed)');
+  assert.equal(report.counts.relevantLowConfidence, 1500);
+  assert.equal(report.gates.lowConfidenceIdentity, false, '1500/3500 = 43% > 30% — unknowns keep the gate failing');
+});
+
+test('a near-empty relevant subset fails the gate — classifying everything out can never produce a vacuous pass', () => {
+  const w = worldWith([
+    { prefix: 'E', n: 3000, lowConf: false, instrumentType: 'etf' },   // even HIGH-confidence irrelevant names
+  ]);
+  const base = bigWorld();
+  const report = REC.reconcileV3({ ...base, listingShards: w.listingShards, aliasShards: w.aliasShards });
+  assert.equal(report.counts.universeRelevant, 0);
+  assert.equal(report.gates.lowConfidenceIdentity, false, 'below minRelevantListings → fail closed');
+});
+
 test('insufficient longitudinal prospective history FAILS reconciliation', () => {
   const report = REC.reconcileV3(bigWorld({ prospectiveDates: 1 }));
   assert.ok(report.failedGates.includes('minProspectiveDates'));
