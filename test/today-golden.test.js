@@ -4,10 +4,20 @@
 // 1. The live board over the frozen all-source fixture must match the CURRENT golden
 //    (test/fixtures/today-golden.json). Any drift is either a bug or a deliberate,
 //    documented change regenerated via `node scripts/capture-today-golden.js`.
-// 2. DAY TRADE NON-REGRESSION: the Day Trade rows must match the IMMUTABLE pre-redesign
-//    baseline (test/fixtures/today-golden-baseline.json) — normalized inputs, scores,
-//    cost treatment and relative ordering are contractually frozen. This file is never
-//    regenerated.
+// 2. DAY TRADE NON-REGRESSION: the Day Trade rows must match the frozen baseline
+//    (test/fixtures/today-golden-baseline.json) — normalized inputs, scores, cost
+//    treatment and relative ordering are contractually frozen.
+//
+//    BASELINE v2 (predictive-redesign, 2026-07-31): regenerated ONCE for two documented
+//    deterministic corrections confirmed in docs/predictive-redesign-audit.md — no other
+//    Day Trade behavior changed:
+//      • defect #13: unknown dollar-volume now takes the CONSERVATIVE cost tier ('small'),
+//        not the cheapest ('liquid') — daytrade fixture rows carry no dollar-volume, so
+//        their costTier/costPenalty/score shift accordingly (production daytrade cards now
+//        propagate measured avgDollarVol, so live rows are usually measured, not assumed);
+//      • defect #11: the canonical card's `lifecycleState` now reaches makeSignal's
+//        stateHint instead of being silently dropped (no state change in this fixture).
+//    The file must not be regenerated again outside an equally documented correction.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

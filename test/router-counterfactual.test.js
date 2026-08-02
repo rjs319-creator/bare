@@ -70,3 +70,14 @@ test('history dates with no graded rows are excluded, never zero-filled', () => 
   const r = evaluateRouterCounterfactual({ historyDays, rows });
   assert.equal(r.coverage.evaluatedDates, 5);
 });
+
+test('staticBest locks ONCE from strictly-prior evidence and holds — never a slow chaser', () => {
+  const { rows, historyDays } = fixture(MIN_HISTORY_DATES, () => ({ A: 0.5, B: 0.5 }));
+  const r = evaluateRouterCounterfactual({ historyDays, rows });
+  // Early dates lack the burn-in (2 rows/date → 20 dates needed) and are skipped, not guessed.
+  assert.ok(r.coverage.staticBestSkippedDates >= 19, `expected burn-in skips, got ${r.coverage.staticBestSkippedDates}`);
+  // Once locked, the pick is disclosed and its arm reflects that algorithm alone (A = +2).
+  assert.equal(r.coverage.staticBestPick, 'A');
+  assert.ok(r.arms.staticBest.meanDaily > 1.5, `static-best should hold A, got ${r.arms.staticBest.meanDaily}`);
+  assert.ok(r.perDate.every(d => 'staticBest' in d));
+});

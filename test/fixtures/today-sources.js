@@ -94,9 +94,11 @@ function project(payload) {
   });
   const horizons = {};
   for (const h of Object.keys(payload.horizons || {})) horizons[h] = (payload.horizons[h] || []).map(row);
+  const topByHorizon = {};
+  for (const h of Object.keys(payload.topByHorizon || {})) topByHorizon[h] = (payload.topByHorizon[h] || []).map(row);
   return {
     counts: payload.counts,
-    top: (payload.top || []).map(row),
+    topByHorizon,
     horizons,
     portfolio: payload.portfolio ? {
       picks: (payload.portfolio.picks || payload.portfolio.selected || []).map(p => p.id || p.ticker),

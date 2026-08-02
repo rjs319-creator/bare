@@ -1,5 +1,11 @@
 # Alpha Research — Fable 5 proposals + empirical validation (2026-07-01)
 
+> ⚠️ **PARTIALLY SUPERSEDED (2026-07-31).** The mom_12_1 control result below (IC 0.035,
+> t=2.16) predates the full PIT security master; the later survivorship-complete pass
+> (`research/MOMENTUM-SURVIVORSHIP-FREE-2026-07.md`) measured momentum rank-IC ≈ 0 on both
+> universes and is authoritative. The regime-avoidance conclusion stands. See
+> docs/predictive-redesign-audit.md for the evidence-authority order.
+
 Goal: new techniques to gain edge/alpha across all algos; present highest-yield
 options. A Fable 5 agent proposed 8 novel techniques; every testable one was then
 run on data — **the survivorship-corrected offline rig** (4217 survivor+delisted

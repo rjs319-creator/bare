@@ -107,7 +107,7 @@ const PRIVILEGED_OPS = new Set([
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
-  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'leadtime2', 'failuremodel', 'complab', 'challengereval', 'router', 'routercf', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward', 'rltwalkforward', 'evidencediag',
+  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'leadtime2', 'failuremodel', 'complab', 'challengereval', 'router', 'routercf', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward', 'rltwalkforward', 'evidencediag', 'datasetsurvival',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -188,11 +188,17 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'daytradescanhealth') return require('../lib/daytrade-scan-runner').runScanHealth(req, res);
   if (req.query.op === 'daytradecapture') return require('../lib/runner-capture').runDaytradeCapture(req, res);
   if (req.query.op === 'datasetgrade') {
-    const date = req.query.date || require('../lib/freshness').etDate(new Date());
-    const out = await require('../lib/intraday-dataset').gradeDatasetDay(date, { limit: parseInt(req.query.limit || '40', 10) || 40 });
+    // With an explicit date: grade that single day. Without one: BACKLOG mode — grade the
+    // oldest incomplete captured dates first (today included), retrying prior days until
+    // each hits remaining=0, terminal unavailability, or the bar-retention deadline.
+    const limit = parseInt(req.query.limit || '40', 10) || 40;
+    const out = req.query.date
+      ? await require('../lib/intraday-dataset').gradeDatasetDay(req.query.date, { limit })
+      : await require('../lib/intraday-backlog').gradeDatasetBacklog({ limit });
     res.setHeader('Cache-Control', 'no-store');
     return res.json(out);
   }
+  if (req.query.op === 'datasetsurvival') return require('../lib/intraday-training').runDatasetSurvival(req, res);
   if (req.query.op === 'swingsearchlog') return require('../lib/swing-search-ledger').runSwingSearchLog(req, res);
   if (req.query.op === 'swingsearchgrade') return require('../lib/swing-search-ledger').runSwingSearchGrade(req, res);
   if (req.query.op === 'swingsearchstatus') return require('../lib/swing-search-ledger').runSwingSearchStatus(req, res);

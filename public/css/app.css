@@ -2630,6 +2630,11 @@
 .td-grade { font-size:.62rem; font-weight:700; padding:.08em .4em; border-radius:999px; border:1px solid transparent; }
 .td-grade.mat-validated{background:rgba(34,197,94,.14);color:#22c55e;border-color:rgba(34,197,94,.4);} .td-grade.mat-promising{background:rgba(250,204,21,.14);color:#eab308;border-color:rgba(250,204,21,.4);} .td-grade.mat-experimental{background:rgba(139,92,246,.14);color:#a78bfa;border-color:rgba(139,92,246,.4);} .td-grade.mat-informational{background:rgba(148,163,184,.14);color:#94a3b8;} .td-grade.mat-disabled{background:rgba(239,68,68,.14);color:#ef4444;border-color:rgba(239,68,68,.4);}
 .td-pctile { font-size:.62rem; font-weight:700; color:#60a5fa; background:rgba(96,165,250,.12); padding:.08em .4em; border-radius:999px; }
+/* ACTIONABLE vs RESEARCH class + immutable-origin age (predictive-redesign) */
+.td-class { font-size:.6rem; font-weight:800; letter-spacing:.04em; padding:.08em .45em; border-radius:4px; }
+.td-class-act { color:#34d399; background:rgba(52,211,153,.14); border:1px solid rgba(52,211,153,.35); }
+.td-class-res { color:#c4b5fd; background:rgba(196,181,253,.12); border:1px solid rgba(196,181,253,.3); }
+.td-age { font-size:.62rem; color:var(--text-dim,#94a3b8); background:rgba(148,163,184,.1); padding:.08em .4em; border-radius:999px; }
 
 /* Data-trust provenance panel on the Today command center */
 .dt-trust { margin:.6rem 0; border:1px solid rgba(255,255,255,.08); border-radius:10px; background:rgba(255,255,255,.02); }
