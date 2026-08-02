@@ -185,6 +185,28 @@ test('delisted ingestion carries an authoritative confirmation; renames link old
   assert.equal(entries[0].effectiveTo, '2024-01-15', 'old alias closed at the rename date (half-open)');
 });
 
+test('a plan-gated 402 page truncates the feed WITH a recorded limitation instead of wedging the run', async () => {
+  const deps = memDeps([
+    { match: '/stock-list', reply: page(STOCK) },
+    { match: 'page=0', reply: page(Array.from({ length: 100 }, (_, i) => ({ symbol: `D${i}`, delistedDate: '2020-01-01', ipoDate: '2010-01-01' }))) },
+    { match: 'page=1', reply: { ok: false, status: 402, body: { _raw: "The values for 'page' can only be 0 based on your current subscription." } } },
+    { match: '/symbol-change', reply: page([]) },
+  ]);
+  const outs = await runToCompletion(deps);
+  const done = outs.find((o) => o.did && o.did.runComplete);
+  assert.ok(done, 'run STILL completes — a plan gate must not block prospective accumulation');
+  const manifest = [...deps.blobs.entries()].find(([p]) => p.startsWith('pitdata/v3/runs/'))[1];
+  assert.equal(manifest.completenessStatus, 'complete-with-limitations', 'no reader can mistake this for full coverage');
+  assert.equal(manifest.limitations.length, 1);
+  assert.match(manifest.limitations[0].bodyNote, /page' can only be 0/);
+  assert.ok(manifest.requestedPages.includes('delisted:1'));
+  assert.equal(manifest.completedPages.includes('delisted:1'), false, 'gated page never counted as collected');
+  // The reconciliation gate sees the truncation and honestly fails all-pages.
+  const REC = require('../lib/pitdata/v3/reconcile');
+  const report = REC.reconcileV3({ latestRun: manifest, now: Date.UTC(2026, 7, 3) });
+  assert.equal(report.gates.allPagesCollected, false);
+});
+
 test('missing API key fails closed — never an empty result', async () => {
   const deps = memDeps(basicResponses());
   deps.apiKey = null;
