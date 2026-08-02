@@ -31,6 +31,7 @@ test('15-panel-features-v3 without secmaster-v3: explicit blocked status, migrat
 
 test('16-secmaster-v3 without inputs: fails closed with its own blocked artifact', (t) => {
   if (process.env.FMP_API_KEY) return t.skip('FMP key in env — blocked path not exercisable');
+  if (fs.existsSync(MASTER)) return t.skip('secmaster-v3 already built locally — blocked path must not disturb it');
   const out = execFileSync('node', [path.join(RESEARCH, '16-secmaster-v3.js')], { encoding: 'utf8', env: { ...process.env, FMP_API_KEY: '' } });
   assert.match(out, /BLOCKED/);
   const blocked = JSON.parse(fs.readFileSync(path.join(DATA, 'secmaster-v3.BLOCKED.json'), 'utf8'));
