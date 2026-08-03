@@ -63,8 +63,17 @@ function main() {
     if (monthlySnapshots.length < 24) monthlySnapshots.push(doc);   // bounded sample for the consistency scan
   }
 
+  // EDGAR adjudication of the reconciliation tail (research/61): tail symbols
+  // where the authoritative Form 25 sides WITH AV stop counting against it.
+  let adjudication = null;
+  try {
+    const a = JSON.parse(fs.readFileSync(path.join(DATA, 'av-delist-adjudication.json'), 'utf8'));
+    if (a && a.schema === 'AvDelistAdjudication' && a.controlMethodSane) adjudication = a;
+    else if (a && !a.controlMethodSane) console.log('adjudication artifact present but its CONTROL group failed sanity — ignored (fail closed)');
+  } catch { /* not adjudicated yet */ }
+
   const gates = [
-    AV.gateDelistingReconciliation(latestDelisted && latestDelisted.records, knownDelistingsFromMaster()),
+    AV.gateDelistingReconciliation(latestDelisted && latestDelisted.records, knownDelistingsFromMaster(), { adjudication }),
     AV.gateMembershipSanity(countsByYm),
     AV.gateInternalConsistency(monthlySnapshots, latestDelisted && latestDelisted.records),
     AV.gateRenameSpotChecks(latestActive && latestActive.records, latestDelisted && latestDelisted.records, RENAME_CHECKS),
