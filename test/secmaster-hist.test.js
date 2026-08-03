@@ -77,3 +77,18 @@ test('assembly: delisting date = LAST Form-25 effective date; reasons pending; m
   const hist2 = SH.assembleHistMaster({ form25Events: events.slice(0, 2), tickerMap: { byCik }, monthlyMembership: {} });
   assert.notEqual(hist.contentHash, hist2.contentHash);
 });
+
+test('mergeReasons: fills only classified categories, immutably; unclassified stay null', () => {
+  const records = {
+    100: { cik: '100', delisting: { date: '2015-06-11', reasonCategory: null } },
+    200: { cik: '200', delisting: { date: '2012-01-15', reasonCategory: null } },
+  };
+  const { records: out, stats } = SH.mergeReasons(records, {
+    100: { reasonCategory: 'bankruptcy', reason: '8-K item 1.03', evidence: { type: 'form25' } },
+    200: { reasonCategory: null, note: 'no-8k-classification' },
+  });
+  assert.equal(out['100'].delisting.reasonCategory, 'bankruptcy');
+  assert.equal(out['200'].delisting.reasonCategory, null, 'unclassified stays honestly null');
+  assert.equal(records['100'].delisting.reasonCategory, null, 'input not mutated');
+  assert.deepEqual(stats, { filled: 1, byCategory: { bankruptcy: 1 }, total: 2 });
+});
