@@ -1,18 +1,12 @@
 const { sanitizeTickers } = require('../lib/auth');
 const { fetchWithTimeout } = require('../lib/http');
+const MS = require('../lib/market-session');
 
-// Determine which session the latest print belongs to (no marketState in meta).
-function deriveSession(meta, lastTs) {
-  const tp = meta.currentTradingPeriod;
-  if (tp && lastTs) {
-    if (tp.post && lastTs >= tp.post.start) return 'POST';
-    if (tp.regular && lastTs >= tp.regular.start && lastTs < tp.regular.end) return 'REGULAR';
-    if (tp.pre && lastTs >= tp.pre.start && lastTs < tp.pre.end) return 'PRE';
-    if (tp.regular && lastTs >= tp.regular.end) return 'POST';
-    return 'CLOSED';
-  }
-  if (meta.regularMarketTime && lastTs) return lastTs > meta.regularMarketTime + 120 ? 'POST' : 'REGULAR';
-  return 'CLOSED';
+// Session comes from the CLOCK (shared calendar service) — was previously a
+// duplicated copy of lib/signal.js deriveSession that let the last candle's
+// timestamp self-certify the session, and could disagree with /api/chart.
+function deriveSession() {
+  return MS.legacyMarketState(MS.sessionInfoAt(new Date()).marketSession);
 }
 
 // Live quote with extended-hours (pre/post market) pricing via Yahoo Finance,
@@ -39,7 +33,7 @@ async function fetchYahoo(ticker) {
       // chartPreviousClose is window-relative. Equal on range=1d, but prefer
       // previousClose so this stays correct if the range ever widens.
       const prevClose    = meta.previousClose ?? meta.chartPreviousClose ?? regularPrice;
-      const marketState  = deriveSession(meta, ts[ts.length - 1]);
+      const marketState  = deriveSession();
       const isExtended   = (marketState === 'PRE' || marketState === 'POST') &&
                            Math.abs(livePrice - regularPrice) > 0.001;
 

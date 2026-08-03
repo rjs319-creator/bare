@@ -24,6 +24,8 @@ const HZ_SIGN = {
   BUY:         { cls: 'buy',  icon: '🟢', word: 'BUY' },
   HOLD:        { cls: 'wait', icon: '⏸️', word: 'WAIT' },
   WAIT:        { cls: 'wait', icon: '⏸️', word: 'WAIT' },
+  WATCH:       { cls: 'wait', icon: '👀', word: 'WATCH — NOT TRIGGERED' },
+  READY:       { cls: 'ready', icon: '🟡', word: 'READY — NOT TRIGGERED' },
   NEUTRAL:     { cls: 'wait', icon: '⏸️', word: 'NEUTRAL' },
   SELL:        { cls: 'sell', icon: '🔴', word: 'SELL' },
   STRONG_SELL: { cls: 'sell', icon: '⛔', word: 'STRONG SELL' },
@@ -45,7 +47,18 @@ const OVERALL_LABEL = {
   'leaning-bearish': ['🔴', 'Leaning bearish'], 'neutral': ['⏸️', 'Neutral'], 'unavailable': ['—', 'Limited data'],
 };
 
-const OF_KIND = { sweep: '⚡ Sweep', block: '🧱 Block', large: '💰 Large' };
+// Honest activity labels — delayed chains cannot attest sweeps/blocks, only
+// turnover/notional (mirrors the Options tab's vocabulary, not tape jargon).
+const OF_KIND = { sweep: '⚡ High-turnover', block: '🧱 Large notional', large: '💰 Premium activity' };
+
+// Interpreted per-contract direction states (options-classify) → presentation.
+// Only ask-side buying on a reliable quote earns a lean; raw call/put side does not.
+const OF_DIR = {
+  PROVISIONAL_BULLISH: { cls: 'bull', icon: '▲', word: 'bullish positioning (provisional)' },
+  PROVISIONAL_BEARISH: { cls: 'bear', icon: '▼', word: 'bearish positioning (provisional)' },
+  MIXED:               { cls: 'neutral', icon: '⚖', word: 'mixed positioning' },
+  DIRECTION_UNKNOWN:   { cls: 'neutral', icon: '◆', word: 'large activity — direction unknown' },
+};
 
 // Compact USD for option premiums (matches the Options tab's ofUsd style).
 function fmtPrem(n) {
@@ -60,7 +73,7 @@ let overlay = null, body = null, refreshTimer = null, curTicker = null;
 // 60s chart refresh does NOT re-fetch these). undefined = loading, null = fetch
 // failed, array = loaded (possibly empty). Kept in state so it survives the
 // chart refresh's body re-render via paintExtras().
-let extras = { ticker: null, options: undefined, social: undefined };
+let extras = { ticker: null, options: undefined, social: undefined, fetchedAt: null };
 
 // WHY NOW composition (op=whynow) — the app's own signals reasoned into a FOR/AGAINST
 // case + honest track record. Fetched once per open, survives the chart refresh via
@@ -70,6 +83,46 @@ let whynow = { ticker: null, data: undefined };
 // Technical Structure & Pattern Intelligence (op=patternsearch) — SHADOW/descriptive.
 // undefined = loading, null = failed, object = loaded report.
 let patterns = { ticker: null, data: undefined };
+
+// ── User intent (Phase-3 redesign): selected horizon + position state ───────
+// The modal shows ONE authoritative recommendation for this intent; everything
+// else renders below as supporting evidence. Persisted across opens.
+const INTENT_KEY = 'tklIntent';
+let intent = { horizon: 'swing', position: 'new' };
+try {
+  const saved = JSON.parse(localStorage.getItem(INTENT_KEY) || 'null');
+  if (saved && ['intraday', 'swing', 'longterm'].includes(saved.horizon)) intent.horizon = saved.horizon;
+  if (saved && ['new', 'holding', 'short'].includes(saved.position)) intent.position = saved.position;
+} catch { /* default intent */ }
+function saveIntent() { try { localStorage.setItem(INTENT_KEY, JSON.stringify(intent)); } catch { /* non-fatal */ } }
+
+let lastData = null;   // latest /api/chart payload — re-render primary on intent change
+
+// Primary action-state presentation (the WATCH/READY/TRIGGERED vocabulary).
+const PR_SIGN = {
+  TRIGGERED:   { cls: 'buy',  icon: '✅', word: 'TRIGGERED' },
+  READY:       { cls: 'ready', icon: '🟡', word: 'READY — NOT TRIGGERED' },
+  WATCH:       { cls: 'wait', icon: '👀', word: 'WATCH — NOT TRIGGERED' },
+  NO_TRADE:    { cls: 'na',   icon: '⏸️', word: 'NO TRADE' },
+  AVOID:       { cls: 'sell', icon: '🚫', word: 'AVOID' },
+  MANAGE:      { cls: 'buy',  icon: '🧭', word: 'MANAGE' },
+  REDUCE:      { cls: 'sell', icon: '🔻', word: 'REDUCE' },
+  EXIT:        { cls: 'sell', icon: '⛔', word: 'EXIT' },
+  STALE:       { cls: 'na',   icon: '⚠', word: 'STALE DATA' },
+  UNAVAILABLE: { cls: 'na',   icon: '—', word: 'UNAVAILABLE' },
+};
+const PR_HZ_LABEL = { intraday: 'DAY TRADE', swing: 'SWING', longterm: 'LONG-TERM' };
+
+// Compact "as of" formatter — ET-naive local render of an ISO timestamp.
+function fmtAsOf(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return String(iso).slice(0, 10);
+  const today = new Date();
+  const sameDay = d.toDateString() === today.toDateString();
+  const hm = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return sameDay ? hm : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${hm}`;
+}
 
 // Verdict level → presentation. Mirrors the signal-banner colour language.
 const WN_VERDICT = {
@@ -96,7 +149,7 @@ function build() {
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !overlay.hidden) close(); });
 }
 
-function priceLine(price) {
+function priceLine(price, data) {
   const chg = price.regChangePct;
   const up = chg == null ? true : chg >= 0;
   const chgTxt = chg == null ? '' :
@@ -104,7 +157,29 @@ function priceLine(price) {
   const ah = price.afterHours
     ? `<span class="tkl-ah">${price.afterHours.session === 'pre' ? 'Pre' : 'After'}-hrs <b style="color:${price.afterHours.change >= 0 ? 'var(--green)' : 'var(--red)'}">$${price.afterHours.price} (${price.afterHours.change >= 0 ? '+' : ''}${price.afterHours.changePct}%)</b></span>`
     : '';
-  return `<div class="tkl-price"><span class="tkl-px">$${price.live}</span>${chgTxt}</div>${ah ? `<div class="tkl-ah-row">${ah}</div>` : ''}`;
+  // Closed market: the headline number is the last close, not a live print —
+  // say so instead of silently presenting an extended-hours price as live.
+  const sm = data && data.sessionMeta;
+  const closed = sm && sm.marketSession === 'closed';
+  const pxLabel = closed ? `<span class="tkl-px-note">last close${sm.lastRegularSession ? ` (${esc(sm.lastRegularSession)})` : ''}</span>` : '';
+  const px = closed && price.regular != null ? price.regular : price.live;
+  return `<div class="tkl-price"><span class="tkl-px">$${px}</span>${chgTxt}${pxLabel}</div>${ah ? `<div class="tkl-ah-row">${ah}</div>` : ''}`;
+}
+
+// Session/freshness badge in the modal header — the authoritative sessionMeta.
+function sessionBadge(data) {
+  const sm = data && data.sessionMeta;
+  if (!sm) return '';
+  const lbl = sm.marketSession === 'regular' ? '🟢 Market open'
+    : sm.marketSession === 'premarket' ? '🌅 Pre-market'
+    : sm.marketSession === 'afterhours' ? '🌙 After-hours'
+    : sm.isHoliday ? '● Closed (holiday)' : '● Market closed';
+  const bits = [
+    sm.dataAsOf ? `data as of ${fmtAsOf(sm.dataAsOf)}` : null,
+    sm.delayed ? 'delayed feed' : null,
+    sm.isEarlyClose ? 'early close today' : null,
+  ].filter(Boolean).join(' · ');
+  return `<span class="tkl-session f-${esc(sm.freshnessState || '')}" title="${esc(sm.freshnessReason || '')}">${lbl}${bits ? ` · ${esc(bits)}` : ''}</span>`;
 }
 
 // A small "evidence strength" meter — NEVER a percentage/probability (there is no
@@ -170,7 +245,11 @@ function buildHorizonCards(data) {
   }
   // Swing
   if (swing) {
-    const sign = HZ_SIGN[swing.action] || HZ_SIGN.WAIT;
+    // The green "BUY" chip must not appear while the trigger has not been hit —
+    // prefer the orchestrator's WATCH/READY/TRIGGERED state when available.
+    const rec = data.primary && data.primary.byPosition && data.primary.byPosition.new
+      ? data.primary.byPosition.new.swing : null;
+    const sign = (rec && HZ_SIGN[rec.action]) || HZ_SIGN[swing.action] || HZ_SIGN.WAIT;
     const p = swing.plan;
     cards.push({
       title: 'Swing', period: swing.horizon || '2–12 weeks', icon: '📐',
@@ -197,7 +276,14 @@ function buildHorizonCards(data) {
       fresh: lt.freshness || 'daily-close',
       available: lt.available !== false,
       reasons: lt.reasons, counter: null,
-      confirm: null, invalidate: lt.factors && lt.factors.sma200 != null ? `Below 200-day $${lt.factors.sma200}` : null,
+      confirm: null,
+      // Side-correct invalidation: a bullish thesis dies on LOSING the 200-day;
+      // a bearish thesis dies on RECLAIMING it (it is already below it).
+      invalidate: lt.factors && lt.factors.sma200 != null
+        ? (lt.trend === 'bearish' ? `Reclaims 200-day $${lt.factors.sma200}`
+          : lt.trend === 'bullish' ? `Loses 200-day $${lt.factors.sma200}`
+          : `Resolves at the 200-day $${lt.factors.sma200}`)
+        : null,
       objective: null, calibrated: lt.calibrated === true, version: lt.version || 'lt-v1',
       factors: ltFactorsHtml(lt),
     });
@@ -246,8 +332,9 @@ function horizonSection(data) {
       <div class="hz-note">${esc(sum.note || '')}</div>
     </div>`;
   }
-  return `<div class="tkl-horizons-wrap">${synth}<div class="tkl-horizons">${grid}</div>
-    <div class="hz-disclaimer">Three independent reads for three holding periods. A swing/long-term <b>SELL</b> or <b>BEARISH</b> means the multi-week/multi-month setup is damaged or an avoid — it does <b>not</b> tell a long-only trader to short. Educational, not financial advice.</div></div>`;
+  return `<details class="tkl-horizons-wrap"><summary class="tkl-horizons-sum">Supporting horizon reads (evidence behind the recommendation)</summary>
+    ${synth}<div class="tkl-horizons">${grid}</div>
+    <div class="hz-disclaimer">Three separate reads for three holding periods — they share price data, so they are not statistically independent. A swing/long-term <b>SELL</b> or <b>BEARISH</b> means the multi-week/multi-month setup is damaged or an avoid — it does <b>not</b> tell a long-only trader to short. Educational, not financial advice.</div></details>`;
 }
 
 function mentionsBlock(ticker) {
@@ -263,35 +350,54 @@ function mentionsBlock(ticker) {
     <div class="tkl-chips">${chips}</div></div>`;
 }
 
-// ── Unusual options flow (bullish/bearish) — same feed as the Options tab ──
+// ── Unusual options flow — uses the engine's INTERPRETED direction states,
+// never the raw call=bullish/put=bearish simplification. A suspected multi-leg
+// spread or an unreliable aggressor read is "direction unknown", honestly.
 function optionsSection(signals) {
-  const title = '⚡ Unusual options flow';
+  const title = '⚡ Unusual options activity';
   if (signals === undefined) return sectionLoading(title);
   if (signals === null) return sectionNote(title, 'Options-flow data is unavailable right now.');
-  if (!signals.length) return sectionNote(title, 'No unusual options flow flagged for this name in the latest scan.');
+  if (!signals.length) return sectionNote(title, 'No unusual options activity flagged for this name in the latest scan.');
 
-  const bull = signals.filter(s => s.sentiment === 'bullish').length;
-  const bear = signals.filter(s => s.sentiment === 'bearish').length;
+  // Aggregate the interpreted per-contract direction states.
+  const counts = { PROVISIONAL_BULLISH: 0, PROVISIONAL_BEARISH: 0, MIXED: 0, DIRECTION_UNKNOWN: 0 };
+  let multiLeg = 0, earnings = null, oiConfirmed = 0;
+  for (const s of signals) {
+    const st = s.directionState && counts[s.directionState] !== undefined ? s.directionState : 'DIRECTION_UNKNOWN';
+    counts[st] += 1;
+    if (s.suspectedMultiLeg) multiLeg += 1;
+    if (s.earningsBeforeExpiry && s.earningsInDays != null) earnings = s.earningsInDays;
+    if (s.oiConfirm && s.oiConfirm.confirmsPositioning) oiConfirmed += 1;
+  }
   const lean = `<div class="tkl-lean">
-    <span class="tkl-pill bull">▲ Bullish ${bull}</span>
-    <span class="tkl-pill bear">▼ Bearish ${bear}</span></div>`;
+    ${counts.PROVISIONAL_BULLISH ? `<span class="tkl-pill bull">▲ Bullish (prov.) ${counts.PROVISIONAL_BULLISH}</span>` : ''}
+    ${counts.PROVISIONAL_BEARISH ? `<span class="tkl-pill bear">▼ Bearish (prov.) ${counts.PROVISIONAL_BEARISH}</span>` : ''}
+    ${counts.MIXED ? `<span class="tkl-pill neutral">⚖ Mixed ${counts.MIXED}</span>` : ''}
+    ${counts.DIRECTION_UNKNOWN ? `<span class="tkl-pill neutral">◆ Direction unknown ${counts.DIRECTION_UNKNOWN}</span>` : ''}
+  </div>`;
+  const flags = [
+    multiLeg ? `⚠ ${multiLeg} suspected spread leg${multiLeg > 1 ? 's' : ''} — no direction inferred from those` : null,
+    earnings != null ? `📅 earnings in ~${earnings}d before expiry — likely event positioning` : null,
+    oiConfirmed ? `✓ ${oiConfirmed} contract${oiConfirmed > 1 ? 's' : ''} confirmed by next-day open interest` : null,
+  ].filter(Boolean).map(f => `<div class="tkl-fine">${esc(f)}</div>`).join('');
 
   const rows = [...signals]
     .sort((a, b) => (b.premium || 0) - (a.premium || 0))
     .slice(0, 3)
     .map(s => {
-      const bullS = s.sentiment === 'bullish';
+      const d = OF_DIR[s.directionState] || OF_DIR.DIRECTION_UNKNOWN;
       const bits = [
         `${(s.type || '').toUpperCase()}${s.strike != null ? ' $' + s.strike : ''}`,
         s.expiry || null,
         fmtPrem(s.premium) || null,
         OF_KIND[s.kind] || (s.kind ? esc(s.kind) : null),
+        s.suspectedMultiLeg ? 'suspected spread' : null,
       ].filter(Boolean).map(esc).join(' · ');
-      return `<div class="tkl-flow-row"><span class="tkl-dir ${bullS ? 'bull' : 'bear'}">${bullS ? '▲' : '▼'}</span><span>${bits}</span></div>`;
+      return `<div class="tkl-flow-row"><span class="tkl-dir ${d.cls}">${d.icon}</span><span>${bits} — <i>${esc(d.word)}</i></span></div>`;
     }).join('');
 
-  return `<div class="tkl-sec"><div class="tkl-mtitle">${title}</div>${lean}${rows}
-    <div class="tkl-fine">Directional lean inferred from call/put side on delayed chains — not live tape.</div></div>`;
+  return `<div class="tkl-sec"><div class="tkl-mtitle">${title}</div>${lean}${flags}${rows}
+    <div class="tkl-fine">Direction requires ask-side prints on reliable quotes — raw call/put volume is NOT read as a direction. Delayed chains; context only, never a primary trade signal by itself.</div></div>`;
 }
 
 // ── Social screener mentions — the Trade Alerts feed (tracked trader accounts) ──
@@ -373,7 +479,7 @@ async function loadPatterns(tk) {
   try {
     const j = await fetchJSON('/api/tracker?op=patternsearch&ticker=' + encodeURIComponent(tk));
     if (curTicker !== tk) return;
-    patterns = { ticker: tk, data: (j && j.report) ? j.report : null };
+    patterns = { ticker: tk, data: (j && j.report) ? j.report : null, fetchedAt: new Date().toISOString() };
   } catch { if (curTicker === tk) patterns = { ticker: tk, data: null }; }
   paintPatterns();
 }
@@ -391,8 +497,15 @@ function paintPatterns() {
   const order = [['intraday', 'Intraday'], ['swing', 'Swing'], ['longterm', 'Long-term']];
   const cards = order.map(([k, lbl]) => patHorizonCard(lbl, r.horizons[k])).join('');
   const align = (typeof r.timeframeAlignment === 'number') ? `<div class="tkl-fine">Timeframe alignment: ${Math.round(r.timeframeAlignment * 100)}% agree on ${esc(r.primary ? r.primary.direction : '—')}.</div>` : '';
-  el.innerHTML = `<div class="tkl-sec tkl-patterns"><div class="tkl-mtitle">${title}</div>${cards || '<div class="tkl-mnone">No pattern on any horizon.</div>'}${align}
-    <div class="tkl-fine">Similarity = chart-shape agreement, <b>not</b> a win probability. A setup is only actionable when it is live, confirmed and fresh.</div></div>`;
+  const failedNotes = Array.isArray(r.failedNotes) && r.failedNotes.length
+    ? r.failedNotes.map(n => `<div class="tkl-fine" style="color:var(--amber)">✖ ${esc(n)}</div>`).join('') : '';
+  // Conflicts were computed server-side but never shown here — a 55% alignment
+  // with an explicit "stand aside" explanation must not read as mild consensus.
+  const conflictNotes = Array.isArray(r.conflicts) && r.conflicts.length
+    ? r.conflicts.slice(0, 2).map(c => `<div class="tkl-fine" style="color:var(--amber)">⚠ ${esc(c.explanation || '')}</div>`).join('') : '';
+  el.innerHTML = `<div class="tkl-sec tkl-patterns"><div class="tkl-mtitle">${title}</div>${cards || '<div class="tkl-mnone">No pattern on any horizon.</div>'}${align}${conflictNotes}${failedNotes}
+    <div class="tkl-fine">Similarity = chart-shape agreement, <b>not</b> a win probability. A setup is only actionable when it is live, confirmed and fresh.</div>
+    ${sectionStamp(patterns.fetchedAt || (r && r.generatedAt))}</div>`;
 }
 
 function patHorizonCard(label, d) {
@@ -402,9 +515,12 @@ function patHorizonCard(label, d) {
   const pred = d.prediction || {};
   const action = plan.action || 'WATCH';
   const dir = d.direction === 'SHORT' ? 'short' : 'long';
+  // A percentage is only shown in the HEADLINE row when it is genuinely
+  // calibrated. Uncalibrated model estimates stay in the labeled expert
+  // detail — a big "Target-first 63%" reads as a probability even with a tag.
   const calib = pred.available && pred.calibrated
     ? `Target-first ${pctOr(pred.targetBeforeStop)} <span class="hzp-ok">calibrated, n=${pred.effectiveSampleSize}</span>`
-    : (pred.available ? `Target-first ${pctOr(pred.targetBeforeStop)} <span class="hzp-warn">model-estimate, not calibrated</span>` : '<span class="hzp-warn">no calibrated estimate</span>');
+    : '<span class="hzp-warn">probability unavailable (no calibrated model — estimates in expert detail)</span>';
   const lift = (typeof pred.incrementalLift === 'number') ? ` · lift vs baseline ${(pred.incrementalLift * 100).toFixed(0)}%` : ' · lift unproven';
   const tier = sim.matchTier || 'NONE';
   return `<div class="hzp">
@@ -482,6 +598,16 @@ function wnSignalRow(s) {
 function whyNowBlock(data) {
   if (data === undefined) return `<div class="wn-card wn-loading"><span class="wn-badge">WHY NOW?</span><span class="wn-loadtxt">Composing the case…</span></div>`;
   if (data === null || !data.ok) return '';   // silent when unavailable — the rest of the modal still stands
+
+  // RECONCILIATION: "why now" describes SCREENER ACTIVITY. It must never read
+  // "nothing actionable" directly beside a primary WATCH/READY/TRIGGERED —
+  // absence from the screener panels is not a verdict on the primary setup.
+  const prim = currentPrimary();
+  if (prim && ['TRIGGERED', 'READY', 'WATCH'].includes(prim.action) && data.verdict && data.verdict.level === 'quiet') {
+    data = { ...data, verdict: { ...data.verdict,
+      headline: 'Not on any screener panel today',
+      summary: `None of the app's screeners flag this name right now — that is separate from the ${PR_HZ_LABEL[intent.horizon] || ''} recommendation above, which comes from the direct price/structure read.`.trim() } };
+  }
   const v = WN_VERDICT[data.verdict.level] || WN_VERDICT.quiet;
   const regime = data.regime ? `<span class="wn-regime">${esc(WN_REGIME[data.regime] || data.regime)}</span>` : '';
   const forRows = data.forCase.map(wnSignalRow).join('');
@@ -606,13 +732,99 @@ function evidencePanel(ev, date) {
   </div>`;
 }
 
+// ── PRIMARY RECOMMENDATION — one authoritative decision for the selected intent ──
+function intentSelector() {
+  const hz = [['intraday', 'Day trade'], ['swing', 'Swing trade'], ['longterm', 'Long-term']]
+    .map(([k, lbl]) => `<button class="pr-hz${intent.horizon === k ? ' on' : ''}" data-hz="${k}">${lbl}</button>`).join('');
+  const pos = [['new', 'New position'], ['holding', 'I own it'], ['short', 'Considering short']]
+    .map(([k, lbl]) => `<option value="${k}"${intent.position === k ? ' selected' : ''}>${lbl}</option>`).join('');
+  return `<div class="pr-intent"><div class="pr-hzs">${hz}</div>
+    <select class="pr-pos" aria-label="Position state">${pos}</select></div>`;
+}
+
+function planLines(rec) {
+  const p = rec.plan;
+  if (!p) return '';
+  const rows = [
+    p.trigger != null ? ['Trigger', `$${p.trigger}${p.setupType ? ` (${p.setupType})` : ''}`] : null,
+    p.entryZone ? ['Entry zone', p.entryZone] : null,
+    p.invalidation != null ? ['Invalidation', `$${p.invalidation}`] : null,
+    (p.targets && p.targets.length) ? ['Objective', p.targets.map(t => `$${t}`).join(' → ')] : null,
+    p.timeStop ? ['Time stop', p.timeStop] : null,
+  ].filter(Boolean).map(([k, v]) => `<div class="pr-line"><span class="pr-k">${k}</span><span>${esc(String(v))}</span></div>`).join('');
+  return rows ? `<div class="pr-plan">${rows}</div>` : '';
+}
+
+function primaryCard(data) {
+  const P = data && data.primary;
+  const rec = P && P.byPosition && P.byPosition[intent.position] && P.byPosition[intent.position][intent.horizon];
+  if (!rec) return '';
+  const sign = PR_SIGN[rec.action] || PR_SIGN.UNAVAILABLE;
+  const dir = rec.direction && rec.direction !== 'unknown' && rec.direction !== 'neutral'
+    ? `<span class="pr-dir ${rec.direction === 'bullish' ? 'bull' : 'bear'}">${rec.direction === 'bullish' ? '▲ bullish' : '▼ bearish'}</span>` : '';
+  const fr = rec.freshness || {};
+  const freshLine = [
+    fr.marketSession ? `session: ${fr.marketSession}` : null,
+    fr.dataAsOf ? `data as of ${fmtAsOf(fr.dataAsOf)}` : null,
+    fr.provisional ? 'provisional (extended hours)' : null,
+    fr.executionAllowed === false && (rec.action === 'READY' || rec.action === 'TRIGGERED') ? 'execution gated' : null,
+  ].filter(Boolean).join(' · ');
+  const supporting = (rec.supporting || []).map(s => `<li class="pr-for">▲ ${esc(s)}</li>`).join('');
+  const contradicting = (rec.contradicting || []).map(s => `<li class="pr-against">▼ ${esc(s)}</li>`).join('');
+  const warnings = (rec.warnings || []).map(w => `<li>⚠ ${esc(w)}</li>`).join('');
+  const events = (rec.eventRisks || []).map(e => `<li>📅 ${esc(e)}</li>`).join('');
+  const fams = (rec.families || []).map(f =>
+    `<div class="pr-fam"><span class="pr-fam-n">${esc(f.family)}</span><span class="pr-fam-s ${f.score > 0.05 ? 'bull' : f.score < -0.05 ? 'bear' : ''}">${f.score > 0 ? '+' : ''}${Math.round((f.score || 0) * 100) / 100}</span><span class="pr-fam-d">${esc(f.detail || '')}</span></div>`).join('');
+  return `<div class="pr-card ${sign.cls}">
+    ${intentSelector()}
+    <div class="pr-verdict"><span class="pr-hz-tag">${PR_HZ_LABEL[intent.horizon]}</span>
+      <span class="pr-action ${sign.cls}">${sign.icon} ${sign.word}</span>${dir}</div>
+    <div class="pr-headline">${esc(rec.headline || '')}</div>
+    <div class="pr-explain">${esc(rec.explanation || '')}</div>
+    ${rec.nextStep ? `<div class="pr-next"><span class="pr-k">What must happen next</span><span>${esc(rec.nextStep)}</span></div>` : ''}
+    ${planLines(rec)}
+    <div class="pr-meta">
+      ${evidenceMeter(rec.evidenceStrength)}
+      <span class="pr-holding">⏳ ${esc(rec.expectedHoldingPeriod || '')}</span>
+      ${freshLine ? `<span class="pr-fresh">${esc(freshLine)}</span>` : ''}
+    </div>
+    ${(supporting || contradicting) ? `<ul class="pr-evlist">${supporting}${contradicting}</ul>` : ''}
+    ${(warnings || events) ? `<ul class="pr-warn">${events}${warnings}</ul>` : ''}
+    <div class="pr-prob">${esc(rec.probabilityNote || 'Evidence score, not a calibrated probability.')}</div>
+    <details class="pr-expert"><summary>Expert detail</summary>
+      <div class="pr-exp-body">
+        ${fams ? `<div class="pr-fams"><div class="pr-exp-h">Evidence families (correlated signals counted once)</div>${fams}</div>` : ''}
+        <div class="pr-exp-meta">model ${esc(rec.version || '')} · maturity ${esc(rec.modelMaturity || 'heuristic')} · calibrated: no${fr.ageSeconds != null ? ` · data age ${Math.round(fr.ageSeconds / 60)}m` : ''}${P.dailyBarComplete === false ? ' · today\'s daily candle still forming' : ''}</div>
+      </div>
+    </details>
+  </div>`;
+}
+
+function paintPrimary() {
+  const el = body && body.querySelector('#tkl-primary');
+  if (!el || !lastData) return;
+  el.innerHTML = primaryCard(lastData);
+  el.querySelectorAll('.pr-hz').forEach(b => b.addEventListener('click', () => {
+    intent.horizon = b.dataset.hz; saveIntent(); paintPrimary(); paintWhyNow();
+  }));
+  const pos = el.querySelector('.pr-pos');
+  if (pos) pos.addEventListener('change', () => { intent.position = pos.value; saveIntent(); paintPrimary(); });
+}
+
+// The primary rec for the CURRENT intent — used to reconcile other sections.
+function currentPrimary() {
+  const P = lastData && lastData.primary;
+  return (P && P.byPosition && P.byPosition[intent.position] && P.byPosition[intent.position][intent.horizon]) || null;
+}
+
 // Paint the options + social sections from current `extras` state (called on
 // first render and again whenever fetchExtras resolves).
 function paintExtras() {
   const flowEl = body.querySelector('#tkl-flow');
   const socEl = body.querySelector('#tkl-social');
-  if (flowEl) flowEl.innerHTML = optionsSection(extras.options);
-  if (socEl) socEl.innerHTML = socialSection(extras.social);
+  const stamp = sectionStamp(extras.fetchedAt);
+  if (flowEl) flowEl.innerHTML = optionsSection(extras.options) + (extras.options ? stamp : '');
+  if (socEl) socEl.innerHTML = socialSection(extras.social) + (extras.social && extras.social.length ? stamp : '');
 }
 
 // Fetch unusual options flow + social mentions once per open, filter to the
@@ -633,14 +845,24 @@ async function loadExtras(ticker) {
       : (soc.value.legacy && Array.isArray(soc.value.legacy.ranked)) ? soc.value.legacy.ranked : null)
     : null;
   extras.social = socList ? socList.filter(x => (x.ticker || '').toUpperCase() === T) : null;
+  extras.fetchedAt = new Date().toISOString();
   paintExtras();
+}
+
+// One shared "as of" stamp per side-section: options/social/whynow/patterns are
+// fetched ONCE per open while the chart refreshes every 60s — each section must
+// carry its own timestamp so mixed ages are disclosed, not hidden.
+function sectionStamp(iso, label = 'checked') {
+  return iso ? `<div class="tkl-fine tkl-asof">🕒 ${label} ${esc(fmtAsOf(iso))} — not auto-refreshed while open</div>` : '';
 }
 
 function renderBody(data) {
   const { ticker, price } = data;
+  lastData = data;
   body.innerHTML = `
-    <div class="tkl-head"><span class="tkl-tk">📈 ${esc(ticker)}</span></div>
-    ${priceLine(price)}
+    <div class="tkl-head"><span class="tkl-tk">📈 ${esc(ticker)}</span>${sessionBadge(data)}</div>
+    ${priceLine(price, data)}
+    <div id="tkl-primary"></div>
     <div id="tkl-whynow"></div>
     <div id="tkl-evidence"></div>
     ${horizonSection(data)}
@@ -651,11 +873,14 @@ function renderBody(data) {
     <div id="tkl-social"></div>
     ${mentionsBlock(ticker)}`;
 
-  // Delegate the grade banner + levels + live chart to the app's shared renderer.
+  // Delegate the live chart to the app's shared renderer. The modal's primary
+  // card is the ONE verdict surface — the renderer's duplicate signal banners
+  // are suppressed here (chartOnly) so two verdicts can't disagree on screen.
   const chartPanel = body.querySelector('#tkl-chart');
-  try { cfg.renderChart(chartPanel, data); }
+  try { cfg.renderChart(chartPanel, data, { chartOnly: true }); }
   catch { chartPanel.innerHTML = `<div class="chart-err">Chart unavailable.</div>`; }
 
+  paintPrimary(); // ONE authoritative recommendation for the selected intent
   paintWhyNow();  // fill the WHY NOW block + breakdown from state
   paintPatterns(); // 📐 Technical Structure & Pattern Intelligence (from state; survives refresh)
   paintExtras();  // fill options/social from state (loading first time, data on refresh)
@@ -677,6 +902,12 @@ async function load(ticker, silent) {
     if (!silent && curTicker === ticker) {
       body.innerHTML = `<div class="tkl-head"><span class="tkl-tk">📈 ${esc(ticker)}</span></div>
         <div class="chart-err">Couldn't load data for ${esc(ticker)}. Check the symbol and try again.</div>`;
+    } else if (silent && curTicker === ticker && body && !body.querySelector('#tkl-stale-note')) {
+      // A failed background refresh must not silently keep painting old data
+      // as current — surface it instead of pretending nothing happened.
+      const head = body.querySelector('.tkl-head');
+      if (head) head.insertAdjacentHTML('afterend',
+        `<div id="tkl-stale-note" class="tkl-fine" style="color:var(--amber)">⚠ Refresh failed — showing the last successful load; data below may be stale.</div>`);
     }
   }
 }
