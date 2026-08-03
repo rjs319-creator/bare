@@ -356,10 +356,13 @@ function sectionNote(title, note) {
 // SHADOW / descriptive. Similarity is chart-shape agreement, NOT a probability; actionability
 // requires live-confirmed-fresh data (the fail-closed decision layer decides the action word).
 
+// Position-aware action labels (pattern-v2): a SHORT setup never reads as "Buy".
 const PAT_ACTION_LABEL = {
-  ACTIONABLE_NOW: 'Buy triggered', RESEARCH_ONLY: 'Research only', WAIT_FOR_TRIGGER: 'Wait for trigger',
-  FORMING: 'Forming — watch', WATCH: 'Watch', NO_ACTION_STALE: 'No action (stale)', DO_NOT_CHASE: 'Do not chase',
-  STALLING: 'Stalling', FAILED: 'Failed', EXIT_INVALIDATED: 'Exit / invalidated', EXPIRED: 'Expired', MANAGE_POSITION: 'Manage',
+  LONG_ENTRY_READY: 'Long — near trigger', LONG_TRIGGERED: 'Long entry triggered',
+  SHORT_ENTRY_READY: 'Short — near trigger', SHORT_TRIGGERED: 'Short entry triggered',
+  HOLD_LONG: 'Hold long', HOLD_SHORT: 'Hold short', TRIM_LONG: 'Trim long', COVER_SHORT: 'Cover short',
+  EXIT_LONG: 'Exit long', AVOID: 'Avoid', WATCH: 'Watch', RESEARCH_ONLY: 'Triggered — research only',
+  FAILED: 'Failed', EXPIRED: 'Expired',
 };
 const pctOr = (v) => (typeof v === 'number' && isFinite(v) ? Math.round(v * 100) + '%' : '—');
 const numOr = (v) => (typeof v === 'number' && isFinite(v) ? v : '—');

@@ -1,88 +1,142 @@
-# Chart Pattern Intelligence
+# Pattern Intelligence (pattern-v2)
 
-A shadow, fail-closed layer that detects classic chart structures by **objective geometry**,
-measures how closely a chart matches them, decides an honest **action**, and is built to
-learn from **leakage-safe forward outcomes** — without ever changing a live screener ranking
-until a pattern family is individually validated.
+A **stateful, evidence-gated technical-setup engine**. It finds family-specific chart
+structures, freezes each one into a persistent episode with structural trigger /
+invalidation / target, tracks it through a real state machine as new bars arrive, grades
+outcomes fill-aware, and only ever issues actionable language for a family that has
+independently passed leakage-safe validation. **Shadow / weight-0**: nothing here feeds a
+live ranking.
 
-> **Honesty contract.** Chart patterns are not certainty. This layer separates *descriptive
-> similarity* (does the chart look like a bull flag?) from *validated predictive value* (does
-> that bull flag actually pay, versus matched controls?). A score is only called a probability
-> when it is properly calibrated. Nothing here is calibrated yet — every prediction is a
-> labeled `model-estimate`, and every match tier is `descriptive` until enough forward
-> outcomes resolve.
+## The correctness contract (v2 rewrite)
 
-## Where it lives
+1. **t−1 / t separation.** Every structural level is built from formation bars 0..t−1
+   (`structure.splitFormation`); the bar at t is only ever evaluated AGAINST the frozen
+   level (`assessBarVsLevel`, which distinguishes intraday penetration, gap-through, and
+   closing confirmation). A candle can never define the trigger it is tested against —
+   the v1 defect that made closing confirmation structurally unreachable.
+2. **Family-specific structure.** Each family has a dedicated detector
+   (`lib/patterns/families.js`): flags need a qualifying pole + bounded retracement;
+   doubles need two comparable pivots + an intervening reaction + a neckline; VCP needs a
+   progressively-shrinking contraction sequence; cup-and-handle measures rims, depth,
+   bottom shape, and a shallow upper-half handle; triangles/wedges need fitted boundaries
+   that actually bound the tape, touch counts, and convergence; breakout-retest /
+   failed-breakout reference a frozen historical breakout event; undercut-reclaim needs a
+   prior low, an undercut, and a reclaim close. Missing required features score ZERO (no
+   renormalization) and fail the pattern; each result carries `featureCoverage`,
+   `missingRequiredFeatures`, `violatedFeatures`, `structuralValidity`.
+3. **Structural trade plans.** Trigger/invalidation/target come from the structure
+   (neckline, boundary-at-t, final-contraction pivot, measured moves…). Reward:risk is
+   computed, never forced; degenerate risk (< 0.25 ATR) marks the plan `invalid`; poor
+   R:R plans are downgraded (AVOID), not dressed up.
+4. **The 5d timeframe was removed** (it supplied fewer bars than any detector minimum —
+   an unusable window is deleted, not displayed). Active windows: `session` (intraday),
+   `20d`, `60d`, `120d`.
 
-All new code is additive and namespaced under `lib/patterns/` + `lib/pattern-routes.js`.
-No existing file's behavior changed except additive wiring (tracker op dispatch, warm chain,
-package `check` script, frontend tab/search injection).
+## Episodes (`lib/patterns/episodes.js`)
 
-| File | Role |
-|---|---|
-| `lib/patterns/geometry.js` | Scale-invariant, ATR-adaptive shape primitives: normalized paths, ATR zigzag/pivots, geometry & volume feature vectors. Reuses `lib/signal.calcATR`. |
-| `lib/patterns/templates.js` | 14 objectively-defined pattern templates (geometry ranges + idealized normalized paths + context). |
-| `lib/patterns/similarity.js` | The **separated** measures: `pathCorrelation`, `dtwSimilarity`, `geometrySimilarity`, `volumeSimilarity`, `contextSimilarity`, a combined similarity, and an honest `matchTier`. |
-| `lib/patterns/phases.js` | Structural pattern phase (EMERGING…FAILED), distinct from the actionability lifecycle. |
-| `lib/patterns/detectors.js` | Runs every template over a window → detection with similarity, phase, derived plan, invalidation. |
-| `lib/patterns/predict.js` | Barrier outcome estimates via `lib/coil-executable` (`model-estimate`), plus empirical analog rate + **incremental lift vs baseline** when available. |
-| `lib/patterns/analog.js` | Point-in-time historical nearest-neighbour engine with three hard leakage guards + effective-sample-size de-overlap. |
-| `lib/patterns/decision.js` | Feeds the **existing** `opportunity-lifecycle` engine an `ev` and maps to explicit actions, fail-closed. |
-| `lib/patterns/schema.js` | Canonical pattern-prediction object + layered novice/expert explanations. |
-| `lib/patterns/index.js` | Multi-timeframe orchestrator (`analyzeTicker`): context, per-timeframe detection, primary/secondary/conflicting reconciliation, timeframe alignment. |
-| `lib/pattern-routes.js` | The four `?op=` handlers (folded into `api/tracker.js`, no new serverless function). |
+Detection → episode with FROZEN levels + provenance (source pivot/bar identifiers), a
+unique key `ticker|family|direction|timeframe|patternStart|triggerType@price|modelVersion`,
+and the state machine
 
-## Server ops (all in `api/tracker.js`)
+```
+EMERGING → FORMING → READY → TRIGGERED_PENDING_CONFIRMATION → CONFIRMED
+        → RETESTING ⇄ CONFIRMED → MANAGING → TARGET_REACHED | STOPPED | EXPIRED
+   any pre-entry state → FAILED (invalidation close) | EXPIRED (aged out)
+```
 
-- `op=patternsearch&ticker=XYZ` — public cached read; full multi-timeframe analysis for one ticker. **Powers the search bar.**
-- `op=patterns[&view=all|bullish|bearish|actionable]` — public cached read; the Pattern Radar, served from the last logged snapshot (a live request never brute-forces the universe).
-- `op=patternlog` — privileged cron writer; scans a bounded pool, records the immutable first-detection ledger + write-once radar snapshot.
-- `op=patterngrade` — privileged cron writer; resolves matured matches using **only bars strictly after detection**.
+- Prior state is restored from storage every scan; the trigger never moves.
+- Pre-entry invalidation is judged on the CLOSE (a wick can't kill a setup); post-entry
+  stops fill on a touch; gaps fill/exit at the open (worse price).
+- Amendments (target/invalidation only, never the trigger) are versioned, reasoned, and
+  pre-entry only. Every transition records its rule.
+- Overlapping detections of the same structure dedupe; a sliding window re-detecting a
+  tracked structure updates the episode instead of duplicating it.
+- **Failed Today** strictly means the transition into FAILED happened today
+  (`failedOn`). Failed/expired episodes are retained with the rule that killed them.
 
-Wired into the warm cron as its own root chain `pattern: ['op=patternlog','op=patterngrade']`.
+## Confirmation & actions
 
-## What each tier means (be precise)
+- `confirm.technicalStatusDaily` (daily close → next-session execution intent) and
+  `confirm.technicalStatusIntraday` (VWAP/relative-volume/remaining-R:R live check,
+  fail-closed on unknowns) are built in the REAL runtime path (`op=patternsearch`,
+  `op=patternlog`) — swing setups do not require a live feed.
+- `technicalStatus` (what the chart did) is never blended with
+  `recommendationEligibility` (whether the family has validated edge). Eligibility reads
+  ONLY the versioned evidence artifact; no artifact → research-only, always.
+- Actions are position-aware (`actions.js`): `LONG/SHORT_ENTRY_READY`,
+  `LONG/SHORT_TRIGGERED`, `HOLD_*`, `TRIM_LONG`, `COVER_SHORT`, `EXIT_LONG`, `AVOID`,
+  `WATCH`, `RESEARCH_ONLY`, `FAILED`, `EXPIRED`. A short can never read "Buy"; entering a
+  short is explicitly distinguished from exiting a long. Tests assert the wording.
 
-- **Fully implemented (shadow):** geometry, 14 detectors, separated similarity, phases, the
-  barrier prediction, the decision→action mapping on the real lifecycle engine, the canonical
-  schema, the multi-timeframe orchestrator, the four ops, the search-bar section, the Pattern
-  Radar tab, and the immutable log/grade writers. All working, all tested (32 unit tests).
-- **Implemented but shadow-only:** everything above is weight-0. It does **not** feed
-  `op=today` or any live ranking. `decidePattern` can only reach `ACTIONABLE_NOW` when a
-  family's edge is *proven* (calibrated/sufficient) — which cannot happen until the ledger
-  matures — so today it tops out at `RESEARCH_ONLY`.
-- **Scaffolded honestly (not trained):** the analog *engine* is complete and leakage-safe, but
-  it needs a precomputed corpus/index to produce calibrated rates; `analogs` are empty until
-  `op=patternlog`/`op=patterngrade` accrue resolved outcomes. `embeddingSimilarity` is a real
-  schema field returned as `null` (no learned-shape model in v1).
-- **Planned / not built:** learned-shape challenger (shapelets/MiniRocket), the CNN
-  chart-image challenger, and the versioned analog *index* over the full archive. No fake model
-  artifact was created. Champion/challenger promotion governance reuses the app's existing
-  pattern (pre-registered bars) and is documented, not yet run.
+## Grading (`lib/patterns/grade.js`)
 
-## Leakage & correctness guarantees (enforced in code, tested)
+Fill-aware and leakage-safe: locate the exact first fill (gap-through-entry fills at the
+open), evaluate barriers only from the fill onward — **a stop that printed before the
+entry filled is never counted**. On a fill bar that opened pre-trigger, range extremes may
+be pre-fill, so post-entry stop evidence is the close. Same-bar target+stop resolves as a
+conservative STOP labeled `ambiguous`. Outcomes are distinct: `no-fill | target | stop |
+timeout | ambiguous | data-unavailable`, each with entry/exit time+price, costs and the
+assumption list. Records key on the full episode key (collision-free).
 
-- Scale invariance: `logPath` of a series and 100× that series are bit-identical.
-- ATR normalization: depth measures transfer across price regimes.
-- No lookahead: analog records must strictly predate the query; a stock can't match its own
-  overlapping/future window; overlapping windows collapse to one **effective** sample.
-- Fail-closed decisions: daily-only ⇒ never `ACTIONABLE_NOW`; stale ⇒ `NO_ACTION_STALE`;
-  invalidation ⇒ `FAILED`; over-extended ⇒ `DO_NOT_CHASE`; strong-but-unproven ⇒ `RESEARCH_ONLY`.
-- HIMS guard: a prior-session bullish pattern on a name now collapsing is never actionable.
-- Grading uses only post-detection bars; intrabar target+stop straddle resolves conservatively to stop.
+## Research & the proven gate (`lib/patterns/research.js`)
 
-## Prerequisite (satisfied)
+Offline PIT pipeline: anchored per-as-of replay (`buildResearchRecords`) with same-ticker
+overlap purging; **matched non-pattern controls** (same mechanical plan on days no family
+fired); purged/embargoed chronological split (train 60% / calibration 20% / untouched
+final 20%); per family×direction×timeframe cells with target-rate + cost-net lift vs
+controls, Wilson CIs, Brier vs baseline, by-year stability, and **Benjamini–Hochberg FDR
+across cells**. `provenGate` requires ALL of: enough final-period fills, enough
+calibration fills, positive cost-net lift, CI clear of the control rate, calibration
+beating baseline, FDR survival, multi-year stable record. `analog.sufficient` has no
+vote anywhere. The output is the versioned evidence artifact (`pattern/evidence.json`)
+that `recommendationEligibility` reads. **Probabilities are null until a cell is proven**,
+and the UI states why; barrier-model numbers are labeled model estimates and are never
+shown as probabilities.
 
-The Day Trade live-freshness fix (the "stale bullish bar shown as a live buy" defect) shipped
-as PR #201 and is binding. This layer reuses that same freshness + lifecycle gate, so it
-cannot amplify a stale recommendation.
+## Universe scan (`lib/patterns/scan.js`)
 
-## Data / deployment limitations
+Two-stage, resumable, observable. Stage 1 (cheap): history ≥ 80 bars, price ≥ $3, avg
+dollar volume ≥ $1M, near a 60d high/low within 6 ATR or contracting. Stage 2: full
+family detection. The cursor persists across cron ticks over the full LARGE + SMALL +
+MICRO universe (hundreds of names, replacing the 16-stock shortlist); the scan state
+records universe size, cursor, eligible/scanned/rejected (with reasons), data failures
+and per-band coverage — shown on the radar so partial coverage is never silent.
 
-- Live analysis needs the daily-candle feed (Yahoo via `screener.fetchDailyHistory`); it fails
-  closed (`insufficient-history`) when unavailable.
-- Radar coverage is a **bounded shortlist** (`DEFAULT_UNIVERSE`, ≤40/run) — not the full
-  universe — to stay inside the serverless wall budget. Search covers any ticker on demand.
-- Persistence needs `BLOB_READ_WRITE_TOKEN`; without it the radar/ledger degrade to
-  `ready:false` and search still works.
-- No Python runtime is introduced; all math is deterministic JS.
+## Ops (folded into `api/tracker.js`, warm chain `pattern`)
+
+| op | access | role |
+|---|---|---|
+| `op=patternsearch&ticker=` | public | live multi-timeframe analysis + intraday confirmation + persisted episodes + chart payload |
+| `op=patterns` | public | the radar action board from persisted episodes + scan observability + evidence status |
+| `op=patternlog` | cron | advance episodes with the new bar, continue the resumable scan, create episodes (immutable first-detection ledger `pattern-episode`), refresh the day snapshot |
+| `op=patterngrade` | cron | fill-aware grading of matured episodes → `pattern/resolved/index.json` |
+| `op=patternresearch&mode=collect|evaluate` | cron/manual | build PIT research shards, then evaluate → the evidence artifact |
+
+Storage: `pattern/episodes.json`, `pattern/scan-state.json`, `pattern/resolved/index.json`,
+`pattern/evidence.json`, `pattern/research/shard-*.json`, refreshable `pattern/day/<date>.json`.
+
+## UI
+
+Pattern Radar (subtab `patternradar`) is an action board: Triggered Now · Ready/Near
+Trigger · Retests & Pullbacks · Developing · Manage · Failed Today · Expired · Resolved ·
+Failed Earlier (collapsed) · Research-Only Families (evidence status per family). One
+primary bucket per episode. Cards carry the full spec field set (frozen levels + types,
+distance to trigger in % and ATR, remaining R:R, age, eligibility, null-or-calibrated
+probability, downgrade reason, freshness) with a novice line and an expert `<details>`
+(transition history, amendments, rules) plus an annotated canvas chart
+(`public/js/pattern-chart.js`: candles, volume, pivots, frozen levels, confirmation bar).
+The evidence banner is Pattern Radar's OWN record via maturity id `chartpattern` — the
+old mapping that displayed Coil's record as pattern evidence is removed.
+
+## Honest status
+
+- **Shadow-only: yes.** No production weight anywhere; promotion requires the proven
+  gate, then an explicit registry maturity flip with caps/correlation checks (Phase 9 of
+  the redesign spec) — none of which is earned yet.
+- **Evidence: none yet.** No resolved episodes, no evidence artifact, zero proven
+  families. Every trigger is research-only until `op=patternresearch` + accrued episodes
+  say otherwise.
+- **Not built (declared, not faked):** learned-shape challengers (shapelets/MiniRocket,
+  gradient-boosted ranking, regime-conditioned ensembles) remain future challengers to
+  the structural rules; chart-image CNNs deliberately out of scope; `embeddingSimilarity`
+  stays an honest null.

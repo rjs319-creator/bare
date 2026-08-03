@@ -21,6 +21,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { loadCern, eventName as cernEventName } from './cern.js';
   import { mountVerdict } from './evidence-badge.js';
+  import { drawPatternChart } from './pattern-chart.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
 
   // Tapping a "💰 flow" badge on any screener card jumps to the Options tab.
@@ -81,7 +82,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     ignition: 'One acceleration-ranked view over all the momentum scanners: catch names whose price AND volume are speeding up (up 10% and accelerating beats up 60% and slowing), with a catalyst tag, ignition score, and stage. EOD/daily data — no real-time or LULD halt prediction.',
     downday: 'What to trade when the market is red: oversold-bounce longs + overheated shorts, with the honest proof that chasing strength on down days loses.',
     coil: 'Names coiling in tight compression before a potential explosive move.',
-    patternradar: 'Classic chart patterns (bull flag, VCP, double bottom…) detected by objective geometry, with an honest phase and action. Shadow/descriptive — similarity is shape agreement, not a win rate.',
+    patternradar: 'Stateful chart-setup engine: family-specific structural detectors, frozen episode levels, position-aware long/short actions, evidence-gated probabilities. Shadow — research until a family validates.',
     confluence: 'Stocks flagged by several screeners at once (agreement = higher conviction).',
     ghost: 'Quiet accumulation — big money building a position before the breakout.',
     trendrider: 'Ride established uptrends; the model drops names once they stop trending.',
@@ -153,10 +154,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // confluence/gapgo/gapdown/fade/aligned/putsell — are deliberately omitted).
   const HOWTO = {
     patternradar: {
-      what: `Classic chart patterns — <b>bull flag, VCP, flat base, cup & handle, double bottom, bear flag, double top</b> and more — detected by <b>objective geometry</b> (ATR-normalized shape, pivots, volume), not by eyeballing. Each match carries a <b>phase</b> (forming → near-trigger → confirmed → failed) and an honest <b>action</b>.`,
-      read: `Each card shows the pattern, its direction, phase, a <b>match tier</b> (how closely the shape fits — this is <b>shape agreement, not a win rate</b>), and a trigger / stop / target plan. A "target-first" number is a <b>model estimate</b> unless it says <i>calibrated</i>. The buckets run Actionable Now → Near Trigger → Forming → Retesting → Too Extended → Failed Today → Strongest Matches → Research-Only.`,
-      act: `Treat this as <b>context, not a buy list</b>. Only <b>Actionable Now</b> means live-confirmed-and-fresh; everything else is watch/wait. A strong shape with an <b>unproven edge</b> shows as <b>Research only</b>. Click a ticker for its full multi-timeframe read.`,
-      catch: `<b>Shadow / descriptive.</b> Chart patterns are not certainty, and this layer does <b>not</b> change any live ranking. Similarity ≠ probability; a pattern's real edge is only trusted once enough forward outcomes resolve (shown under Evidence). Stale or failed setups are shown as such, never as buys.`,
+      what: `A <b>stateful setup engine</b> for classic chart structures — bull/bear flag, VCP, flat base, cup & handle, double bottom/top, triangles, wedges, breakout-retest, failed breakout, undercut & reclaim — each found by its <b>own structural detector</b> (real pivots, fitted trendlines, necklines), not a generic shape match. A detected setup becomes an <b>episode</b> with a <b>frozen trigger, invalidation and target</b> that never drift as new bars arrive.`,
+      read: `Each card shows the episode's <b>state</b> (Emerging → Forming → Ready → Triggered → Confirmed → Retesting → In position → Target/Stopped/Failed/Expired), a <b>position-aware action</b> (long-entry vs short-entry vs hold vs exit — a short setup never says "buy"), the frozen levels with their structural source, distance to trigger in % and ATR, remaining reward:risk, and the exact rule behind its last upgrade or downgrade. Expand a card for the transition history and an <b>annotated chart</b> (pivots + levels drawn on).`,
+      act: `Treat this as <b>research, not a buy list</b>. Until a pattern family passes independent validation on its own resolved out-of-sample record, even a confirmed breakout shows as <b>"Triggered — research only"</b>. Probabilities appear ONLY when calibrated evidence exists; otherwise the card says exactly why there is none.`,
+      catch: `<b>Shadow (weight-0).</b> This layer never changes a live ranking. The evidence banner at the top is Pattern Radar's <b>own</b> record — it starts at "no history yet" and has to earn anything more. Failed and expired setups stay on the board with the rule that killed them; "Failed Today" strictly means the failure happened today.`,
     },
     gridlock: {
       what: `A <b>shadow research</b> engine that starts from a <b>physical event</b> — a new AI data-center's power demand, a plant retirement, a record capacity auction, a turbine order — models the <b>regional grid constraint</b> it changes (PJM first), and maps it only to companies with <b>verified exposure</b> (filings/IR, never AI guesses). Most companies mentioned in the news are correctly classified as too indirect.`,
@@ -6965,14 +6966,23 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   let coilLoaded = false, coilScope = 'all';
   function ensureCoil() { if (!coilLoaded) { coilLoaded = true; runCoilUI(); } }
 
-  // ── Chart Pattern Radar (op=patterns) — SHADOW/descriptive ──
-  // Reads the last logged pattern snapshot (a live request must not brute-force the universe).
-  // Ranks by validated edge/actionability/freshness, not by raw visual similarity.
+  // ── Chart Pattern Radar (op=patterns) — STATEFUL EPISODES, SHADOW ──
+  // The radar reads PERSISTED pattern episodes (frozen triggers, real state machine),
+  // grouped into one primary action-board bucket each. Actions are position-aware
+  // (a SHORT never reads as "Buy") and evidence-gated: an unvalidated family caps at
+  // "research only" no matter how clean the chart looks.
   let patternRadarLoaded = false, patternRadarView = 'all';
   const PR_ACTION_LABEL = {
-    ACTIONABLE_NOW: 'Buy triggered', RESEARCH_ONLY: 'Research only', WAIT_FOR_TRIGGER: 'Wait for trigger',
-    FORMING: 'Forming — watch', WATCH: 'Watch', NO_ACTION_STALE: 'No action (stale)', DO_NOT_CHASE: 'Do not chase',
-    STALLING: 'Stalling', FAILED: 'Failed', EXIT_INVALIDATED: 'Exit / invalidated', EXPIRED: 'Expired', MANAGE_POSITION: 'Manage',
+    LONG_ENTRY_READY: 'Long — near trigger', LONG_TRIGGERED: 'Long entry triggered',
+    SHORT_ENTRY_READY: 'Short — near trigger', SHORT_TRIGGERED: 'Short entry triggered',
+    HOLD_LONG: 'Hold long', HOLD_SHORT: 'Hold short', TRIM_LONG: 'Trim long', COVER_SHORT: 'Cover short',
+    EXIT_LONG: 'Exit long', AVOID: 'Avoid', WATCH: 'Watch', RESEARCH_ONLY: 'Triggered — research only',
+    FAILED: 'Failed', EXPIRED: 'Expired',
+  };
+  const PR_STATE_LABEL = {
+    EMERGING: 'Emerging', FORMING: 'Forming', READY: 'Ready', TRIGGERED_PENDING_CONFIRMATION: 'Triggered — awaiting close',
+    CONFIRMED: 'Confirmed', RETESTING: 'Retesting', MANAGING: 'In position', TARGET_REACHED: 'Target reached',
+    STOPPED: 'Stopped', FAILED: 'Failed', EXPIRED: 'Expired',
   };
   function ensurePatternRadar() {
     if (patternRadarLoaded) return;
@@ -6990,50 +7000,114 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       renderPatternRadar(t, el);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the pattern radar.</p></div>`; }
   }
+  function prEvidenceBanner(ev) {
+    if (!ev) return '';
+    return `<div class="dt-note" style="border-left-color:#38bdf8;margin-bottom:8px"><b>📐 Pattern Radar evidence.</b> ${esc(ev.message || '')}${ev.artifactVersion ? ` <span class="dt-dim">artifact ${esc(ev.artifactVersion)}</span>` : ''}</div>`;
+  }
+  function prScanLine(scan) {
+    if (!scan || !scan.stats) return '';
+    const s = scan.stats;
+    const reasons = Object.entries(s.rejectionReasons || {}).map(([k, v]) => `${k}:${v}`).join(', ');
+    return `<div class="tkl-fine" style="margin-bottom:8px">Scan ${esc(scan.date || '')} — universe ${s.universe}, cursor ${scan.cursor}${scan.done ? ' (complete)' : ' (in progress)'} · stage-1 eligible ${s.eligible} · stage-2 scanned ${s.scanned} · rejected ${s.rejectedStage1}${reasons ? ` (${esc(reasons)})` : ''} · data failures ${s.dataFailures}</div>`;
+  }
   function renderPatternRadar(t, el) {
     if (!t || !t.ok) { el.innerHTML = `<div class="pr-empty">Pattern radar unavailable.</div>`; return; }
     if (!t.ready) {
-      el.innerHTML = `<div class="pr-empty">The pattern radar has not been built yet.<br><span class="tkl-fine">It populates from the daily background scan (op=patternlog). Until then, search any ticker to see its full pattern analysis, or the Coil Radar for live compression.</span></div>`;
+      el.innerHTML = `${prEvidenceBanner(t.evidence)}<div class="pr-empty">No pattern episodes tracked yet.<br><span class="tkl-fine">Episodes accrue from the daily background scan (op=patternlog). Until then, search any ticker for its live structural analysis.</span></div>${prFamiliesTable(t.families)}`;
       return;
     }
     const r = t.radar || {};
     const filters = ['all', 'bullish', 'bearish', 'actionable'].map(v =>
       `<button class="hub-sub-btn${v === patternRadarView ? ' active' : ''}" data-prview="${v}">${v}</button>`).join(' ');
     const buckets = [
-      ['actionableNow', '⚡ Actionable Now'], ['nearTrigger', '🎯 Near Trigger'], ['forming', '🌱 Forming'],
-      ['retesting', '🔁 Retesting'], ['tooExtended', '🏃 Too Extended'], ['failedToday', '❌ Failed Today'],
-      ['strongMatches', '📐 Strongest Classic-Pattern Matches'], ['researchOnly', '🔬 Research-Only Challengers'],
+      ['triggeredNow', '⚡ Triggered Now'], ['ready', '🎯 Ready / Near Trigger'], ['retests', '🔁 Retests & Pullbacks'],
+      ['developing', '🌱 Developing'], ['manage', '📊 Manage Existing Setups'], ['failedToday', '❌ Failed Today'],
+      ['expired', '⌛ Expired'], ['resolved', '🏁 Resolved (target/stop)'], ['failedEarlier', '🗄 Failed Earlier'],
     ];
     const body = buckets.map(([k, lbl]) => {
       const items = r[k] || [];
       if (!items.length) return '';
-      return `<div class="pr-bucket"><h3>${lbl} (${items.length})</h3>${items.map(prCard).join('')}</div>`;
+      const collapsed = k === 'failedEarlier' || k === 'expired' || k === 'resolved';
+      const cards = items.map(prCard).join('');
+      return collapsed
+        ? `<details class="pr-bucket"><summary><h3 style="display:inline">${lbl} (${items.length})</h3></summary>${cards}</details>`
+        : `<div class="pr-bucket"><h3>${lbl} (${items.length})</h3>${cards}</div>`;
     }).filter(Boolean).join('');
-    el.innerHTML = `<div class="tkl-fine" style="margin-bottom:8px">Shadow / descriptive · ranked by validated edge, actionability & freshness — not raw visual similarity. Similarity is shape agreement, not a win rate.</div>
+    el.innerHTML = `${prEvidenceBanner(t.evidence)}${prScanLine(t.scan)}
       <div class="hub-subnav" style="margin-bottom:10px">${filters}</div>
-      ${body || '<div class="pr-empty">No qualifying pattern matches in the latest scan.</div>'}
-      <div class="tkl-fine">Snapshot ${esc(t.date || '')} · ${t.count || 0} matches.</div>`;
+      ${body || '<div class="pr-empty">No episodes match this view.</div>'}
+      ${prFamiliesTable(t.families)}
+      <div class="tkl-fine">${t.count || 0} episodes · updated ${esc(t.updatedAt || '')} · ${esc(t.modelVersion || '')} · shadow (weight-0 in all live rankings).</div>`;
     el.querySelectorAll('[data-prview]').forEach(b => b.addEventListener('click', () => {
       patternRadarView = b.dataset.prview; runPatternRadarUI();
     }));
     el.querySelectorAll('[data-pr-tk]').forEach(a => a.addEventListener('click', (e) => {
       e.preventDefault(); openTickerLookup(a.dataset.prTk);
     }));
+    el.querySelectorAll('[data-pr-chart]').forEach(b => b.addEventListener('click', () => prLoadChart(b)));
+  }
+  function prFamiliesTable(families) {
+    if (!Array.isArray(families) || !families.length) return '';
+    const rows = families.map(f => `<tr><td>${esc(f.label || f.family)}</td><td>${esc(f.direction || '')}</td>
+      <td>${f.implemented === false ? '<span class="hzp-warn">not implemented</span>' : esc(f.status || '')}</td>
+      <td class="dt-dim" style="font-size:.85em">${esc(f.reason || '')}</td></tr>`).join('');
+    return `<details class="pr-bucket"><summary><h3 style="display:inline">🔬 Research-Only Families (evidence status)</h3></summary>
+      <table style="width:100%;font-size:.86em;border-collapse:collapse;margin-top:6px"><thead><tr style="color:var(--text-dim);text-align:left"><th>Family</th><th>Dir</th><th>Status</th><th>Why</th></tr></thead><tbody>${rows}</tbody></table></details>`;
   }
   function prCard(m) {
-    const sim = m.similarity || {}, plan = m.plan || {}, pred = m.prediction || {};
     const dir = m.direction === 'SHORT' ? 'short' : 'long';
-    const action = plan.action || 'WATCH';
-    const calib = pred && pred.available && pred.calibrated ? `tgt-first ${Math.round(pred.targetBeforeStop * 100)}% (calibrated)` : 'model-estimate only';
-    return `<div class="hzp"><div class="hzp-head">
+    const action = m.action || 'WATCH';
+    const elig = m.recommendationEligibility || {};
+    const prob = (typeof m.probability === 'number')
+      ? `P(target first) ${Math.round(m.probability * 100)}% <span class="hzp-ok">(calibrated, n=${m.probabilitySample || '?'})</span>`
+      : `<span class="hzp-warn">no calibrated probability</span> <span class="dt-dim">(${esc(elig.status || 'no evidence')})</span>`;
+    const dist = (typeof m.distanceToTriggerPct === 'number') ? `${m.distanceToTriggerPct}% / ${m.distanceToTriggerAtr ?? '—'} ATR to trigger` : '';
+    const trans = (m.transitions || []).map(t2 => `${esc(t2.date || '')} ${esc(t2.from || 'start')}→${esc(t2.to)} <i>${esc(t2.rule || '')}</i>`).join('<br>');
+    return `<div class="hzp" data-pr-ep="${esc(m.episodeId || '')}"><div class="hzp-head">
         <a href="#" class="hzp-label" data-pr-tk="${esc(m.ticker)}">${esc(m.ticker)}</a>
-        <span class="hzp-label">${esc(m.patternLabel || '')}</span>
+        <span class="hzp-label">${esc(m.label || m.family || '')}</span>
         <span class="hzp-dir ${dir}">${esc(m.direction || '')}</span>
-        <span class="hzp-phase">${esc(m.phase || '')}</span>
-        <span class="hzp-action a-${esc(action)}">${esc(PR_ACTION_LABEL[action] || action)}</span></div>
-      <div class="hzp-novice">${esc(m.noviceExplanation || '')}</div>
-      <div class="hzp-metrics">Match <b>${esc(sim.matchTier || 'NONE')}</b> (${sim.combined ?? '—'}) · ${esc(m.timeframe || '')} · Trig ${plan.trigger ?? '—'} · Stop ${plan.stop ?? '—'} · Tgt ${plan.target ?? '—'} · R:R ${plan.rewardRisk ?? '—'} · ${calib}</div>
+        <span class="hzp-phase">${esc(PR_STATE_LABEL[m.state] || m.state || '')}</span>
+        <span class="hzp-action a-${esc(action)}">${esc(PR_ACTION_LABEL[action] || action)}</span>
+        ${m.fresh === false ? '<span class="hzp-warn">stale</span>' : ''}</div>
+      <div class="hzp-novice">${esc(m.noviceLine || '')}</div>
+      <div class="hzp-metrics">${esc(m.timeframe || '')} · Trigger ${m.trigger ?? '—'} <span class="dt-dim">(frozen ${esc(m.triggerType || '')})</span> · Invalidation ${m.invalidation ?? '—'} · Target ${m.target ?? '—'} · R:R ${m.rr ?? '—'} · remaining R:R ${m.remainingRR ?? '—'} ${dist ? '· ' + esc(dist) : ''} · age ${m.barsSinceDetection ?? 0} bars</div>
+      <div class="hzp-metrics">${prob} · structure ${m.structuralValidity ?? '—'} (coverage ${m.featureCoverage ?? '—'}) · quality ${esc(m.setupQuality || '—')}${m.downgradeReason ? ` · <span class="hzp-warn">${esc(m.downgradeReason)}</span>` : ''}</div>
+      <details class="hzp-expert"><summary>Expert detail & chart</summary>
+        <div class="hzp-exp">
+          <div>Episode ${esc(m.episodeId || '')} · detected ${esc(m.detectedDate || '')} · regime at detection ${esc(m.regimeAtDetection || '—')} · entry ${esc((m.entry && m.entry.state) || 'NONE')}${m.entry && m.entry.price ? ` @ ${m.entry.price} (${esc(m.entry.date || '')})` : ''}</div>
+          <div>Last rule: ${esc(m.lastRule || '—')} · evidence: ${esc(elig.reason || '—')}</div>
+          <div style="margin-top:4px">${trans || 'no transitions'}</div>
+          ${(m.amendments || []).length ? `<div>Amendments: ${m.amendments.map(a => `${esc(a.field)} ${a.from}→${a.to} (${esc(a.reason || '')})`).join('; ')}</div>` : ''}
+          <button class="hub-sub-btn" data-pr-chart="${esc(m.ticker)}" data-pr-ep-id="${esc(m.episodeId || '')}" style="margin-top:6px">📈 Load annotated chart</button>
+          <div class="pr-chart-slot"></div>
+        </div>
+      </details>
     </div>`;
+  }
+  async function prLoadChart(btn) {
+    const tk = btn.dataset.prChart;
+    const slot = btn.parentElement.querySelector('.pr-chart-slot');
+    if (!tk || !slot) return;
+    btn.disabled = true;
+    btn.textContent = 'Loading chart…';
+    try {
+      const j = await fetchJSON('/api/tracker?op=patternsearch&ticker=' + encodeURIComponent(tk));
+      const card = btn.closest('[data-pr-ep]');
+      const epId = btn.dataset.prEpId;
+      const dets = (j && j.report && j.report.detections) || [];
+      const ep = (j && j.episodes || []).find(e => e.episodeId === epId) || null;
+      // Prefer the detection matching this episode's family; fall back to the first.
+      const det = dets.find(d => ep && d.patternFamily === ep.family && d.direction === ep.direction) || dets[0] || null;
+      const detForChart = det ? { ...det, plan: ep ? { trigger: ep.trigger, stop: ep.invalidation, target: ep.target, action: det.plan && det.plan.action } : det.plan } : (ep ? { patternLabel: ep.label, direction: ep.direction, timeframe: ep.timeframe, plan: { trigger: ep.trigger, stop: ep.invalidation, target: ep.target }, pivotsUsed: [] } : null);
+      slot.innerHTML = '<canvas style="width:100%;height:260px;display:block;margin-top:6px"></canvas>';
+      drawPatternChart(slot.querySelector('canvas'), j.chart, detForChart);
+      btn.textContent = '📈 Reload chart';
+    } catch {
+      slot.innerHTML = '<div class="hzp-warn">Could not load the chart.</div>';
+      btn.textContent = '📈 Load annotated chart';
+    }
+    btn.disabled = false;
   }
   async function runCoilUI() {
     const el = document.getElementById('coil-container');
