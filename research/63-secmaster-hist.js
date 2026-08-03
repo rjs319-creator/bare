@@ -164,11 +164,12 @@ async function main() {
     membershipStatus: `PARTIAL: ${hist.coverage.membershipMonthsAvailable} monthly snapshots collected (target ~200; AV daily job accruing)`,
     overlapVsSecmasterV3: overlap,
     membershipSourceAudit,
-    finding: '2026-08-03 audit: soon-to-die names (Form-25 delistings 2011-2014) appear in AV 2010-2011 active snapshots at only 11-26% — AV reconstructs history from its own thin pre-2015 delisting table, so its old-era snapshots are SURVIVORSHIP-BIASED AT THE SOURCE and cannot serve as the membership leg there. Candidate replacements: Wayback-archived NasdaqTrader symbol directories (free, contemporaneous), or Sharadar (paid).',
+    finding: '2026-08-03 audits: (1) soon-to-die names (Form-25 delistings 2011-2014) appear in AV 2010-2011 active snapshots at only 15-31% — AV old-era snapshots are SURVIVORSHIP-BIASED AT THE SOURCE; (2) Wayback NasdaqTrader symbol directories are too sparse for monthly membership (23+7 snapshots 2009-2016, none in 2010); (3) FMP serves ZERO price bars for 2012-2014 delisted names (BYI/OMX/DOLE probed) — dead-name PRICES for the old era have NO available source in the current stack. CONSEQUENCE: the free path covers delisting events/dates only; a survivorship-free historical PRICE+membership vendor (e.g. Sharadar SEP) is required for any 2010-2015 panel.',
     nextSteps: [
-      'membership leg for 2010-2015 needs a contemporaneous source: prototype Wayback NasdaqTrader symbol-directory snapshots; AV snapshots remain useful for the recent era + as cross-checks',
+      'Era-A (2010-2021) panel requires a survivorship-free price+membership vendor — Sharadar SEP (research/SHARADAR-INTEGRATION-PLAN-2026-08.md) now solves ALL remaining legs (dead-name prices, membership by observation, permaticker identity) in one purchase; nothing free covers dead-name prices',
+      'the free assets stand regardless: Form-25 event record (validated 96.1%) + this CIK spine become the cross-validation harness for ANY purchased feed',
       'delisting reasons: 8-K classification pass over Form-25 CIKs (research/lib/edgar.js, ~90min of throttled fetches)',
-      'unmapped CIKs: ~19% fund/trust/notes by name pattern; type-classify before treating the rest as a common-stock gap',
+      'AV daily accrual continues (recent-era membership + cross-checks only)',
     ],
   };
   fs.writeFileSync(OUT, JSON.stringify(hist));
