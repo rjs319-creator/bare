@@ -119,7 +119,17 @@ async function main() {
     avRecords,
     form25Events,
   });
-  const hist = SH.assembleHistMaster({ form25Events, tickerMap, monthlyMembership });
+  let hist = SH.assembleHistMaster({ form25Events, tickerMap, monthlyMembership });
+
+  // 8-K reason classification (research/64-form25-reasons.js), when present.
+  const reasonsDoc = loadJson(path.join(DATA, 'form25-reasons.json'));
+  let reasonStats = null;
+  if (reasonsDoc && reasonsDoc.reasons) {
+    const merged = SH.mergeReasons(hist.records, reasonsDoc.reasons);
+    hist = { ...hist, records: merged.records };
+    reasonStats = merged.stats;
+    console.log(`reasons merged: ${merged.stats.filled}/${merged.stats.total} classified ${JSON.stringify(merged.stats.byCategory)}`);
+  }
 
   // Consistency check vs the verified 2021+ secmaster (should track the 96.1%
   // enumeration validation by construction — recompute, never assume).
@@ -164,6 +174,7 @@ async function main() {
     membershipStatus: `PARTIAL: ${hist.coverage.membershipMonthsAvailable} monthly snapshots collected (target ~200; AV daily job accruing)`,
     overlapVsSecmasterV3: overlap,
     membershipSourceAudit,
+    reasonClassification: reasonStats,
     finding: '2026-08-03 audits: (1) soon-to-die names (Form-25 delistings 2011-2014) appear in AV 2010-2011 active snapshots at only 15-31% — AV old-era snapshots are SURVIVORSHIP-BIASED AT THE SOURCE; (2) Wayback NasdaqTrader symbol directories are too sparse for monthly membership (23+7 snapshots 2009-2016, none in 2010); (3) FMP serves ZERO price bars for 2012-2014 delisted names (BYI/OMX/DOLE probed) — dead-name PRICES for the old era have NO available source in the current stack. CONSEQUENCE: the free path covers delisting events/dates only; a survivorship-free historical PRICE+membership vendor (e.g. Sharadar SEP) is required for any 2010-2015 panel.',
     nextSteps: [
       'Era-A (2010-2021) panel requires a survivorship-free price+membership vendor — Sharadar SEP (research/SHARADAR-INTEGRATION-PLAN-2026-08.md) now solves ALL remaining legs (dead-name prices, membership by observation, permaticker identity) in one purchase; nothing free covers dead-name prices',

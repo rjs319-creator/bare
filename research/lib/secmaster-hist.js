@@ -156,7 +156,25 @@ function assembleHistMaster({ form25Events, tickerMap, monthlyMembership = {} })
   return { ...payload, contentHash: sha256(canonicalJson(records)) };
 }
 
+// Merge the 8-K reason-classification artifact into master records
+// (immutable: returns new records). Only fills reasonCategory where the
+// classification produced one; everything else stays honestly null.
+function mergeReasons(records, reasonsByCik) {
+  const out = {};
+  let filled = 0;
+  const byCategory = {};
+  for (const [cik, rec] of Object.entries(records)) {
+    const r = reasonsByCik && reasonsByCik[cik];
+    if (r && r.reasonCategory) {
+      out[cik] = { ...rec, delisting: { ...rec.delisting, reasonCategory: r.reasonCategory, reason: r.reason || null, reasonEvidence: r.evidence || null } };
+      filled++;
+      byCategory[r.reasonCategory] = (byCategory[r.reasonCategory] || 0) + 1;
+    } else out[cik] = rec;
+  }
+  return { records: out, stats: { filled, byCategory, total: Object.keys(records).length } };
+}
+
 module.exports = {
   SECMASTER_HIST_VERSION, normCik, normalizeCompanyName,
-  buildTickerMap, assembleHistMaster,
+  buildTickerMap, assembleHistMaster, mergeReasons,
 };
