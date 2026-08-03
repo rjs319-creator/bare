@@ -56,7 +56,7 @@ const PRIVILEGED_OPS = new Set([
   'brieftick', 'cerntick', 'coiltick', 'confluencetick', 'corebuild', 'corelog',
   'crowdtick', 'daytradetick', 'downdaytick', 'dualreadlog', 'dualreadtune', 'edgelog',
   'fadetick', 'gapdowntick', 'gapgotick', 'ghostlog', 'intracapture', 'leaderboardtick',
-  'narrative', 'optionsassess', 'patternlog', 'patterngrade', 'predicttick', 'timinglog', 'timingtune', 'tonetick',
+  'narrative', 'optionsassess', 'patternlog', 'patterngrade', 'patternresearch', 'predicttick', 'timinglog', 'timingtune', 'tonetick',
   // 'track' snapshots the day's Screener+Momentum picks to Blob (a state-changing WRITE).
   // The daily cron dispatches it with the internal bearer (warm-chains-routes.js), so gating
   // it here blocks an anonymous public GET from mutating the ledger without breaking the cron.
@@ -440,5 +440,6 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'patterns') return require('../lib/pattern-routes').runPatterns(req, res);
   if (req.query.op === 'patternlog') return require('../lib/pattern-routes').runPatternLog(req, res);
   if (req.query.op === 'patterngrade') return require('../lib/pattern-routes').runPatternGrade(req, res);
+  if (req.query.op === 'patternresearch') return require('../lib/pattern-routes').runPatternResearch(req, res);
   return runScoreboard(req, res);
 };

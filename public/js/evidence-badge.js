@@ -30,7 +30,10 @@ const TAB_STRATEGY = {
   picks: 'momentum',
   rltlab: 'rlt',
   aligned: 'screener',
-  patternradar: 'coil',
+  // Pattern Radar shows ONLY its own evidence (id 'chartpattern'). It was previously
+  // mapped to 'coil', which displayed the Coil strategy's record as if it were Pattern
+  // Radar's — another strategy's performance must never stand in as pattern evidence.
+  patternradar: 'chartpattern',
   atlas: 'atlasx',
   orbitlab: 'orbit',
   options: 'optionsflow',
