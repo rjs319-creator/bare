@@ -17,6 +17,8 @@ jobs:
         run: npm run check
       - name: Unit tests
         run: npm test
+      - name: Research data-quality gate (skips when research data absent)
+        run: npm run audit:research
 
   deploy:
     # Auto-deploy to Vercel PRODUCTION on every push to main (i.e. a merged PR),

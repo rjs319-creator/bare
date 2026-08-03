@@ -71,6 +71,7 @@ function panel({ nDates = 40, perDate = 8, missingFrac = 0.2, sigStrength = 1, s
       const noise = (rnd() - 0.5) * 0.5;
       rows.push({
         securityId: `s${k}`, ticker: `s${k}`, decisionTs: `d${String(d).padStart(3, '0')}`,
+        labelEndDate: `d${String(d + 2).padStart(3, '0')}`,   // 2-bar label window (purge contract)
         horizon: 'swing', regime: d < nDates / 2 ? 'risk-on' : 'risk-off', capBand: k % 2 ? 'small' : 'large',
         features: rnd() < missingFrac ? { sig } : { sig, mom121: rnd() - 0.5 },
         outcome: sig * sigStrength + noise,

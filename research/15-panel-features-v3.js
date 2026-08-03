@@ -1,64 +1,115 @@
 'use strict';
-// Step 15 — PANEL v3: the feature panel rebuilt on the fwd-outcome-v3 contract.
+// Step 15 — PANEL v3.1: the feature panel rebuilt on the fwd-outcome-v3 label
+// contract PLUS the identity / corporate-action / snapshot-manifest layers.
 //   node research/15-panel-features-v3.js
 //
-// Written BESIDE panel-v2 (research/14-panel-features.js → panel-features.json),
-// which is NEVER overwritten: v3 writes panel-features-v3.json. Differences:
-//   * labels come from research/lib/outcome-v3.forwardOutcomeV3, so a delisting
-//     is only labeled when research/data/secmaster-v3.json supplies an
-//     authoritative confirmed record — a stale price tail alone is 'unresolved'
-//     (v2 labeled it 'delisted' and haircut it: the verified defect).
-//   * a confirmed delisting with an UNVERIFIED reason stays in the panel as an
-//     explicit 'c' row with a null label (fail closed) — it is never dropped,
-//     because dropping dead names is the survivorship trap this rebuild exists
-//     to close.
-//   * every row carries its decision timestamp; the label triplets carry
-//     status chars m|c|p|u|n (mature / confirmed_delisted / pending /
-//     unresolved / no_fill); f{h} is null unless labelReady, and label-ready
-//     values are asserted through outcome-v3.assertTrainable.
-//   * requires secmaster-v3. Absent → writes an explicit BLOCKED artifact with
-//     the deterministic migration commands and exits without generating
-//     anything.
+// v3.1 upgrades over the first panel-v3 build (each closed a verified defect):
+//   * IDENTITY — listingId is the primary key. Symbol cache files sharing one
+//     listingId (ticker renames: CDAY→DAY, SCHN→RDUS, MCG→SHCO, AMSWA→LGTY)
+//     are merged into ONE canonical series via research/lib/identity-v3; the
+//     row's `s` is the reconstructed ticker ACTIVE on the decision date and
+//     `cs` is the cache symbol backing the series. Residual duplicate
+//     (lid, dt) keys HARD-FAIL the build. Conflicting/ambiguous identity is
+//     quarantined, never merged.
+//   * INSTRUMENT TYPE — ETFs/funds/ADRs/warrants/units/rights/preferred are
+//     excluded with reason codes; unknown identity fails closed (excluded).
+//   * PRICES — labels and momentum/vol features are computed on a TOTAL-RETURN
+//     index (vendor-split-adjusted close reinvesting adjDividend, verified via
+//     research/lib/corpactions). Raw closes still drive cap/ADV. A symbol
+//     without cached corporate-action provenance is EXCLUDED (fail closed).
+//     A residual split discontinuity excludes the whole series.
+//   * EXTREME EVENTS — unexplained one-session extremes (spike-revert,
+//     ambiguous, unadjusted-split) poison their dates: decision rows entering
+//     on a poisoned bar are skipped and labels whose window touches one are
+//     withheld ('u'), counted, and reported. Never winsorized into data.
+//   * CUTOFFS — the single ambiguous "data cutoff" is replaced by explicit
+//     featureAvailabilityCutoff / lastDecisionTimestamp / labelObservationCutoff
+//     and per-horizon lastFullyMatureDecisionDate, all DERIVED from the data
+//     and enforced by lib/manifest verifySnapshotManifest. A manifest
+//     inconsistency writes panel-v3.INVALID.json and exits nonzero instead of
+//     publishing.
+//   * Rows carry le{h} (label-end date) so maturity is verifiable forever.
 //
-// DOCUMENTED LIMITATION (not silent): per-row `sec` is the vendor's CURRENT
-// sector classification — historical sector history is not available on this
-// data plan. Any sector-conditioned study must disclose sectorBasis from the
-// header; sector-residualized results on this panel are advisory only.
-//
-// Everything else (grid, PIT cap-band membership, features) matches step 14 so
-// v2-vs-v3 label deltas are attributable to the label contract alone.
+// DOCUMENTED LIMITATIONS (not silent):
+//   * `sec` is the vendor's CURRENT sector classification — NOT point-in-time.
+//   * shares outstanding are weighted-average diluted from quarterly filings —
+//     an approximation, applied with filing-date availability.
+//   * alias intervals are reconstructed from observed trading spans (vendor
+//     rename history is only ~3 months deep).
 
 const fs = require('fs');
 const path = require('path');
 const pit = require('./lib/pit');
 const OV3 = require('./lib/outcome-v3');
+const ID3 = require('./lib/identity-v3');
+const CA = require('./lib/corpactions');
+const MF = require('./lib/manifest');
 
 const DATA = path.join(__dirname, 'data');
 const MASTER_PATH = path.join(DATA, 'secmaster-v3.json');
 const OUT_PATH = path.join(DATA, 'panel-features-v3.json');
+const MANIFEST_PATH = path.join(DATA, 'panel-v3-manifest.json');
+const IDENTITY_REPORT_PATH = path.join(DATA, 'identity-quality-v3.json');
+const EXTREMES_REPORT_PATH = path.join(DATA, 'extreme-returns-v3.json');
+const COVERAGE_REPORT_PATH = path.join(DATA, 'universe-coverage-v3.json');
 const BLOCKED_PATH = path.join(DATA, 'panel-v3.BLOCKED.json');
+const INVALID_PATH = path.join(DATA, 'panel-v3.INVALID.json');
+const CORP_DIR = path.join(DATA, 'corpactions');
 const GRID = pit.monthEnds('2022-01', '2026-05');
 const VOL_LB = 63;
 const HORIZONS = [21, 63, 126];
+const PANEL_VERSION = 'panel-v3.1';
 
 const STATUS_CHAR = { mature: 'm', confirmed_delisted: 'c', pending: 'p', unresolved: 'u', no_fill: 'n' };
 
-// f{h}: training label (null unless label-ready — enforced by assertTrainable,
-// so a contract drift throws instead of silently mislabeling).
+const NON_COMMON_NAME_RE = /\bwarrants?\b|\brights?\b|\bunits?\b|preferred|preference|depositary|depositaries|\betf\b|exchange.traded fund|\bnotes? due\b|acquisition corp|acquisition co/i;
+const NON_COMMON_SUFFIX_RE = /[-.](WS|WT|W|U|R|RT)$/i;
+
+const REIT_NAME_RE = /\bREIT\b|Realty Trust|Realty Group|Realty Income|Real Estate Investment|Properties Trust|Property Trust|Realty Investment/i;
+const EQUITY_EXCHANGES = new Set(['NYSE', 'NASDAQ', 'AMEX', 'NYSE AMERICAN']);
+
+// Instrument-type classification. Positive knowledge excludes; ABSENT knowledge
+// with a suspicious symbol shape also excludes (fail closed); otherwise the
+// secmaster identity (already required upstream) plus a clean name passes.
+// VENDOR-FLAG CAVEAT (measured, not assumed): FMP marks exchange-listed equity
+// REITs (FRT, VNO, KRG…) isFund=true. Deleting the REIT sector would be a
+// systematic universe distortion, so an exchange-listed REIT-named security
+// OVERRIDES the isFund flag — every override is counted and disclosed.
+function classifyInstrument(sym, meta, record) {
+  const secu = (record && record.security) || {};
+  const name = (meta && meta.name) || '';
+  const exch = String((record && record.exchange) || (meta && meta.exchange) || '').toUpperCase();
+  if (secu.isEtf === true) return { include: false, reason: 'etf' };
+  if (sym.length === 5 && /X$/.test(sym)) return { include: false, reason: 'mutual-fund-ticker-shape' };
+  if (secu.isFund === true) {
+    if (REIT_NAME_RE.test(name) && EQUITY_EXCHANGES.has(exch)) {
+      return { include: true, reason: null, override: 'vendor-isFund-overridden-equity-reit' };
+    }
+    return { include: false, reason: 'fund' };
+  }
+  if (secu.isAdr === true) return { include: false, reason: 'adr' };
+  if (NON_COMMON_NAME_RE.test(name)) return { include: false, reason: 'non-common-name-pattern' };
+  if (NON_COMMON_SUFFIX_RE.test(sym)) return { include: false, reason: 'non-common-symbol-suffix' };
+  if (sym.length >= 5 && /W$/.test(sym) && !name) return { include: false, reason: 'suspected-warrant-suffix-no-name' };
+  return { include: true, reason: null };
+}
+
+// f{h}: training label (null unless label-ready — enforced by assertTrainable).
 // d{h}: 1 iff a label-ready confirmed delisting; null when no label exists.
-// s{h}: outcome status char (kept even when the label is withheld).
+// s{h}: outcome status char. le{h}: label-end date when label-ready.
 function labelFieldsV3(h, o) {
   if (o.labelReady) OV3.assertTrainable(o);
   return {
     [`f${h}`]: o.labelReady ? o.trainingLabel : null,
     [`d${h}`]: o.labelReady ? (o.status === 'confirmed_delisted' ? 1 : 0) : null,
     [`s${h}`]: STATUS_CHAR[o.status] || 'u',
+    [`le${h}`]: o.labelReady ? o.actualExitDate : null,
   };
 }
 
 const sd = (a) => { if (a.length < 2) return null; const m = a.reduce((x, y) => x + y, 0) / a.length; return Math.sqrt(a.reduce((s, x) => s + (x - m) ** 2, 0) / (a.length - 1)); };
-const ratio = (ps, i, lb, sk) => { if (i - lb < 0 || i - sk < 0) return null; const a = ps[i - lb].close, b = ps[i - sk].close; return (a > 0 && b > 0) ? b / a - 1 : null; };
-function annVol(ps, i, n) { if (i - n < 0) return null; const r = []; for (let k = i - n + 1; k <= i; k++) { const x = ps[k].close / ps[k - 1].close - 1; if (Number.isFinite(x)) r.push(Math.max(-0.5, Math.min(0.5, x))); } const s = sd(r); return s ? s * Math.sqrt(252) : null; }
+const ratio = (ps, i, lb, sk) => { if (i - lb < 0 || i - sk < 0) return null; const a = ps[i - lb].tr, b = ps[i - sk].tr; return (a > 0 && b > 0) ? b / a - 1 : null; };
+function annVol(ps, i, n) { if (i - n < 0) return null; const r = []; for (let k = i - n + 1; k <= i; k++) { const x = ps[k].tr / ps[k - 1].tr - 1; if (Number.isFinite(x)) r.push(Math.max(-0.5, Math.min(0.5, x))); } const s = sd(r); return s ? s * Math.sqrt(252) : null; }
 function advN(ps, i, n) { if (i < 0) return null; let s = 0, c = 0; for (let k = Math.max(0, i - n + 1); k <= i; k++) { s += ps[k].dollar; c++; } return c ? s / c : null; }
 
 function writeBlocked(reason) {
@@ -68,7 +119,8 @@ function writeBlocked(reason) {
     migration: [
       '1. node --env-file=research/.env research/16-secmaster-v3.js            # FMP+EDGAR reconstruction (cached, resumable)',
       '   or: node research/16-secmaster-v3.js --from <pitdata-v3 listings export>',
-      '2. node research/15-panel-features-v3.js',
+      '2. node --env-file=research/.env research/54-corpactions-fetch.js       # splits+dividends provenance (cached, resumable)',
+      '3. node research/15-panel-features-v3.js',
     ],
   };
   fs.mkdirSync(DATA, { recursive: true });
@@ -77,45 +129,173 @@ function writeBlocked(reason) {
   for (const step of blocked.migration) console.log(step);
 }
 
-function buildPanel({ master, symbols, cacheDir }) {
-  const syms = Object.keys(symbols).sort();
-  const out = {};
-  // per horizon-label state counts, and label-withheld reasons for disclosure
-  const labelStates = { m: 0, c: 0, p: 0, u: 0, n: 0 };
-  const withheldDelistings = { unverifiedReason: 0 };
-  let kept = 0, names = 0, deadNamesIncluded = 0;
-  const outcomeOpts = Object.freeze({
-    dataCutoffMs: pit.DATA_CUTOFF_MS,
-    securityMasterVersion: master.version,
-    priceDataVersion: 'fmp-cache-v1',
-    // unknownReasonPolicy intentionally NOT set: outcome-v3 defaults to
-    // 'exclude' (fail closed on unverified delisting reasons).
-  });
-  for (const sym of syms) {
-    const f = path.join(cacheDir, `${sym}.json`); if (!fs.existsSync(f)) continue;
+// Merge income statements across a group's member cache files (vendor backfills
+// the same filings under each alias): union deduped by period date.
+function mergedIncome(cacheDir, members) {
+  const byDate = new Map();
+  for (const sym of members) {
+    const f = path.join(cacheDir, `${sym}.json`);
+    if (!fs.existsSync(f)) continue;
     let c; try { c = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { continue; }
-    const ps = pit.priceSeries(c.price); if (ps.length < 60) continue;
-    const ss = pit.sharesSeries(c.income); if (!ss.length) continue;
-    const sec = symbols[sym].sector || 'Unknown'; names++;
-    const security = master.records[sym] || null;   // null → outcome-v3 fails closed to unresolved
+    for (const r of c.income || []) {
+      if (r && r.date && !byDate.has(r.date)) byDate.set(r.date, r);
+    }
+  }
+  return [...byDate.values()];
+}
+
+function buildPanel({ master, symbols, cacheDir, corpDir }) {
+  const symsAll = Object.keys(symbols).sort();
+  const exclusions = {};                       // symbol-level exclusion reason → count
+  const excl = (reason) => { exclusions[reason] = (exclusions[reason] || 0) + 1; };
+
+  // ── symbol-level funnel: cache → instrument type → identity ────────────────
+  const cached = [];
+  for (const sym of symsAll) {
+    if (!fs.existsSync(path.join(cacheDir, `${sym}.json`))) { excl('no-price-cache'); continue; }
+    cached.push(sym);
+  }
+  const typed = [];
+  for (const sym of cached) {
+    const cls = classifyInstrument(sym, symbols[sym], master.records[sym]);
+    if (!cls.include) { excl(`type:${cls.reason}`); continue; }
+    if (cls.override) excl(`override:${cls.override}`);   // disclosure counter, symbol still included
+    typed.push(sym);
+  }
+
+  // Series loader (memoized) for spans + overlap checks + the build itself.
+  const seriesMemo = new Map();
+  const loadSeries = (sym) => {
+    if (seriesMemo.has(sym)) return seriesMemo.get(sym);
+    let out = null;
+    try {
+      const c = JSON.parse(fs.readFileSync(path.join(cacheDir, `${sym}.json`), 'utf8'));
+      const ps = pit.priceSeries(c.price);
+      out = ps.length ? ps : null;
+    } catch { out = null; }
+    seriesMemo.set(sym, out);
+    return out;
+  };
+  const spanOf = (sym) => {
+    const ps = loadSeries(sym);
+    if (!ps) return null;
+    return { firstBar: new Date(ps[0].ms).toISOString().slice(0, 10), lastBar: new Date(ps[ps.length - 1].ms).toISOString().slice(0, 10), bars: ps.length };
+  };
+  const overlapCheck = (a, b) => ID3.seriesConsistent(loadSeries(a) || [], loadSeries(b) || []);
+
+  const identity = ID3.buildIdentityIndex({ symbols: typed, records: master.records, spanOf, overlapCheck });
+  for (let k = 0; k < identity.noIdentity.length; k++) excl('no-identity-fails-closed');
+  for (const q of identity.quarantined) for (let k = 0; k < q.symbols.length; k++) excl('identity-quarantined');
+
+  // ── group-level build ──────────────────────────────────────────────────────
+  const out = {};
+  const labelStates = { m: 0, c: 0, p: 0, u: 0, n: 0 };
+  const labelStatesByH = Object.fromEntries(HORIZONS.map((h) => [h, { m: 0, c: 0, p: 0, u: 0, n: 0 }]));
+  const withheldDelistings = { unverifiedReason: 0 };
+  const extremeSummary = { symbolsAudited: 0, events: 0, byClass: {}, poisonedLabels: 0, poisonedEntriesSkipped: 0, perSymbol: [] };
+  const provenanceSummary = { verifiedSplitAdjusted: 0, unverifiable: 0, conflicts: 0 };
+  const monthlyFunnel = {};    // ym → counters
+  let kept = 0, names = 0, deadNamesIncluded = 0;
+  let dataEdgeMs = 0;
+  let minRetrievedAt = null, maxRetrievedAt = null;
+
+  const groups = [...identity.groups.values()].sort((a, b) => (a.listingId < b.listingId ? -1 : 1));
+  for (const g of groups) {
+    const src = g.canonicalSource;
+    const rawSeries = loadSeries(src);
+    if (!rawSeries || rawSeries.length < 60) { excl('too-few-bars'); continue; }
+
+    // Corporate-action provenance is REQUIRED (fail closed).
+    const corpPath = path.join(corpDir, `${src}.json`);
+    if (!fs.existsSync(corpPath)) { excl('no-corpaction-provenance'); continue; }
+    let corp; try { corp = JSON.parse(fs.readFileSync(corpPath, 'utf8')); } catch { excl('no-corpaction-provenance'); continue; }
+    if (corp.retrievedAt) {
+      if (!minRetrievedAt || corp.retrievedAt < minRetrievedAt) minRetrievedAt = corp.retrievedAt;
+      if (!maxRetrievedAt || corp.retrievedAt > maxRetrievedAt) maxRetrievedAt = corp.retrievedAt;
+    }
+    const sv = CA.verifySplitAdjustment(rawSeries, corp.splits);
+    if (sv.verified === false) { excl('split-adjustment-conflict'); provenanceSummary.conflicts++; continue; }
+    if (sv.verified === true) provenanceSummary.verifiedSplitAdjusted++; else provenanceSummary.unverifiable++;
+
+    const ps = CA.withTotalReturn(rawSeries, corp.dividends);
+    const audit = CA.extremeReturnAudit(rawSeries, corp);
+    extremeSummary.symbolsAudited++;
+    if (audit.events.length) {
+      extremeSummary.events += audit.events.length;
+      for (const e of audit.events) extremeSummary.byClass[e.class] = (extremeSummary.byClass[e.class] || 0) + 1;
+      if (extremeSummary.perSymbol.length < 500) extremeSummary.perSymbol.push({ sym: src, lid: g.listingId, events: audit.events });
+    }
+
+    const ss = pit.sharesSeries(mergedIncome(cacheDir, g.members));
+    if (!ss.length) { excl('no-shares-series'); continue; }
+
+    const meta = symbols[src] || symbols[g.members[0]] || {};
+    const sec = meta.sector || 'Unknown';
+    const security = master.records[src] || null;
+    names++;
     if (security && security.status === 'delisted') deadNamesIncluded++;
+    if (rawSeries[rawSeries.length - 1].ms > dataEdgeMs) dataEdgeMs = rawSeries[rawSeries.length - 1].ms;
+
+    // Stash per-group work for the second pass (labels need the global data edge).
+    g._work = { ps, audit, ss, sec, security };
+  }
+
+  // The label observation cutoff is DERIVED from the data: the latest bar any
+  // included series carries. Every pending/unresolved decision past it is
+  // honestly pending; every mature label must end at or before it (verified by
+  // the manifest invariants).
+  const labelObservationCutoffMs = dataEdgeMs;
+  const cutoffs = {
+    featureAvailabilityCutoff: new Date(dataEdgeMs).toISOString().slice(0, 10),
+    labelObservationCutoff: new Date(labelObservationCutoffMs).toISOString().slice(0, 10),
+    lastDecisionTimestamp: null,   // set after rows emit
+  };
+
+  for (const g of groups) {
+    if (!g._work) continue;
+    const { ps, audit, ss, sec, security } = g._work;
+    const opts = { dataCutoffMs: labelObservationCutoffMs, securityMasterVersion: master.version, priceDataVersion: 'fmp-cache-v1+corpactions-v1-tr' };
+    // Label series: TR index as the return basis (close ← tr), raw close kept
+    // for entry-positivity semantics via tr>0 equivalence.
+    const labelSeries = ps.map((b) => ({ ms: b.ms, close: b.tr }));
     for (const d of GRID) {
+      const ym = new Date(d).toISOString().slice(0, 7);
+      const fun = (monthlyFunnel[ym] ||= { candidates: 0, priced: 0, bandPass: 0, featurePass: 0, emitted: 0 });
+      fun.candidates++;
       const pa = pit.asOfPriceAdv(ps, d); if (!pa || pa.stale) continue;
-      const i = pa.idx, sh = pit.asOfShares(ss, d); if (!sh) continue;
+      const i = pa.idx;
+      fun.priced++;
+      const sh = pit.asOfShares(ss, d); if (!sh) continue;
       const cap = pa.close * sh; if (cap < pit.CAP_LO || cap > pit.CAP_HI || pa.adv < pit.ADV_FLOOR) continue;
+      fun.bandPass++;
       const m121 = ratio(ps, i, 252, 21); if (m121 == null) continue;
-      const outcomes = HORIZONS.map((h) => OV3.forwardOutcomeV3({ series: ps, dateMs: d, bars: h, security, opts: outcomeOpts }));
-      for (const o of outcomes) {
-        labelStates[STATUS_CHAR[o.status] || 'u']++;
+      fun.featurePass++;
+      if (audit.poisonedMs.has(ps[i].ms)) { extremeSummary.poisonedEntriesSkipped++; continue; }
+
+      const outcomes = HORIZONS.map((h) => {
+        const o = OV3.forwardOutcomeV3({ series: labelSeries, dateMs: d, bars: h, security, opts });
+        if (o.labelReady && CA.windowPoisoned(audit.poisonedMs, ps[i].ms, Date.parse(o.actualExitDate))) {
+          extremeSummary.poisonedLabels++;
+          return { ...o, status: 'unresolved', labelReady: false, trainingLabel: null, reason: 'extreme-event-in-window-fails-closed' };
+        }
+        return o;
+      });
+      for (let hIdx = 0; hIdx < HORIZONS.length; hIdx++) {
+        const o = outcomes[hIdx];
+        const ch = STATUS_CHAR[o.status] || 'u';
+        labelStates[ch]++;
+        labelStatesByH[HORIZONS[hIdx]][ch]++;
         if (o.status === 'confirmed_delisted' && !o.labelReady) withheldDelistings.unverifiedReason++;
       }
       const m121lag = ratio(ps, i - 63, 252, 21);
       const v63 = annVol(ps, i, VOL_LB);
       const a20 = advN(ps, i, 20), a60 = advN(ps, i, 60);
+      const dt = new Date(d).toISOString().slice(0, 10);
       const row = {
-        s: sym, sec, cap, adv: pa.adv, ipo: Math.round((d - ps[0].ms) / pit.DAY),
-        dt: new Date(d).toISOString().slice(0, 10),   // decision timestamp (features as-of this session close)
-        lid: security ? security.listingId : null,
+        s: ID3.canonicalTickerAt(g, dt) || g.canonicalSource,
+        cs: g.canonicalSource,
+        sec, cap, adv: pa.adv, ipo: Math.round((d - ps[0].ms) / pit.DAY),
+        dt, lid: g.listingId,
         m61: ratio(ps, i, 126, 21), m91: ratio(ps, i, 189, 21), m121,
         m181: ratio(ps, i, 378, 21), m63: ratio(ps, i, 126, 63), m93: ratio(ps, i, 189, 63), m122: ratio(ps, i, 252, 42),
         acc: m121lag == null ? null : m121 - m121lag,
@@ -123,41 +303,166 @@ function buildPanel({ master, symbols, cacheDir }) {
         v63, ra: v63 ? m121 / v63 : null, vs: (a20 && a60) ? a20 / a60 : null,
         ...labelFieldsV3(21, outcomes[0]), ...labelFieldsV3(63, outcomes[1]), ...labelFieldsV3(126, outcomes[2]),
       };
-      const ym = new Date(d).toISOString().slice(0, 7); (out[ym] || (out[ym] = [])).push(row); kept++;
+      fun.emitted++;
+      (out[ym] || (out[ym] = [])).push(row); kept++;
+      if (row.dt && (!cutoffs.lastDecisionTimestamp || row.dt > cutoffs.lastDecisionTimestamp)) cutoffs.lastDecisionTimestamp = row.dt;
+    }
+    delete g._work;
+  }
+
+  // HARD FAIL on residual duplicate (lid, dt) keys — identity resolution must
+  // make them impossible; if one appears the build is defective.
+  const seen = new Set();
+  for (const ym of Object.keys(out)) {
+    for (const r of out[ym]) {
+      const key = `${r.lid}|${r.dt}`;
+      if (seen.has(key)) throw new Error(`duplicate (listingId, decisionTs) key survived identity resolution: ${key}`);
+      seen.add(key);
     }
   }
-  return { out, labelStates, withheldDelistings, kept, names, deadNamesIncluded };
+
+  return {
+    out, labelStates, labelStatesByH, withheldDelistings, kept, names, deadNamesIncluded,
+    identity, exclusions, extremeSummary, provenanceSummary, monthlyFunnel, cutoffs,
+    corpRetrievedRange: { min: minRetrievedAt, max: maxRetrievedAt },
+  };
+}
+
+function lastFullyMatureByHorizon(out) {
+  const res = {};
+  for (const h of HORIZONS) {
+    let last = null;
+    for (const ym of Object.keys(out)) {
+      for (const r of out[ym]) {
+        if (r[`f${h}`] != null && (!last || r.dt > last)) last = r.dt;   // trainable = label-ready
+      }
+    }
+    res[String(h)] = last;
+  }
+  return res;
+}
+
+function missingnessByFeature(out) {
+  const keys = ['m61', 'm91', 'm121', 'm181', 'm63', 'm93', 'm122', 'acc', 'r21', 'r5', 'v63', 'ra', 'vs'];
+  const nulls = Object.fromEntries(keys.map((k) => [k, 0]));
+  let n = 0;
+  for (const ym of Object.keys(out)) for (const r of out[ym]) { n++; for (const k of keys) if (r[k] == null) nulls[k]++; }
+  return Object.fromEntries(keys.map((k) => [k, n ? +(nulls[k] / n).toFixed(4) : null]));
 }
 
 function main() {
   if (!fs.existsSync(MASTER_PATH)) {
     return writeBlocked('research/data/secmaster-v3.json missing — fwd-outcome-v3 requires an authoritative security master and will not label from price staleness');
   }
+  if (!fs.existsSync(CORP_DIR) || !fs.readdirSync(CORP_DIR).some((f) => f.endsWith('.json'))) {
+    return writeBlocked('research/data/corpactions/ empty — labels require corporate-action provenance (run research/54-corpactions-fetch.js)');
+  }
   const master = JSON.parse(fs.readFileSync(MASTER_PATH, 'utf8'));
-  const symbols = JSON.parse(fs.readFileSync(path.join(DATA, 'symbols.json'), 'utf8')).symbols;
-  const { out, labelStates, withheldDelistings, kept, names, deadNamesIncluded } = buildPanel({ master, symbols, cacheDir: pit.CACHE });
-  const months = Object.keys(out).sort();
+  const symbolsDoc = JSON.parse(fs.readFileSync(path.join(DATA, 'symbols.json'), 'utf8'));
+  const symbols = symbolsDoc.symbols;
+
+  // Predecessor hash (superseded-by chain) BEFORE overwriting.
+  let supersedes = null;
+  if (fs.existsSync(OUT_PATH)) {
+    try { supersedes = MF.normalizedPanelHash(JSON.parse(fs.readFileSync(OUT_PATH, 'utf8')).panel); } catch { supersedes = null; }
+  }
+
+  const b = buildPanel({ master, symbols, cacheDir: pit.CACHE, corpDir: CORP_DIR });
+  const months = Object.keys(b.out).sort();
+  const datasetHash = MF.normalizedPanelHash(b.out);
+  const generatedAt = new Date().toISOString();
+  const universeRule = `PIT at decision date: cap in [${pit.CAP_LO / 1e6}M, ${pit.CAP_HI / 1e9}B], ADV ≥ ${pit.ADV_FLOOR / 1e6}M, non-stale price, shares as-of with filing lag, US common stock only (ETF/fund/ADR/warrant/unit/right/preferred excluded)`;
+
+  const manifest = MF.buildSnapshotManifest({
+    snapshotId: `${PANEL_VERSION}:${datasetHash.slice(0, 16)}`,
+    datasetHash,
+    codeCommit: process.env.GIT_COMMIT || null,
+    generatedAt,
+    securityMasterHash: MF.definitionHash({ version: master.version, builtAt: master.builtAt, counts: master.counts }),
+    universeDefinitionHash: MF.definitionHash({ universeRule, grid: ['2022-01', '2026-05'], volLb: VOL_LB, horizons: HORIZONS }),
+    sources: [
+      { name: 'fmp-price-cache', version: 'fmp-cache-v1', retrievedAt: null, earliestObservation: '2021-06-25', latestObservation: b.cutoffs.labelObservationCutoff },
+      { name: 'secmaster-v3', version: master.version, retrievedAt: master.builtAt, earliestObservation: null, latestObservation: null },
+      { name: 'fmp-corpactions', version: 'corpactions-v1', retrievedAt: b.corpRetrievedRange.max, earliestObservation: null, latestObservation: null },
+      { name: 'symbols-universe', version: symbolsDoc.generatedAt || 'unknown', retrievedAt: symbolsDoc.generatedAt || null, earliestObservation: null, latestObservation: null },
+    ],
+    featureAvailabilityCutoff: b.cutoffs.featureAvailabilityCutoff,
+    lastDecisionTimestamp: b.cutoffs.lastDecisionTimestamp,
+    labelObservationCutoff: b.cutoffs.labelObservationCutoff,
+    lastFullyMatureDecisionDate: lastFullyMatureByHorizon(b.out),
+    priceAdjustmentBasis: 'vendor-split-adjusted close + total-return index (adjDividend reinvested); raw closes preserved for cap/ADV',
+    corporateActionSource: 'fmp-stable:splits+dividends',
+    corporateActionStatus: `verified-split-adjusted:${b.provenanceSummary.verifiedSplitAdjusted} unverifiable(no in-window splits):${b.provenanceSummary.unverifiable} conflicts-excluded:${b.provenanceSummary.conflicts}`,
+    sectorClassificationBasis: 'current-vendor-classification — NOT point-in-time; disclose in any sector-conditioned result',
+    rowCount: b.kept,
+    securityCount: new Set(Object.values(b.out).flat().map((r) => r.lid)).size,
+    listingStatusCounts: { activeNames: b.names - b.deadNamesIncluded, deadNamesIncluded: b.deadNamesIncluded },
+    labelStateCounts: b.labelStatesByH,
+    missingnessByFeature: missingnessByFeature(b.out),
+    excludedRowCounts: { ...b.exclusions, 'label:poisoned-extreme-event': b.extremeSummary.poisonedLabels, 'row:entry-bar-poisoned': b.extremeSummary.poisonedEntriesSkipped },
+    knownLimitations: [
+      ...(master.meta && master.meta.coverageLimitations ? master.meta.coverageLimitations : []),
+      { source: 'shares-outstanding', limitation: 'weightedAverageShsOut (diluted-average approximation); availability = acceptedDate > filingDate > period+45d lag', consequence: 'market caps are approximate near share-count changes' },
+      { source: 'fundamental-restatements', limitation: 'vendor may serve restated statements; original-vs-restated vintages are not distinguishable on this plan', consequence: 'as-of shares may embed restated values; amended-filing timing is approximate' },
+      { source: 'sector-classification', limitation: 'current-vendor, not point-in-time', consequence: 'sector-conditioned studies are advisory only' },
+      { source: 'alias-intervals', limitation: 'reconstructed from observed trading spans (vendor rename history ~3 months deep)', consequence: 'rename dates approximate to the last bar under the prior symbol' },
+    ],
+    supersedes,
+  });
+
+  const verdict = MF.verifySnapshotManifest(manifest, b.out, { horizons: HORIZONS });
+  if (!verdict.valid) {
+    fs.writeFileSync(INVALID_PATH, JSON.stringify({ status: 'invalid', panelVersion: PANEL_VERSION, generatedAt, errors: verdict.errors, stats: verdict.stats }, null, 2));
+    console.error('PANEL INVALID — not published. Errors:');
+    for (const e of verdict.errors) console.error(`  * ${e}`);
+    process.exitCode = 1;
+    return;
+  }
+
   fs.writeFileSync(OUT_PATH, JSON.stringify({
-    generatedAt: new Date().toISOString(),
-    panelVersion: 'panel-v3',
+    generatedAt,
+    panelVersion: PANEL_VERSION,
     outcomePolicyVersion: OV3.OUTCOME_POLICY_VERSION,
     unknownReasonPolicy: 'exclude',
     securityMasterVersion: master.version,
     securityMasterSource: master.source || null,
     securityMasterBuiltAt: master.builtAt || null,
     coverageLimitations: (master.meta && master.meta.coverageLimitations) || null,
-    dataCutoff: new Date(pit.DATA_CUTOFF_MS).toISOString().slice(0, 10),
-    universeRule: `PIT at decision date: cap in [${pit.CAP_LO / 1e6}M, ${pit.CAP_HI / 1e9}B], ADV ≥ ${pit.ADV_FLOOR / 1e6}M, non-stale price, shares as-of with filing lag`,
-    featureTimestamping: 'all features computed from bars/filings at or before each row\'s dt (decision date); shares apply pit.asOfShares filing lag',
+    dataCutoff: b.cutoffs.labelObservationCutoff,   // legacy field: now the DERIVED label cutoff
+    universeRule,
+    featureTimestamping: 'all features computed from bars/filings at or before each row\'s dt (decision date); shares apply pit.asOfShares filing lag; return basis = total-return index',
     sectorBasis: 'current-vendor-classification — NOT point-in-time; disclose in any sector-conditioned result',
-    labelStates,
-    withheldDelistings,
-    months, rows: kept, deadNamesIncluded, panel: out,
+    labelStates: b.labelStates,
+    labelStatesByHorizon: b.labelStatesByH,
+    withheldDelistings: b.withheldDelistings,
+    months, rows: b.kept, deadNamesIncluded: b.deadNamesIncluded,
+    datasetHash,
+    manifest,
+    panel: b.out,
   }));
+  fs.writeFileSync(MANIFEST_PATH, JSON.stringify({ manifest, verification: verdict }, null, 2));
+  fs.writeFileSync(IDENTITY_REPORT_PATH, JSON.stringify({ generatedAt, ...b.identity.report }, null, 2));
+  fs.writeFileSync(EXTREMES_REPORT_PATH, JSON.stringify({ generatedAt, ...b.extremeSummary }, null, 2));
+  fs.writeFileSync(COVERAGE_REPORT_PATH, JSON.stringify({
+    generatedAt, universeRule,
+    symbolFunnel: {
+      universeSymbols: Object.keys(symbols).length,
+      exclusionsBySymbol: b.exclusions,
+    },
+    monthlyFunnel: b.monthlyFunnel,
+  }, null, 2));
   if (fs.existsSync(BLOCKED_PATH)) fs.unlinkSync(BLOCKED_PATH);
-  console.log(`Panel built (panel-v3/${OV3.OUTCOME_POLICY_VERSION}): ${kept} name-months across ${months.length} months, ${names} names scanned, ${deadNamesIncluded} confirmed-delisted names included.`);
-  console.log('label states (per horizon-label):', JSON.stringify(labelStates), 'withheld delisting labels:', JSON.stringify(withheldDelistings));
+  if (fs.existsSync(INVALID_PATH)) fs.unlinkSync(INVALID_PATH);
+  console.log(`Panel built (${PANEL_VERSION}/${OV3.OUTCOME_POLICY_VERSION}): ${b.kept} name-months across ${months.length} months, ${b.names} names, ${b.deadNamesIncluded} confirmed-delisted names included.`);
+  console.log(`datasetHash ${datasetHash.slice(0, 16)}… supersedes ${supersedes ? supersedes.slice(0, 16) + '…' : '(none)'}`);
+  console.log('cutoffs:', JSON.stringify({ ...b.cutoffs }));
+  console.log('label states:', JSON.stringify(b.labelStates), 'withheld delistings:', JSON.stringify(b.withheldDelistings));
+  console.log('extremes:', JSON.stringify({ events: b.extremeSummary.events, byClass: b.extremeSummary.byClass, poisonedLabels: b.extremeSummary.poisonedLabels, entriesSkipped: b.extremeSummary.poisonedEntriesSkipped }));
+  console.log('identity:', JSON.stringify({ groups: b.identity.report.resolvedGroups, multiSymbol: b.identity.report.multiSymbolGroups, quarantined: b.identity.report.quarantinedGroups, noIdentity: b.identity.report.noIdentitySymbols }));
 }
 
-module.exports = { labelFieldsV3, buildPanel, OUT_PATH, BLOCKED_PATH, GRID, HORIZONS, STATUS_CHAR };
+module.exports = {
+  labelFieldsV3, buildPanel, classifyInstrument, lastFullyMatureByHorizon,
+  OUT_PATH, BLOCKED_PATH, INVALID_PATH, MANIFEST_PATH, GRID, HORIZONS, STATUS_CHAR, PANEL_VERSION,
+};
 if (require.main === module) main();
