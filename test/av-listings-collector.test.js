@@ -53,16 +53,55 @@ test('partitions: content-addressed and tamper-evident', () => {
   assert.notEqual(doc.contentHash, doc2.contentHash);
 });
 
-test('gate 1: delisting reconciliation passes at ≥95% agreement, fails below, discloses disagreements', () => {
+test('gate 1: convention window (±21d, Form-25 effectiveness) counts as agreement; beyond it fails', () => {
   const av = Array.from({ length: 100 }, (_, i) => ({ symbol: `S${i}`, delistingDate: '2024-06-10', assetType: 'Stock' }));
-  const knownGood = Array.from({ length: 100 }, (_, i) => ({ symbol: `S${i}`, date: '2024-06-12' }));   // within 7d
+  const knownGood = Array.from({ length: 100 }, (_, i) => ({ symbol: `S${i}`, date: '2024-06-20' }));   // the +10d convention offset
   const g1 = AV.gateDelistingReconciliation(av, knownGood);
   assert.equal(g1.status, 'pass');
+  assert.equal(g1.offsetStats.median, 10, 'the convention offset is measured and reported');
   const knownBad = knownGood.map((k, i) => (i < 10 ? { ...k, date: '2024-09-01' } : k));               // 10% off by months
   const g2 = AV.gateDelistingReconciliation(av, knownBad);
   assert.equal(g2.status, 'fail');
+  assert.equal(g2.tailCount, 10);
   assert.ok(g2.disagreements.length > 0);
   assert.equal(AV.gateDelistingReconciliation(av, knownGood.slice(0, 10)).status, 'insufficient-data');
+});
+
+test('gate 1 + adjudication: tail symbols EDGAR sides with AV on stop counting against it; the rest still do', () => {
+  const av = Array.from({ length: 100 }, (_, i) => ({ symbol: `S${i}`, delistingDate: '2024-06-10', assetType: 'Stock' }));
+  const known = Array.from({ length: 100 }, (_, i) => ({ symbol: `S${i}`, date: i < 10 ? '2024-09-01' : '2024-06-20' }));
+  const unresolved = AV.gateDelistingReconciliation(av, known);
+  assert.equal(unresolved.status, 'fail');
+  // EDGAR adjudicates 8 of the 10 tail symbols in AV's favor → 98% ≥ 95%.
+  const adjudication = { avConsistentSymbols: Array.from({ length: 8 }, (_, i) => `S${i}`) };
+  const resolved = AV.gateDelistingReconciliation(av, known, { adjudication });
+  assert.equal(resolved.status, 'pass');
+  assert.equal(resolved.tailResolvedForAv, 8);
+  assert.equal(resolved.adjudicated, true);
+  assert.equal(resolved.disagreements.length, 2, 'unadjudicated tail symbols remain disclosed disagreements');
+  // Adjudicating only 4 of 10 leaves 94% → still fail (no free pass).
+  const partial = AV.gateDelistingReconciliation(av, known, { adjudication: { avConsistentSymbols: ['S0', 'S1', 'S2', 'S3'] } });
+  assert.equal(partial.status, 'fail');
+});
+
+test('adjudicateDelistingCase: Form-25 filing anchors AV, filing+10 anchors the secmaster; no evidence fails closed', () => {
+  // AV = last trading day ≈ filing date; secmaster carried a wrong date.
+  const avRight = AV.adjudicateDelistingCase({ symbol: 'X', avDate: '2024-06-10', knownDate: '2024-09-01', form25FilingDate: '2024-06-11' });
+  assert.equal(avRight.verdict, 'av-consistent');
+  assert.equal(avRight.avConsistent, true);
+  assert.equal(avRight.effectiveDate, '2024-06-21');
+  // Secmaster matches filing+10; AV is months off.
+  const secRight = AV.adjudicateDelistingCase({ symbol: 'Y', avDate: '2024-02-01', knownDate: '2024-06-21', form25FilingDate: '2024-06-11' });
+  assert.equal(secRight.verdict, 'secmaster-consistent');
+  assert.equal(secRight.avConsistent, false);
+  // Neither side near the filing → EDGAR disagrees with both.
+  assert.equal(AV.adjudicateDelistingCase({ symbol: 'Z', avDate: '2023-01-01', knownDate: '2023-06-01', form25FilingDate: '2024-06-11' }).verdict, 'edgar-disagrees-with-both');
+  // Form 15 fallback uses a wider window on the filing date itself.
+  assert.equal(AV.adjudicateDelistingCase({ symbol: 'W', avDate: '2024-05-20', knownDate: '2024-09-01', form15FilingDate: '2024-06-05' }).verdict, 'av-consistent');
+  // No filings at all → never an AV agreement.
+  const none = AV.adjudicateDelistingCase({ symbol: 'V', avDate: '2024-05-20', knownDate: '2024-09-01' });
+  assert.equal(none.verdict, 'no-edgar-evidence');
+  assert.equal(none.avConsistent, false);
 });
 
 test('gate 2: membership sanity catches out-of-band months and cliffs', () => {

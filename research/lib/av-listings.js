@@ -133,29 +133,84 @@ const partitionValid = (doc) => !!(doc && doc.contentHash && Array.isArray(doc.r
 const isCommonStock = (r) => r.assetType === 'Stock';
 
 // Gate 1: delisting-date reconciliation against the independently built
-// secmaster (FMP+EDGAR, 636 confirmed delistings 2021+): ≥95% of matched
-// symbols agree within ±7 calendar days; the disagreement list is disclosed.
-function gateDelistingReconciliation(latestDelistedRecords, knownDelistings, { tolDays = 7, minMatchFrac = 0.95 } = {}) {
+// secmaster (FMP+EDGAR, 636 confirmed delistings 2021+).
+//
+// MEASURED CONVENTION (first run, 578 matches): AV records the LAST TRADING
+// DAY; the secmaster records the Form-25 EFFECTIVE date (SEC Rule 12d2-2(d):
+// filing + 10 days) — the offset distribution has a median of exactly +10
+// days. The convention window (default ±21d: 10-day effectiveness + halts /
+// weekend drift) therefore counts as agreement, and the residual tail is
+// judged by EDGAR ADJUDICATION (research/61-av-delist-adjudicate.js): a tail
+// symbol whose AV date matches the authoritative Form-25 filing date is an AV
+// agreement (the SECMASTER carried the wrong date, not AV). Only tail symbols
+// where EDGAR sides against AV — or is silent — count against it.
+// Pass bar stays ≥95% of matched symbols.
+function gateDelistingReconciliation(latestDelistedRecords, knownDelistings, {
+  tolDaysConvention = 21, minMatchFrac = 0.95, adjudication = null,
+} = {}) {
   if (!latestDelistedRecords || !latestDelistedRecords.length) return { gate: 'delisting-reconciliation', status: 'insufficient-data' };
   const bySym = new Map(latestDelistedRecords.filter((r) => r.delistingDate).map((r) => [r.symbol, r.delistingDate]));
-  let matched = 0, agree = 0;
-  const disagreements = [];
+  let matched = 0, withinConvention = 0;
+  const offsets = [];
+  const tail = [];
   for (const k of knownDelistings || []) {
     const av = bySym.get(k.symbol);
     if (!av) continue;
     matched++;
-    const diff = Math.abs(Date.parse(av) - Date.parse(k.date)) / 86400000;
-    if (diff <= tolDays) agree++;
-    else if (disagreements.length < 50) disagreements.push({ symbol: k.symbol, known: k.date, av, diffDays: Math.round(diff) });
+    const signed = Math.round((Date.parse(k.date) - Date.parse(av)) / 86400000);   // known − AV; +10 ≈ the convention
+    offsets.push(signed);
+    if (Math.abs(signed) <= tolDaysConvention) withinConvention++;
+    else tail.push({ symbol: k.symbol, known: k.date, av, diffDays: signed });
   }
   if (matched < 50) return { gate: 'delisting-reconciliation', status: 'insufficient-data', matched, note: 'need ≥50 matched known delistings' };
+  offsets.sort((a, b) => a - b);
+  const offsetStats = {
+    median: offsets[Math.floor(offsets.length / 2)],
+    p10: offsets[Math.floor(offsets.length / 10)],
+    p90: offsets[Math.floor((offsets.length * 9) / 10)],
+  };
+  // Adjudicated tail agreements: EDGAR sided with AV → the disagreement was
+  // the secmaster's, not AV's. Unadjudicated or EDGAR-against-AV tail symbols
+  // remain disagreements (fail closed).
+  const avConsistent = new Set((adjudication && adjudication.avConsistentSymbols) || []);
+  const tailResolvedForAv = tail.filter((t) => avConsistent.has(t.symbol)).length;
+  const agree = withinConvention + tailResolvedForAv;
   const frac = agree / matched;
   return {
     gate: 'delisting-reconciliation',
     status: frac >= minMatchFrac ? 'pass' : 'fail',
-    knownDelistings: (knownDelistings || []).length, matched, agreeWithinTolerance: agree,
-    agreementFraction: +frac.toFixed(4), tolDays, disagreements,
+    knownDelistings: (knownDelistings || []).length, matched,
+    withinConvention, tolDaysConvention, offsetStats,
+    tailCount: tail.length, tailResolvedForAv,
+    adjudicated: !!adjudication,
+    agreementFraction: +frac.toFixed(4),
+    disagreements: tail.filter((t) => !avConsistent.has(t.symbol)).slice(0, 50),
+    note: 'convention: AV=last trading day, secmaster=Form-25 effective (filing+10d); tail judged by EDGAR adjudication when available',
   };
+}
+
+// EDGAR adjudication of one reconciliation-tail symbol. The authoritative
+// anchor is the Form 25: its FILING date ≈ the last trading day (AV's
+// convention) and filing+10 = the effective date (the secmaster's convention).
+// Form 15 (deregistration) is a weaker anchor: filing date only, wider window.
+// No filings → 'no-edgar-evidence' (fails closed: never an AV agreement).
+const FORM25_EFFECTIVE_DAYS_LOCAL = 10;
+function adjudicateDelistingCase({ symbol, avDate, knownDate, form25FilingDate, form15FilingDate }, { tolDays = 7, form15TolDays = 30 } = {}) {
+  const days = (a, b) => Math.abs(Date.parse(a) - Date.parse(b)) / 86400000;
+  if (form25FilingDate) {
+    const effective = new Date(Date.parse(form25FilingDate) + FORM25_EFFECTIVE_DAYS_LOCAL * 86400000).toISOString().slice(0, 10);
+    const avOk = avDate && days(avDate, form25FilingDate) <= tolDays;
+    const knownOk = knownDate && days(knownDate, effective) <= tolDays;
+    const verdict = avOk && knownOk ? 'both-consistent' : avOk ? 'av-consistent' : knownOk ? 'secmaster-consistent' : 'edgar-disagrees-with-both';
+    return { symbol, anchor: 'form25', form25FilingDate, effectiveDate: effective, avDate, knownDate, verdict, avConsistent: avOk };
+  }
+  if (form15FilingDate) {
+    const avOk = avDate && days(avDate, form15FilingDate) <= form15TolDays;
+    const knownOk = knownDate && days(knownDate, form15FilingDate) <= form15TolDays;
+    const verdict = avOk && knownOk ? 'both-consistent' : avOk ? 'av-consistent' : knownOk ? 'secmaster-consistent' : 'edgar-disagrees-with-both';
+    return { symbol, anchor: 'form15', form15FilingDate, avDate, knownDate, verdict, avConsistent: avOk };
+  }
+  return { symbol, anchor: null, avDate, knownDate, verdict: 'no-edgar-evidence', avConsistent: false };
 }
 
 // Gate 2: monthly common-stock membership counts stay in a plausible band with
@@ -243,6 +298,7 @@ module.exports = {
   AV_LISTINGS_VERSION, EXPECTED_HEADER, FROM_YM, DEFAULT_RUN_BUDGET, THROTTLE_MS,
   monthEndDate, ymRange, snapshotPlan, parseCsv, classifyResponse,
   partitionDoc, partitionValid, isCommonStock,
+  adjudicateDelistingCase,
   gateDelistingReconciliation, gateMembershipSanity, gateInternalConsistency,
   gateRenameSpotChecks, gatesVerdict,
 };
