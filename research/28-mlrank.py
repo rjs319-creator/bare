@@ -42,14 +42,27 @@ TARGET = "f21"                      # 1-month fwd, panel-v2 (fwd-outcome-v2): ma
 N_GROUPS = 8                        # CPCV month-groups
 PURGE = 1                          # months purged each side of a test block (>= fwd horizon in months)
 
+# COHORT_FILE (optional): the v3.2 cohort-eligibility ledger. When set, only
+# decision dates whose 21-session cohort is FULLY OBSERVED enter the study —
+# a date can never enter because a few early delistings resolved labels early.
+COHORT = os.environ.get("COHORT_FILE")
+
 def load():
     d = json.load(open(PANEL))
+    eligible = None
+    if COHORT:
+        ledger = json.load(open(COHORT))
+        eligible = set(ledger["byHorizon"]["21"]["eligibleDates"])
     rows = []
     for ym, arr in d["panel"].items():
         for r in arr:
             r = dict(r); r["ym"] = ym; rows.append(r)
     df = pd.DataFrame(rows)
     df = df[np.isfinite(df[TARGET])].copy()
+    if eligible is not None:
+        before = df["dt"].nunique()
+        df = df[df["dt"].isin(eligible)].copy()
+        print(f"cohort filter: {before} decision dates -> {df['dt'].nunique()} fully observed (21s)")
     df["logcap"] = np.log(df["cap"].clip(lower=1))
     df["logadv"] = np.log(df["adv"].clip(lower=1))
     df["ipo"] = df["ipo"].fillna(df["ipo"].median())

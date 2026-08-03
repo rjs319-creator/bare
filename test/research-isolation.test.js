@@ -25,6 +25,10 @@ const FORBIDDEN = [
   'research/lib/pit',          // research PIT slice + price cache
   'research/lib/edgar',        // research EDGAR enrichment
   'pitdata-v3-listings',       // raw listing export
+  'cohort-eligibility',        // v3.2 cohort-maturity ledger
+  'market-calendar-v1',        // v3.2 session-calendar artifact
+  'research/lib/cohort',       // v3.2 cohort contract module
+  'research/lib/calendar',     // v3.2 calendar module
 ];
 
 // Live-app surfaces that must stay isolated. lib/research/ is the app-side

@@ -1,30 +1,36 @@
 'use strict';
-// CORPORATE-ACTION / ADJUSTED-PRICE LAYER (corpactions-v1)
+// CORPORATE-ACTION / ADJUSTED-PRICE LAYER (corpactions-v2)
 //
 // The cached FMP `historical-price-eod/full` closes are VENDOR-SPLIT-ADJUSTED
 // (verified empirically: CELH 3:1 2023-11-15 and GME 4:1 2022-07-22 show no
 // discontinuity) but NOT dividend-adjusted, and carried no provenance. This
-// layer makes the basis explicit, verified and versioned:
+// layer makes the basis explicit, verified and versioned.
 //
-//   * split records + dividend records per symbol, cached with retrievedAt
-//     (research/54-corpactions-fetch.js populates the cache);
-//   * verifySplitAdjustment — proves (or refutes) that the vendor series is
-//     split-adjusted by checking each in-window split for a residual
-//     discontinuity; a residual jump at a split date is a CONFLICT, never
-//     silently repaired;
-//   * withTotalReturn — a total-return index (split-adjusted close reinvesting
-//     adjDividend on ex-date) for research features/labels; raw closes remain
-//     untouched for execution modeling and display;
-//   * extremeReturnAudit — every one-session move beyond tiered thresholds is
-//     classified: explained-by-corporate-action, legitimate-persistent-move,
-//     conflicting (unadjusted split), or unresolved (spike that reverts /
-//     ambiguous). Conflicting and unresolved events POISON the dates around
-//     them: labels whose window touches a poisoned date are withheld
-//     (fail closed) — an error is never winsorized into trainable data.
+// v2 CORRECTION (verified defect in v1): v1's extremeReturnAudit looked at ~5
+// FUTURE bars to classify an extreme move (persistent vs spike-revert vs
+// ambiguous) and then POISONED the reverting/ambiguous ones — so whether an
+// observation stayed trainable depended on how the market performed AFTER the
+// decision. That is selection leakage. v2 separates two layers:
+//
+//   A. DECISION-TIME VALIDATION (decisionTimeQualityAudit) — may use only
+//      facts knowable at the bar's own timestamp: known splits/dividends,
+//      same-session OHLC consistency, duplicate/malformed vendor records,
+//      residual unadjusted-split discontinuities. ONLY this layer poisons.
+//      An extreme move with no structural inconsistency is an OBSERVED MARKET
+//      MOVE: it stays, whatever the future path did. It is flagged
+//      ('unconfirmed-extreme', extremeMs) purely so experiments can run the
+//      SYMMETRIC sensitivity views (include all / exclude all — never
+//      "exclude only the ones that later reverted").
+//
+//   B. POST-EVENT DIAGNOSTICS (postEventPersistenceDiagnostics) — the old
+//      persistence/reversion read, retained as a research diagnostic. It can
+//      never determine whether a row exists, poison an entry, withhold a
+//      label, or change cohort eligibility. Every record it emits carries
+//      diagnosticOnly: true.
 //
 // Pure module: no network. The fetch script owns I/O.
 
-const CORPACTIONS_VERSION = 'corpactions-v1';
+const CORPACTIONS_VERSION = 'corpactions-v2';
 
 // Detection thresholds by prior-close tier. Detection is deliberately wider
 // than "impossible" — classification decides what survives.
@@ -34,10 +40,11 @@ const JUMP_THRESHOLDS = Object.freeze([
   { minPrev: 0, up: 2.00, down: -0.80 },
 ]);
 const SPLIT_MATCH_TOLERANCE = 0.15;     // relative match of jump ratio to split factor
-const PERSIST_BARS = 5;                 // bars used to test whether a repricing held
-const PERSIST_TOLERANCE = 0.35;         // median stays within ±35% of the new level → persistent
-const REVERT_TOLERANCE = 0.20;          // median back within ±20% of the OLD level → spike-revert
+const PERSIST_BARS = 5;                 // diagnostics only: bars used to describe persistence
+const PERSIST_TOLERANCE = 0.35;         // diagnostics only
+const REVERT_TOLERANCE = 0.20;          // diagnostics only
 const POISON_RADIUS_BARS = 1;           // poisoned bar ± this many bars is untrainable
+const OHLC_TOLERANCE = 0.001;           // relative tolerance for close within [low, high]
 
 function thresholdFor(prevClose) {
   for (const t of JUMP_THRESHOLDS) if (prevClose >= t.minPrev) return t;
@@ -107,14 +114,18 @@ function withTotalReturn(series, dividends) {
   return out;
 }
 
-// Classify every extreme one-session raw move. Returns
-// { events: [{date, ret, prevClose, close, class, detail}], poisonedMs: Set }
-// class ∈ explained-split-error (conflicting), explained-dividend,
-//         legitimate-persistent, spike-revert (unresolved), ambiguous
-//         (unresolved), tail-truncated (unresolved).
-function extremeReturnAudit(series, { splits = [], dividends = [] } = {}) {
+// ── Layer A: DECISION-TIME VALIDATION ─────────────────────────────────────────
+// Classifies every bar/extreme using ONLY decision-time evidence. Returns
+// { version, events, poisonedMs: Set, extremeMs: Set } where
+//   events[].class ∈ explained-split-error (poison), explained-dividend (keep),
+//                    duplicate-bar (poison), ohlc-inconsistent (poison),
+//                    non-positive-price (poison), unconfirmed-extreme (KEEP —
+//                    observed market move, flagged for symmetric sensitivity)
+// Bars may carry optional {open, high, low} for same-session consistency.
+function decisionTimeQualityAudit(series, { splits = [], dividends = [] } = {}) {
   const events = [];
   const poisonedMs = new Set();
+  const extremeMs = new Set();
   const splitByApproxMs = (splits || []).map((s) => ({ ms: Date.parse(s.date), factor: splitFactor(s) })).filter((s) => Number.isFinite(s.ms) && s.factor);
   const divByMs = new Map();
   for (const d of dividends || []) {
@@ -127,17 +138,43 @@ function extremeReturnAudit(series, { splits = [], dividends = [] } = {}) {
       poisonedMs.add(series[k].ms);
     }
   };
-  for (let i = 1; i < series.length; i++) {
-    const prev = series[i - 1], cur = series[i];
-    if (!(prev.close > 0) || !(cur.close > 0)) continue;
+  const isoOf = (b) => new Date(b.ms).toISOString().slice(0, 10);
+
+  const seenMs = new Set();
+  for (let i = 0; i < series.length; i++) {
+    const cur = series[i];
+    // Duplicate vendor record for the same session — structurally malformed.
+    if (seenMs.has(cur.ms)) {
+      events.push({ date: isoOf(cur), class: 'duplicate-bar', detail: 'multiple bars share one session timestamp' });
+      poison(i);
+    }
+    seenMs.add(cur.ms);
+    // Same-session OHLC consistency (when OHLC is present on the bar).
+    if (Number.isFinite(cur.high) && Number.isFinite(cur.low)) {
+      const lo = cur.low * (1 - OHLC_TOLERANCE), hi = cur.high * (1 + OHLC_TOLERANCE);
+      const bad = cur.low > cur.high * (1 + OHLC_TOLERANCE)
+        || (Number.isFinite(cur.close) && (cur.close < lo || cur.close > hi))
+        || (Number.isFinite(cur.open) && (cur.open < lo || cur.open > hi));
+      if (bad) {
+        events.push({ date: isoOf(cur), class: 'ohlc-inconsistent', detail: `open/close outside [low, high]: o=${cur.open} h=${cur.high} l=${cur.low} c=${cur.close}` });
+        poison(i);
+      }
+    }
+    if (i === 0) continue;
+    const prev = series[i - 1];
+    if (!(prev.close > 0) || !(cur.close > 0)) {
+      if (!(cur.close > 0)) { events.push({ date: isoOf(cur), class: 'non-positive-price', detail: `close=${cur.close}` }); poison(i); }
+      continue;
+    }
     const ret = cur.close / prev.close - 1;
     const th = thresholdFor(prev.close);
     if (ret <= th.up && ret >= th.down) continue;
 
-    const ev = { date: new Date(cur.ms).toISOString().slice(0, 10), ret: +ret.toFixed(4), prevClose: prev.close, close: cur.close };
+    const ev = { date: isoOf(cur), ret: +ret.toFixed(4), prevClose: prev.close, close: cur.close };
 
     // 1) Matches a known split factor near this date → the vendor FAILED to
-    //    adjust here (series is otherwise adjusted) → conflicting.
+    //    adjust here (series is otherwise adjusted) → structural conflict.
+    //    Decision-time evidence: the split record and the jump are contemporaneous.
     const ratio = ret > 0 ? cur.close / prev.close : prev.close / cur.close;
     const nearSplit = splitByApproxMs.find((s) => Math.abs(s.ms - cur.ms) <= 5 * 86400000
       && (Math.abs(ratio / s.factor - 1) <= SPLIT_MATCH_TOLERANCE || Math.abs(ratio * s.factor - 1) <= SPLIT_MATCH_TOLERANCE));
@@ -146,42 +183,60 @@ function extremeReturnAudit(series, { splits = [], dividends = [] } = {}) {
       poison(i);
       continue;
     }
-    // 2) Large special dividend on the ex-date explains a drop.
+    // 2) Large special dividend on the ex-date explains a drop (decision-time
+    //    corporate-action evidence; total-return layer handles the economics).
     const div = divByMs.get(cur.ms);
     if (ret < 0 && div && div / prev.close >= Math.abs(ret) * 0.6) {
       events.push({ ...ev, class: 'explained-dividend', detail: `dividend ${div} on ex-date` });
-      continue;                        // total-return layer handles it; raw label poisoning not needed
-    }
-    // 3) Persistence: did the market keep the new level?
-    const fwd = series.slice(i + 1, i + 1 + PERSIST_BARS).map((b) => b.close).filter((c) => c > 0);
-    if (!fwd.length) {
-      events.push({ ...ev, class: 'tail-truncated', detail: 'no forward bars to verify persistence' });
-      poison(i);
       continue;
     }
-    const median = fwd.sort((a, b) => a - b)[Math.floor(fwd.length / 2)];
-    if (Math.abs(median / cur.close - 1) <= PERSIST_TOLERANCE) {
-      events.push({ ...ev, class: 'legitimate-persistent', detail: `median next-${fwd.length} close ${median} holds the move` });
-      continue;
-    }
-    if (Math.abs(median / prev.close - 1) <= REVERT_TOLERANCE) {
-      events.push({ ...ev, class: 'spike-revert', detail: `median next-${fwd.length} close ${median} reverted to prior level` });
-      poison(i);
-      continue;
-    }
-    events.push({ ...ev, class: 'ambiguous', detail: `median next-${fwd.length} close ${median} neither holds nor reverts` });
-    poison(i);
+    // 3) No structural inconsistency: this is an OBSERVED MARKET MOVE. With a
+    //    single provider it cannot be cross-confirmed, so it is flagged for the
+    //    symmetric sensitivity views — but it is NEVER poisoned, and its future
+    //    path plays no part in this decision.
+    events.push({ ...ev, class: 'unconfirmed-extreme', detail: 'no corporate-action or structural explanation; retained as an observed market move (single-provider, unconfirmable)' });
+    extremeMs.add(cur.ms);
   }
-  return { version: CORPACTIONS_VERSION, events, poisonedMs };
+  return { version: CORPACTIONS_VERSION, events, poisonedMs, extremeMs };
 }
 
-const UNRESOLVED_CLASSES = Object.freeze(['explained-split-error', 'spike-revert', 'ambiguous', 'tail-truncated']);
+// Classes that poison — ALL are decision-time structural evidence. Future-path
+// classes (spike-revert/ambiguous/tail-truncated) may never appear here.
+const POISONING_CLASSES = Object.freeze(['explained-split-error', 'duplicate-bar', 'ohlc-inconsistent', 'non-positive-price']);
 
-// Does the label window [entryMs, exitMs] touch any poisoned bar?
-function windowPoisoned(poisonedMs, entryMs, exitMs) {
-  for (const ms of poisonedMs) if (ms > entryMs && ms <= exitMs) return true;
+// ── Layer B: POST-EVENT DIAGNOSTICS (research only, never data cleaning) ─────
+// Describes how each unconfirmed extreme resolved. Output is diagnosticOnly:
+// consumers MUST NOT use it to gate rows, labels, or cohorts (the audit gate
+// enforces this: poisoning classes are restricted to POISONING_CLASSES).
+function postEventPersistenceDiagnostics(series, auditEvents) {
+  const byDate = new Map(series.map((b, i) => [new Date(b.ms).toISOString().slice(0, 10), i]));
+  const out = [];
+  for (const ev of auditEvents || []) {
+    if (ev.class !== 'unconfirmed-extreme') continue;
+    const i = byDate.get(ev.date);
+    if (i == null) continue;
+    const cur = series[i], prev = series[i - 1];
+    const fwd = series.slice(i + 1, i + 1 + PERSIST_BARS).map((b) => b.close).filter((c) => c > 0);
+    let persistence, detail;
+    if (!fwd.length) { persistence = 'tail-truncated'; detail = 'no forward bars to describe persistence'; }
+    else {
+      const median = fwd.sort((a, b) => a - b)[Math.floor(fwd.length / 2)];
+      if (Math.abs(median / cur.close - 1) <= PERSIST_TOLERANCE) { persistence = 'persistent'; detail = `median next-${fwd.length} close ${median} holds the move`; }
+      else if (prev && Math.abs(median / prev.close - 1) <= REVERT_TOLERANCE) { persistence = 'reverted'; detail = `median next-${fwd.length} close ${median} returned to the prior level`; }
+      else { persistence = 'ambiguous'; detail = `median next-${fwd.length} close ${median} neither holds nor reverts`; }
+    }
+    out.push({ ...ev, diagnosticOnly: true, persistence, persistenceDetail: detail });
+  }
+  return out;
+}
+
+// Does the window (entryMs, exitMs] touch any flagged bar?
+function windowTouches(msSet, entryMs, exitMs) {
+  for (const ms of msSet) if (ms > entryMs && ms <= exitMs) return true;
   return false;
 }
+const windowPoisoned = windowTouches;   // structural poison (labels withheld)
+const windowExtreme = windowTouches;    // sensitivity flag (labels KEPT, row marked)
 
 // Full per-symbol provenance summary for the manifest.
 function adjustmentProvenance({ symbol, series, corp }) {
@@ -201,7 +256,9 @@ function adjustmentProvenance({ symbol, series, corp }) {
 
 module.exports = {
   CORPACTIONS_VERSION, JUMP_THRESHOLDS, SPLIT_MATCH_TOLERANCE, PERSIST_BARS,
-  PERSIST_TOLERANCE, REVERT_TOLERANCE, POISON_RADIUS_BARS, UNRESOLVED_CLASSES,
+  PERSIST_TOLERANCE, REVERT_TOLERANCE, POISON_RADIUS_BARS, POISONING_CLASSES,
+  OHLC_TOLERANCE,
   thresholdFor, splitFactor, verifySplitAdjustment, withTotalReturn,
-  extremeReturnAudit, windowPoisoned, adjustmentProvenance,
+  decisionTimeQualityAudit, postEventPersistenceDiagnostics,
+  windowPoisoned, windowExtreme, adjustmentProvenance,
 };
