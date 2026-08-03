@@ -1093,6 +1093,25 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       r.maxScore = Math.max(0, ...r.contracts.map(c => c.score || 0));
       r.minDte = Math.min(Infinity, ...r.contracts.map(c => c.dte ?? Infinity));
       r.maxVolOi = Math.max(0, ...r.contracts.map(c => c.volOi || 0));
+      // HONEST DIRECTION PRESERVATION: rebuild the interpreted ticker-level
+      // direction from the per-contract states (mirrors the server aggregate)
+      // so the client re-aggregation can't silently degrade every row to
+      // "Direction unknown" — which is what dropping these fields used to do.
+      let dBull = 0, dBear = 0, dUnknown = 0, multiLeg = 0;
+      for (const c of r.contracts) {
+        if (c.suspectedMultiLeg) multiLeg += 1;
+        if (c.directionState === 'PROVISIONAL_BULLISH') dBull += 1;
+        else if (c.directionState === 'PROVISIONAL_BEARISH') dBear += 1;
+        else dUnknown += 1;
+      }
+      r.suspectedMultiLeg = multiLeg;
+      r.unknownShare = r.contracts.length ? Math.round(100 * dUnknown / r.contracts.length) / 100 : null;
+      r.directionState = dBull > 0 && dBear === 0 ? 'PROVISIONAL_BULLISH'
+        : dBear > 0 && dBull === 0 ? 'PROVISIONAL_BEARISH'
+        : dBull > 0 && dBear > 0 ? 'MIXED' : 'DIRECTION_UNKNOWN';
+      r.directionLabel = r.directionState === 'PROVISIONAL_BULLISH' ? 'Bullish positioning (provisional)'
+        : r.directionState === 'PROVISIONAL_BEARISH' ? 'Bearish positioning (provisional)'
+        : r.directionState === 'MIXED' ? 'Mixed positioning' : 'Direction unknown';
       return r;
     });
     out.sort((a, b) => b.totalPremium - a.totalPremium);
@@ -8936,7 +8955,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     }
   }
 
-  function renderChart(panel, data) {
+  // opts.chartOnly: suppress the duplicate verdict banners (dual-read +
+  // sig-banner + levels). Used by the ticker-lookup modal, whose primary
+  // recommendation card is the single authoritative verdict surface.
+  function renderChart(panel, data, opts = {}) {
+    const chartOnly = opts.chartOnly === true;
     const { live, candles, indicators, price, marketState, interval, signals, source } = data;
     const act = (live.action || 'HOLD').toLowerCase();
     const actLabel = live.label || 'Hold';
@@ -8962,18 +8985,20 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       ? ` · <b style="color:${price.afterHours.change >= 0 ? 'var(--green)' : 'var(--red)'}">${price.afterHours.session === 'pre' ? 'Pre' : 'After'}-hrs $${price.afterHours.price} (${price.afterHours.change >= 0 ? '+' : ''}${price.afterHours.changePct}%)</b>`
       : '';
 
-    const dualHtml = data.dual ? buildDualBanner(data) : '';
-
-    panel.innerHTML = `
-      ${dualHtml}
+    const dualHtml = (!chartOnly && data.dual) ? buildDualBanner(data) : '';
+    const bannerHtml = chartOnly ? '' : `
       <div class="sig-banner ${act}">
         <div class="sig-verdict">
           <div class="sig-action">${esc(actLabel)}</div>
           <div class="sig-conf" title="Evidence strength — a heuristic weight of the signals, NOT a probability">Evidence ${live.evidenceStrength ?? live.confidence}/10</div>
         </div>
         <div class="sig-reasons">${reasonsHtml}${counterHtml}</div>
-      </div>
-      ${levelsHtml}
+      </div>`;
+
+    panel.innerHTML = `
+      ${dualHtml}
+      ${bannerHtml}
+      ${chartOnly ? '' : levelsHtml}
       <div class="chart-canvas-wrap"><canvas></canvas></div>
       <div class="chart-legend">
         <span><i class="cleg-swatch" style="background:#c0d0e8"></i>Price</span>
@@ -9003,12 +9028,16 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const chartEvents = Array.isArray(data.events) ? data.events : [];
     drawChart(canvas, candles, indicators, signals, source, { levels: chartLevels, events: chartEvents });
 
-    handleSignalUpdate(data.ticker, live.action);
+    // Signal-flip chime/notification only when the signal is actually live and
+    // executable — a weekend refresh of a demoted closed-market read must not
+    // fire a "STRONG BUY" alert.
+    const executable = !data.sessionMeta || data.sessionMeta.executionAllowed === true;
+    if (executable) handleSignalUpdate(data.ticker, live.action);
 
     // Enrich the mechanical dual-read with the Fable narrative + quadrant track
     // record, and the long-term second-opinions panel (all async — the banner
     // already shows the instant mechanical verdict).
-    if (data.dual) { enrichDualRead(panel, data); fetchLtRecs(panel.querySelector('[data-dual]') || panel, data); }
+    if (!chartOnly && data.dual) { enrichDualRead(panel, data); fetchLtRecs(panel.querySelector('[data-dual]') || panel, data); }
   }
 
   // ── Dual-horizon read (short-term × long-term) ──────────────────────────────
@@ -9080,16 +9109,30 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (!j || !j.recs) return;
       const R = j.recs;
       const custom = { rec: LT_TREND_TO_REC[data.longTerm && data.longTerm.trend] || 'Hold', detail: `Trend + relative-strength model · score ${data.longTerm ? data.longTerm.score : '—'}` };
-      const all = [custom.rec, R.expert && R.expert.rec, R.fundamental && R.fundamental.rec, R.technical && R.technical.rec, R.momentum && R.momentum.rec].filter(Boolean);
-      const buy = all.filter(x => x === 'Buy').length, sell = all.filter(x => x === 'Sell').length, hold = all.filter(x => x === 'Hold').length;
-      const lean = buy > hold && buy > sell ? 'Buy' : sell > hold && sell > buy ? 'Sell' : 'Hold';
+      // CORRELATION-AWARE tally: custom-LT, technical and momentum all read the
+      // SAME price series (trend200/cross/trailing returns) — they are ONE
+      // price-evidence family with a single majority vote, not three
+      // independent confirmations. Fundamental and analyst/expert are the only
+      // genuinely distinct evidence families here.
+      const priceVotes = [custom.rec, R.technical && R.technical.rec, R.momentum && R.momentum.rec].filter(Boolean);
+      const vote = list => {
+        const b = list.filter(x => x === 'Buy').length, s = list.filter(x => x === 'Sell').length, h = list.filter(x => x === 'Hold').length;
+        return b > h && b > s ? 'Buy' : s > h && s > b ? 'Sell' : list.length ? 'Hold' : null;
+      };
+      const familyVotes = [
+        vote(priceVotes),                          // price family — one voice
+        R.fundamental && R.fundamental.rec,        // fundamental family
+        R.expert && R.expert.rec,                  // analyst family
+      ].filter(Boolean);
+      const buy = familyVotes.filter(x => x === 'Buy').length, sell = familyVotes.filter(x => x === 'Sell').length, hold = familyVotes.filter(x => x === 'Hold').length;
+      const lean = vote(familyVotes) || 'Hold';
       host.innerHTML = `
-        <div class="lr-head"><span class="lr-title">Long-term second opinions</span><span class="lr-consensus ${REC_TONE[lean]}">${buy}·${hold}·${sell} → ${lean}</span></div>
+        <div class="lr-head"><span class="lr-title">Long-term second opinions</span><span class="lr-consensus ${REC_TONE[lean]}" title="Counted by EVIDENCE FAMILY: the custom, technical and momentum models share the same price features, so together they get one vote (price), beside fundamental and analyst.">${buy}·${hold}·${sell} → ${lean} <small>(by family)</small></span></div>
         ${recRow('Custom model', custom)}
         ${recRow('Expert consensus', R.expert)}
         ${recRow('Fundamental', R.fundamental)}
-        ${recRow('Technical', R.technical)}
-        ${recRow('Momentum', R.momentum)}`;
+        ${recRow('Technical', { ...R.technical, detail: ((R.technical && R.technical.detail) || '') + ' · price family (shares the custom model\'s vote)' })}
+        ${recRow('Momentum', { ...R.momentum, detail: ((R.momentum && R.momentum.detail) || '') + ' · price family (shares the custom model\'s vote)' })}`;
       host.hidden = false;
     } catch { /* leave hidden — the custom read still stands */ }
   }

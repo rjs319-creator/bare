@@ -36,7 +36,10 @@ test('quiet name: no signals → honest "nothing here" verdict, empty cases', ()
   assert.equal(r.verdict.level, 'quiet');
   assert.equal(r.forCase.length, 0);
   assert.equal(r.againstCase.length, 0);
-  assert.match(r.verdict.summary, /isn't on any of the app's screens/);
+  assert.match(r.verdict.summary, /isn't on any of the app's screener panels/);
+  // The quiet verdict must be SCREENER-SCOPED — it cannot claim "nothing to act
+  // on" for the ticker while the primary recommendation may be live.
+  assert.doesNotMatch(r.verdict.summary, /Nothing to act on/i);
 });
 
 test('ghost + apex both fire in risk-on → constructive, two FOR signals with a real track record', () => {

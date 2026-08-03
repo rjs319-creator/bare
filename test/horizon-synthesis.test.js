@@ -42,10 +42,11 @@ test('unavailable swing does not become neutral', () => {
   assert.ok(!s.conflicts.some(c => /swing/.test(c)), 'unavailable never conflicts');
 });
 
-test('all daily horizons unavailable → intraday-only note', () => {
+test('all daily horizons unavailable → intraday-only note, and one horizon is NEVER "aligned"', () => {
   const s = synthesizeHorizons({ intraday: intr('BUY'), swing: sw('UNAVAILABLE'), longTerm: lt('unavailable') });
-  // only one horizon available and it is bullish → aligned by that single read
-  assert.strictEqual(s.overall, 'aligned-bullish');
+  // "Aligned" is a claim about agreement — a single available bullish horizon
+  // can only be "leaning", never "aligned" (that used to be the codified bug).
+  assert.strictEqual(s.overall, 'leaning-bullish');
   assert.match(s.note, /intraday-only/i);
 });
 

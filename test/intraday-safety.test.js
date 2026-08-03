@@ -42,6 +42,38 @@ test('premarket / after-hours sessions are explicit', () => {
   assert.strictEqual(classifyIntradayFreshness('yahoo', 'POST', now - 60, now), 'afterhours');
 });
 
+test('a STALE premarket or after-hours bar cannot escape the age check', () => {
+  const now = 1_700_000_000;
+  assert.strictEqual(classifyIntradayFreshness('yahoo', 'PRE', now - 3 * 3600, now), 'stale');
+  assert.strictEqual(classifyIntradayFreshness('yahoo', 'POST', now - 2 * 3600, now), 'stale');
+});
+
+test('closed market can NEVER present a live intraday BUY/SELL', () => {
+  const live = liveBuy();
+  const h = shapeIntradayHorizon(live, 'yahoo', 'CLOSED', 'closed', '2024-01-05');
+  assert.strictEqual(h.action, 'HOLD', 'no actionable BUY while the exchange is closed');
+  assert.strictEqual(h.levels, null, 'no live-looking levels while closed');
+  assert.strictEqual(h.executionAllowed, false);
+  assert.strictEqual(live.action, 'HOLD', 'legacy live demoted in place');
+  assert.ok(/closed/i.test(h.label));
+  assert.strictEqual(h.priorBias, 'bullish', 'direction survives as labeled historical context');
+});
+
+test('extended-hours reads are provisional and never executable', () => {
+  const live = liveBuy();
+  const h = shapeIntradayHorizon(live, 'yahoo', 'PRE', 'premarket', '2024-01-05');
+  assert.strictEqual(h.provisional, true);
+  assert.strictEqual(h.executionAllowed, false);
+  assert.strictEqual(h.action, 'BUY', 'extended read survives but is labeled provisional');
+});
+
+test('live regular-session read is executable', () => {
+  const live = liveBuy();
+  const h = shapeIntradayHorizon(live, 'yahoo', 'REGULAR', 'live', '2024-01-05');
+  assert.strictEqual(h.executionAllowed, true);
+  assert.strictEqual(h.provisional, false);
+});
+
 test('regular-session bar older than the threshold is stale, fresh bar is live', () => {
   const now = 1_700_000_000;
   assert.strictEqual(classifyIntradayFreshness('yahoo', 'REGULAR', now - 5 * 60, now), 'live');
