@@ -80,11 +80,16 @@ function panel({ nDates = 40, perDate = 8, missingFrac = 0.2, sigStrength = 1, s
   }
   return rows;
 }
+
+// v3.2: every experiment needs an explicit eligible-cohort map. For synthetic
+// panels every generated date is a fully observed cohort by construction.
+const allElig = (rows) => ({ eligibleDates: [...new Set(rows.map((r) => r.decisionTs))], source: 'test-synthetic-fully-observed' });
 const sigRanker = { name: 'sig-candidate', fit: () => null, score: (_m, r) => (r.features.sig != null ? r.features.sig : NaN) };
 const antiRanker = { name: 'anti-candidate', fit: () => null, score: (_m, r) => -(r.features.sig != null ? r.features.sig : NaN) };
 
 test('runExperimentV3: benchmark coverage reported; all rankers share the covered population', () => {
-  const out = H3.runExperimentV3(panel(), [sigRanker], { folds: 4, seed: 11 }, { generatedAt: 'T' });
+  const rows = panel();
+  const out = H3.runExperimentV3(rows, [sigRanker], { folds: 4, seed: 11, cohortEligibility: allElig(rows) }, { generatedAt: 'T' });
   assert.ok(out.benchmark.coverage.excludedRows > 0);
   assert.ok(out.benchmark.coverage.coveredFrac < 1);
   assert.ok(out.benchmark.coverage.missingByFeature.mom121 > 0, 'missingness visible per feature');
@@ -104,8 +109,8 @@ test('BH correction CAN change a nominal pass into a non-pass (defect 12 fixed)'
   let flipped = false;
   for (const s of [0.05, 0.08, 0.12, 0.18, 0.25, 0.35]) {
     const rows = panel({ sigStrength: s, seed: 21 });
-    const few = H3.runExperimentV3(rows, [sigRanker], { folds: 4, seed: 11 }, { generatedAt: 'T', variantsInspected: 0 });
-    const many = H3.runExperimentV3(rows, [sigRanker], { folds: 4, seed: 11 }, { generatedAt: 'T', variantsInspected: 4000 });
+    const few = H3.runExperimentV3(rows, [sigRanker], { folds: 4, seed: 11, cohortEligibility: allElig(rows) }, { generatedAt: 'T', variantsInspected: 0 });
+    const many = H3.runExperimentV3(rows, [sigRanker], { folds: 4, seed: 11, cohortEligibility: allElig(rows) }, { generatedAt: 'T', variantsInspected: 4000 });
     const vFew = few.verdicts['sig-candidate'], vMany = many.verdicts['sig-candidate'];
     if (vFew.q != null && vMany.q != null) assert.ok(vMany.q >= vFew.q, 'more inspected variants can never SHRINK q');
     if (vFew.checks.qPassesFdr && !vMany.checks.qPassesFdr) {
@@ -118,7 +123,8 @@ test('BH correction CAN change a nominal pass into a non-pass (defect 12 fixed)'
 });
 
 test('the negative control can never become champion, even when candidates are worthless', () => {
-  const out = H3.runExperimentV3(panel(), [antiRanker], { folds: 4, seed: 11 }, { generatedAt: 'T' });
+  const rows = panel();
+  const out = H3.runExperimentV3(rows, [antiRanker], { folds: 4, seed: 11, cohortEligibility: allElig(rows) }, { generatedAt: 'T' });
   assert.notEqual(out.champion && out.champion.name, 'control-random');
   assert.match(out.overall, /NOT-CONFIRMED/);
   const v = out.verdicts['anti-candidate'];
@@ -126,7 +132,8 @@ test('the negative control can never become champion, even when candidates are w
 });
 
 test('trial denominator never shrinks below the registry family count', () => {
-  const out = H3.runExperimentV3(panel(), [sigRanker], { folds: 4, seed: 11 },
+  const rows = panel();
+  const out = H3.runExperimentV3(rows, [sigRanker], { folds: 4, seed: 11, cohortEligibility: allElig(rows) },
     { generatedAt: 'T', experimentFamilyId: 'swing-ranking' });
   const REG = require('../lib/research/hypothesis-registry');
   assert.ok(out.trialsInspected >= REG.familyTrials('swing-ranking'));
@@ -135,16 +142,16 @@ test('trial denominator never shrinks below the registry family count', () => {
 
 test('results are reproducible from the manifest: identical inputs + seed → byte-identical output', () => {
   const rows = panel();
-  const a = H3.runExperimentV3(rows, [sigRanker], { folds: 4, seed: 42 }, { generatedAt: 'T', datasetHash: 'h1' });
-  const b = H3.runExperimentV3(rows, [sigRanker], { folds: 4, seed: 42 }, { generatedAt: 'T', datasetHash: 'h1' });
+  const a = H3.runExperimentV3(rows, [sigRanker], { folds: 4, seed: 42, cohortEligibility: allElig(rows) }, { generatedAt: 'T', datasetHash: 'h1' });
+  const b = H3.runExperimentV3(rows, [sigRanker], { folds: 4, seed: 42, cohortEligibility: allElig(rows) }, { generatedAt: 'T', datasetHash: 'h1' });
   assert.equal(JSON.stringify(a), JSON.stringify(b));
-  const c = H3.runExperimentV3(rows, [sigRanker], { folds: 4, seed: 43 }, { generatedAt: 'T', datasetHash: 'h1' });
+  const c = H3.runExperimentV3(rows, [sigRanker], { folds: 4, seed: 43, cohortEligibility: allElig(rows) }, { generatedAt: 'T', datasetHash: 'h1' });
   assert.equal(c.manifest.randomSeed, 43, 'seed recorded so the run is re-derivable');
 });
 
 test('a PASS verdict is only ever provisional and never claims production', () => {
   const strong = panel({ sigStrength: 3, missingFrac: 0.05, nDates: 50, seed: 8 });
-  const out = H3.runExperimentV3(strong, [sigRanker], { folds: 4, seed: 11 }, { generatedAt: 'T' });
+  const out = H3.runExperimentV3(strong, [sigRanker], { folds: 4, seed: 11, cohortEligibility: allElig(strong) }, { generatedAt: 'T' });
   const v = out.verdicts['sig-candidate'];
   if (v.verdict.startsWith('PASS')) {
     assert.match(v.verdict, /PROVISIONAL/);

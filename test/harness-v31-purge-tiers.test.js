@@ -4,7 +4,25 @@
 // null-pass the upgrade exists to prevent and proves it is caught.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('crypto');
 const H3 = require('../lib/research/harness-v3');
+const EX = require('../lib/research/execution');
+const SV = require('../lib/research/survivorship');
+
+// v3.2: cost evidence must come from the execution engine. Build a real
+// artifact from synthetic bars whose exit close yields the wanted gross.
+// ADV 100e6 → 'large' tier → base round-trip 12bps (commission 1bp/side).
+function engineEvidence(exitClose) {
+  const DAY = 86400000;
+  const bars = Array.from({ length: 30 }, (_, i) => ({
+    ms: Date.UTC(2026, 0, 2) + i * DAY, open: 100, high: 101, low: 99, close: i === 25 ? exitClose : 100,
+  }));
+  const fill = EX.executableOutcome({ bars, decisionIdx: 4, horizonSessions: 21, adv: 100e6 });
+  return EX.buildCostEvidence({ fills: [fill], strategyId: 'test', datasetHash: 'h1', horizonSessions: 21 });
+}
+const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
+// v3.2: every experiment needs an explicit eligible-cohort map.
+const allElig = (rows) => ({ eligibleDates: [...new Set(rows.map((r) => r.decisionTs))], source: 'test-synthetic-fully-observed' });
 
 const dates = Array.from({ length: 20 }, (_, i) => `d${String(i).padStart(3, '0')}`);
 const row = (d, labelEnd, extra = {}) => ({
@@ -67,7 +85,7 @@ test('runExperimentV3: fold definitions record purge counts and every overlappin
       });
     }
   }
-  const out = H3.runExperimentV3(rows, [], { folds: 4, seed: 1, embargoBars: 2 }, { generatedAt: 'T' });
+  const out = H3.runExperimentV3(rows, [], { folds: 4, seed: 1, embargoBars: 2, cohortEligibility: allElig(rows) }, { generatedAt: 'T' });
   assert.ok(out.foldDefinitions.length > 0);
   for (const f of out.foldDefinitions) {
     assert.ok(Number.isFinite(f.purgedRows), 'purged count recorded per fold');
@@ -99,7 +117,8 @@ function strongPanel() {
 const sigRanker = { name: 'cand', fit: () => null, score: (_m, r) => r.features.sig };
 
 test('tiers: statistical pass WITHOUT cost evidence is capped at STATISTICAL_SIGNAL_CANDIDATE', () => {
-  const out = H3.runExperimentV3(strongPanel(), [sigRanker], { folds: 4, seed: 5 }, { generatedAt: 'T' });
+  const rows = strongPanel();
+  const out = H3.runExperimentV3(rows, [sigRanker], { folds: 4, seed: 5, cohortEligibility: allElig(rows) }, { generatedAt: 'T' });
   const v = out.verdicts.cand;
   assert.equal(v.checks.costEvidenceMeasured, false);
   assert.equal(v.checks.costNetPositiveUnderStress, false, 'missing cost evidence FAILS the check — never null');
@@ -111,9 +130,11 @@ test('tiers: statistical pass WITHOUT cost evidence is capped at STATISTICAL_SIG
 });
 
 test('tiers: measured cost evidence that fails under doubled costs blocks the economic tier', () => {
-  const out = H3.runExperimentV3(strongPanel(), [sigRanker], {
-    folds: 4, seed: 5,
-    costEvidenceByRanker: { cand: { net: 0.02, doubledCostNet: -0.01, stressedLiquidityNet: 0.01 } },
+  // Exit 100.15 → gross 15bps: positive at base 12bps, negative at 24bps.
+  const rows = strongPanel();
+  const out = H3.runExperimentV3(rows, [sigRanker], {
+    folds: 4, seed: 5, cohortEligibility: allElig(rows),
+    costEvidenceByRanker: { cand: engineEvidence(100.15) },
   }, { generatedAt: 'T' });
   const v = out.verdicts.cand;
   assert.equal(v.costEvidence.measured, true);
@@ -122,9 +143,11 @@ test('tiers: measured cost evidence that fails under doubled costs blocks the ec
 });
 
 test('tiers: full measured cost evidence + statistical pass → ECONOMICALLY_VIABLE_CANDIDATE, never promotion', () => {
-  const out = H3.runExperimentV3(strongPanel(), [sigRanker], {
-    folds: 4, seed: 5,
-    costEvidenceByRanker: { cand: { net: 0.02, doubledCostNet: 0.01, stressedLiquidityNet: 0.005 } },
+  // Exit 103 → gross ~3%: positive under base, doubled and stressed costs.
+  const rows = strongPanel();
+  const out = H3.runExperimentV3(rows, [sigRanker], {
+    folds: 4, seed: 5, cohortEligibility: allElig(rows),
+    costEvidenceByRanker: { cand: engineEvidence(103) },
   }, { generatedAt: 'T' });
   const v = out.verdicts.cand;
   if (v.tier !== H3.TIERS.NOT_CONFIRMED) {
@@ -133,30 +156,95 @@ test('tiers: full measured cost evidence + statistical pass → ECONOMICALLY_VIA
   }
 });
 
-test('tiers: promotion eligibility requires BOTH verified prospective agreement AND a human-review artifact', () => {
-  const cost = { cand: { net: 0.02, doubledCostNet: 0.01, stressedLiquidityNet: 0.005 } };
-  const noArtifact = H3.runExperimentV3(strongPanel(), [sigRanker], {
-    folds: 4, seed: 5, costEvidenceByRanker: cost,
-    prospectiveEvidence: { agreementVerified: true, humanReviewArtifact: '' },
-  }, { generatedAt: 'T' });
-  if (noArtifact.verdicts.cand.tier !== H3.TIERS.NOT_CONFIRMED) {
-    assert.equal(noArtifact.verdicts.cand.tier, H3.TIERS.ECONOMIC, 'no artifact → no promotion tier');
+// The full promotion-gate requirement set (v3.2): dataset currency, model
+// version, proven-safe survivorship, timestamped prospective sample,
+// calibration, and a HASH-VERIFIED human-review artifact — a nonempty string
+// is no longer sufficient.
+function promotionFixtures() {
+  const reviewContent = 'Reviewed 2026-08-02: prospective log matches, costs verified, approve for registry review.';
+  return {
+    cost: { cand: engineEvidence(103) },
+    survivorship: SV.makeSurvivorshipContract({
+      historicalListingSource: 'exchange-monthly-listings',
+      historicalListingSourceAuthoritative: true,
+      monthlyExpectedListingCount: { '2026-01': 100, '2026-02': 100 },
+      monthlyCoveredListingCount: { '2026-01': 100, '2026-02': 99 },
+      delistedSecuritiesExpected: 20, delistedSecuritiesCovered: 20,
+      totalSecurities: 100,
+    }),
+    prospective: {
+      agreementVerified: true, predictionsTimestampedBeforeOutcomes: true,
+      sampleSize: 40, probabilitiesUsed: false,
+    },
+    review: { artifactContent: reviewContent, artifactHash: sha(reviewContent) },
+  };
+}
+
+test('tiers: promotion requires the FULL gate — each missing requirement blocks it', () => {
+  const fx = promotionFixtures();
+  assert.equal(fx.survivorship.status, 'proven-safe', 'fixture sanity');
+  const run = (optsOver = {}, metaOver = {}) => {
+    const rows = strongPanel();
+    return H3.runExperimentV3(rows, [sigRanker], {
+      folds: 4, seed: 5, cohortEligibility: allElig(rows),
+      costEvidenceByRanker: fx.cost,
+      currentDatasetHash: 'h1',
+      prospectiveEvidence: fx.prospective,
+      humanReviewArtifact: fx.review,
+      ...optsOver,
+    }, {
+      generatedAt: 'T', datasetHash: 'h1', modelVersion: 'frozen-v1',
+      survivorship: fx.survivorship,
+      ...metaOver,
+    });
+  };
+  const full = run();
+  const v = full.verdicts.cand;
+  if (v.tier !== H3.TIERS.NOT_CONFIRMED) {
+    assert.equal(v.tier, H3.TIERS.PROMOTION);
+    assert.equal(v.promotionGate.eligible, true);
+    assert.match(v.promotionGate.note, /registry/);
   }
-  const full = H3.runExperimentV3(strongPanel(), [sigRanker], {
-    folds: 4, seed: 5, costEvidenceByRanker: cost,
-    prospectiveEvidence: { agreementVerified: true, humanReviewArtifact: 'research/data/evidence/review-2026-08.json' },
-  }, { generatedAt: 'T' });
-  if (full.verdicts.cand.tier !== H3.TIERS.NOT_CONFIRMED) {
-    assert.equal(full.verdicts.cand.tier, H3.TIERS.PROMOTION);
-    assert.match(full.verdicts.cand.verdict, /human/);
+  // Each single missing requirement caps the tier at ECONOMIC.
+  const degraded = [
+    run({ humanReviewArtifact: { artifactContent: fx.review.artifactContent, artifactHash: 'wrong' } }),
+    run({ humanReviewArtifact: null }),
+    run({ prospectiveEvidence: { ...fx.prospective, sampleSize: 3 } }),
+    run({ prospectiveEvidence: { ...fx.prospective, predictionsTimestampedBeforeOutcomes: false } }),
+    run({ prospectiveEvidence: { ...fx.prospective, probabilitiesUsed: true, calibrationPassed: false } }),
+    run({ currentDatasetHash: 'DIFFERENT' }),
+    run({}, { modelVersion: null }),
+    run({}, { survivorship: SV.makeSurvivorshipContract({ historicalListingSource: 'symbols.json', delistedSecuritiesCovered: 5 }) }),
+    run({}, { survivorship: { schema: 'SurvivorshipContract', status: 'proven-safe' } }),   // forged claim without measurements
+  ];
+  for (const out of degraded) {
+    const dv = out.verdicts.cand;
+    if (dv.tier !== H3.TIERS.NOT_CONFIRMED) {
+      assert.equal(dv.tier, H3.TIERS.ECONOMIC, `missing requirement must block promotion (failed: ${dv.promotionGate.failed.join(',') || 'none'})`);
+      assert.ok(dv.promotionGate.failed.length > 0);
+    }
   }
 });
 
-test('costEvidenceCheck: partial evidence is unmeasured and never passes', () => {
+test('costEvidenceCheck: arbitrary caller-supplied numbers are unmeasured and never pass', () => {
   assert.equal(H3.costEvidenceCheck(null).passes, false);
-  assert.equal(H3.costEvidenceCheck({ net: 0.02 }).measured, false);
-  assert.equal(H3.costEvidenceCheck({ net: 0.02, doubledCostNet: 0.01 }).measured, false);
-  const ok = H3.costEvidenceCheck({ net: 0.02, doubledCostNet: 0.01, stressedLiquidityNet: 0.001 });
+  // The old defect: bare positive numbers claimed as "measured".
+  const bare = H3.costEvidenceCheck({ net: 0.02, doubledCostNet: 0.01, stressedLiquidityNet: 0.001 });
+  assert.equal(bare.measured, false, 'no engine artifact → unmeasured');
+  assert.equal(bare.passes, false);
+  // Tampered artifact: flip a number after hashing → rejected.
+  const good = engineEvidence(103);
+  const tampered = { ...good, net: 0.5 };
+  assert.equal(H3.costEvidenceCheck(tampered).measured, false);
+  // Signal-close entry basis can never satisfy the economic gate.
+  const { artifactHash, ...payload } = good;
+  const signalClose = { ...payload, entryBasis: 'signal-day-close' };
+  signalClose.artifactHash = sha(JSON.stringify(signalClose));   // even a "consistent" hash cannot save the wrong basis
+  const sc = H3.costEvidenceCheck(signalClose);
+  assert.equal(sc.measured, false);
+  assert.match(sc.detail, /never an executable entry|not produced/);
+  // A genuine engine artifact IS measured.
+  const ok = H3.costEvidenceCheck(good);
   assert.equal(ok.measured, true);
   assert.equal(ok.passes, true);
 });

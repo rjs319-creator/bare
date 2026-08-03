@@ -18,17 +18,26 @@
 //     research/lib/corpactions). Raw closes still drive cap/ADV. A symbol
 //     without cached corporate-action provenance is EXCLUDED (fail closed).
 //     A residual split discontinuity excludes the whole series.
-//   * EXTREME EVENTS — unexplained one-session extremes (spike-revert,
-//     ambiguous, unadjusted-split) poison their dates: decision rows entering
-//     on a poisoned bar are skipped and labels whose window touches one are
-//     withheld ('u'), counted, and reported. Never winsorized into data.
-//   * CUTOFFS — the single ambiguous "data cutoff" is replaced by explicit
-//     featureAvailabilityCutoff / lastDecisionTimestamp / labelObservationCutoff
-//     and per-horizon lastFullyMatureDecisionDate, all DERIVED from the data
-//     and enforced by lib/manifest verifySnapshotManifest. A manifest
-//     inconsistency writes panel-v3.INVALID.json and exits nonzero instead of
-//     publishing.
+//   * EXTREME EVENTS (v3.2) — DECISION-TIME validation only: structural
+//     evidence (unadjusted splits, duplicate/malformed bars, OHLC conflicts)
+//     poisons its dates (entries skipped, labels withheld 'u'). An unexplained
+//     extreme is an OBSERVED MARKET MOVE: retained whatever its future path,
+//     flagged x{h}=1 so experiments can run symmetric sensitivity views
+//     (include-all vs exclude-all). Persistence/reversion is a post-event
+//     DIAGNOSTIC only — it can never gate a row, label or cohort.
+//   * CUTOFFS + COHORTS (v3.2) — explicit featureAvailabilityCutoff /
+//     lastDecisionTimestamp / labelObservationCutoff, PLUS the cohort-maturity
+//     contract: a market-session calendar (research/lib/calendar) and a
+//     per-(decisionDate, horizon) eligibility ledger (research/lib/cohort).
+//     A decision date enters cross-sectional evaluation only when its whole
+//     window elapsed, zero rows are pending and coverage ≥ 95% — three early
+//     delistings can never mature a 1,700-name pending cohort.
 //   * Rows carry le{h} (label-end date) so maturity is verifiable forever.
+//   * PROVENANCE (v3.2) — content hashes for every source payload/partition
+//     (security master, universe, corp-action + price Merkle roots, calendar,
+//     cohort ledger) and full build facts (commit, dirty flag + diff hash,
+//     command, deterministic params). Reproducibility class is derived, never
+//     declared.
 //
 // DOCUMENTED LIMITATIONS (not silent):
 //   * `sec` is the vendor's CURRENT sector classification — NOT point-in-time.
@@ -39,11 +48,16 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const { execSync } = require('child_process');
 const pit = require('./lib/pit');
 const OV3 = require('./lib/outcome-v3');
 const ID3 = require('./lib/identity-v3');
 const CA = require('./lib/corpactions');
 const MF = require('./lib/manifest');
+const CAL = require('./lib/calendar');
+const COHORT = require('./lib/cohort');
+const SV = require('../lib/research/survivorship');
 
 const DATA = path.join(__dirname, 'data');
 const MASTER_PATH = path.join(DATA, 'secmaster-v3.json');
@@ -52,13 +66,19 @@ const MANIFEST_PATH = path.join(DATA, 'panel-v3-manifest.json');
 const IDENTITY_REPORT_PATH = path.join(DATA, 'identity-quality-v3.json');
 const EXTREMES_REPORT_PATH = path.join(DATA, 'extreme-returns-v3.json');
 const COVERAGE_REPORT_PATH = path.join(DATA, 'universe-coverage-v3.json');
+const CALENDAR_PATH = path.join(DATA, 'market-calendar-v1.json');
+const COHORT_PATH = path.join(DATA, 'cohort-eligibility-v3.json');
 const BLOCKED_PATH = path.join(DATA, 'panel-v3.BLOCKED.json');
 const INVALID_PATH = path.join(DATA, 'panel-v3.INVALID.json');
 const CORP_DIR = path.join(DATA, 'corpactions');
-const GRID = pit.monthEnds('2022-01', '2026-05');
+const GRID_FROM = '2022-01', GRID_TO = '2026-05';
+const GRID = pit.monthEnds(GRID_FROM, GRID_TO);
 const VOL_LB = 63;
 const HORIZONS = [21, 63, 126];
-const PANEL_VERSION = 'panel-v3.1';
+const PANEL_VERSION = 'panel-v3.2';
+const MIN_OUTCOME_COVERAGE = COHORT.DEFAULT_MIN_OUTCOME_COVERAGE;
+const CALENDAR_SOURCE_SYMBOL = 'SPY';
+const BUILD_COMMAND = 'node research/15-panel-features-v3.js';
 
 const STATUS_CHAR = { mature: 'm', confirmed_delisted: 'c', pending: 'p', unresolved: 'u', no_fill: 'n' };
 
@@ -192,7 +212,11 @@ function buildPanel({ master, symbols, cacheDir, corpDir }) {
   const labelStates = { m: 0, c: 0, p: 0, u: 0, n: 0 };
   const labelStatesByH = Object.fromEntries(HORIZONS.map((h) => [h, { m: 0, c: 0, p: 0, u: 0, n: 0 }]));
   const withheldDelistings = { unverifiedReason: 0 };
-  const extremeSummary = { symbolsAudited: 0, events: 0, byClass: {}, poisonedLabels: 0, poisonedEntriesSkipped: 0, perSymbol: [] };
+  const extremeSummary = {
+    symbolsAudited: 0, events: 0, byClass: {}, persistenceDiagnostics: {},
+    poisonedLabels: 0, poisonedEntriesSkipped: 0, unconfirmedExtremeFlaggedLabels: 0, perSymbol: [],
+    policy: 'decision-time-structural-only poisons; unconfirmed extremes retained + flagged (x{h}) for symmetric sensitivity views; persistence classes are diagnosticOnly',
+  };
   const provenanceSummary = { verifiedSplitAdjusted: 0, unverifiable: 0, conflicts: 0 };
   const monthlyFunnel = {};    // ym → counters
   let kept = 0, names = 0, deadNamesIncluded = 0;
@@ -218,12 +242,18 @@ function buildPanel({ master, symbols, cacheDir, corpDir }) {
     if (sv.verified === true) provenanceSummary.verifiedSplitAdjusted++; else provenanceSummary.unverifiable++;
 
     const ps = CA.withTotalReturn(rawSeries, corp.dividends);
-    const audit = CA.extremeReturnAudit(rawSeries, corp);
+    // DECISION-TIME validation only: structural evidence (unadjusted splits,
+    // duplicate/malformed bars, OHLC inconsistency) poisons; an unexplained
+    // extreme is an observed market move — retained, flagged for the
+    // symmetric sensitivity views, never judged by its future path.
+    const audit = CA.decisionTimeQualityAudit(rawSeries, corp);
+    const diagnostics = CA.postEventPersistenceDiagnostics(rawSeries, audit.events);
     extremeSummary.symbolsAudited++;
     if (audit.events.length) {
       extremeSummary.events += audit.events.length;
       for (const e of audit.events) extremeSummary.byClass[e.class] = (extremeSummary.byClass[e.class] || 0) + 1;
-      if (extremeSummary.perSymbol.length < 500) extremeSummary.perSymbol.push({ sym: src, lid: g.listingId, events: audit.events });
+      for (const d of diagnostics) extremeSummary.persistenceDiagnostics[d.persistence] = (extremeSummary.persistenceDiagnostics[d.persistence] || 0) + 1;
+      if (extremeSummary.perSymbol.length < 500) extremeSummary.perSymbol.push({ sym: src, lid: g.listingId, events: audit.events, diagnostics });
     }
 
     const ss = pit.sharesSeries(mergedIncome(cacheDir, g.members));
@@ -274,11 +304,25 @@ function buildPanel({ master, symbols, cacheDir, corpDir }) {
 
       const outcomes = HORIZONS.map((h) => {
         const o = OV3.forwardOutcomeV3({ series: labelSeries, dateMs: d, bars: h, security, opts });
+        // STRUCTURAL poison only (unadjusted split, duplicate/malformed bar,
+        // OHLC conflict) — all decision-time evidence. Future persistence
+        // plays no part here.
         if (o.labelReady && CA.windowPoisoned(audit.poisonedMs, ps[i].ms, Date.parse(o.actualExitDate))) {
           extremeSummary.poisonedLabels++;
-          return { ...o, status: 'unresolved', labelReady: false, trainingLabel: null, reason: 'extreme-event-in-window-fails-closed' };
+          return { ...o, status: 'unresolved', labelReady: false, trainingLabel: null, reason: 'structural-data-error-in-window-fails-closed' };
         }
         return o;
+      });
+      // Sensitivity flag: label window (or entry bar) touches a
+      // provider-unconfirmed extreme. The label is KEPT either way; the flag
+      // lets experiments run include-all vs exclude-all-symmetric views.
+      const extremeFlags = HORIZONS.map((h, hIdx) => {
+        const o = outcomes[hIdx];
+        if (!o.labelReady) return null;
+        const touches = audit.extremeMs.has(ps[i].ms)
+          || CA.windowExtreme(audit.extremeMs, ps[i].ms, Date.parse(o.actualExitDate));
+        if (touches) extremeSummary.unconfirmedExtremeFlaggedLabels++;
+        return touches ? 1 : null;
       });
       for (let hIdx = 0; hIdx < HORIZONS.length; hIdx++) {
         const o = outcomes[hIdx];
@@ -303,6 +347,9 @@ function buildPanel({ master, symbols, cacheDir, corpDir }) {
         v63, ra: v63 ? m121 / v63 : null, vs: (a20 && a60) ? a20 / a60 : null,
         ...labelFieldsV3(21, outcomes[0]), ...labelFieldsV3(63, outcomes[1]), ...labelFieldsV3(126, outcomes[2]),
       };
+      // Sparse sensitivity flags (only when set — x{h}=1 ⇔ label window
+      // touches a provider-unconfirmed extreme move).
+      HORIZONS.forEach((h, hIdx) => { if (extremeFlags[hIdx]) row[`x${h}`] = 1; });
       fun.emitted++;
       (out[ym] || (out[ym] = [])).push(row); kept++;
       if (row.dt && (!cutoffs.lastDecisionTimestamp || row.dt > cutoffs.lastDecisionTimestamp)) cutoffs.lastDecisionTimestamp = row.dt;
@@ -324,11 +371,16 @@ function buildPanel({ master, symbols, cacheDir, corpDir }) {
   return {
     out, labelStates, labelStatesByH, withheldDelistings, kept, names, deadNamesIncluded,
     identity, exclusions, extremeSummary, provenanceSummary, monthlyFunnel, cutoffs,
+    cachedSymbols: cached,
     corpRetrievedRange: { min: minRetrievedAt, max: maxRetrievedAt },
   };
 }
 
-function lastFullyMatureByHorizon(out) {
+// HONESTLY RENAMED (was lastFullyMatureByHorizon — a misleading name): the
+// last decision date carrying ANY label-ready row. A data-availability
+// diagnostic only; the experiment boundary is the COHORT ledger's
+// lastFullyObservedCohortDate (three early delistings do not mature a cohort).
+function lastLabelReadyByHorizon(out) {
   const res = {};
   for (const h of HORIZONS) {
     let last = null;
@@ -340,6 +392,51 @@ function lastFullyMatureByHorizon(out) {
     res[String(h)] = last;
   }
   return res;
+}
+
+// ── build provenance helpers ─────────────────────────────────────────────────
+const fileSha256 = (p) => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+
+// Merkle leaves over a set of JSON partition files. Also regex-extracts
+// fetchedAt/retrievedAt stamps (without a full parse) for the retrieval range.
+function hashPartitionDir(dir, files) {
+  const leaves = [];
+  let minStamp = null, maxStamp = null;
+  for (const f of files) {
+    const p = path.join(dir, f);
+    if (!fs.existsSync(p)) continue;
+    const buf = fs.readFileSync(p);
+    leaves.push({ name: f, hash: crypto.createHash('sha256').update(buf).digest('hex') });
+    const m = buf.toString('utf8', 0, Math.min(buf.length, 400)).match(/"(?:fetchedAt|retrievedAt)"\s*:\s*"([^"]+)"/);
+    if (m) {
+      if (!minStamp || m[1] < minStamp) minStamp = m[1];
+      if (!maxStamp || m[1] > maxStamp) maxStamp = m[1];
+    }
+  }
+  return { root: MF.merkleRoot(leaves), fileCount: leaves.length, minStamp, maxStamp };
+}
+
+// Git build facts. NEVER prints or stores file contents beyond the diff hash.
+function gitBuildFacts(repoRoot) {
+  const run = (cmd) => execSync(cmd, { cwd: repoRoot, maxBuffer: 64 * 1024 * 1024 }).toString();
+  let codeCommit = null, worktreeDirty = false, dirtyDiffHash = null;
+  try { codeCommit = run('git rev-parse HEAD').trim() || null; } catch { codeCommit = null; }
+  try { worktreeDirty = run('git status --porcelain').trim().length > 0; } catch { worktreeDirty = true; }
+  if (worktreeDirty) {
+    try { dirtyDiffHash = crypto.createHash('sha256').update(run('git diff HEAD')).digest('hex'); } catch { dirtyDiffHash = null; }
+  }
+  return { codeCommit, worktreeDirty, dirtyDiffHash };
+}
+
+// The panel's session calendar, built from the benchmark series' observed
+// trading days (no separately authoritative exchange calendar exists here).
+function buildPanelCalendar(cacheDir) {
+  const p = path.join(cacheDir, `${CALENDAR_SOURCE_SYMBOL}.json`);
+  if (!fs.existsSync(p)) return null;
+  let doc; try { doc = JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; }
+  const dates = (doc.price || []).map((r) => r.date).filter(Boolean);
+  if (dates.length < 250) return null;
+  return CAL.buildSessionCalendar(dates, { source: `${CALENDAR_SOURCE_SYMBOL} fmp-cache-v1 observed sessions` });
 }
 
 function missingnessByFeature(out) {
@@ -367,39 +464,114 @@ function main() {
     try { supersedes = MF.normalizedPanelHash(JSON.parse(fs.readFileSync(OUT_PATH, 'utf8')).panel); } catch { supersedes = null; }
   }
 
+  const calendar = buildPanelCalendar(pit.CACHE);
+  if (!calendar) {
+    return writeBlocked(`benchmark series ${CALENDAR_SOURCE_SYMBOL} missing from price cache — the market-session calendar (cohort maturity) cannot be built`);
+  }
+
   const b = buildPanel({ master, symbols, cacheDir: pit.CACHE, corpDir: CORP_DIR });
   const months = Object.keys(b.out).sort();
   const datasetHash = MF.normalizedPanelHash(b.out);
   const generatedAt = new Date().toISOString();
   const universeRule = `PIT at decision date: cap in [${pit.CAP_LO / 1e6}M, ${pit.CAP_HI / 1e9}B], ADV ≥ ${pit.ADV_FLOOR / 1e6}M, non-stale price, shares as-of with filing lag, US common stock only (ETF/fund/ADR/warrant/unit/right/preferred excluded)`;
 
+  // ── cohort-eligibility ledger (the experiment boundary) ────────────────────
+  const ledger = COHORT.computeCohortLedger({
+    panelByMonth: b.out, calendar, horizons: HORIZONS,
+    labelObservationCutoff: b.cutoffs.labelObservationCutoff,
+    minOutcomeCoverage: MIN_OUTCOME_COVERAGE,
+  });
+
+  // ── complete content provenance (payloads and partitions, never counts) ───
+  const corpFiles = fs.readdirSync(CORP_DIR).filter((f) => f.endsWith('.json')).sort();
+  const corpHash = hashPartitionDir(CORP_DIR, corpFiles);
+  const priceFiles = [...new Set([...b.cachedSymbols, CALENDAR_SOURCE_SYMBOL])].sort().map((s) => `${s}.json`);
+  const priceHash = hashPartitionDir(pit.CACHE, priceFiles);
+  const git = gitBuildFacts(path.join(__dirname, '..'));
+
+  // Survivorship: a MEASURED contract. The universe starts from a present-day
+  // symbols payload — NOT a proven monthly historical listing universe — so
+  // the status is survivorship-reduced until an authoritative source exists.
+  const survivorship = SV.makeSurvivorshipContract({
+    historicalListingSource: 'symbols.json (present-day FMP stock list) + secmaster-v3 delisting reconstruction (FMP+EDGAR)',
+    historicalListingSourceAuthoritative: false,
+    delistedSecuritiesCovered: b.deadNamesIncluded,
+    delistedSecuritiesExpected: null,     // unknown: no authoritative monthly historical listing count
+    totalSecurities: b.names,
+    instrumentTypeCoverage: { includedNames: b.names, exclusionsBySymbol: Object.fromEntries(Object.entries(b.exclusions).filter(([k]) => k.startsWith('type:'))) },
+    missingSymbolReasons: b.exclusions,
+    notes: 'monthly expected listing counts unavailable on this provider plan; promotion eligibility is blocked until a proven historical listing universe with measured coverage exists',
+  });
+
   const manifest = MF.buildSnapshotManifest({
     snapshotId: `${PANEL_VERSION}:${datasetHash.slice(0, 16)}`,
     datasetHash,
-    codeCommit: process.env.GIT_COMMIT || null,
     generatedAt,
-    securityMasterHash: MF.definitionHash({ version: master.version, builtAt: master.builtAt, counts: master.counts }),
-    universeDefinitionHash: MF.definitionHash({ universeRule, grid: ['2022-01', '2026-05'], volLb: VOL_LB, horizons: HORIZONS }),
+    sourceHashes: {
+      securityMasterPayloadHash: MF.definitionHash(master),
+      universePayloadHash: MF.definitionHash(symbolsDoc),
+      corpactionsMerkleRoot: corpHash.root,
+      priceCacheMerkleRoot: priceHash.root,
+      marketCalendarHash: calendar.calendarHash,
+      cohortEligibilityHash: ledger.ledgerHash,
+    },
+    build: {
+      codeCommit: git.codeCommit,
+      worktreeDirty: git.worktreeDirty,
+      dirtyDiffHash: git.dirtyDiffHash,
+      buildCommand: BUILD_COMMAND,
+      generationParams: {
+        grid: [GRID_FROM, GRID_TO], volLb: VOL_LB, horizons: HORIZONS,
+        minOutcomeCoverage: MIN_OUTCOME_COVERAGE, unknownReasonPolicy: 'exclude',
+        capLo: pit.CAP_LO, capHi: pit.CAP_HI, advFloor: pit.ADV_FLOOR,
+        calendarSourceSymbol: CALENDAR_SOURCE_SYMBOL,
+      },
+      priceCacheRetrievalRange: {
+        minFetchedAt: priceHash.minStamp, maxFetchedAt: priceHash.maxStamp,
+        corpMinRetrievedAt: b.corpRetrievedRange.min, corpMaxRetrievedAt: b.corpRetrievedRange.max,
+        partitions: { priceCache: priceHash.fileCount, corpactions: corpHash.fileCount },
+      },
+      sourceSchemaVersions: {
+        'fmp-price-cache': 'fmp-cache-v1',
+        corpactions: CA.CORPACTIONS_VERSION,
+        secmaster: master.version,
+        symbols: symbolsDoc.generatedAt || 'unknown',
+        calendar: CAL.CALENDAR_VERSION,
+        cohort: COHORT.COHORT_POLICY_VERSION,
+        outcome: OV3.OUTCOME_POLICY_VERSION,
+      },
+    },
     sources: [
-      { name: 'fmp-price-cache', version: 'fmp-cache-v1', retrievedAt: null, earliestObservation: '2021-06-25', latestObservation: b.cutoffs.labelObservationCutoff },
+      { name: 'fmp-price-cache', version: 'fmp-cache-v1', retrievedAt: priceHash.maxStamp, earliestObservation: '2021-06-25', latestObservation: b.cutoffs.labelObservationCutoff },
       { name: 'secmaster-v3', version: master.version, retrievedAt: master.builtAt, earliestObservation: null, latestObservation: null },
-      { name: 'fmp-corpactions', version: 'corpactions-v1', retrievedAt: b.corpRetrievedRange.max, earliestObservation: null, latestObservation: null },
+      { name: 'fmp-corpactions', version: CA.CORPACTIONS_VERSION, retrievedAt: b.corpRetrievedRange.max, earliestObservation: null, latestObservation: null },
       { name: 'symbols-universe', version: symbolsDoc.generatedAt || 'unknown', retrievedAt: symbolsDoc.generatedAt || null, earliestObservation: null, latestObservation: null },
+      { name: 'market-calendar', version: CAL.CALENDAR_VERSION, retrievedAt: null, earliestObservation: calendar.firstSession, latestObservation: calendar.lastSession },
     ],
     featureAvailabilityCutoff: b.cutoffs.featureAvailabilityCutoff,
     lastDecisionTimestamp: b.cutoffs.lastDecisionTimestamp,
     labelObservationCutoff: b.cutoffs.labelObservationCutoff,
-    lastFullyMatureDecisionDate: lastFullyMatureByHorizon(b.out),
+    lastLabelReadyDecisionDateByHorizon: lastLabelReadyByHorizon(b.out),
+    lastFullyObservedCohortDateByHorizon: Object.fromEntries(
+      Object.entries(ledger.byHorizon).map(([h, v]) => [h, v.lastFullyObservedCohortDate]),
+    ),
+    cohortEligibilityByHorizon: COHORT.ledgerManifestSummary(ledger),
+    cohortCoveragePolicy: { minOutcomeCoverage: MIN_OUTCOME_COVERAGE, basis: ledger.policy.basis },
+    ineligibleCohortCounts: Object.fromEntries(
+      Object.entries(ledger.byHorizon).map(([h, v]) => [h, v.ineligibleCounts]),
+    ),
+    marketCalendarVersion: CAL.CALENDAR_VERSION,
     priceAdjustmentBasis: 'vendor-split-adjusted close + total-return index (adjDividend reinvested); raw closes preserved for cap/ADV',
     corporateActionSource: 'fmp-stable:splits+dividends',
     corporateActionStatus: `verified-split-adjusted:${b.provenanceSummary.verifiedSplitAdjusted} unverifiable(no in-window splits):${b.provenanceSummary.unverifiable} conflicts-excluded:${b.provenanceSummary.conflicts}`,
     sectorClassificationBasis: 'current-vendor-classification — NOT point-in-time; disclose in any sector-conditioned result',
+    survivorship,
     rowCount: b.kept,
     securityCount: new Set(Object.values(b.out).flat().map((r) => r.lid)).size,
     listingStatusCounts: { activeNames: b.names - b.deadNamesIncluded, deadNamesIncluded: b.deadNamesIncluded },
     labelStateCounts: b.labelStatesByH,
     missingnessByFeature: missingnessByFeature(b.out),
-    excludedRowCounts: { ...b.exclusions, 'label:poisoned-extreme-event': b.extremeSummary.poisonedLabels, 'row:entry-bar-poisoned': b.extremeSummary.poisonedEntriesSkipped },
+    excludedRowCounts: { ...b.exclusions, 'label:structural-poison': b.extremeSummary.poisonedLabels, 'row:entry-bar-poisoned': b.extremeSummary.poisonedEntriesSkipped },
     knownLimitations: [
       ...(master.meta && master.meta.coverageLimitations ? master.meta.coverageLimitations : []),
       { source: 'shares-outstanding', limitation: 'weightedAverageShsOut (diluted-average approximation); availability = acceptedDate > filingDate > period+45d lag', consequence: 'market caps are approximate near share-count changes' },
@@ -410,7 +582,7 @@ function main() {
     supersedes,
   });
 
-  const verdict = MF.verifySnapshotManifest(manifest, b.out, { horizons: HORIZONS });
+  const verdict = MF.verifySnapshotManifest(manifest, b.out, { horizons: HORIZONS, calendar });
   if (!verdict.valid) {
     fs.writeFileSync(INVALID_PATH, JSON.stringify({ status: 'invalid', panelVersion: PANEL_VERSION, generatedAt, errors: verdict.errors, stats: verdict.stats }, null, 2));
     console.error('PANEL INVALID — not published. Errors:');
@@ -440,7 +612,12 @@ function main() {
     manifest,
     panel: b.out,
   }));
-  fs.writeFileSync(MANIFEST_PATH, JSON.stringify({ manifest, verification: verdict }, null, 2));
+  // verification.recomputedLedger duplicates the cohort artifact — strip it
+  // from the manifest report file (the artifact below is the authority).
+  const { recomputedLedger, ...verdictSlim } = verdict;
+  fs.writeFileSync(MANIFEST_PATH, JSON.stringify({ manifest, verification: verdictSlim }, null, 2));
+  fs.writeFileSync(CALENDAR_PATH, JSON.stringify(CAL.calendarArtifact(calendar), null, 2));
+  fs.writeFileSync(COHORT_PATH, JSON.stringify(ledger, null, 2));
   fs.writeFileSync(IDENTITY_REPORT_PATH, JSON.stringify({ generatedAt, ...b.identity.report }, null, 2));
   fs.writeFileSync(EXTREMES_REPORT_PATH, JSON.stringify({ generatedAt, ...b.extremeSummary }, null, 2));
   fs.writeFileSync(COVERAGE_REPORT_PATH, JSON.stringify({
@@ -457,12 +634,19 @@ function main() {
   console.log(`datasetHash ${datasetHash.slice(0, 16)}… supersedes ${supersedes ? supersedes.slice(0, 16) + '…' : '(none)'}`);
   console.log('cutoffs:', JSON.stringify({ ...b.cutoffs }));
   console.log('label states:', JSON.stringify(b.labelStates), 'withheld delistings:', JSON.stringify(b.withheldDelistings));
-  console.log('extremes:', JSON.stringify({ events: b.extremeSummary.events, byClass: b.extremeSummary.byClass, poisonedLabels: b.extremeSummary.poisonedLabels, entriesSkipped: b.extremeSummary.poisonedEntriesSkipped }));
+  console.log('extremes:', JSON.stringify({ events: b.extremeSummary.events, byClass: b.extremeSummary.byClass, persistenceDiagnostics: b.extremeSummary.persistenceDiagnostics, structuralPoisonedLabels: b.extremeSummary.poisonedLabels, entriesSkipped: b.extremeSummary.poisonedEntriesSkipped, sensitivityFlagged: b.extremeSummary.unconfirmedExtremeFlaggedLabels }));
   console.log('identity:', JSON.stringify({ groups: b.identity.report.resolvedGroups, multiSymbol: b.identity.report.multiSymbolGroups, quarantined: b.identity.report.quarantinedGroups, noIdentity: b.identity.report.noIdentitySymbols }));
+  console.log('cohorts:', JSON.stringify(Object.fromEntries(Object.entries(ledger.byHorizon).map(([h, v]) => [h, {
+    lastFullyObserved: v.lastFullyObservedCohortDate, eligible: v.eligibleCohorts, ineligible: v.ineligibleCounts,
+  }]))));
+  console.log('build:', JSON.stringify({ codeCommit: (git.codeCommit || 'NULL').slice(0, 12), dirty: git.worktreeDirty, reproducibility: manifest.build.reproducibility }));
+  console.log('survivorship:', survivorship.status);
 }
 
 module.exports = {
-  labelFieldsV3, buildPanel, classifyInstrument, lastFullyMatureByHorizon,
-  OUT_PATH, BLOCKED_PATH, INVALID_PATH, MANIFEST_PATH, GRID, HORIZONS, STATUS_CHAR, PANEL_VERSION,
+  labelFieldsV3, buildPanel, classifyInstrument, lastLabelReadyByHorizon,
+  buildPanelCalendar, hashPartitionDir, gitBuildFacts,
+  OUT_PATH, BLOCKED_PATH, INVALID_PATH, MANIFEST_PATH, CALENDAR_PATH, COHORT_PATH,
+  GRID, HORIZONS, STATUS_CHAR, PANEL_VERSION, MIN_OUTCOME_COVERAGE,
 };
 if (require.main === module) main();

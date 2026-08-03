@@ -30,8 +30,10 @@ const sharesSeries = income => (income || [])
   .map(r => ({ eff: Date.parse(r.acceptedDate || r.filingDate || r.date) + (r.acceptedDate || r.filingDate ? 0 : LAG), shares: r.weightedAverageShsOut ?? r.weightedAverageShsOutDil ?? null }))
   .filter(r => Number.isFinite(r.eff) && r.shares > 0).sort((a, b) => a.eff - b.eff);
 
+// Raw open/high/low ride along (additive, optional) so decision-time OHLC
+// consistency checks and next-open execution modeling can use real vendor bars.
 const priceSeries = price => (price || [])
-  .map(r => ({ ms: Date.parse(r.date), close: r.close, dollar: (r.close || 0) * (r.volume || 0) }))
+  .map(r => ({ ms: Date.parse(r.date), close: r.close, dollar: (r.close || 0) * (r.volume || 0), open: r.open, high: r.high, low: r.low }))
   .filter(r => Number.isFinite(r.ms) && r.close > 0).sort((a, b) => a.ms - b.ms);
 
 function asOfShares(series, dateMs) { let s = null; for (const r of series) { if (r.eff <= dateMs) s = r.shares; else break; } return s; }

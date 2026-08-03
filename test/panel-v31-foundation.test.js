@@ -1,8 +1,10 @@
 'use strict';
-// Adversarial tests for the panel-v3.1 foundation layers:
-//   research/lib/manifest.js     — snapshot-manifest contract + invariants
+// Adversarial tests for the panel v3 foundation layers (v3.2 contracts):
+//   research/lib/manifest.js     — snapshot-manifest-v2 contract + invariants
 //   research/lib/identity-v3.js  — listingId identity, alias intervals, dedup
-//   research/lib/corpactions.js  — adjustment verification, TR index, extreme audit
+//   research/lib/corpactions.js  — adjustment verification, TR index,
+//                                  DECISION-TIME quality audit (v2: future
+//                                  paths never gate data)
 // Each test constructs the failure the layer exists to prevent and proves it is
 // caught (fail closed), plus append-invariance in both layers.
 const { test } = require('node:test');
@@ -11,6 +13,9 @@ const assert = require('node:assert/strict');
 const MF = require('../research/lib/manifest');
 const ID3 = require('../research/lib/identity-v3');
 const CA = require('../research/lib/corpactions');
+const CAL = require('../research/lib/calendar');
+const COHORT = require('../research/lib/cohort');
+const SV = require('../lib/research/survivorship');
 
 const DAY = 86400000;
 const D0 = Date.UTC(2024, 0, 2);
@@ -18,7 +23,11 @@ const ms = (i) => D0 + i * DAY;
 const iso = (i) => new Date(ms(i)).toISOString().slice(0, 10);
 const bars = (closes, start = 0) => closes.map((c, i) => ({ ms: ms(start + i), close: c, dollar: c * 1e6 }));
 
-// ── manifest ─────────────────────────────────────────────────────────────────
+// ── manifest (snapshot-manifest-v2) ──────────────────────────────────────────
+
+// Daily "sessions" 2024-01-02 onward (a test calendar; density is irrelevant
+// to the invariants under test).
+const testCalendar = () => CAL.buildSessionCalendar(Array.from({ length: 120 }, (_, i) => iso(i)), { source: 'test' });
 
 function tinyPanel() {
   return {
@@ -31,14 +40,41 @@ function tinyPanel() {
     ],
   };
 }
+
+const HEX = (c) => c.repeat(64);
+
 function tinyManifest(panel, over = {}) {
+  const cal = testCalendar();
+  const ledger = COHORT.computeCohortLedger({
+    panelByMonth: panel, calendar: cal, horizons: [21],
+    labelObservationCutoff: over.labelObservationCutoff || '2024-03-01',
+  });
   return MF.buildSnapshotManifest({
     snapshotId: 't1', datasetHash: MF.normalizedPanelHash(panel), generatedAt: '2024-03-01T00:00:00Z',
-    securityMasterHash: 'smh', universeDefinitionHash: 'udh', sources: [],
+    sourceHashes: {
+      securityMasterPayloadHash: HEX('a'), universePayloadHash: HEX('b'),
+      corpactionsMerkleRoot: HEX('c'), priceCacheMerkleRoot: HEX('d'),
+      marketCalendarHash: cal.calendarHash, cohortEligibilityHash: ledger.ledgerHash,
+    },
+    build: {
+      codeCommit: HEX('e').slice(0, 40), worktreeDirty: false, dirtyDiffHash: null,
+      buildCommand: 'node test', generationParams: { grid: ['2024-01', '2024-02'] },
+      sourceSchemaVersions: { test: 'v1' },
+    },
+    sources: [],
     featureAvailabilityCutoff: '2024-03-01', lastDecisionTimestamp: '2024-02-29',
     labelObservationCutoff: '2024-03-01',
-    lastFullyMatureDecisionDate: { 21: '2024-01-31' },
+    lastLabelReadyDecisionDateByHorizon: { 21: '2024-01-31' },
+    lastFullyObservedCohortDateByHorizon: Object.fromEntries(
+      Object.entries(ledger.byHorizon).map(([h, v]) => [h, v.lastFullyObservedCohortDate]),
+    ),
+    cohortEligibilityByHorizon: COHORT.ledgerManifestSummary(ledger),
+    cohortCoveragePolicy: { minOutcomeCoverage: COHORT.DEFAULT_MIN_OUTCOME_COVERAGE },
+    ineligibleCohortCounts: Object.fromEntries(
+      Object.entries(ledger.byHorizon).map(([h, v]) => [h, v.ineligibleCounts]),
+    ),
     priceAdjustmentBasis: 'test', corporateActionStatus: 'test', sectorClassificationBasis: 'test',
+    survivorship: SV.makeSurvivorshipContract({ historicalListingSource: 'test payload', delistedSecuritiesCovered: 1 }),
     rowCount: 3, securityCount: 2, labelStateCounts: { 21: { m: 2, p: 1 } },
     ...over,
   });
@@ -56,18 +92,27 @@ test('manifest: hash covers the actual payload — one changed value changes it'
   assert.notEqual(MF.normalizedPanelHash(p1), MF.normalizedPanelHash(p2));
 });
 
-test('manifest: valid panel verifies clean', () => {
+test('manifest: valid panel verifies clean (cohort maturity recomputed from calendar)', () => {
   const panel = tinyPanel();
-  const v = MF.verifySnapshotManifest(tinyManifest(panel), panel, { horizons: [21] });
+  const v = MF.verifySnapshotManifest(tinyManifest(panel), panel, { horizons: [21], calendar: testCalendar() });
   assert.deepEqual(v.errors, []);
   assert.equal(v.valid, true);
+  // The fully observed cohort is Jan (both mature); Feb is pending → excluded.
+  assert.equal(v.stats.lastFullyObservedCohortByHorizon['21'], '2024-01-31');
+});
+
+test('manifest: verification without a calendar fails closed (cohorts cannot be trusted from the manifest itself)', () => {
+  const panel = tinyPanel();
+  const v = MF.verifySnapshotManifest(tinyManifest(panel), panel, { horizons: [21] });
+  assert.equal(v.valid, false);
+  assert.ok(v.errors.some((e) => /calendar/.test(e)));
 });
 
 test('manifest: duplicate (lid, dt) keys fail verification', () => {
   const panel = tinyPanel();
   panel['2024-01'].push({ ...panel['2024-01'][0], s: 'AAA2' });
   const m = tinyManifest(panel, { rowCount: 4, datasetHash: MF.normalizedPanelHash(panel) });
-  const v = MF.verifySnapshotManifest(m, panel, { horizons: [21] });
+  const v = MF.verifySnapshotManifest(m, panel, { horizons: [21], calendar: testCalendar() });
   assert.equal(v.valid, false);
   assert.ok(v.errors.some((e) => /duplicate/.test(e)), v.errors.join('; '));
 });
@@ -76,7 +121,7 @@ test('manifest: a trainable label ending after labelObservationCutoff fails', ()
   const panel = tinyPanel();
   panel['2024-01'][0].le21 = '2024-03-15';   // beyond cutoff 2024-03-01
   const m = tinyManifest(panel, { datasetHash: MF.normalizedPanelHash(panel) });
-  const v = MF.verifySnapshotManifest(m, panel, { horizons: [21] });
+  const v = MF.verifySnapshotManifest(m, panel, { horizons: [21], calendar: testCalendar() });
   assert.equal(v.valid, false);
   assert.ok(v.errors.some((e) => /labelObservationCutoff/.test(e)));
 });
@@ -85,7 +130,7 @@ test('manifest: trainable label without le{h} is unverifiable and fails', () => 
   const panel = tinyPanel();
   panel['2024-01'][0].le21 = null;
   const m = tinyManifest(panel, { datasetHash: MF.normalizedPanelHash(panel) });
-  const v = MF.verifySnapshotManifest(m, panel, { horizons: [21] });
+  const v = MF.verifySnapshotManifest(m, panel, { horizons: [21], calendar: testCalendar() });
   assert.equal(v.valid, false);
   assert.ok(v.errors.some((e) => /missing le/.test(e)));
 });
@@ -93,7 +138,7 @@ test('manifest: trainable label without le{h} is unverifiable and fails', () => 
 test('manifest: decisions after lastDecisionTimestamp and stale counts fail', () => {
   const panel = tinyPanel();
   const m = tinyManifest(panel, { lastDecisionTimestamp: '2024-01-31', rowCount: 99 });
-  const v = MF.verifySnapshotManifest(m, panel, { horizons: [21] });
+  const v = MF.verifySnapshotManifest(m, panel, { horizons: [21], calendar: testCalendar() });
   assert.equal(v.valid, false);
   assert.ok(v.errors.some((e) => /decided after/.test(e)));
   assert.ok(v.errors.some((e) => /rowCount/.test(e)));
@@ -102,7 +147,7 @@ test('manifest: decisions after lastDecisionTimestamp and stale counts fail', ()
 test('manifest: dataset hash mismatch (stale manifest) fails', () => {
   const panel = tinyPanel();
   const m = tinyManifest(panel, { datasetHash: 'deadbeef' });
-  const v = MF.verifySnapshotManifest(m, panel, { horizons: [21] });
+  const v = MF.verifySnapshotManifest(m, panel, { horizons: [21], calendar: testCalendar() });
   assert.equal(v.valid, false);
   assert.ok(v.errors.some((e) => /datasetHash mismatch/.test(e)));
 });
@@ -111,13 +156,56 @@ test('manifest: null lid rows are rejected (indefensible identity)', () => {
   const panel = tinyPanel();
   panel['2024-01'].push({ s: 'ZZZ', lid: null, dt: '2024-01-31', f21: 0.1, s21: 'm', le21: '2024-02-28' });
   const m = tinyManifest(panel, { rowCount: 4, datasetHash: MF.normalizedPanelHash(panel) });
-  const v = MF.verifySnapshotManifest(m, panel, { horizons: [21] });
+  const v = MF.verifySnapshotManifest(m, panel, { horizons: [21], calendar: testCalendar() });
   assert.equal(v.valid, false);
   assert.ok(v.errors.some((e) => /null listingId/.test(e)));
 });
 
 test('manifest: required fields cannot be omitted', () => {
   assert.throws(() => MF.buildSnapshotManifest({ snapshotId: 'x' }), /required field/);
+});
+
+test('manifest: source hashes must be content hashes — versions/counts are rejected', () => {
+  const panel = tinyPanel();
+  assert.throws(
+    () => tinyManifest(panel, {
+      sourceHashes: {
+        securityMasterPayloadHash: 'v1.2.3',   // a version string, not a hash
+        universePayloadHash: HEX('b'), corpactionsMerkleRoot: HEX('c'),
+        priceCacheMerkleRoot: HEX('d'), marketCalendarHash: HEX('f'), cohortEligibilityHash: HEX('9'),
+      },
+    }),
+    /content hash/,
+  );
+});
+
+test('manifest: reproducibility class is derived — a dirty build cannot claim confirmatory', () => {
+  assert.equal(MF.reproducibilityClass({ codeCommit: 'abc', worktreeDirty: false, dirtyDiffHash: null }), MF.REPRODUCIBILITY.CONFIRMATORY);
+  assert.equal(MF.reproducibilityClass({ codeCommit: 'abc', worktreeDirty: true, dirtyDiffHash: 'ddd' }), MF.REPRODUCIBILITY.EXPLORATORY_DIFF);
+  assert.equal(MF.reproducibilityClass({ codeCommit: 'abc', worktreeDirty: true, dirtyDiffHash: null }), MF.REPRODUCIBILITY.NON_REPRODUCIBLE);
+  assert.equal(MF.reproducibilityClass({ codeCommit: null, worktreeDirty: false, dirtyDiffHash: null }), MF.REPRODUCIBILITY.NON_REPRODUCIBLE);
+  const panel = tinyPanel();
+  assert.throws(
+    () => tinyManifest(panel, {
+      build: {
+        codeCommit: 'abc', worktreeDirty: true, dirtyDiffHash: null,
+        buildCommand: 'x', generationParams: {}, sourceSchemaVersions: {},
+        reproducibility: MF.REPRODUCIBILITY.CONFIRMATORY,
+      },
+    }),
+    /contradicts build facts/,
+  );
+});
+
+test('manifest: merkle root changes when any partition changes, and when one is added', () => {
+  const leaves = [{ name: 'a.json', hash: HEX('1') }, { name: 'b.json', hash: HEX('2') }];
+  const r1 = MF.merkleRoot(leaves);
+  const r2 = MF.merkleRoot([{ name: 'a.json', hash: HEX('3') }, leaves[1]]);
+  const r3 = MF.merkleRoot([...leaves, { name: 'c.json', hash: HEX('4') }]);
+  assert.notEqual(r1, r2);
+  assert.notEqual(r1, r3);
+  // Order-independence: same partitions, any order → same root.
+  assert.equal(r1, MF.merkleRoot([leaves[1], leaves[0]]));
 });
 
 // ── identity ─────────────────────────────────────────────────────────────────
@@ -229,7 +317,7 @@ test('identity: no listingId → excluded and reported, never embedded', () => {
   assert.equal(idx.report.noIdentitySymbols, 1);
 });
 
-// ── corporate actions ────────────────────────────────────────────────────────
+// ── corporate actions (v2: decision-time validation vs post-event diagnostics) ─
 
 test('corpactions: an ALREADY-adjusted split series verifies clean and creates no extreme event', () => {
   // 3:1 split at day 50 on a vendor-adjusted series: closes are continuous.
@@ -239,7 +327,7 @@ test('corpactions: an ALREADY-adjusted split series verifies clean and creates n
   const sv = CA.verifySplitAdjustment(series, splits);
   assert.equal(sv.verified, true);
   assert.equal(sv.basis, 'vendor-split-adjusted-verified');
-  const audit = CA.extremeReturnAudit(series, { splits, dividends: [] });
+  const audit = CA.decisionTimeQualityAudit(series, { splits, dividends: [] });
   assert.equal(audit.events.length, 0, 'no artificial momentum from a properly adjusted split');
 });
 
@@ -251,7 +339,7 @@ test('corpactions: an UNADJUSTED split (raw discontinuity) is a conflict, classi
   const sv = CA.verifySplitAdjustment(series, splits);
   assert.equal(sv.verified, false);
   assert.equal(sv.basis, 'split-adjustment-conflict');
-  const audit = CA.extremeReturnAudit(series, { splits, dividends: [] });
+  const audit = CA.decisionTimeQualityAudit(series, { splits, dividends: [] });
   const ev = audit.events.find((e) => e.class === 'explained-split-error');
   assert.ok(ev, 'the -67% jump must be classified as a split error, not a crash');
   assert.ok(audit.poisonedMs.has(ms(50)), 'the split date is poisoned');
@@ -262,7 +350,7 @@ test('corpactions: a reverse split does not create a false crash or rally', () =
   const closes = Array.from({ length: 100 }, (_, i) => (i < 50 ? 2 : 20));
   const series = bars(closes);
   const splits = [{ date: iso(50), numerator: 1, denominator: 10 }];
-  const audit = CA.extremeReturnAudit(series, { splits, dividends: [] });
+  const audit = CA.decisionTimeQualityAudit(series, { splits, dividends: [] });
   const ev = audit.events.find((e) => e.date === iso(50));
   assert.ok(ev);
   assert.equal(ev.class, 'explained-split-error');
@@ -284,7 +372,7 @@ test('corpactions: dividends handled consistently — ex-date drop is explained,
   // Big special dividend: price drops 60% on ex-date with a matching dividend.
   const closes = Array.from({ length: 20 }, (_, i) => (i < 10 ? 50 : 20));
   const dividends = [{ date: iso(10), adjDividend: 30 }];
-  const audit = CA.extremeReturnAudit(bars(closes), { splits: [], dividends });
+  const audit = CA.decisionTimeQualityAudit(bars(closes), { splits: [], dividends });
   const ev = audit.events.find((e) => e.date === iso(10));
   assert.ok(ev);
   assert.equal(ev.class, 'explained-dividend');
@@ -303,33 +391,76 @@ test('corpactions: appended future corporate actions cannot change earlier TR va
   for (let i = 0; i <= 20; i++) assert.equal(trAfter[i].tr, trBefore[i].tr, `tr[${i}] changed by a future action`);
 });
 
-test('corpactions: a spike that fully reverts is unresolved and poisons its window', () => {
+test('corpactions: a genuine spike-and-revert is an OBSERVED MOVE — retained, flagged, never poisoned', () => {
+  // v1 poisoned this via the FUTURE path (it reverted) — selection leakage.
   const closes = Array.from({ length: 20 }, (_, i) => (i === 10 ? 25 : 10));   // one-bar 150% spike
-  const audit = CA.extremeReturnAudit(bars(closes), { splits: [], dividends: [] });
+  const audit = CA.decisionTimeQualityAudit(bars(closes), { splits: [], dividends: [] });
   const ev = audit.events.find((e) => e.date === iso(10));
   assert.ok(ev);
-  assert.equal(ev.class, 'spike-revert');
-  assert.ok(audit.poisonedMs.has(ms(10)));
-  assert.ok(CA.windowPoisoned(audit.poisonedMs, ms(5), ms(15)), 'label windows crossing the spike are poisoned');
-  assert.ok(!CA.windowPoisoned(audit.poisonedMs, ms(13), ms(18)), 'windows clear of the spike are unaffected');
+  assert.equal(ev.class, 'unconfirmed-extreme', 'no structural evidence → observed market move, not bad vendor data');
+  assert.ok(!audit.poisonedMs.has(ms(10)), 'future reversion must NOT poison the date');
+  assert.ok(audit.extremeMs.has(ms(10)), 'flagged for the symmetric sensitivity views');
+  // The reversion is still DESCRIBED — as a diagnostic that can never gate data.
+  const diag = CA.postEventPersistenceDiagnostics(bars(closes), audit.events);
+  assert.equal(diag[0].persistence, 'reverted');
+  assert.equal(diag[0].diagnosticOnly, true);
 });
 
-test('corpactions: a persistent large move is legitimate and does NOT poison', () => {
+test('corpactions: a persistent large move is equally an observed move — identical treatment to the reverting one', () => {
   const closes = Array.from({ length: 20 }, (_, i) => (i < 10 ? 10 : 22));   // repriced and held (e.g. acquisition pop)
-  const audit = CA.extremeReturnAudit(bars(closes), { splits: [], dividends: [] });
+  const audit = CA.decisionTimeQualityAudit(bars(closes), { splits: [], dividends: [] });
   const ev = audit.events.find((e) => e.date === iso(10));
   assert.ok(ev);
-  assert.equal(ev.class, 'legitimate-persistent');
+  assert.equal(ev.class, 'unconfirmed-extreme');
   assert.ok(!audit.poisonedMs.has(ms(10)));
+  assert.ok(audit.extremeMs.has(ms(10)), 'SYMMETRY: the persistent move carries the same flag as the reverting one');
+  const diag = CA.postEventPersistenceDiagnostics(bars(closes), audit.events);
+  assert.equal(diag[0].persistence, 'persistent');
 });
 
-test('corpactions: extreme at the series tail (unverifiable persistence) fails closed', () => {
+test('corpactions: CHANGING the future path changes nothing about trainability (append-invariance of quality)', () => {
+  // Same history through day 10; wildly different futures.
+  const revert = Array.from({ length: 20 }, (_, i) => (i === 10 ? 25 : 10));
+  const persist = Array.from({ length: 20 }, (_, i) => (i < 10 ? 10 : 25));
+  const aR = CA.decisionTimeQualityAudit(bars(revert), { splits: [], dividends: [] });
+  const aP = CA.decisionTimeQualityAudit(bars(persist), { splits: [], dividends: [] });
+  const evR = aR.events.find((e) => e.date === iso(10));
+  const evP = aP.events.find((e) => e.date === iso(10));
+  assert.equal(evR.class, evP.class, 'the class of the day-10 extreme cannot depend on later bars');
+  assert.equal(aR.poisonedMs.has(ms(10)), aP.poisonedMs.has(ms(10)));
+  assert.equal(aR.extremeMs.has(ms(10)), aP.extremeMs.has(ms(10)));
+});
+
+test('corpactions: an extreme at the series tail is an observed move too (no forward bars needed)', () => {
   const closes = Array.from({ length: 12 }, (_, i) => (i === 11 ? 30 : 10));
-  const audit = CA.extremeReturnAudit(bars(closes), { splits: [], dividends: [] });
+  const audit = CA.decisionTimeQualityAudit(bars(closes), { splits: [], dividends: [] });
   const ev = audit.events.find((e) => e.date === iso(11));
   assert.ok(ev);
-  assert.equal(ev.class, 'tail-truncated');
-  assert.ok(audit.poisonedMs.has(ms(11)));
+  assert.equal(ev.class, 'unconfirmed-extreme');
+  assert.ok(!audit.poisonedMs.has(ms(11)), 'absence of future bars is not evidence of bad data');
+  const diag = CA.postEventPersistenceDiagnostics(bars(closes), audit.events);
+  assert.equal(diag[0].persistence, 'tail-truncated');
+  assert.equal(diag[0].diagnosticOnly, true);
+});
+
+test('corpactions: OHLC inconsistency and duplicate bars are decision-time structural errors and DO poison', () => {
+  const series = bars(Array.from({ length: 10 }, () => 100));
+  series[4] = { ...series[4], open: 100, high: 90, low: 95, close: 100 };   // high < low
+  const audit = CA.decisionTimeQualityAudit(series, { splits: [], dividends: [] });
+  assert.ok(audit.events.some((e) => e.class === 'ohlc-inconsistent'));
+  assert.ok(audit.poisonedMs.has(series[4].ms));
+
+  const dup = bars(Array.from({ length: 10 }, () => 100));
+  dup.splice(5, 0, { ...dup[4] });   // duplicated session record
+  const audit2 = CA.decisionTimeQualityAudit(dup, { splits: [], dividends: [] });
+  assert.ok(audit2.events.some((e) => e.class === 'duplicate-bar'));
+});
+
+test('corpactions: poisoning classes are decision-time only (the audit gate contract)', () => {
+  for (const c of CA.POISONING_CLASSES) {
+    assert.ok(!['spike-revert', 'ambiguous', 'legitimate-persistent', 'tail-truncated'].includes(c),
+      `future-path class '${c}' may never poison`);
+  }
 });
 
 test('corpactions: missing provenance reports basis unverified + missing (fail-closed marker)', () => {
