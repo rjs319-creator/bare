@@ -22,8 +22,12 @@ async function fetchSymbol(sym) {
   return out;
 }
 
+// Public-availability ordering (PIT contract): acceptedDate (SEC acceptance
+// timestamp) > filingDate > period date + conservative LAG. Shares are
+// weighted-average (diluted fallback) — an APPROXIMATION of shares outstanding,
+// disclosed in every consuming manifest.
 const sharesSeries = income => (income || [])
-  .map(r => ({ eff: Date.parse(r.filingDate || r.acceptedDate || r.date) + (r.filingDate || r.acceptedDate ? 0 : LAG), shares: r.weightedAverageShsOut ?? r.weightedAverageShsOutDil ?? null }))
+  .map(r => ({ eff: Date.parse(r.acceptedDate || r.filingDate || r.date) + (r.acceptedDate || r.filingDate ? 0 : LAG), shares: r.weightedAverageShsOut ?? r.weightedAverageShsOutDil ?? null }))
   .filter(r => Number.isFinite(r.eff) && r.shares > 0).sort((a, b) => a.eff - b.eff);
 
 const priceSeries = price => (price || [])

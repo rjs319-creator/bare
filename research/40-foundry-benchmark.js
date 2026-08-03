@@ -33,7 +33,11 @@ function main() {
   }
   const raw = fs.readFileSync(PANEL_PATH, 'utf8');
   const panel = JSON.parse(raw);
-  const datasetHash = `panel-features-v3:${crypto.createHash('sha256').update(raw).digest('hex').slice(0, 16)}`;
+  // Prefer the normalized-payload hash from the snapshot manifest (identifies
+  // the DATA, not the file bytes); fall back to a file hash for old vintages.
+  const datasetHash = panel.datasetHash
+    ? `panel-features-v3:${panel.datasetHash.slice(0, 16)}`
+    : `panel-features-v3:${crypto.createHash('sha256').update(raw).digest('hex').slice(0, 16)}`;
   let codeVersion = 'git:unknown';
   try { codeVersion = `git:${execSync('git rev-parse --short HEAD', { cwd: __dirname }).toString().trim()}`; } catch { /* recorded as unknown */ }
 
@@ -45,6 +49,7 @@ function main() {
         securityId: r.lid || `sym:${r.s}`,
         ticker: r.s,
         decisionTs: r.dt || `${ym}-28`,
+        labelEndDate: r[`le${HORIZON}`] || null,   // exact label end — required for purge/embargo (rows without it never train)
         horizon: `${HORIZON}d`,
         features: { mom121: r.m121 },
         outcome: r[`f${HORIZON}`],
@@ -70,10 +75,13 @@ function main() {
   console.log(`momentum-12-1 on panel-v3 (${HORIZON}d): meanIC ${mom.meanIC}, HAC t ${mom.hac.tstat}, MBB CI90 [${(mom.mbbCi90 || []).join(', ')}], ESS ${mom.effectiveSampleSize}, dates ${mom.dates}`);
   console.log(`control-random: meanIC ${ctrl.meanIC}, HAC t ${ctrl.hac.tstat}`);
 
+  // periodEnd = the last decision date actually EVALUATED (an event with a
+  // label), never the last month merely present in the panel grid.
+  const evaluatedDates = events.map((e) => e.decisionTs).sort();
   const rec = EL.makeEvidenceRecord({
     hypothesisId: 'momentum-12-1-swing',
     datasetHash,
-    periodStart: panel.months[0], periodEnd: panel.months[panel.months.length - 1],
+    periodStart: evaluatedDates[0], periodEnd: evaluatedDates[evaluatedDates.length - 1],
     horizon: `${HORIZON}d`,
     codeVersion,
     manifestHash: crypto.createHash('sha256').update(JSON.stringify(report.manifest || report)).digest('hex').slice(0, 16),
