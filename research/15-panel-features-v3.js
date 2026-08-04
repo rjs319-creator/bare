@@ -164,7 +164,18 @@ function mergedIncome(cacheDir, members) {
   return [...byDate.values()];
 }
 
-function buildPanel({ master, symbols, cacheDir, corpDir }) {
+// opts (all optional, defaults byte-identical to the frozen v3.2 behavior):
+//   grid             — decision-date grid (default: the module GRID)
+//   requireShares    — false ⇒ no shares series required, cap = null (a source
+//                      with no fundamentals substitutes a declared band rule)
+//   bandCheck        — ({cap, adv}) => bool universe-band predicate (default:
+//                      the frozen cap∈[CAP_LO,CAP_HI] ∧ adv≥ADV_FLOOR rule)
+//   priceDataVersion — provenance string stamped into every outcome
+function buildPanel({ master, symbols, cacheDir, corpDir }, opts = {}) {
+  const grid = opts.grid || GRID;
+  const requireShares = opts.requireShares !== false;
+  const bandCheck = opts.bandCheck || null;
+  const priceDataVersion = opts.priceDataVersion || 'fmp-cache-v1+corpactions-v1-tr';
   const symsAll = Object.keys(symbols).sort();
   const exclusions = {};                       // symbol-level exclusion reason → count
   const excl = (reason) => { exclusions[reason] = (exclusions[reason] || 0) + 1; };
@@ -256,8 +267,8 @@ function buildPanel({ master, symbols, cacheDir, corpDir }) {
       if (extremeSummary.perSymbol.length < 500) extremeSummary.perSymbol.push({ sym: src, lid: g.listingId, events: audit.events, diagnostics });
     }
 
-    const ss = pit.sharesSeries(mergedIncome(cacheDir, g.members));
-    if (!ss.length) { excl('no-shares-series'); continue; }
+    const ss = requireShares ? pit.sharesSeries(mergedIncome(cacheDir, g.members)) : [];
+    if (requireShares && !ss.length) { excl('no-shares-series'); continue; }
 
     const meta = symbols[src] || symbols[g.members[0]] || {};
     const sec = meta.sector || 'Unknown';
@@ -284,26 +295,28 @@ function buildPanel({ master, symbols, cacheDir, corpDir }) {
   for (const g of groups) {
     if (!g._work) continue;
     const { ps, audit, ss, sec, security } = g._work;
-    const opts = { dataCutoffMs: labelObservationCutoffMs, securityMasterVersion: master.version, priceDataVersion: 'fmp-cache-v1+corpactions-v1-tr' };
+    const opts2 = { dataCutoffMs: labelObservationCutoffMs, securityMasterVersion: master.version, priceDataVersion };
     // Label series: TR index as the return basis (close ← tr), raw close kept
     // for entry-positivity semantics via tr>0 equivalence.
     const labelSeries = ps.map((b) => ({ ms: b.ms, close: b.tr }));
-    for (const d of GRID) {
+    for (const d of grid) {
       const ym = new Date(d).toISOString().slice(0, 7);
       const fun = (monthlyFunnel[ym] ||= { candidates: 0, priced: 0, bandPass: 0, featurePass: 0, emitted: 0 });
       fun.candidates++;
       const pa = pit.asOfPriceAdv(ps, d); if (!pa || pa.stale) continue;
       const i = pa.idx;
       fun.priced++;
-      const sh = pit.asOfShares(ss, d); if (!sh) continue;
-      const cap = pa.close * sh; if (cap < pit.CAP_LO || cap > pit.CAP_HI || pa.adv < pit.ADV_FLOOR) continue;
+      const sh = requireShares ? pit.asOfShares(ss, d) : null;
+      if (requireShares && !sh) continue;
+      const cap = sh ? pa.close * sh : null;
+      if (bandCheck ? !bandCheck({ cap, adv: pa.adv }) : (cap < pit.CAP_LO || cap > pit.CAP_HI || pa.adv < pit.ADV_FLOOR)) continue;
       fun.bandPass++;
       const m121 = ratio(ps, i, 252, 21); if (m121 == null) continue;
       fun.featurePass++;
       if (audit.poisonedMs.has(ps[i].ms)) { extremeSummary.poisonedEntriesSkipped++; continue; }
 
       const outcomes = HORIZONS.map((h) => {
-        const o = OV3.forwardOutcomeV3({ series: labelSeries, dateMs: d, bars: h, security, opts });
+        const o = OV3.forwardOutcomeV3({ series: labelSeries, dateMs: d, bars: h, security, opts: opts2 });
         // STRUCTURAL poison only (unadjusted split, duplicate/malformed bar,
         // OHLC conflict) — all decision-time evidence. Future persistence
         // plays no part here.
