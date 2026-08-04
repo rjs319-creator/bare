@@ -9,6 +9,7 @@ const {
   HISTORY_CAP, SHADOW_BASIS, DETERMINISTIC_BASELINE,
   validateModelCard, applyPointerChange, rollbackPointer,
   saveCandidate, loadArtifact, getChampion, promote, promoteLive, rollback, scoreShadow,
+  recordShadowObservations, shadowStats, scoreShadowBatch, setShadowChallenger,
 } = require('../lib/model-registry');
 const { trainLogistic } = require('../lib/survival-model');
 
@@ -177,9 +178,48 @@ test('promoteLive: requires the artifact card to carry passed-gates evidence fro
   assert.equal(refused.ok, false);
   assert.equal(refused.reason, 'not-passed-gates');
 
+  // Even a passed-gates artifact cannot go live without the MINIMUM PROSPECTIVE SHADOW
+  // WINDOW — a backtest alone can never serve.
+  const noShadow = await promoteLive('v-gated', { store, now: NOW });
+  assert.equal(noShadow.ok, false);
+  assert.equal(noShadow.reason, 'insufficient-shadow-window');
+
+  const { GATES } = require('../lib/promotion-gate');
+  const perDay = Math.ceil(GATES.minShadowEpisodes / GATES.minShadowDays);
+  for (let d = 1; d <= GATES.minShadowDays; d++) {
+    await recordShadowObservations({ date: `2026-07-${String(d).padStart(2, '0')}`, episodes: perDay }, { store });
+  }
+  const stats = await shadowStats({ store });
+  assert.ok(stats.shadowDays >= GATES.minShadowDays && stats.shadowEpisodes >= GATES.minShadowEpisodes);
+
   const live = await promoteLive('v-gated', { store, now: NOW });
   assert.equal(live.ok, true);
   assert.equal(live.pointer.mode, 'live');
+});
+
+test('27. the shadow artifact loads ONCE and scores in batch; a challenger coexists with a live champion', async () => {
+  const store = memStore();
+  await saveCandidate({ model: fitModel(), meta: goodMeta('v-champ') }, { store, now: NOW });
+  await saveCandidate({ model: fitModel(), meta: goodMeta('v-chal') }, { store, now: NOW });
+  await promote('v-champ', { gate: PASSING_GATE, store, now: NOW });
+
+  // Batch scoring: read count stays flat regardless of batch size (ONE artifact load).
+  let reads = 0;
+  const counting = { ...store, readJSON: async (k, d) => { reads++; return store.readJSON(k, d); } };
+  const feats = Array.from({ length: 10 }, () => ({ x: 1, z: 0 }));
+  const out = await scoreShadowBatch(feats, { store: counting });
+  assert.equal(out.length, 10);
+  assert.ok(out.every(s => s && s.calibrated === false && s.version === 'v-champ'));
+  assert.ok(reads <= 3, `champion loaded once for the whole batch (${reads} reads)`);
+
+  // A shadow CHALLENGER registers beside the champion and takes over shadow scoring,
+  // while the champion pointer is untouched.
+  const reg = await setShadowChallenger('v-chal', { store, now: NOW, actor: 'test', reason: 'challenger trial' });
+  assert.equal(reg.ok, true);
+  const s2 = await scoreShadow({ x: 1, z: 0 }, { store });
+  assert.equal(s2.version, 'v-chal');
+  assert.equal(s2.mode, 'shadow-challenger');
+  assert.equal((await getChampion({ store })).version, 'v-champ', 'champion pointer untouched');
 });
 
 test('rollback: one call restores the previous pointer; refuses with no history', async () => {
