@@ -23,7 +23,7 @@ const { runPredict, runPredictTick, runCrowd, runCrowdTick, runBrief, runBriefTi
 const { runFadeOpt, runFadeSeed, runFadeSignals, runFadeTick, runFadeBook,
         runTrendOpt, runTrend, runTrendTick, runTrendBook,
         runDaytrade, runDaytradeTick, runDaytradeBook, runDaytradeOpt,
-        runConfluence, runConfluenceTick, runConfluenceBook, runConfluenceOpt,
+        runConfluence, runConfluenceTick, runConfluenceBook, runConfluenceOpt, runConfluenceMarginal,
         runCoil, runCoilTick, runCoilBook,
         runGapGo, runGapGoTick, runGapGoBook,
         runDownDay, runDownDayTick, runDownDayBook,
@@ -242,6 +242,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'confluencetick') return runConfluenceTick(req, res);
   if (req.query.op === 'confluencebook') return runConfluenceBook(req, res);
   if (req.query.op === 'confluenceopt') return runConfluenceOpt(req, res);
+  if (req.query.op === 'confluencemarginal') return runConfluenceMarginal(req, res);
   if (req.query.op === 'pulse') return runPulse(req, res);
   if (req.query.op === 'pulserefine') return runPulseRefine(req, res);
   if (req.query.op === 'pulsegrade') return runPulseGrade(req, res);

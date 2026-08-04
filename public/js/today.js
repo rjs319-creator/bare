@@ -361,6 +361,22 @@ export function renderCommandCenter(container, p) {
     + lane('❌ Failed', L.failed, legend) + lane('⏰ Expired', L.expired, legend);
   if (laneHtml) html += `<div class="td-lanes"><div class="td-lanes-h">Since yesterday</div>${laneHtml}</div>`;
 
+  // Swing Research / Shadow lane (defects #1 + #4) — standalone Emerging Leaders and
+  // micro/expanded scope observations. VISUALLY AND MECHANICALLY DISTINCT from the
+  // actionable board: these rows never entered the production merge and cannot size
+  // a position. Shown so shadow candidates are observable while their prospective
+  // evidence accrues.
+  const SR = p.swingResearch || {};
+  if ((SR.inventory && SR.inventory.length) || (SR.coverage && SR.coverage.missingScopeCache && SR.coverage.missingScopeCache.length)) {
+    const srRow = r => `<span class="td-evt" title="${esc(r.researchLane === 'emergingLeader' ? 'Standalone Emerging Leader (no base-pattern status) — shadow research, not a recommendation' : 'Unapproved scope/strategy observation — shadow research, not a recommendation')}">`
+      + `${r.researchLane === 'emergingLeader' ? '🌱' : '🔬'} ${esc(r.ticker)} <span class="td-dim">${esc(r.universeScope || '?')}${r.alsoInScopes && r.alsoInScopes.length ? ' +' + r.alsoInScopes.join('+') : ''}</span></span>`;
+    const missing = (SR.coverage && SR.coverage.missingScopeCache) || [];
+    html += `<div class="td-lanes"><div class="td-lanes-h">🔬 Swing Research / Shadow <span class="td-dim">— observed, graded prospectively, weight-0 on the board (promotion is a registry change only)</span></div>`
+      + ((SR.inventory || []).slice(0, 20).map(srRow).join('') || `<div class="td-dim td-empty">No shadow swing observations today.</div>`)
+      + (missing.length ? `<div class="td-dim" style="margin-top:4px">⚠ missing scope cache: ${esc(missing.join(', '))}</div>` : '')
+      + `</div>`;
+  }
+
   // Upcoming risk events (#8).
   if (p.events && p.events.length) {
     const evLabel = e => e.type === 'earnings'
