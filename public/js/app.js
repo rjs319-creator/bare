@@ -77,7 +77,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     custom: 'A momentum model that adapts its scoring to the current market regime.',
     coremo: 'Steady, confirmed uptrends with the strongest 12-month momentum.',
     daytrade: 'Short-term setups for same-day trading, with a live entry-timing grade.',
-    gapgo: 'Stocks gapping up on news and continuing — the one validated event edge.',
+    gapgo: 'Stocks gapping up on news and continuing — a shadow event challenger; its prospective ledger has not cleared promotion.',
     omega: 'OMEGA-SWING — liquid names with early-to-middle-stage momentum likely to keep rising over the next 5–10 trading days. Sector- and market-relative, ranked by expected utility, with an entry plan and invalidation for each. Not a chaser of already-vertical moves; won’t force picks in weak regimes.',
     atlas: 'ATLAS-X — a SHADOW / weight-0 swing research workspace. Expert-staged candidates are sorted into entry lanes (Enter Next Session / Wait-for-Breakout / -Pullback / -Confirmation / Do Not Chase / Avoid), tracked as episodes once live, and judged in an Evidence & Validation panel. It CANNOT originate or affect a live trade; failure-score and target-before-stop are qualitative bands (never percentages), and it is allowed to show nothing.',
     ignition: 'One acceleration-ranked view over all the momentum scanners: catch names whose price AND volume are speeding up (up 10% and accelerating beats up 60% and slowing), with a catalyst tag, ignition score, and stage. EOD/daily data — no real-time or LULD halt prediction.',
@@ -3520,7 +3520,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     daytrade: { level: 'confirm', one: `A ${L('regime', 'regime')}-gated movers watchlist, not a win-rate edge. Large-cap ${L('momentum', 'momentum')} doesn't beat SPY; small-cap explosive is positive-expectancy but wins <50% (a few big runners carry it).` },
     confluence: { level: 'confirm', one: `~48% win rate in 5y tests — no strategy or ${L('confluence', 'confluence')} combination confidently beats the market. A multi-strategy confirmation overlay.` },
     ghost: { level: 'building', one: `An early-${L('accumulation', 'accumulation')} watchlist. The price core is mostly weak ${L('momentum', 'momentum')} (~0.08 IC); insider/fundamentals add little. Live record still accruing.` },
-    trendrider: { level: 'validated', one: `The "stand down when red" timing is validated across 5 independent selloffs — the project's strongest finding. But green = riding ${L('beta', 'beta')}, not stock-picking skill: it tells you WHEN, not WHAT.` },
+    trendrider: { level: 'building', one: `The "stand down when red" timing held across 5 independent selloffs in research — the project's strongest finding — but Trend Rider itself is shadow / weight-0 with no promotion artifact. Green = riding ${L('beta', 'beta')}, not stock-picking skill: it tells you WHEN, not WHAT.` },
     fade: { level: 'building', one: `A choppy/neutral-tape ${L('meanrev', 'mean-reversion')} fade. The selected high-conviction basket showed ~+0.9%/mo net out-of-sample (${L('beta', 'beta')}-neutral, after costs) — the most promising result, but the live ${L('backtest', 'track record')} is still building.` },
     forecast: { level: 'building', one: `AI ${L('forecast', 'falsifiable forecasts')} on the market, ${L('tape', 'tape')}/${L('regime', 'regime')}-aware and auto-graded against real prices — no self-scoring. Short-term prediction is hard; expect the live accuracy to sit near a coin flip. Educational, not a signal.` },
     crowd: { level: 'confirm', one: `A ${L('predmarket', 'prediction-market')} sentiment radar (Kalshi + Polymarket) — flags unusual volume and sharp odds swings on macro/equity contracts. It shows what the crowd is suddenly repricing (often confirming news), not a tradeable edge. The volume baseline sharpens over the first few days.` },
@@ -5913,7 +5913,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
     el.innerHTML = `${lightHtml}${howToHtml}${basketHtml}${moversHtml}${trackHtml}
       <div class="fade-caveats"><b>How to use.</b> Trend-following works when markets trend and fails when they chop or fall. The light blends SPY's trend, how <i>clean</i> the trend is (efficiency), market breadth, and the risk regime. <b>Green/Yellow</b> = the climate that historically rewarded riding trends; <b>Red</b> = stand down.
-      <br><b>Honest caveat.</b> This is a market-timing + trend-capture system, not a stock-alpha engine — the proven edge is the <b>timing light</b> (when to be on vs off), not beating the market on selection. The basket largely captures the uptrend (beta) when it's safe to. Research, not financial advice.</div>`;
+      <br><b>Honest caveat.</b> This is a market-timing + trend-capture system, not a stock-alpha engine — the research-supported lever is the <b>timing light</b> (when to be on vs off — still shadow, graded prospectively), not beating the market on selection. The basket largely captures the uptrend (beta) when it's safe to. Research, not financial advice.</div>`;
 
     const meta = document.getElementById('trendr-meta');
     if (meta) meta.textContent = `· light ${lbl} · ${basket.length} names in the ride list`;
@@ -6912,7 +6912,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const regimeNote = t.regime === 'risk-off'
       ? `<div class="dt-note" style="border-left-color:#ef4444"><b>🛑 Risk-off regime — suggested size is 0.</b> Non-earnings gaps were net-negative in risk-off across the backtest (the edge is a risk-on/neutral phenomenon). Names still shown for the watchlist, but the sizing model stands down.</div>`
       : '';
-    const strong = list('🔥 STRONG — gap ≥5% <span class="dt-dim">(the validated primary)</span>', t.strong, 'Big unscheduled gaps. Intraday exp08: +1.9%/trade, PF 1.47, all 4 years, passes deflation (broad survivorship-corrected daily-bar re-test: PF 1.29). Ranked by the 🎯 continuation meta-label (gap + RVOL + regime) — top-third beat bottom in 6/6 years OOS.');
+    const strong = list('🔥 STRONG — gap ≥5% <span class="dt-dim">(largest-gap tier · shadow)</span>', t.strong, 'Big unscheduled gaps. Research backtest only (exp08: +1.9%/trade, PF 1.47); an independent 2026-08 held-out re-test was inconclusive (date-clustered t≈1.5) and the liquid-25 subset was negative held-out. Not promoted — judged prospectively on the verified next-session ORB ledger. Ranked by the 🎯 continuation meta-label (gap + RVOL + regime).');
     const moderate = list('⚡ MODERATE — gap 3–5%', t.moderate, 'Smaller gaps — positive but weaker than the ≥5% tier. Same continuation ranking + sizing.');
 
     // Self-validation ledger (forward excess-vs-SPY of logged picks, by tier).
@@ -7183,7 +7183,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <div class="chart-panel" data-chart-panel style="display:none"></div>
       </div>`;
     const list = (title, rows, sub) => `<div class="rot-panel"><div class="rot-head">${title}</div><div class="rot-sub">${sub}</div>${(rows || []).map(card).join('') || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No qualifying gap-downs right now — selective, event-driven; empty on quiet days.</span></div>'}</div>`;
-    const strong = list('🔴 STRONG — gap ≤ −5% <span class="dt-dim">(the validated primary)</span>', t.strong, 'Big unscheduled gap-downs. Backtest: short excess +1.0%/3d, win 55%, positive all 3 years. Ranked by gap size (bigger = more continuation).');
+    const strong = list('🔴 STRONG — gap ≤ −5% <span class="dt-dim">(largest-gap tier · watch-only shadow)</span>', t.strong, 'Big unscheduled gap-downs. Research backtest only (short excess +1.0%/3d, win 55%, 3 years) — shorts stay watch-only until observed borrow and verified intraday execution exist. Ranked by gap size (bigger = more continuation).');
     const moderate = list('🟠 MODERATE — gap −3 to −5%', t.moderate, 'Smaller gap-downs — positive but weaker than the ≤−5% tier.');
     let bookPanel = '';
     if (book && book.ok) {
@@ -7427,7 +7427,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       </div>`;
     const bt = t.systemBacktest;
     const btPanel = bt ? `<div class="dt-note" style="border-left-color:#22c55e;margin-top:10px"><b>📈 Backtested system (${esc(bt.scope)}, ~2y point-in-time).</b> Trading the actual plan (enter on the break, stop, target): <b>${bt.triggerRatePct}%</b> of picks trigger; of those, <b>${bt.winRatePct}%</b> hit target, averaging <b>${bt.avgRPerEntered >= 0 ? '+' : ''}${bt.avgRPerEntered}R per entered trade</b>. ${esc(bt.verdict)}.</div>` : '';
-    const caveat = `<div class="dt-note" style="border-left-color:#a855f7;margin-top:10px"><b>⚠️ Honest edge.</b> ${esc(t.method ? t.method.caveat : '')} The % is a real base rate, not a promise — most of these stay quiet. <b>Enter</b> is a breakout buy-stop above the coil (not the current price); <b>target</b> is the calibrated ≥2.5σ break level. Picks are <b>ranked by coil strength</b> (the validated signal). I tested ranking by Expected-R / reward:risk and <b>dropped it — it backtested inverted</b> (tight high-R:R stops get whipsawed → worst realized trades). Paper-track before sizing.</div>`;
+    const caveat = `<div class="dt-note" style="border-left-color:#a855f7;margin-top:10px"><b>⚠️ Honest edge.</b> ${esc(t.method ? t.method.caveat : '')} The % is a real base rate, not a promise — most of these stay quiet. <b>Enter</b> is a breakout buy-stop above the coil (not the current price); <b>target</b> is the calibrated ≥2.5σ break level. Picks are <b>ranked by coil strength</b> — validated in research only as an abnormal-expansion detector, not as a trade system (realized trade R ≈ break-even). I tested ranking by Expected-R / reward:risk and <b>dropped it — it backtested inverted</b> (tight high-R:R stops get whipsawed → worst realized trades). Paper-track before sizing.</div>`;
     el.innerHTML = `${howto}
       ${coilTrackPanel(book)}
       <div style="margin:10px 0">${scopeBtns}</div>
@@ -7531,7 +7531,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       </div>`;
     };
     let picksPanel;
-    if (t.riskOff) picksPanel = `<div class="rot-panel"><div class="rot-head">🛑 Risk-off — list suppressed</div><div class="rot-sub">Trend/confluence signals underperform in risk-off (validated). Stand down on new longs.</div></div>`;
+    if (t.riskOff) picksPanel = `<div class="rot-panel"><div class="rot-head">🛑 Risk-off — list suppressed</div><div class="rot-sub">Trend/confluence signals underperform in risk-off (the app's most consistent research finding). Stand down on new longs.</div></div>`;
     else {
       const relaxNote = t.relaxed && t.count ? `<div class="rot-sub" style="color:var(--amber)">No strong 4/5 confluence today — showing moderate <b>3/5</b> agreement (the ledger's bar). Weaker signal; confirm on the chart.</div>` : '';
       picksPanel = `<div class="rot-panel"><div class="rot-head">⚙️ Confluence longs (${t.count})</div><div class="rot-sub">Ranked by <b>independent-family</b> agreement (trend + mean-reversion count more than piling on correlated trend votes) + the per-stock learner. Chips = strategies that agree; the family chip flags single-factor "confluence."</div>${relaxNote}${(t.picks || []).map(card).join('') || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No names at ≥3/5 agreement right now.</span></div>'}</div>`;
