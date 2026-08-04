@@ -171,26 +171,57 @@ test('5c. an alert carries plan, evidence, latency and the dedup identity', () =
   assert.ok(a.drivers.positive.length >= 2);
 });
 
-// ── Revival identity: the failed original cannot reuse its plan ───────────────
-test('14. a revival mints a NEW setupId and requires a live (new) plan', () => {
+// ── Revival identity: episode-stable unless the structure MATERIALLY changed ──
+test('14. a revival keeps its setupId (same episode) unless the setup materially changed', () => {
   const failedEv = { ticker: 'REV', now: NOW, session: 'regular', freshness: { freshnessStatus: 'FRESH_TODAY' }, breakoutFailed: true };
   const failed = advanceLifecycle(null, { strategy: 'daytrade', ...failedEv });
   const s1 = failed.setupId;
-  // Revival AFTER cooldown expiry with fully-green strict evidence.
-  const later = '2026-07-08T15:00:00.000Z';
-  const green = {
+  const green = later => ({
     ticker: 'REV', now: later, session: 'regular', actionableFresh: true,
     freshness: { freshnessStatus: 'FRESH_TODAY' },
     aboveVwap: true, momentumOk: true, residualOk: true, relVolOk: true, triggerConfirmed: true,
     remainingRR: 2, extensionAtr: 1,
-  };
-  const revived = advanceLifecycle(failed, { strategy: 'daytrade', ...green });
+  });
+  // One qualifying eval after cooldown expiry only ARMS the revival streak (debounce).
+  const held = advanceLifecycle(failed, { strategy: 'daytrade', ...green('2026-07-08T14:50:00.000Z') });
+  assert.equal(held.state, STATES.FAILED, 'a single qualifying eval must not revive');
+  assert.equal(held.reviveStreak, 1);
+  // Second consecutive qualifying eval → REVIVED. NO material structural change occurred
+  // (same trigger, no new catalyst, < materialMinElapsed) → SAME setupId, so the alert
+  // dedup key still matches and the user is never re-alerted for this same setup.
+  const revived = advanceLifecycle(held, { strategy: 'daytrade', ...green('2026-07-08T14:55:00.000Z') });
   assert.equal(revived.state, STATES.ACTIONABLE_NOW);
-  assert.notEqual(revived.setupId, s1, 'revival = new setup identity');
-  // And the card for the revived setup shows ONLY a live-recomputed plan.
-  const card = buildCanonicalCard({ ticker: 'REV', entry: 90, stop: 88, target: 94 }, { ...green, metrics: {}, livePlan: null }, revived, { now: later });
+  assert.equal(revived.history.at(-1).reasonCode, 'REVIVED');
+  assert.equal(revived.setupId, s1, 'non-material revival keeps the episode identity');
+
+  // A revival WITH a genuinely new catalyst IS a new setup → new identity (new alerts allowed).
+  const failed2 = advanceLifecycle(null, { strategy: 'daytrade', ...failedEv });
+  const h2 = advanceLifecycle(failed2, { strategy: 'daytrade', ...green('2026-07-08T14:50:00.000Z'), newCatalyst: true });
+  const r2 = advanceLifecycle(h2, { strategy: 'daytrade', ...green('2026-07-08T14:55:00.000Z'), newCatalyst: true });
+  assert.equal(r2.state, STATES.ACTIONABLE_NOW);
+  assert.notEqual(r2.setupId, failed2.setupId, 'material change (new catalyst) mints a new setup identity');
+
+  // And the card for a revived setup shows ONLY a live-recomputed plan.
+  const later = '2026-07-08T15:00:00.000Z';
+  const card = buildCanonicalCard({ ticker: 'REV', entry: 90, stop: 88, target: 94 }, { ...green(later), metrics: {}, livePlan: null }, revived, { now: later });
   assert.equal(card.planValid, false, 'without a live plan the revived setup cannot carry buy levels');
   assert.equal(card.entry, null);
+});
+
+test('14b. elapsed time alone (≥ materialMinElapsedMs) makes a revival a NEW setup', () => {
+  const failedEv = { ticker: 'REV2', now: NOW, session: 'regular', freshness: { freshnessStatus: 'FRESH_TODAY' }, breakoutFailed: true };
+  const failed = advanceLifecycle(null, { strategy: 'daytrade', ...failedEv });
+  const green = later => ({
+    ticker: 'REV2', now: later, session: 'regular', actionableFresh: true,
+    freshness: { freshnessStatus: 'FRESH_TODAY' },
+    aboveVwap: true, momentumOk: true, residualOk: true, relVolOk: true, triggerConfirmed: true,
+    remainingRR: 2, extensionAtr: 1,
+  });
+  // 50+ minutes after retirement (≥ the 45-min material threshold) — a genuinely new context.
+  const h = advanceLifecycle(failed, { strategy: 'daytrade', ...green('2026-07-08T15:20:00.000Z') });
+  const r = advanceLifecycle(h, { strategy: 'daytrade', ...green('2026-07-08T15:25:00.000Z') });
+  assert.equal(r.state, STATES.ACTIONABLE_NOW);
+  assert.notEqual(r.setupId, failed.setupId, 'enough elapsed time = a new setup identity');
 });
 
 // ── Discovery: change detection before the +2% floor ──────────────────────────

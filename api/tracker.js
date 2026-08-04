@@ -114,6 +114,9 @@ const PRIVILEGED_OPS = new Set([
 const EXPENSIVE_OPS = new Set([
   'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'leadtime2', 'failuremodel', 'complab', 'challengereval', 'router', 'routercf', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward', 'rltwalkforward', 'evidencediag', 'datasetsurvival',
   'peerprop', 'peerpropwf', 'underreaction', 'targetcompare', 'expgap',
+  // discover: the Day Trade page fires it every 60s (CDN-coalesced at 45s), but unthrottled
+  // anonymous callers could drive a ~2,500-name provider fan-out + Blob writes at will.
+  'discover',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -192,6 +195,12 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'survival') return require('../lib/survival-eval').runSurvival(req, res);
   if (req.query.op === 'daytradescan') return require('../lib/daytrade-scan-runner').runScanRunner(req, res);
   if (req.query.op === 'daytradescanhealth') return require('../lib/daytrade-scan-runner').runScanHealth(req, res);
+  // Web Push (feature-flagged: no-ops unless VAPID env + web-push dependency are present).
+  // Subscribe/unsubscribe are browser POSTs carrying only the PushSubscription JSON; status
+  // exposes configuration + counts, never endpoints (they are capability URLs).
+  if (req.query.op === 'pushsubscribe' || req.query.op === 'pushunsubscribe' || req.query.op === 'pushstatus') {
+    return require('../lib/push-routes').runPushOp(req, res);
+  }
   if (req.query.op === 'daytradecapture') return require('../lib/runner-capture').runDaytradeCapture(req, res);
   if (req.query.op === 'datasetgrade') {
     // With an explicit date: grade that single day. Without one: BACKLOG mode — grade the

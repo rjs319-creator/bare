@@ -1,4 +1,5 @@
   import { esc, fmtMoney, timeAgo } from './format.js';
+  import { DEFAULT_PREFS as DT_ALERT_DEFAULTS, shouldNotify, recordNotified } from './notify-prefs.js';
   import { fetchJSON, HEAVY_TIMEOUT_MS } from './fetch-json.js';
   import { startLivePrices as startScreenerLive, stopLivePrices as stopScreenerLive, LIVE_SCREENERS } from './live-price.js';
   import { startFlowBadges, setFlowNav, FLOW_BADGE_TABS } from './flow-badge.js';
@@ -5088,12 +5089,33 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     try { const d = await fetchJSON('/api/tracker?op=alertfeed'); if (d && d.ok) alertItems = d.items || []; } catch {}
     return alertItems;
   }
+  // ── Alert preferences (per-class toggles, quiet hours, rate caps) + fixed delivery ──
+  // Policy is pure (notify-prefs.js); this layer only persists prefs/state and shows the
+  // notification. Fixes: unread items no longer re-fire every 60s (notified ids persist),
+  // per-class prefs + quiet hours + hourly/daily caps are honored, and delivery routes
+  // through the service-worker registration when available (survives tab-focus quirks).
+  const getAlertPrefs = () => { try { return { ...DT_ALERT_DEFAULTS, ...(JSON.parse(localStorage.getItem('dtAlertPrefs') || '{}')) }; } catch { return { ...DT_ALERT_DEFAULTS }; } };
+  const setAlertPrefs = p => { try { localStorage.setItem('dtAlertPrefs', JSON.stringify(p)); } catch {} };
+  const getNotifyState = () => { try { return JSON.parse(localStorage.getItem('dtNotifyState') || '{}'); } catch { return {}; } };
+  const setNotifyState = s => { try { localStorage.setItem('dtNotifyState', JSON.stringify(s)); } catch {} };
+  const etHourNow = () => { try { return +new Date().toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false }); } catch { return new Date().getHours(); } };
   function maybeNotify(items) {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const prefs = getAlertPrefs();
+    let state = getNotifyState();
+    const nowMs = Date.now(), etHour = etHourNow();
     const seen = getSeen();
-    items.filter(i => Date.parse(i.ts) > seen).slice(0, 3).forEach(i => {
-      try { new Notification(i.title, { body: i.detail || '', tag: i.id }); } catch {}
-    });
+    for (const i of items.filter(x => Date.parse(x.ts) > seen).slice(0, 6)) {
+      const d = shouldNotify(i, prefs, state, nowMs, etHour);
+      if (!d.notify) continue;
+      try {
+        if (swReg && swReg.showNotification) swReg.showNotification(i.title, { body: i.detail || '', tag: i.id, renotify: false });
+        else new Notification(i.title, { body: i.detail || '', tag: i.id });
+        if (prefs.sound && typeof playAlertSound === 'function') { try { playAlertSound(); } catch {} }
+        state = recordNotified(state, i, nowMs);
+      } catch {}
+    }
+    setNotifyState(state);
   }
   function ensureAlerts() { if (!alertsLoaded) { alertsLoaded = true; runAlertsUI(); } else runAlertsUI(); }
   async function runAlertsUI() {
@@ -5120,8 +5142,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       body = `<div class="rot-head" style="margin-top:14px">Recent</div>` + alertItems.map(i => {
         const unread = Date.parse(i.ts) > seen;
         const col = ALERT_COL[i.sev] || 'var(--text-dim)';
-        return `<div class="rot-panel crowd-row alert-row${unread ? ' alert-unread' : ''}" data-go="${i.go || ''}" style="margin-top:8px;border-left:3px solid ${col}">`
-          + `<div class="crowd-head"><span><b>${ALERT_ICON[i.type] || '🔔'} ${esc(i.title)}</b></span><span class="dt-dim" style="white-space:nowrap">${timeAgo(i.ts)}</span></div>`
+        // Early-watch research pings render muted with an explicit watch-only marker so the
+        // feed can never dress a watch annotation up as a trade signal.
+        const isWatch = i.kind === 'early_watch';
+        return `<div class="rot-panel crowd-row alert-row${unread ? ' alert-unread' : ''}" data-go="${i.go || ''}" style="margin-top:8px;border-left:3px ${isWatch ? 'dashed' : 'solid'} ${col}${isWatch ? ';opacity:.8' : ''}">`
+          + `<div class="crowd-head"><span><b>${ALERT_ICON[i.type] || '🔔'} ${esc(i.title)}</b>${isWatch ? ' <span class="dt-dim" style="font-size:10px">watch-only</span>' : ''}</span><span class="dt-dim" style="white-space:nowrap">${timeAgo(i.ts)}</span></div>`
           + (i.detail ? `<div class="rot-sub">${esc(i.detail)}</div>` : '') + `</div>`;
       }).join('');
     }
@@ -5919,13 +5944,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // op=daytrade pull — no need to block this render on it.
     try { fetchJSON('/api/tracker?op=discover').catch(() => null); } catch {}
     try {
-      const [t, book, timingBook, dtAlerts] = await Promise.all([
+      const [t, book, timingBook, dtAlerts, scanHealth, capture] = await Promise.all([
         fetchJSON('/api/tracker?op=daytrade'),
         fetchJSON('/api/tracker?op=daytradebook').catch(() => null),
         fetchJSON('/api/tracker?op=timingbook').catch(() => null),
         fetchJSON('/api/tracker?op=daytradealerts').catch(() => null),
+        fetchJSON('/api/tracker?op=daytradescanhealth').catch(() => null),
+        fetchJSON('/api/tracker?op=daytradecapture').catch(() => null),
       ]);
       renderDaytrade._alerts = (dtAlerts && dtAlerts.ok && dtAlerts.alerts) || [];
+      renderDaytrade._alertMeta = dtAlerts && dtAlerts.ok ? { suppressedToday: dtAlerts.suppressedToday || 0 } : null;
+      renderDaytrade._scanHealth = scanHealth && scanHealth.ok !== false ? scanHealth : null;
+      renderDaytrade._capture = capture && capture.ok !== false ? capture : null;
       renderDaytrade(t, book, timingBook);
       // New Day-Trade transitions land in the shared 🔔 feed — refresh the unread badge and
       // (opt-in) surface browser notifications while the page is open.
@@ -5947,6 +5977,76 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         ${row('Green (7-10)', b.green, '🟢')}${row('Amber (4-6)', b.amber, '🟡')}${row('Red (1-3)', b.red, '🔴')}
         <div class="bt-ic-row" style="border-top:1px solid var(--border);margin-top:4px"><span></span><span></span><span>${resolved} resolved · ${tb.daysLogged || 0} days</span></div>
       </div>`;
+  }
+
+  // Wire the 🔔 Alert settings panel: pref changes persist immediately (so the 60s re-render
+  // restores them), and the background-push toggle drives the full subscribe/unsubscribe flow
+  // against the feature-flagged server ops. Honest UX: when the server is not configured for
+  // push, the server's own note is shown and the toggle stays off — no pretend delivery.
+  const urlB64ToU8 = s => { const pad = '='.repeat((4 - s.length % 4) % 4); const b = atob((s + pad).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from([...b].map(c => c.charCodeAt(0))); };
+  function wireAlertSettings(el) {
+    const panel = el.querySelector('#dt-alert-settings');
+    if (!panel) return;
+    panel.querySelectorAll('[data-dt-pref]').forEach(inp => {
+      inp.addEventListener('change', () => {
+        const p = getAlertPrefs();
+        const k = inp.dataset.dtPref;
+        if (k === 'quietEnabled') p.quietHours = { ...p.quietHours, enabled: inp.checked };
+        else if (k === 'quietStart') p.quietHours = { ...p.quietHours, startET: Math.min(23, Math.max(0, +inp.value || 0)) };
+        else if (k === 'quietEnd') p.quietHours = { ...p.quietHours, endET: Math.min(23, Math.max(0, +inp.value || 0)) };
+        else if (k === 'maxPerHour') p.maxPerHour = Math.max(1, +inp.value || 6);
+        else if (k === 'maxPerDay') p.maxPerDay = Math.max(1, +inp.value || 20);
+        else p[k] = inp.checked;
+        setAlertPrefs(p);
+        if (k === 'browserNotifications' && inp.checked && 'Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission().catch(() => {});
+        }
+      });
+    });
+    const toggle = panel.querySelector('#dt-push-toggle');
+    const statusEl = panel.querySelector('#dt-push-status');
+    if (!toggle) return;
+    const setStatus = msg => { if (statusEl) statusEl.textContent = msg; };
+    // Reflect the actual current subscription state (never localStorage guesses).
+    (async () => {
+      try {
+        const reg = swReg || (navigator.serviceWorker && await navigator.serviceWorker.ready);
+        const sub = reg && reg.pushManager ? await reg.pushManager.getSubscription() : null;
+        toggle.checked = !!sub;
+        if (sub) setStatus('Background push active on this browser.');
+      } catch {}
+    })();
+    toggle.addEventListener('change', async () => {
+      try {
+        if (toggle.checked) {
+          setStatus('Checking server configuration…');
+          const st = await fetchJSON('/api/tracker?op=pushstatus').catch(() => null);
+          if (!st || !st.configured || !st.vapidPublicKey) {
+            toggle.checked = false;
+            setStatus((st && st.note) || 'Server not configured for background push (VAPID keys missing) — in-app alerts still work.');
+            return;
+          }
+          const perm = await Notification.requestPermission();
+          if (perm !== 'granted') { toggle.checked = false; setStatus('Browser permission denied.'); return; }
+          const reg = swReg || await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToU8(st.vapidPublicKey) });
+          const out = await fetch('/api/tracker?op=pushsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub.toJSON() }) }).then(r => r.json()).catch(() => null);
+          if (out && out.ok) setStatus('Background push enabled — you will receive the alert classes checked above even with the tab closed. iPhone/iPad: requires Add to Home Screen first.');
+          else { toggle.checked = false; try { await sub.unsubscribe(); } catch {} setStatus('Could not store the subscription server-side.'); }
+        } else {
+          const reg = swReg || await navigator.serviceWorker.ready;
+          const sub = reg && reg.pushManager ? await reg.pushManager.getSubscription() : null;
+          if (sub) {
+            try { await fetch('/api/tracker?op=pushunsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) }); } catch {}
+            try { await sub.unsubscribe(); } catch {}
+          }
+          setStatus('Background push disabled.');
+        }
+      } catch (e) {
+        toggle.checked = false;
+        setStatus('Push setup failed: ' + String((e && e.message) || e));
+      }
+    });
   }
 
   function renderDaytrade(t, book, timingBook) {
@@ -6088,6 +6188,37 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     } else {
       track = `<div class="rot-panel rot-panel-pending"><div class="rot-head">📊 Live track record — building…</div><div class="rot-sub">${book ? `${book.stillOpen || 0} open, ${book.resolved || 0} resolved` : ''}. Each pick is scored ~${t.horizon} sessions later; accrues automatically via the daily cron.</div></div>`;
     }
+    // 🩺 DISCOVERY HEALTH — the server's 5-state verdict, verbatim (it is the authority; the
+    // client never re-derives health, and zero anomalies is NOT interpreted as unhealthy).
+    // Novices see the one-line `explain`; the expert <details> exposes the full contract.
+    const sh = renderDaytrade._scanHealth;
+    const HEALTH_DOT = { healthy: '#22c55e', degraded: '#f59e0b', stale: '#ef4444', idle: '#64748b', unavailable: '#ef4444' };
+    let healthStrip = '';
+    if (sh && sh.state) {
+      const h = sh.health || {};
+      const cov = h.lastCoverage || {};
+      const dotCol = HEALTH_DOT[sh.state] || '#64748b';
+      const dotStyle = sh.state === 'unavailable' ? `border:2px solid ${dotCol};background:transparent` : `background:${dotCol}`;
+      const hx = [
+        ['Last scan', h.lastRunAt ? new Date(h.lastRunAt).toLocaleTimeString() : null],
+        ['Last success', h.lastSuccessAt ? new Date(h.lastSuccessAt).toLocaleTimeString() : null],
+        ['Duration', h.lastDurationMs != null ? h.lastDurationMs + 'ms' : null],
+        ['Coverage', h.lastCoveragePct != null ? h.lastCoveragePct + '%' + (cov.provider ? ` via ${cov.provider}` : '') + (cov.volumeAvailable === false ? ' — price-only fallback (volume evidence unavailable)' : '') : null],
+        ['Scanned / anomalies', h.lastScanned != null ? `${h.lastScanned} / ${h.lastAnomalies ?? '–'}` : null],
+        ['Outcome', h.lastOutcome || null],
+        ['Next expected', h.nextExpectedAt ? new Date(h.nextExpectedAt).toLocaleTimeString() : null],
+        ['Consecutive errors', h.consecutiveErrors || null],
+        ['Missed scans today (est.)', h.missedScanEstimate || null],
+        ['Today by outcome', sh.history && sh.history.byOutcome ? Object.entries(sh.history.byOutcome).map(([k, v]) => `${k} ${v}`).join(' · ') : null],
+      ].filter(r => r[1] != null);
+      healthStrip = `<div class="rot-panel" style="border-color:${dotCol}44;padding:8px 12px">
+          <div style="display:flex;align-items:center;gap:8px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;${dotStyle}"></span><b style="font-size:12.5px">${esc(sh.explain || `Discovery: ${sh.state}`)}</b></div>
+          ${hx.length ? `<details class="expert-only dt-dim" style="font-size:10.5px;margin-top:4px"><summary style="cursor:pointer">🩺 Discovery diagnostics</summary>${hx.map(r => `<div>· ${r[0]}: <b>${esc(String(r[1]))}</b></div>`).join('')}${sh.note ? `<div>· Note: ${esc(sh.note)}</div>` : ''}</details>` : ''}
+        </div>`;
+    } else {
+      healthStrip = `<div class="rot-panel" style="border-color:#64748b44;padding:8px 12px"><span class="dt-dim" style="font-size:12px">🩺 Discovery health unknown (health endpoint unreachable) — the board still fails closed on stale data.</span></div>`;
+    }
+
     // ⚡ Actionable Now — the ONLY buy-language section: current-session-validated, fade-gated,
     // carry-ranked. Every card here cleared the intraday actionable gate (fresh 5-min evidence
     // + valid thesis + valid plan). A stale prior-session mover can NEVER appear here.
@@ -6102,6 +6233,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         ['VWAP', o.currentVwap != null ? '$' + o.currentVwap + (o.aboveVwap === true ? ' (above)' : o.aboveVwap === false ? ' (below)' : '') : null],
         ['15-min move', o.mom15 != null ? (o.mom15 * 100).toFixed(2) + '%' : null],
         ['Residual vs SPY', o.residualVsSpy != null ? o.residualVsSpy + '%' : null],
+        ['Residual vs sector', o.residualSector15 != null ? (o.residualSector15 * 100).toFixed(2) + '%' : 'sector evidence unavailable'],
         ['Time-of-day RVOL', o.timeOfDayRelVol != null ? o.timeOfDayRelVol + '×' : null],
         ['Extension', o.extensionAtr != null ? o.extensionAtr + ' ATR above VWAP' : null],
         ['Remaining R:R', o.remainingRR != null ? String(o.remainingRR) : null],
@@ -6114,7 +6246,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         ['Setup id', o.setupId || null],
       ].filter(r => r[1] != null);
       if (!rows.length) return '';
-      return `<details class="dt-dim" style="font-size:10.5px;margin-top:4px"><summary style="cursor:pointer">🔬 Expert evidence</summary>${rows.map(r => `<div>· ${r[0]}: <b>${esc(String(r[1]))}</b></div>`).join('')}</details>`;
+      return `<details class="dt-dim expert-only" style="font-size:10.5px;margin-top:4px"><summary style="cursor:pointer">🔬 Expert evidence</summary>${rows.map(r => `<div>· ${r[0]}: <b>${esc(String(r[1]))}</b></div>`).join('')}</details>`;
     };
     // Plan line — an ACTIONABLE card shows the LIVE recomputed plan (never the stale daily
     // levels); a non-actionable card shows only the next-session ORB reference.
@@ -6196,7 +6328,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // 🧪 Expert diagnostics — Stage-2 selection lanes (who got deep validation and why, who
     // was budget-rejected). Collapsed by default; expandable for experts.
     const sel = t.stage2Selection;
-    const diagSection = sel ? `<details class="rot-panel" style="border-color:#33415555"><summary class="rot-head" style="cursor:pointer;color:#94a3b8">🧪 Stage-2 selection diagnostics <span class="dt-dim">(budget ${sel.budget}: ${(sel.selected || []).length} validated, ${(sel.rejected || []).length} rejected)</span></summary>
+    const diagSection = sel ? `<details class="rot-panel expert-only" style="border-color:#33415555"><summary class="rot-head" style="cursor:pointer;color:#94a3b8">🧪 Stage-2 selection diagnostics <span class="dt-dim">(budget ${sel.budget}: ${(sel.selected || []).length} validated, ${(sel.rejected || []).length} rejected)</span></summary>
         <div class="rot-sub">Deep live-validation budget by lane — management/revalidation protected, discovery guaranteed ${sel.reserves ? sel.reserves.DISCOVERY_RESERVE : '?'} slots + ${sel.reserves ? sel.reserves.ANOMALY_RESERVE : '?'} anomaly reserve. Candidates: ${Object.entries(sel.laneCounts || {}).map(([k, v]) => `${k} ${v}`).join(' · ')}.</div>
         <div style="font-size:11px;line-height:1.7;padding:4px 8px">${(sel.selected || []).map(s => `<span style="display:inline-block;margin:1px 6px 1px 0"><b>${esc(s.ticker)}</b> <span class="dt-dim">${esc(s.lane)}${s.via && s.via.includes('reserve') ? '·R' : ''}</span></span>`).join('')}</div>
         ${(sel.rejected || []).length ? `<div class="dt-dim" style="font-size:11px;padding:0 8px 6px">Budget-rejected: ${sel.rejected.slice(0, 15).map(r => esc(r.ticker)).join(', ')}${sel.rejected.length > 15 ? ` +${sel.rejected.length - 15} more` : ''}</div>` : ''}
@@ -6210,14 +6342,90 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <div class="dt-best-grid">${extRows.slice(0, 12).map(laneCard).join('')}</div>
       </div>` : '';
 
-    // ⚡ Today's Day-Trade alert feed (transition alerts, deduped server-side).
+    // ⚡ Today's Day-Trade alert feed — TWO CLASSES, visually separated: Early Watch rows are
+    // muted/outlined and carry the server's watch-only actionability text; confirmed-trigger
+    // rows keep the loud styling. Kind chips make the class legible at a glance.
     const dtAlerts = (renderDaytrade._alerts || []);
-    const alertRow = a => `<div class="bt-ic-row"><span>${a.kind === 'entry' ? '⚡' : a.kind === 'retire' ? '🛑' : a.kind === 'revive' ? '🔁' : '⚠️'} <b>${esc(a.ticker)}</b> <span class="dt-dim">${esc(a.atET || '')}</span></span><span class="dt-dim">${esc((a.transition && a.transition.to) || '')}</span><span class="dt-dim">${a.plan ? `$${a.plan.entry} / 🛑$${a.plan.stop} / 🏁$${a.plan.target}` : (a.explanation ? esc(a.explanation).slice(0, 60) : '')}</span></div>`;
+    const KIND_CHIP = {
+      early_watch: ['🛰 watch', '#38bdf8'], entry: ['⚡ trigger', '#22c55e'], revive: ['🔁 re-confirmed', '#22c55e'],
+      retire: ['🛑 retired', '#ef4444'], caution: ['⚠️ caution', '#f59e0b'],
+    };
+    const kindChip = a => {
+      const c = KIND_CHIP[a.kind] || ['🔔', '#94a3b8'];
+      return `<span class="dt-badge" style="border:1px solid ${c[1]}55;color:${c[1]};border-radius:4px;padding:0 5px;font-size:10px">${c[0]}</span>`;
+    };
+    const alertRow = a => {
+      if (a.kind === 'early_watch') {
+        return `<div class="bt-ic-row" style="opacity:.85"><span>${kindChip(a)} <b>${esc(a.ticker)}</b> <span class="dt-dim">${esc(a.atET || '')}</span></span><span class="dt-dim">${esc(a.earlyState || '')}</span><span class="dt-dim" style="font-size:10.5px">watch-only — not an entry</span></div>
+          <details class="dt-dim" style="font-size:10.5px;margin:-2px 0 4px 14px"><summary style="cursor:pointer">what changed / what's missing</summary>
+            ${a.whatChanged && a.whatChanged.length ? `<div>· Changed: ${esc(a.whatChanged.join('; '))}</div>` : ''}
+            ${a.confirmationMissing && a.confirmationMissing.length ? `<div>· Still missing: ${esc(a.confirmationMissing.join('; '))}</div>` : ''}
+            ${a.invalidation ? `<div>· Invalidates: ${esc(a.invalidation)}</div>` : ''}
+            ${a.dataFreshness ? `<div>· Data: ${esc(a.dataFreshness)}</div>` : ''}
+            ${a.sinceFirstDetectionMin != null ? `<div>· First detected ${a.sinceFirstDetectionMin}m before this alert</div>` : ''}
+            ${a.evidenceLabel ? `<div>· Evidence: ${esc(a.evidenceLabel)}</div>` : ''}
+          </details>`;
+      }
+      return `<div class="bt-ic-row"><span>${kindChip(a)} <b>${esc(a.ticker)}</b> <span class="dt-dim">${esc(a.atET || '')}</span></span><span class="dt-dim">${esc((a.transition && a.transition.to) || '')}</span><span class="dt-dim">${a.plan ? `$${a.plan.entry} / 🛑$${a.plan.stop} / 🏁$${a.plan.target}` : (a.explanation ? esc(a.explanation).slice(0, 60) : '')}</span></div>`;
+    };
+    const suppressedNote = renderDaytrade._alertMeta && renderDaytrade._alertMeta.suppressedToday
+      ? ` · ${renderDaytrade._alertMeta.suppressedToday} suppressed (budget/never-alerted retirements)` : '';
     const alertsSection = dtAlerts.length ? `<div class="rot-panel" style="border-color:#a855f755">
-        <div class="rot-head" style="color:#c084fc">🔔 Today's transition alerts <span class="dt-dim">(${dtAlerts.length})</span></div>
-        <div class="rot-sub">Every lifecycle <b>transition</b> alerted today — entries, retirements (with the exact invalidation reason), chase warnings and revivals. Each fires <b>once per setup</b> (server-deduplicated); they also land in the 🔔 Alerts feed and, if enabled, as browser notifications while the app is open. <span class="dt-dim">No background push exists when the app is closed — alerts accrue and deliver on next open (honest limitation of this deployment).</span></div>
+        <div class="rot-head" style="color:#c084fc">🔔 Today's alerts <span class="dt-dim">(${dtAlerts.length}${suppressedNote})</span></div>
+        <div class="rot-sub"><b>Two classes:</b> 🛰 <b>Early Watch</b> (an early-state progression worth watching — explicitly <b>not</b> a confirmed entry) and ⚡ <b>Confirmed trigger</b> (the execution gate passed at emission time). Each fires <b>once per setup per state</b> (server-deduplicated, episode-stable ids, budget-capped); retirements of setups you were never alerted about stay board-only. Delivery: in-app feed + opt-in browser notifications; background Web Push only if the server operator has configured it (see 🔔 Alert settings).</div>
         ${dtAlerts.slice(0, 20).map(alertRow).join('')}
       </div>` : '';
+
+    // 🔔 Alert settings — per-class toggles, sound, quiet hours, caps, background push.
+    const prefs = getAlertPrefs();
+    const chk = (k, on) => `<label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer"><input type="checkbox" data-dt-pref="${k}" ${on ? 'checked' : ''}> ${({
+      earlyWatch: '🛰 Early Watch notifications <span class="dt-dim">(research pings — off by default)</span>',
+      confirmedTrigger: '⚡ Confirmed-trigger notifications',
+      retirement: '🛑 Retirement / invalidation notifications',
+      sound: '🔊 Sound',
+      browserNotifications: '💻 Browser notifications',
+    })[k] || k}</label>`;
+    const prefsPanel = `<details class="rot-panel" style="border-color:#33415555" id="dt-alert-settings"><summary class="rot-head" style="cursor:pointer;color:#94a3b8">🔔 Alert settings</summary>
+        <div style="display:flex;flex-direction:column;gap:6px;padding:6px 10px">
+          ${chk('confirmedTrigger', prefs.confirmedTrigger)}
+          ${chk('earlyWatch', prefs.earlyWatch)}
+          ${chk('retirement', prefs.retirement)}
+          ${chk('browserNotifications', prefs.browserNotifications)}
+          ${chk('sound', prefs.sound)}
+          <label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer"><input type="checkbox" data-dt-pref="quietEnabled" ${prefs.quietHours && prefs.quietHours.enabled ? 'checked' : ''}> 🌙 Quiet hours <input type="number" min="0" max="23" data-dt-pref="quietStart" value="${prefs.quietHours ? prefs.quietHours.startET : 20}" style="width:44px"> – <input type="number" min="0" max="23" data-dt-pref="quietEnd" value="${prefs.quietHours ? prefs.quietHours.endET : 7}" style="width:44px"> <span class="dt-dim">ET</span></label>
+          <label style="display:flex;gap:6px;align-items:center;font-size:12px">Caps: <input type="number" min="1" max="60" data-dt-pref="maxPerHour" value="${prefs.maxPerHour}" style="width:44px">/hour · <input type="number" min="1" max="200" data-dt-pref="maxPerDay" value="${prefs.maxPerDay}" style="width:52px">/day</label>
+          <div style="border-top:1px solid var(--border);padding-top:6px">
+            <label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer"><input type="checkbox" id="dt-push-toggle"> 📡 Background push <span class="dt-dim">(alerts you've enabled above, even with the tab closed)</span></label>
+            <div class="dt-dim" id="dt-push-status" style="font-size:10.5px;margin-top:2px"></div>
+          </div>
+        </div>
+      </details>`;
+
+    // 📋 Daily retrospective — the day's honest scorecard from the independent capture report
+    // (accrues after the post-close run) + today's alert-load stats.
+    const cap = renderDaytrade._capture;
+    let retroSection = '';
+    {
+      const alertKinds = dtAlerts.reduce((o, a) => ({ ...o, [a.kind]: (o[a.kind] || 0) + 1 }), {});
+      const alertLine = dtAlerts.length ? `<div class="bt-ic-row"><span>Alerts today</span><span>${Object.entries(alertKinds).map(([k, v]) => `${(KIND_CHIP[k] || ['?'])[0]} ${v}`).join(' · ')}</span><span class="dt-dim">${suppressedNote.replace(/^ · /, '') || 'none suppressed'}</span></div>` : '';
+      if (cap && cap.metrics) {
+        const mr = cap.metrics.missReasons || {};
+        retroSection = `<details class="rot-panel" style="border-color:#33415555"><summary class="rot-head" style="cursor:pointer;color:#94a3b8">📋 Today so far — retrospective <span class="dt-dim">(${cap.runners ?? '?'} runner${cap.runners === 1 ? '' : 's'} by the pre-registered definition)</span></summary>
+          <div class="rot-sub">Graded against an <b>independent, pre-registered runner definition</b> — the screener cannot grade its own homework. "Remaining fraction at detection" near 1 = caught early; near 0 = detected after the move (little credit).</div>
+          <div class="bt-ic-row"><span>Capture rate</span><span><b>${cap.metrics.captureRate != null ? Math.round(cap.metrics.captureRate * 100) + '%' : 'n/a'}</b></span><span class="dt-dim">${(cap.captured || []).length || 0} caught · ${(cap.missed || []).length || 0} missed</span></div>
+          ${cap.metrics.medianRemainingFractionAtDetection != null ? `<div class="bt-ic-row"><span>Median move remaining at detection</span><span><b>${Math.round(cap.metrics.medianRemainingFractionAtDetection * 100)}%</b></span><span></span></div>` : ''}
+          ${Object.keys(mr).length ? `<div class="bt-ic-row"><span>Miss reasons</span><span class="dt-dim" style="font-size:11px">${Object.entries(mr).map(([k, v]) => `${esc(k)} ${v}`).join(' · ')}</span><span></span></div>` : ''}
+          ${cap.metrics.dudsAmongActionable != null ? `<div class="bt-ic-row"><span>Duds among actionable</span><span>${cap.metrics.dudsAmongActionable}</span><span></span></div>` : ''}
+          ${cap.scanner ? `<div class="bt-ic-row"><span>Scanner</span><span>${cap.scanner.scans} scans</span><span class="dt-dim">${cap.scanner.sparse ? '⚠ sparse coverage' : 'coverage ok'}${cap.scanner.largestGapMin ? ` · largest gap ${cap.scanner.largestGapMin}m` : ''}</span></div>` : ''}
+          ${alertLine}
+          ${cap.honesty ? `<div class="dt-dim" style="font-size:10.5px;padding:4px 8px">${esc(cap.honesty)}</div>` : ''}
+        </details>`;
+      } else {
+        retroSection = `<details class="rot-panel" style="border-color:#33415555"><summary class="rot-head" style="cursor:pointer;color:#94a3b8">📋 Today so far — retrospective</summary>
+          <div class="rot-sub">Retrospective accrues after the post-close capture run (runners caught/missed with reasons, lead time, duds avoided).</div>${alertLine}
+        </details>`;
+      }
+    }
 
     // 🗂 Retired Today — names that INVALIDATED intraday. Kept (never silently removed) for
     // honesty + forward grading. A down name is a FAILED setup, not a discounted original buy.
@@ -6239,12 +6447,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // revived setups; measured, not hidden.
     const missedRows = [...retiredRows, ...(lanes.priorSessionWatch || [])].filter(o => o.falseRetirement);
     const revivedRows = best.filter(o => (o.reasonCodes || []).includes('REVIVED'));
-    const missedSection = (missedRows.length || revivedRows.length) ? `<div class="rot-panel" style="border-color:#a855f744">
+    const missedSection = (missedRows.length || revivedRows.length) ? `<div class="rot-panel expert-only" style="border-color:#a855f744">
         <div class="rot-head" style="color:#c084fc">🔁 Missed / Revived — audit lane <span class="dt-dim">(${missedRows.length + revivedRows.length})</span></div>
         <div class="rot-sub">Retired names that subsequently became strong runners (<b>false retirements</b> — the retirement rules' error rate, measured honestly) and setups that re-qualified with a <b>new</b> plan.</div>
         <div class="dt-best-grid">${[...missedRows.slice(0, 8).map(laneCard), ...revivedRows.slice(0, 8).map((o, i) => bestCard(o, i))].join('')}</div>
       </div>` : '';
-    el.innerHTML = banner + tapeBadge + pacedBanner + bestSection + armedSection + discSection + diagSection + extSection + alertsSection + retiredSection + missedSection + priorSection + configBanner + howto + ml + es + runSection + expList + track + timingScorecard(timingBook) +
+    el.innerHTML = banner + healthStrip + tapeBadge + pacedBanner + bestSection + armedSection + discSection + diagSection + extSection + alertsSection + prefsPanel + retroSection + retiredSection + missedSection + priorSection + configBanner + howto + ml + es + runSection + expList + track + timingScorecard(timingBook) +
       `<div class="fade-caveats"><b>How to use.</b> Today's relative-volume + momentum movers (the EOD version of the Finviz day-trade scans), regime-gated and self-learning. <b>Honest validation</b> (5y, forward 3-session excess vs SPY): large-cap momentum-chasing does <b>not</b> beat the market (it mean-reverts, −1.3% out-of-sample); explosive small-caps carry a <b>positive average excess</b> (~+1.7–2.3% in risk-on/neutral) but a <b>sub-50% hit-rate</b> — a few big runners carry it, and it dies in risk-off. So treat these as a <b>ranked movers watchlist</b>, not a win-rate edge; the per-stock learner tilts toward names whose momentum actually continues and drops the rest. <b>The 🧪 experimental config above</b> (opening-range-breakout entry + 2.5×ATR stop + top-half selection) is the one variant that tested out-of-sample positive on <b>real intraday execution</b> — but it <b>failed formal deflation</b> (deflated Sharpe 0.59), so it's a paper-trading lead to confirm forward, not a proven edge. Confirm entries in TradingView (MACD / RSI / Smart-Money). Research, not advice.</div>`;
     // Wire each card's chart toggle (reuses the shared /api/chart canvas renderer)
     // and start live-price polling for the recommended names.
@@ -6257,6 +6465,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (btn) btn.addEventListener('click', () => toggleChart(cardEl, tk));
     });
     startDaytradePrices([...new Set(dtTickers)]);
+    wireAlertSettings(el);
     // ⏱️ Entry-timing lights — use each pick's ORB plan levels + avg volume when present.
     // ⏱️ Entry-timing lights carry the lifecycle context so the server can refuse to grade a
     // stale / failed / not-yet-valid setup (returns "not eligible"), and only ACTIONABLE_NOW

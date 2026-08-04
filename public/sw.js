@@ -19,7 +19,10 @@ self.addEventListener('notificationclick', (e) => {
   })());
 });
 
-// Server-sent Web Push (used once the server-side cron is configured).
+// Server-sent Web Push. Payload: {title, body, tag, kind, sev} (see lib/push-notify.js).
+// tag = server alert id → duplicate deliveries of the same alert collapse into one
+// notification. renotify only for confirmed triggers ('entry'): an early watch is
+// explicitly not a trade, so a re-delivered one must not buzz the phone again.
 self.addEventListener('push', (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch {}
@@ -29,7 +32,7 @@ self.addEventListener('push', (e) => {
     icon: '/icon.svg',
     badge: '/icon.svg',
     tag: d.tag || 'market-signal',
-    renotify: true,
+    renotify: d.kind !== 'early_watch',
     data: d.data || { url: '/#momentum' },
     vibrate: [100, 50, 100],
   }));
