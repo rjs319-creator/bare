@@ -45,12 +45,17 @@ test('openingRange: high/low/mid over the first 30 minutes only', () => {
   assert.equal(or.bars, 6);         // 09:30..09:55
 });
 
-test('point-in-time: buildIntradayFeatures never uses bars after `now`', () => {
+test('point-in-time: buildIntradayFeatures never uses bars after `now`, and the forming bar is not evidence', () => {
   const bars = risingToday();                       // runs to 10:30
+  // At exactly 10:00 the 10:00 bar has just STARTED — it is forming, not evidence.
   const f = buildIntradayFeatures({ todayBars: bars, now: '2026-07-08T14:00:00Z' });   // now = 10:00
-  assert.equal(f.last, 101.5);                      // the 10:00 bar, NOT the 10:30 bar
-  assert.ok(f.bars <= 7, `only bars up to 10:00 (${f.bars})`);
-  assert.equal(upto(bars, '2026-07-08T14:00:00Z').length, 7);
+  assert.equal(f.last, 101.0);                      // the 09:55 COMPLETED bar, not the forming 10:00 bar
+  assert.ok(f.bars <= 6, `only completed bars up to 10:00 (${f.bars})`);
+  assert.equal(f.dataQuality.formingBarPresent, true);
+  assert.equal(upto(bars, '2026-07-08T14:00:00Z').length, 7);   // raw PIT slice still includes the forming bar
+  // Once the 10:00 bar completes (10:05) it becomes evidence.
+  const g = buildIntradayFeatures({ todayBars: bars, now: '2026-07-08T14:05:00Z' });   // now = 10:05
+  assert.equal(g.last, 101.5);
 });
 
 test('triggerConfirmed once the opening range is complete and price breaks above it', () => {
@@ -66,7 +71,9 @@ test('triggerConfirmed once the opening range is complete and price breaks above
 test('breakoutFailed: broke above the OR high, then closed back below the OR midpoint', () => {
   const bars = risingToday().slice(0, 8);
   bars.push(bar('10:10', 101.9, 102.5, 100.0, 100.2, 3000));   // spikes above OR high, closes below OR mid (~100.45)
-  const f = buildIntradayFeatures({ todayBars: bars, now: '2026-07-08T14:10:00Z' });
+  // At 10:15 the 10:10 bar is COMPLETED — its close is evidence. (At 10:10 it would still
+  // be forming and could not confirm the failure — see the boundary tests.)
+  const f = buildIntradayFeatures({ todayBars: bars, now: '2026-07-08T14:15:00Z' });
   assert.equal(f.breakoutFailed, true);
 });
 
@@ -108,8 +115,9 @@ test('the same fully-green feature set WITHOUT a quote fails closed (bar alone i
 test('an intraday breakout failure drives the lifecycle to FAILED', () => {
   const bars = risingToday().slice(0, 8);
   bars.push(bar('10:10', 101.9, 102.5, 100.0, 100.2, 3000));   // failed breakout
-  const f = buildIntradayFeatures({ todayBars: bars, priorSessions: [priorFlat()], now: '2026-07-08T14:10:00Z', dailyAtr: 3 });
-  const ev = intradayEv({ ticker: 'ABC', candidateDate: '2026-07-08' }, f, { now: '2026-07-08T14:10:00Z' });
+  // Evaluated at 10:15 so the failing bar is COMPLETED evidence.
+  const f = buildIntradayFeatures({ todayBars: bars, priorSessions: [priorFlat()], now: '2026-07-08T14:15:00Z', dailyAtr: 3 });
+  const ev = intradayEv({ ticker: 'ABC', candidateDate: '2026-07-08' }, f, { now: '2026-07-08T14:15:00Z' });
   assert.equal(ev.breakoutFailed, true);
   const rec = advanceLifecycle(null, { strategy: 'daytrade', ...ev });
   assert.equal(rec.state, STATES.FAILED);

@@ -3,8 +3,8 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { buildBestOpportunities } = require('../lib/screener-routes');
 
-// A pool pick that clears passesQualityGate (pctChange>0, carry>=50, not overextended, no
-// fade catalyst) and carries the full point-in-time metadata the scan rows attach.
+// A pool pick that clears best-gate-v2 (full intraday-validated lifecycle envelope + live
+// plan + unblocked execution gate) and carries the point-in-time metadata scan rows attach.
 function pick(ticker, over = {}) {
   return {
     ticker, sector: 'Tech', scan: 'momentum_liquid', tier: 'A',
@@ -13,6 +13,10 @@ function pick(ticker, over = {}) {
     avgVol: 1_500_000, date: '2026-07-22',
     barIsToday: true, paced: false,
     freshness: { candidateDate: '2026-07-22', freshnessStatus: 'FRESH_TODAY', barIsToday: true },
+    actionable: true, lifecycleState: 'ACTIONABLE_NOW', currentSessionFresh: true,
+    thesisValid: true, planValid: true,
+    livePlan: { basis: 'live-intraday', entry: 20, stop: 19, target: 22, rr: 2, riskPct: 5, expiresAt: '2099-01-01T00:00:00Z' },
+    execution: { gate: { blocked: false, reasons: [] } },
     ...over,
   };
 }
@@ -35,10 +39,17 @@ test('Best Opportunity cards carry the full live metadata (freshness/barIsToday/
 // Opportunities (the actionable lane), not flagged-and-kept.
 test('a stale prior-session name is EXCLUDED from Best Opportunities (not merely flagged)', () => {
   const stale = pick('OLD', {
-    barIsToday: false, paced: false,
+    barIsToday: false, paced: false, currentSessionFresh: false, actionable: false,
     freshness: { candidateDate: '2026-07-21', freshnessStatus: 'PRIOR_SESSION', barIsToday: false },
   });
   assert.deepEqual(buildBestOpportunities([stale]), [], 'a stale prior-session name cannot enter the actionable lane');
+  // Even with actionable somehow asserted, missing current-session freshness ALONE excludes
+  // (each envelope member is an independent requirement under best-gate-v2).
+  const freshless = pick('HALF', { currentSessionFresh: false });
+  assert.deepEqual(buildBestOpportunities([freshless]), []);
+  // And a missing live plan alone excludes — buy language can never ship without levels.
+  const planless = pick('NOPLAN', { livePlan: null });
+  assert.deepEqual(buildBestOpportunities([planless]), [], '11. missing live plan cannot enter Best Opportunities');
 });
 
 test('a canonically-classified non-actionable card is excluded even if its daily bar looks fresh', () => {

@@ -57,15 +57,27 @@ jobs:
           fi
 
       # BOARD TICK — advance the lifecycle + emit alerts WITHOUT requiring a browser.
-      # op=daytrade is the Stage-2 evaluation + persisted lifecycle + alert emission path;
-      # before this tick existed those only ran while someone had the page open, so with the
-      # app closed no early-watch or confirmed-trigger alert could ever be produced (Web
-      # Push had nothing to deliver). Public op (CDN-coalesced 30s); best-effort — a slow
-      # cycle must not fail the scan job.
+      # op=daytradeboardtick is the ONE authenticated lifecycle mutator (Stage-2 validation,
+      # lifecycle advance, alert emission, persistence, capture) — the public op=daytrade is
+      # a read-only projection and cannot advance state. FAILURES ARE VISIBLE: a non-200, a
+      # timeout, or ok:false (persistence/alert failure inside the tick) fails this step —
+      # the old `|| true` swallowed every one of those and the scheduler read green.
       - name: Board tick (lifecycle advance + alert emission)
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl -sS --max-time 90 "$APP_URL/api/tracker?op=daytrade" -o /tmp/board.json || true
-          head -c 400 /tmp/board.json || true
+          code=$(curl -sS -o /tmp/board.json -w '%{http_code}' --max-time 90 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/tracker?op=daytradeboardtick&source=scheduler")
+          head -c 600 /tmp/board.json; echo
+          if [ "$code" != "200" ]; then
+            echo "::error::op=daytradeboardtick returned HTTP $code (lifecycle persistence or alert emission failed — see boardtick-health)"
+            exit 1
+          fi
+          if grep -q '"ok":false' /tmp/board.json; then
+            echo "::error::board tick reported ok:false"
+            exit 1
+          fi
 
   postclose:
     # Post-close: capture report (public op) + bounded label-grading passes (privileged).

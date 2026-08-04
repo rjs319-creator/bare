@@ -26,7 +26,10 @@ const green = (now, extra = {}) => ({
   ticker: 'FLAP', now, session: 'regular', actionableFresh: true,
   freshness: { freshnessStatus: 'FRESH_TODAY' },
   aboveVwap: true, momentumOk: true, residualOk: true, relVolOk: true, triggerConfirmed: true,
-  remainingRR: 2, extensionAtr: 1, ...extra,
+  remainingRR: 2, extensionAtr: 1,
+  // Production contract (requireLivePlan): actionable requires a usable current live plan.
+  livePlan: { basis: 'live-intraday', entry: 100, stop: 98, target: 104, trigger: 99.5, expiresAt: '2026-07-08T20:00:00.000Z' },
+  ...extra,
 });
 const stall = (now) => green(now, { momentumOk: false, triggerConfirmed: false, relVolOk: false });
 

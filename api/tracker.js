@@ -102,6 +102,14 @@ const PRIVILEGED_OPS = new Set([
   // Day Trade scan runner (external-scheduler entry point — writes discovery state, dataset
   // buckets and runner health) + dataset grading (per-ticker bar fetch fan-out + grade WRITE).
   'daytradescan', 'datasetgrade',
+  // Day Trade BOARD TICK — the ONE authorized lifecycle mutator (Stage-2 validation,
+  // lifecycle advance, alert emission, persistence, capture). The public op=daytrade is a
+  // READ-ONLY projection; only this authenticated tick may advance state or emit alerts.
+  'daytradeboardtick',
+  // Model governance WRITES: train candidate artifacts, promote (shadow), register a
+  // shadow challenger, promote live, rollback. Authenticated + actor-stamped — a learned
+  // model can never be promoted anonymously or automatically.
+  'modeltrain', 'modelpromote', 'modelchallenger', 'modelpromotelive', 'modelrollback',
   // Peer Propagation + News Underreaction shadow ledger WRITES (persist latest board /
   // append immutable daily picks). Cron/manual-with-bearer only.
   'peerproplog', 'underreactionlog',
@@ -195,6 +203,11 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'survival') return require('../lib/survival-eval').runSurvival(req, res);
   if (req.query.op === 'daytradescan') return require('../lib/daytrade-scan-runner').runScanRunner(req, res);
   if (req.query.op === 'daytradescanhealth') return require('../lib/daytrade-scan-runner').runScanHealth(req, res);
+  // Authenticated board tick (the ONE lifecycle mutator) + model-governance ops.
+  if (req.query.op === 'daytradeboardtick') return require('../lib/screener-routes').runDaytradeBoardTick(req, res);
+  if (['modeltrain', 'modelpromote', 'modelchallenger', 'modelpromotelive', 'modelrollback', 'modelstatus'].includes(req.query.op)) {
+    return require('../lib/model-ops').runModelOps(req, res);
+  }
   // Web Push (feature-flagged: no-ops unless VAPID env + web-push dependency are present).
   // Subscribe/unsubscribe are browser POSTs carrying only the PushSubscription JSON; status
   // exposes configuration + counts, never endpoints (they are capability URLs).

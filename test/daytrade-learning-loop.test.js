@@ -207,21 +207,38 @@ test('evaluateDatasetSurvival trains out-of-fold from dataset rows and reports w
 
 // ── Capture priority + bucket upgrade ───────────────────────────────────────────
 
-test('strong at-risk rows survive the storage cap deterministically, regardless of input order', () => {
-  // Arrange: 450 at-risk rows; strongest cusum values placed LAST in input order.
+test('24. the storage cap never silently violates the recorded sampling probability (v2 contract)', () => {
+  // Arrange: 450 at-risk rows — the cap binds on the at-risk class itself.
   const universe = [];
   for (let i = 0; i < 450; i++) universe.push(mkRow(`T${String(i).padStart(3, '0')}`, { cusum: 1.0 + i * 0.02, z: null, dayPct: null, relVol: null }));
   const built = DS.buildScanRows(universe, { date: '2026-07-29', at: AT });
-  assert.equal(built.rows.length, DS.MAX_ROWS_PER_SCAN);
-  assert.equal(built.dropped, 50);
-  const keptTickers = new Set(built.rows.map(r => r.ticker));
-  assert.ok(keptTickers.has('T449'), 'strongest anomaly kept');
-  assert.ok(!keptTickers.has('T000'), 'weakest at-risk dropped, not an order accident');
-  assert.deepEqual(built.droppedByReason, { capExceeded: 50, atRisk: 50, ordinary: 0 });
 
-  // Determinism: reversed input produces the identical kept set.
+  // The cap is honored as a RATE, not a slice: the at-risk class is hash-thinned at
+  // cap/atRiskN and every kept row's sampleProb RECORDS that rate (no row claims prob 1
+  // while others in its class were dropped — the IPW-bias defect this closes).
+  const expectedRate = DS.MAX_ROWS_PER_SCAN / 450;
+  assert.ok(built.rows.length <= DS.MAX_ROWS_PER_SCAN, 'cap respected');
+  assert.ok(built.rows.length >= 0.85 * DS.MAX_ROWS_PER_SCAN, `thinned to ≈ the cap (${built.rows.length})`);
+  for (const r of built.rows) {
+    assert.equal(r.sampleProb, +expectedRate.toFixed(5), `${r.ticker}: recorded prob = true inclusion rate`);
+    assert.equal(r.capThinned, true);
+  }
+  // The bucket doc carries the full cap contract: pre-cap, post-cap, threshold, rates.
+  assert.equal(built.capContract.preCapRows, 450);
+  assert.equal(built.capContract.postCapRows, built.rows.length);
+  assert.equal(built.capContract.capThreshold, DS.MAX_ROWS_PER_SCAN);
+  assert.equal(built.capContract.atRiskStageRate, +expectedRate.toFixed(5));
+  assert.equal(built.droppedByReason.atRisk, 450 - built.rows.length);
+
+  // Determinism: reversed input produces the IDENTICAL kept set (hash of date|bucket|ticker,
+  // never input order).
   const rebuilt = DS.buildScanRows([...universe].reverse(), { date: '2026-07-29', at: AT });
-  assert.deepEqual(new Set(rebuilt.rows.map(r => r.ticker)), keptTickers);
+  assert.deepEqual(new Set(rebuilt.rows.map(r => r.ticker)), new Set(built.rows.map(r => r.ticker)));
+
+  // When everything fits, at-risk rows keep sampleProb 1 exactly (no phantom thinning).
+  const small = DS.buildScanRows(universe.slice(0, 50), { date: '2026-07-29', at: AT });
+  assert.ok(small.rows.every(r => r.sampleProb === 1 && !r.capThinned));
+  assert.equal(small.capContract.atRiskStageRate, 1);
 });
 
 test('a bucket upgrades only for a demonstrably more complete capture, preserving audit history', async () => {

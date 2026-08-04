@@ -18,10 +18,18 @@ const cfFor = (todayPct, adrPct = 4, nearHighFrac = 0.99) => {
   return pcarryPriceFeatures(c);
 };
 
-// These fixtures exercise the FADE-AVOIDANCE ranking, not freshness, so they default to a
-// current-session bar (barIsToday) — the live actionability gate (freshness enforcement) is
-// covered separately in bestopp-freshness.test.js.
-const mk = (ticker, relVol, pctChange, excessPct, extra = {}) => ({ ticker, relVol, pctChange, excessPct, last: 10, score: relVol * 10 + pctChange, barIsToday: true, freshness: { freshnessStatus: 'FRESH_TODAY', barIsToday: true }, ...extra });
+// These fixtures exercise the best-gate-v2 RANKING. Admission is intraday-validated (the
+// full lifecycle envelope + a live plan + execution gate) — carry/overextension only rank.
+const LIVE_PLAN_FIX = { basis: 'live-intraday', entry: 10, stop: 9.5, target: 11, rr: 2, riskPct: 5, expiresAt: '2099-01-01T00:00:00Z' };
+const mk = (ticker, relVol, pctChange, excessPct, extra = {}) => ({
+  ticker, relVol, pctChange, excessPct, last: 10, score: relVol * 10 + pctChange,
+  barIsToday: true, freshness: { freshnessStatus: 'FRESH_TODAY', barIsToday: true },
+  // best-gate-v2 admission envelope (the live route stamps these after Stage-2 validation).
+  actionable: true, lifecycleState: 'ACTIONABLE_NOW', currentSessionFresh: true,
+  thesisValid: true, planValid: true, livePlan: { ...LIVE_PLAN_FIX },
+  execution: { gate: { blocked: false, reasons: [] } },
+  ...extra,
+});
 
 test('assignRelScores: assigns 0-100 with the strongest pick at 100 and weakest at 0', () => {
   const ml = [mk('A', 5, 12, 11), mk('B', 1.3, 3, 2)];
@@ -42,19 +50,21 @@ test('assignRelScores: single pick gets a valid score, no divide-by-zero', () =>
   assert.ok(Number.isFinite(one[0].relScore));
 });
 
-test('buildBestOpportunities: fade-avoidance gate drops below-base-rate carry (explosive fades out)', () => {
-  // A clean liquid name (carry ≥ floor, not overextended) is admitted; a below-base-rate
-  // explosive name is now EXCLUDED by the carry floor — no more "flows through, discounted".
+test('12. pcarry (a 3-session multi-day model) can NO LONGER suppress a valid intraday setup', () => {
+  // best-gate-v2: a below-base-rate carry name with a fully-validated intraday setup is
+  // ADMITTED and merely ranks lower — the old hard carry floor was a multi-day model
+  // vetoing a same-day question.
   const pool = [
     mk('LIQCLEAN', 4, 9, 8, { scan: 'momentum_liquid', tier: 'A', carry: 55 }),
-    mk('EXPWEAK', 3, 12, 10, { scan: 'explosive_small', carry: 45 }),   // < 50 base rate → dropped
+    mk('EXPWEAK', 3, 12, 10, { scan: 'explosive_small', carry: 45 }),
   ];
   assignRelScores([pool]);
   const best = buildBestOpportunities(pool);
-  assert.deepEqual(best.map(b => b.ticker), ['LIQCLEAN'], 'only the above-base-rate name survives');
+  assert.deepEqual(best.map(b => b.ticker), ['LIQCLEAN', 'EXPWEAK'], 'both admitted; carry only ranks');
+  assert.equal(best[0].gateVersion, 'best-gate-v2');
 });
 
-test('buildBestOpportunities: gate excludes overextended blow-offs and dilution/M&A pops', () => {
+test('buildBestOpportunities: overextension DISCOUNTS the rank; dilution/M&A pops stay excluded', () => {
   const pool = [
     mk('CLEAN', 3, 7, 6, { scan: 'momentum_liquid', tier: 'A', carry: 55 }),
     mk('BLOWOFF', 6, 30, 28, { scan: 'momentum_liquid', tier: 'A', carry: 55, overextended: true }),
@@ -63,28 +73,34 @@ test('buildBestOpportunities: gate excludes overextended blow-offs and dilution/
   ];
   assignRelScores([pool]);
   const best = buildBestOpportunities(pool);
-  assert.deepEqual(best.map(b => b.ticker), ['CLEAN'], 'only the non-fade name passes the gate');
+  assert.deepEqual(best.map(b => b.ticker), ['CLEAN', 'BLOWOFF'], 'blow-off admitted but ranked below; fade catalysts excluded');
 });
 
-test('buildBestOpportunities: drops RED, unscored, and low-carry names', () => {
+test('buildBestOpportunities: unknown carry ranks at the base rate; the lifecycle envelope is the admission', () => {
   const pool = [
     mk('UP', 3, 7, 6, { scan: 'momentum_liquid', tier: 'A', carry: 52 }),
-    mk('DOWN', 3, -4, -5, { scan: 'momentum_liquid', tier: 'A', carry: 52 }),   // red → out
-    mk('NOCARRY', 3, 5, 4, { scan: 'momentum_liquid', tier: 'A' }),             // no carry → out
-    mk('LOWCARRY', 3, 5, 4, { scan: 'momentum_liquid', tier: 'A', carry: 48 }), // < floor → out
+    mk('NOCARRY', 3, 5, 4, { scan: 'momentum_liquid', tier: 'A', carry: null }),   // unknown → base-rate rank, still admitted
+    mk('LOWCARRY', 3, 5, 4, { scan: 'momentum_liquid', tier: 'A', carry: 48 }),
+    // No lifecycle envelope (never Stage-2 validated) → excluded regardless of daily flags.
+    { ticker: 'UNVALIDATED', relVol: 3, pctChange: 9, excessPct: 8, last: 10, barIsToday: true, carry: 60 },
   ];
-  assignRelScores([pool]);
+  assignRelScores([pool.filter(p => p.relScore === undefined)]);
   const best = buildBestOpportunities(pool);
-  assert.deepEqual(best.map(b => b.ticker), ['UP']);
+  assert.deepEqual(best.map(b => b.ticker), ['UP', 'NOCARRY', 'LOWCARRY'], 'carry orders; envelope admits');
 });
 
-test('buildBestOpportunities: empty pool of fade traps returns [] (honest empty state)', () => {
-  const pool = [
-    mk('X', 5, 25, 24, { scan: 'explosive_small', carry: 44, overextended: true }),
-    mk('Y', 3, 6, 5, { scan: 'momentum_liquid', tier: 'A', carry: 46 }),
+test('buildBestOpportunities: an unvalidated pool returns [] (honest empty state) and a blocked execution gate excludes', () => {
+  // Picks with no lifecycle envelope (never Stage-2 validated) cannot enter the actionable
+  // lane no matter how bullish the daily numbers — an honest empty state, never a backfill.
+  const unvalidated = [
+    { ticker: 'X', relVol: 5, pctChange: 25, excessPct: 24, last: 10, barIsToday: true, carry: 60 },
+    { ticker: 'Y', relVol: 3, pctChange: 6, excessPct: 5, last: 10, barIsToday: true, carry: 55 },
   ];
-  assignRelScores([pool]);
-  assert.deepEqual(buildBestOpportunities(pool), [], 'nothing clean → empty, not backfilled');
+  assert.deepEqual(buildBestOpportunities(unvalidated), [], 'no envelope → empty, not backfilled');
+  // A validated name whose EXECUTION gate blocked (risk too small vs costs, spread, ...) is
+  // excluded from buy language even with a green signal gate.
+  const blocked = mk('BLOCKED', 3, 6, 5, { scan: 'momentum_liquid', tier: 'A', carry: 60, execution: { gate: { blocked: true, reasons: ['plan risk 20bps < 3× round-trip cost 30bps'] } } });
+  assert.deepEqual(buildBestOpportunities([blocked]), [], 'execution-blocked → excluded from Best Opportunities');
 });
 
 test('buildBestOpportunities: ranks #1..N by carry odds and caps the list', () => {
