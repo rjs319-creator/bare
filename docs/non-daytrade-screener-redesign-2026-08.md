@@ -210,6 +210,55 @@ production ranks. Flipping `DECISION_ELIGIBILITY_MODE=enforce` is now safe-by-co
 Suite after the follow-on batch: **3,552 tests / 3,550 pass / 0 fail**; `npm run check`
 clean; `today.js`/`evidence-badge.js` module-parse verified.
 
+## 6c. Backlog batch (post-merge of PR #263 — closes §4 items 1, 4 and 5)
+
+1. **entry-v2.1 — trigger-verified Scoreboard basis for conditional contracts** (§4
+   item 1, conditional half). Sections whose contract fillPolicy is
+   `stop-through-trigger`/`conditional on trigger` (coil, GapDown; GapGo never enters
+   the pick loop) are graded on daily bars with verified-trigger semantics: trigger
+   never traded inside the horizon → **no-fill**; open beyond the ±5% chase ceiling
+   (constant reused from `lib/gapgo-verify`) → **gap-skip** (terminal); open through
+   the trigger → filled at the **worse open**; intra-bar touch → filled at the trigger.
+   Unfilled/skipped episodes are COUNTED per group (`fills` in the payload) and
+   excluded from every return array — `summarizeReturns` does raw math on `ret`, so
+   averaging a never-filled plan as 0 would fabricate a return. Benchmark legs anchor
+   at the verified FILL date (open for gap-through, close for intra-bar — a documented
+   daily-bar approximation, NOT intraday verification; contracts stay
+   `fillVerified:false` so maturity remains closed). Coil rows grade only from their
+   captured `plan.entry`; rows with no plan are ungradeable (null), a decision price
+   is never silently promoted to a trigger. Daytrade stays pinned to the legacy basis
+   (source-pin test unchanged). `basisVersion: 'entry-v2.1'`.
+2. **posterior-rank gate** (§4 item 4). The fade-engine per-ticker posterior is
+   learned close-to-close (proxy) yet carried promote-direction weight in three live
+   ranks — Confluence (`indepScore + 8·learnedExcess`, whose top slice the tick
+   LEDGERS, i.e. the learner selected its own training data), Down-Day shorts
+   (posterior as primary sort key deciding which shorts are served) and Trend Rider
+   (drifted admission veto). New registry entry `posterior-rank` (shadow, criteria
+   recorded) + `posteriorRankWeight()` (mirrors the confluence-marginal fail-closed
+   pattern): the boost term is weight-0 until registry production AND a version-matched
+   PASS artifact. AVOID-only influence survives (drifted names still sink/drop — the
+   one registry-validated use of the fade learner); learnedExcess/confidence remain
+   visible as annotation; `posteriorPolicy` disclosure on all three payloads. The Day
+   Trade consumer keeps its literal 8× term (frozen, source-pin tested).
+3. **Down-Day conditional-context enforcement + research controls** (§4 item 5).
+   `fromDownDay` rows now carry `conditionGate: { required: 'red-tape', met }`
+   (unknown tape fails closed) and `assessSignal` demotes any declared-but-unmet
+   condition to research — the mission's "hard-gate actionable long signals to
+   objectively red-market sessions", enforced at the eligibility layer. The display
+   path labels every bucket's rows `researchControl` + `controlReason` on non-red
+   tapes (`displayMode: 'research-controls'`), and the UI shows a 🔬 research-control
+   chip per card instead of relying on banner prose.
+
+Still open from §4: Scoreboard executable-engine migration for the remaining legacy
+sections (fixture-coupled to the Day Trade freeze), Ignition intraday grading
+(data-blocked), PIT spine depth / Phase-5 challengers (Sharadar decision pending with
+the user — do not purchase without them).
+
+Suite after this batch: **3,547 tests / 3,547 pass / 0 fail** (16 new in
+`test/backlog-batch-2026-08.test.js`); `npm run check` clean. No model promoted; the
+fade posterior's rank influence was REMOVED, not validated — abstention over
+unvalidated boosts.
+
 ## 7. Empirical results
 
 **None claimed.** This pass ran no new market experiment; the standing negative/null
