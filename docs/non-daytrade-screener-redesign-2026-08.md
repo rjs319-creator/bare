@@ -266,3 +266,84 @@ verdicts (swing V3, OMEGA, momentum survivorship-free, RLT, NSL, SUE-PEAD/congre
 revisions) are unchanged and remain authoritative. Promoted: none. Demoted (registry
 honesty, not performance): gapgo, coil, biotech → shadow. Everything else stays exactly
 where its evidence puts it.
+
+## 8. Decision-time & statistics batch (2026-08-04, third pass)
+
+Re-audit of the merged redesign against the current source (every item proven at
+file:line before editing; already-fixed items verified, not duplicated). Five commits,
+each with regression tests; Day Trade untouched throughout (pin proofs added where a
+shared engine changed). Baseline 3,562/3,560 → **3,618 tests / 3,616 pass / 0 fail**.
+
+1. **Gap & Go decision-time repair (`gapgo-orb-verify-v2`).** The v1 verified channel
+   graded the gap session's OWN opening range while the durable decision was logged
+   post-close from that session's completed candle — the graded trade began ~6.5h
+   before the decision existed — and the logger never persisted the frozen `take`.
+   Now: EOD decision → NEXT-SESSION ORB only (`selectEntrySession` refuses same/earlier
+   sessions; holes wider than weekend+holiday fail closed as `entry-session-uncertain`);
+   the tick freezes `take`/`continuationScore`/`scoringVersion`/`decisionTs`/
+   `dataCutoffSession` on every ledger row (`freezeGapLedgerPick`, pure); cohorts
+   TAKE (only promotion-grade) / CONTROL (`take:false`) / LEGACY-NO-DECISION; v1
+   episodes immutable, marked superseded, never pooled with v2 (namespaced keys +
+   version filters). One scoring identity everywhere: ledger rows and the live route
+   now carry the registered `gapgo-v1` (the route's stray `gapgo-pit-v2` label removed);
+   the contract declares `decisionBasis`/`eligibleEntrySession`/`verifyVersion` and the
+   UI plan text describes the graded next-session contract.
+2. **maturity-v3 — utility-metric promotion gates.** The mandatory pick-level Wilson
+   >50% beat-rate gate is removed from Validated: promotion is earned on the date-level
+   cost-net portfolio CI (clear of zero), so low-hit/high-payoff strategies with real
+   utility can qualify; hit rate is descriptive only; high-hit negative expectancy is
+   explicitly rejected; protective disablement gains a dependence-aware route (CI
+   entirely below zero). `dateLevelNetExcess` now uses Newey-West/HAC standard errors
+   over the chronological date series (lags ≈ horizonBars−1 for overlapping 5/21/63-
+   session labels), floored at the IID SE so the correction can only widen the gate.
+3. **Evidence-cohort separation.** `gradeStrategy` selects the exact frozen policy
+   cohort: registry `policyTiers` (ignition → `['IGNITION']`, WATCH is the control) and
+   always-excluded `BROAD_*`/`HIST_*` research lanes, with pooled/excluded tiers
+   reported in stats. Ignition's three experiments are three identities end-to-end:
+   backfilled rows (`backfill:true`, previously read by nothing) reclassify to `HIST_*`
+   at Scoreboard read time (ledger immutable) and are excluded from lead-time anchors;
+   the broad lane adds the expanded cache, explicit price/dollar-volume/history/
+   freshness eligibility, honest funnel telemetry (attempted / eligible / scored /
+   excludedByReason incl. recorded-and-deduped funnel overlap / per-scope cache
+   timestamps), and runs independently when op=today is dark (display + log paths,
+   unified exclusion sets).
+4. **gov-v2.1 — freshness, awaited writes, real artifact schema.** Governance persists
+   `scoreboardGeneratedAt` + `evidenceHash` (sha256 of stable-stringified groups) and
+   every consumer (eligibility + Scoreboard allocation gate) now requires BOTH the
+   write time AND the evidence time to be fresh — the daily maturity cron can no longer
+   launder a stale Scoreboard with a fresh `savedAt`. The governance capital-control
+   write is awaited (failure ⇒ `ok:false` + `governancePersisted.error`), as is the
+   summary write. `validPromotionArtifact` enforces the complete
+   docs/model-promotion-policy.md schema (19 required fields incl. approver, code
+   commit, dataset/universe/feature hashes, predeclared metric, cost stress,
+   survivorship/PIT status, calibration, tail risk, prospective evidence, evidence
+   hash, expiry; revocation honored; malformed docs rejected, never coerced) — the old
+   `{approve, version}` check was a rubber stamp. No artifact was created; the path
+   stays empty. Eligibility also closes the null-version fail-open hole (unversioned
+   legacy governance records cannot clear a versioned strategy) and surfaces the
+   three-class taxonomy `ACTIONABLE` / `QUALIFIED_LEAD` / `RESEARCH` (`signalClass`).
+5. **sb-episodes-v2 — trading-session cooldowns.** Contracts declare
+   `episodeCooldownSessions` in sessions but the episode engine, the Dual Confirmed
+   book and the ATLAS-X staleness gate compared calendar days (a 21-session cooldown
+   ≈ 15 sessions — "independent" episodes opened ~40% early, inflating the counts the
+   promotion gates lean on). Gaps are now counted with `calendarSessionsBetween`; the
+   FROZEN daytrade section is pinned to the legacy calendar axis and tested.
+6. **UI claim sweep (17 strings).** Hard-coded "validated / proven / passes deflation /
+   calibrated odds / survivorship-safe / validated track record / failure probability"
+   claims contradicting the registry were replaced with evidence-honest language
+   (Gap & Go, Gap-Down, Trend Rider incl. its green "Validated edge" TRUST badge, Coil,
+   Core Momentum, Breakout, Today footer/tooltips, challenger notes).
+   `evidence-badge.js` verified registry-driven. A source-scan test
+   (`test/ui-claims.test.js`) locks the vocabulary.
+
+**Verified but deliberately unchanged / still blocked:** row-level scoring-version
+segregation inside the Scoreboard group key remains deferred (Day-Trade-coupled fixture
+regeneration; mitigated by the maturity policy-cohort filter, the fillVerified gate and
+the eligibility version guard — legacy-unversioned evidence can no longer clear or
+promote anything); PIT universe/provider provenance (Phase 7) stays data-blocked
+pending the Sharadar decision; no challenger model was fitted (standing survivorship-
+free verdicts are negative — building one would be BLOCKED_DATA theater).
+
+**Empirical results: none claimed.** No new market experiment ran. Promoted: none.
+Demoted: none (registry statuses unchanged; several strategies' *evidence pools*
+shrank to their honest cohorts, which can only lower future grades until earned).
