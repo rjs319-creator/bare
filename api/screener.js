@@ -1,5 +1,5 @@
 const Anthropic = require('@anthropic-ai/sdk');
-const { fetchDailyHistory, screenTicker, smaAt } = require('../lib/screener');
+const { fetchDailyHistory, screenTicker } = require('../lib/screener');
 const { LARGE, SMALL_CAPS, MICRO_CAPS, SECTOR_OF } = require('../lib/universe');
 const { fetchFundamentals, fetchInsiders } = require('../lib/fundamentals');
 const { runGhostAccumulationIndex, REGIME_WEIGHTS: GHOST_WEIGHTS, PILLAR_LABEL: GHOST_PILLAR_LABEL } = require('../lib/ghost');
@@ -8,6 +8,7 @@ const apex = require('../lib/apex');
 const { composeWhyNow } = require('../lib/whynow');
 const { fetchMacro } = require('../lib/macro');
 const { loadCandleCache, cacheState, cacheGet, saveCandleCache } = require('../lib/candle-cache');
+const { rankOnly } = require('../lib/rank-semantics');
 const { isTrusted, cronSecret } = require('../lib/auth');
 const { readJSON, writeJSON, hasStore } = require('../lib/store');
 const { fetchShortInterest, siFlag } = require('../lib/shortinterest');
@@ -49,53 +50,15 @@ async function mapLimit(items, limit, fn) {
   return out;
 }
 
-// Cross-sectional percentile rank (0-100) for each named factor across the set.
-function attachPercentiles(items, getters) {
-  for (const [name, fn] of Object.entries(getters)) {
-    const vals = items.map(fn).filter(v => v != null && !isNaN(v)).sort((a, b) => a - b);
-    const pr = x => {
-      if (x == null || isNaN(x) || !vals.length) return 0;
-      let lo = 0, hi = vals.length;
-      while (lo < hi) { const mid = (lo + hi) >> 1; if (vals[mid] <= x) lo = mid + 1; else hi = mid; }
-      return Math.round((lo / vals.length) * 100);
-    };
-    items.forEach(it => { it._pct = it._pct || {}; it._pct[name] = pr(fn(it)); });
-  }
-}
-
-// Default composite weighting (the client can override live via the Tune panel).
-// This project's own edge research found the DEAD factors — volume-surge (`vol`,
-// rank-IC ≈ −0.004) and base-quality/VCP (`base`) — carry no forward-return edge,
-// while accumulation ratio (`accum`, IC ~0.075) and up/down volume (`ud`, ~0.071)
-// DO. So the default now zeroes base+vol and routes their weight to accum+ud
-// alongside the validated momentum family (rs/mom/trend/volAdj/prox). base+vol are
-// kept in the shape (weight 0) so the Tune panel can still expose them and a user
-// can opt back into the classic breakout view. Keep in sync with SCR_DEFAULT_W in
-// public/js/app.js.
-const DEFAULT_WEIGHTS = { rs: 22, mom: 20, trend: 16, volAdj: 14, accum: 12, ud: 10, prox: 6, base: 0, vol: 0 };
-
-// Cross-sectional percentile components for one name (0-100 each).
-function pctComponents(it) {
-  const p = it._pct || {};
-  return {
-    rs:     p.mom126 || 0,
-    mom:    Math.round(((p.mom63 || 0) + (p.mom126 || 0)) / 2),
-    trend:  p.trend || 0,
-    volAdj: p.volAdj || 0,
-    base:   p.base || 0,
-    vol:    p.volSurge || 0,
-    prox:   p.prox || 0,
-    accum:  p.accum || 0,   // accumulation ratio — smart-money flow (has real edge)
-    ud:     p.ud || 0,      // up/down volume
-  };
-}
-
-function composite(pct, w) {
-  const sum = Object.values(w).reduce((a, b) => a + b, 0) || 1;
-  let s = 0;
-  for (const k in w) s += (w[k] / sum) * (pct[k] || 0);
-  return Math.round(s);
-}
+// SHARED SELECTION ENGINE (Screener Replay v3). Percentiles, the quant composite,
+// scope thresholds, freshness gate, liquidity floor, regime and the admission/
+// buffer selection all live in lib/swing-screener-engine.js — ONE implementation
+// used by this live route AND by historical replay (lib/swing-replay-v3.js), so
+// a backtest claim about "the screener" is provably about THIS selection. The
+// default weights (Tune-panel overridable client-side; keep in sync with
+// SCR_DEFAULT_W in public/js/app.js) are ENGINE.DEFAULT_WEIGHTS.
+const ENGINE = require('../lib/swing-screener-engine');
+const DEFAULT_WEIGHTS = ENGINE.DEFAULT_WEIGHTS;
 
 // The raw LLM call (Anthropic haiku) — one request covering the given candidates.
 async function callNarrativeLLM(candidates) {
@@ -268,6 +231,10 @@ module.exports = async function handler(req, res) {
         if (!r) return null;
         if (!r.ticker) r.ticker = t;
         r.capTier = tier;
+        // Per-entry freshness provenance (defect #3): the candidate's own last bar
+        // date is the ONLY freshness fact a compiled multi-shard cache can't forge.
+        r.lastBarDate = data.candles.length ? data.candles[data.candles.length - 1].date : null;
+        r.dataProvenance = data.provenance || null;
         return r;
       } catch { return null; }
     });
@@ -287,19 +254,31 @@ module.exports = async function handler(req, res) {
     }
     mark.scan = Date.now() - reqT0;
 
-    // Liquidity floor so results are actually tradeable. Raised from $0.3M/$2M
-    // after the Scoreboard showed the illiquid small/micro names — and the Ghost
-    // picks that ride on these same candidates — were the biggest money-losers:
-    // thin spread + slippage on close-to-close paper moves they never capture.
-    if (isSmallScope) {
-      const floor = isMicro ? 1_000_000 : 3_000_000;
-      valid = valid.filter(c => (c.factors.dollarVol || 0) >= floor);
-    }
-
-    // Exchange filter (from live chart meta)
+    // Exchange filter (from live chart meta) — applied BEFORE the cross-sectional
+    // engine so the percentile cohort is the filtered universe, exactly as before.
     if (exchangeFilter && exchangeFilter !== 'ALL') {
       valid = valid.filter(c => (c.exchange || '').toUpperCase() === exchangeFilter);
     }
+
+    // Macro (VIX + credit) resolves BEFORE selection — the engine's emerging-leader
+    // admission arm is macro-gated. The promise was kicked off at request start.
+    let macro = null;
+    try { macro = await macroPromise; } catch {}
+    const macroRiskOff = !!(macro && macro.riskOff);
+
+    // ── SHARED SELECTION ENGINE (Screener Replay v3) ──────────────────────────
+    // Freshness gate (defect #3) → liquidity floor → same-date cohort percentiles
+    // + quant composite → regime → admission (status gate + regime-gated emerging
+    // arm) → deterministic buffer selection, with a reason-coded rejection for
+    // every evaluated name. Identical code path to historical replay.
+    const sel = ENGINE.selectCandidates({
+      rows: valid, scope, spyCandles, macroRiskOff,
+      regimeEligible: sectorFilter === 'all' && exchangeFilter === 'ALL',
+    });
+    valid = sel.cohort;
+    const regime = sel.regime;
+    const freshness = sel.freshness;
+    let candidates = sel.candidates;
 
     // Sector rotation: how many names per sector qualified vs. were scanned
     const rot = {};
@@ -345,58 +324,11 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // 2. Quant percentiles across the scanned peer group
-    attachPercentiles(valid, {
-      mom63:    c => c.factors.mom63,
-      mom126:   c => c.factors.mom126,
-      trend:    c => c.factors.trendTemplate,
-      volAdj:   c => c.factors.volAdjMom,
-      volSurge: c => c.factors.volSurge,
-      base:     c => c.factors.baseQuality,
-      prox:     c => c.factors.proximity,
-      accum:    c => c.metrics.accumRatio,
-      ud:       c => c.metrics.udVol,
-    });
-    valid.forEach(c => { c.pct = pctComponents(c); c.quant = { score: composite(c.pct, DEFAULT_WEIGHTS) }; });
-
-    // ── Market regime (large/unfiltered only): SPY vs 200-DMA + breadth ──
-    // Computed BEFORE selection so the emerging-leader admission (below) can be
-    // regime-gated. Blended with the VIX/credit MACRO layer (leads the index).
-    let regime = null;
-    if (!isSmallScope && sectorFilter === 'all' && exchangeFilter === 'ALL') {
-      let indexAbove200 = null;
-      if (spyCandles) { const cl = spyCandles.map(x => x.close), li = cl.length - 1, s200 = smaAt(cl, 200, li); indexAbove200 = s200 != null ? cl[li] > s200 : null; }
-      const breadthPct = valid.length ? Math.round((valid.filter(c => c.above50).length / valid.length) * 100) : null;
-      // Bearish regime: SPY below its 200-DMA OR fewer than 40% of names above
-      // their 50-DMA. Breakouts fail at much higher rates here, so the UI warns
-      // and downgrades long breakout scores when this is true.
-      const bearish = indexAbove200 === false || (breadthPct != null && breadthPct < 40);
-      regime = {
-        indexAbove200,
-        breadthPct,
-        bearish,
-        riskOn: indexAbove200 === true && (breadthPct == null || breadthPct >= 45),
-      };
-    }
-    // Macro (VIX + credit) — the promise was kicked off early; resolves once.
-    let macro = null;
-    try { macro = await macroPromise; } catch {}
-    const macroRiskOff = !!(macro && macro.riskOff);
-
-    // 3. Select the display buffer, ranked PURELY by the (cleaned) quant composite —
-    //    NOT breakouts-first (breakout PF < 1 in this project's research), so a
-    //    confirmed breakout is a metadata BADGE (c.qualifies), not a sort key.
-    //    ADMISSION (item 5): also admit emergingLeader names — fresh RS leadership +
-    //    accumulation, not extended, built only on validated factors — that lack a
-    //    base-pattern status. Gated by the 5y admission backtest (lib/emerging.js):
-    //    LARGE only (small/micro incremental names backtested NEGATIVE — the
-    //    falling-knife archetype the detector can't distinguish) and only OUTSIDE
-    //    risk-off (the +1.5% incremental fwd excess fades risk-off). Return a buffer
-    //    beyond `cap` so client re-weighting can swap names in.
-    const admitEmerging = !isSmallScope && !(!!(regime && regime.bearish) || macroRiskOff);
-    const buffer = cap + (isSmallScope ? 6 : 8);
-    let candidates = valid.filter(c => c.include || (admitEmerging && c.emergingLeader))
-      .sort((a, b) => b.quant.score - a.quant.score).slice(0, buffer);
+    // Percentiles, regime, admission and the buffer were all computed by the shared
+    // engine above (sel.cohort / sel.regime / sel.candidates). The admission rule is
+    // unchanged: ranked PURELY by the (cleaned) quant composite, with the regime- and
+    // macro-gated emergingLeader arm (lib/emerging.js shipGated study; LARGE only,
+    // never in risk-off). See lib/swing-screener-engine.js for the single source.
 
     // 4. Enrich candidates — LLM narrative + real fundamentals + insider data —
     //    ALL IN PARALLEL (independent calls). Previously serialized, which made a
@@ -414,11 +346,15 @@ module.exports = async function handler(req, res) {
       ticker: c.ticker, company: c.company, capTier: c.capTier,
       sector: c.sector, exchange: c.exchange, aboveSma200: c.aboveSma200,
       status: c.status, qualifies: c.qualifies, emergingLeader: c.emergingLeader,
+      lastBarDate: c.lastBarDate || null, dataProvenance: c.dataProvenance || null,
       price: c.price, changePct: c.changePct,
       filters: c.filters,
       criteria: { ...c.criteria, narrative: c.narrativeStrength != null ? c.narrativeStrength >= 6 : false },
       metrics: c.metrics, levels: c.levels, factors: c.factors,
       pct: c.pct, quant: c.quant, reasons: c.reasons,
+      // Defect #7: the quant composite is a same-date cross-sectional RANKING score
+      // (0-100 blend of factor percentiles). Not a probability; none exists here.
+      rankSemantics: rankOnly(c.quant && c.quant.score),
       fundamentals: c.fundamentals || null, insider: c.insider || null,
       shortInterest: siData ? siFlag(siData.bySymbol[c.ticker.toUpperCase()], c.fundamentals && c.fundamentals.sharesOut) : null,
       narrative: c.narrative, narrativeStrength: c.narrativeStrength, theme: c.theme,
@@ -565,6 +501,22 @@ module.exports = async function handler(req, res) {
       lookback,
       candleSource: useCache ? 'cache' : 'live',
       candlesFetched: freshFetched.size,
+      freshness,
+      dataCutoff: freshness.decisionSession || ghostDataCutoff || null,
+      // Live candidate-observation record (Screener Replay v3): the same
+      // engine/hash the replay computes, so any served selection can be compared
+      // against a replay of the same session — a mismatch fails parity.
+      selection: {
+        engineVersion: ENGINE.ENGINE_VERSION,
+        candidateSetHash: require('../lib/swing-candidate-schema').candidateSetHash(
+          candidates.slice(0, cap).map(c => require('../lib/swing-candidate-schema').candidateId({
+            strategyId: 'screener', scoringVersion: 'screener-v1', universeScope: scope,
+            ticker: c.ticker, decisionCutoff: freshness.decisionSession || ghostDataCutoff || 'unknown',
+          }))),
+        selectedCount: Math.min(cap, candidates.length),
+        rejectionCounts: sel.rejections.reduce((m, r) => { m[r.reason] = (m[r.reason] || 0) + 1; return m; }, {}),
+        rejections: sel.rejections.slice(0, 50),
+      },
       timings: { cacheLoadMs: mark.cacheLoad, scanMs: mark.scan, enrichMs: (mark.enrich || 0) - (mark.scan || 0), totalMs: Date.now() - reqT0 },
       results: candidates,
       ghostTop,

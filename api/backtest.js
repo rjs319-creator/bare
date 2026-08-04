@@ -1,7 +1,17 @@
-// Strategy backtest — replays the elite screen across history and measures
-// REALISTIC trade outcomes: ATR stop/target exits, return vs SPY (alpha),
-// market-regime split, and walk-forward (in-sample vs out-of-sample) edge
-// validation so the auto-derived High-Conviction combo isn't curve-fit.
+// LEGACY pattern backtest — replays the raw per-ticker chart-pattern evaluator
+// (evalSetupAt) across history with ATR stop/target exits, SPY excess, regime
+// split and an in-sample/out-of-sample feature diagnostic.
+//
+// ⚠ NOT A LIVE-STRATEGY VALIDATION. This endpoint tests a DIFFERENT strategy
+// than the production screener selects: it has no relative-strength-vs-SPY
+// gate, no 50/200 trend eligibility, no same-date cross-sectional percentiles,
+// no quant composite ranking, no candidate cap/buffer, no liquidity floor, no
+// regime admission rules and no deduplicated central decision ranking. Its
+// results therefore cannot validate (or promote) production picks. Every
+// response is stamped `historicalLiveParity:false` + `promotionBlocked:true`
+// with the explicit mismatch list. Production-parity validation lives in
+// Screener Replay v3 (lib/swing-replay-v3.js, docs/swing-screener-replay-v3.md).
+// The endpoint is retained for historical comparison of the raw pattern layer.
 const { fetchDailyHistory, evalSetupAt, smaAt, rsHighArray } = require('../lib/screener');
 const { calcRSI, calcATR } = require('../lib/signal');
 const { LARGE, SMALL_CAPS, MICRO_CAPS } = require('../lib/universe');
@@ -63,6 +73,31 @@ const TIERS = ['Breakout', 'Setup', 'Early'];
 // this bump; the execution policy is echoed in every response.
 const BACKTEST_VERSION = 'backtest-exec-v2';
 const tierForScope = (scope) => scope === 'micro' ? 'micro' : scope === 'small' ? 'small' : 'liquid';
+
+// Defect-2 honesty stamp: this endpoint replays raw chart patterns ticker-by-ticker,
+// NOT the production selection pipeline. The stamp travels on every response so no
+// consumer (UI, research script, promotion tooling) can mistake these numbers for
+// evidence about what the live screener actually picks. `promotionBlocked` is read
+// by the promotion tooling as a hard veto — artifacts carrying it can never satisfy
+// a registry promotion gate.
+const LIVE_PARITY_STAMP = Object.freeze({
+  historicalLiveParity: false,
+  promotionBlocked: true,
+  parityMismatches: Object.freeze([
+    'no relative-strength-vs-SPY selection gate (live: RS leadership feeds admission)',
+    'no 50/200-session trend eligibility gate',
+    'no same-date full-cohort cross-sectional percentiles (live: attachPercentiles over the scanned universe)',
+    'no production quant composite ranking (live: DEFAULT_WEIGHTS composite orders admission)',
+    'no candidate cap/buffer selection (live: top-N buffer by composite)',
+    'no liquidity floor or scope rules (live: $1M/$3M dollar-volume floors by scope)',
+    'no market-regime admission rules (live: bearish/risk-off gates emerging-leader admission)',
+    'no deduplication or central decision ranking (live: op=today merge)',
+    'samples every 5th trading day per ticker independently, not a common decision session',
+  ]),
+  warning: 'Legacy pattern backtest: replays raw chart patterns per ticker, not the production screener. '
+    + 'Results CANNOT validate production picks or support promotion. Use Screener Replay v3 for '
+    + 'production-parity validation.',
+});
 
 // Simulate one long ATR stop/target trade with a realistic NEXT-OPEN entry. The signal is
 // known at c[i].close; the fill is the next session's open (+ slippage). Barriers are scanned
@@ -340,6 +375,7 @@ async function backtestMode(req, res) {
       exits: { stopATR: STOP_ATR, targetATR: TGT_ATR, maxHold: MAX_HOLD },
       execution: { policy: POLICIES.NEXT_OPEN_PLUS_SLIPPAGE, entry: 'next-open+slippage', tier: tierForScope(scope), policyVersion: EXECUTION_POLICY_VERSION },
       version: BACKTEST_VERSION,
+      ...LIVE_PARITY_STAMP,
       summary, overall, regimeSplit, efficacy, model,
       generatedAt: new Date().toISOString(),
     });
@@ -420,6 +456,7 @@ async function portfolioMode(req, res) {
       pit: pitOut,
       execution: { policy: POLICIES.NEXT_OPEN_PLUS_SLIPPAGE, entry: 'next-open+slippage', tier: tierForScope(scope), policyVersion: EXECUTION_POLICY_VERSION },
       version: BACKTEST_VERSION,
+      ...LIVE_PARITY_STAMP,
       stats: {
         totalReturn: +((eq - 1) * 100).toFixed(1), cagr: cagr(eq), sharpe: sharpe(dr), maxDD: +(mdd * 100).toFixed(1), exposure: +(exposSum / nDays * 100).toFixed(0),
         spyReturn: +((seq - 1) * 100).toFixed(1), spyCagr: cagr(seq), spySharpe: sharpe(sdr), spyMaxDD: +(smdd * 100).toFixed(1),
@@ -453,7 +490,9 @@ async function walkforwardMode(req, res) {
   try {
     const out = await runGhostBacktest({ scope, months, step, limit, insiderData, fundamentalsData });
     res.setHeader('Cache-Control', (insiderData || fundamentalsData) ? 'no-store' : 's-maxage=3600, stale-while-revalidate=86400');
-    return res.json(out);
+    // Same honesty stamp: the GAI walk-forward tests pillar ranks over its own
+    // cohort construction, not the production selection pipeline.
+    return res.json({ ...out, ...LIVE_PARITY_STAMP });
   } catch (e) {
     return res.status(502).json({ error: 'Walk-forward failed: ' + e.message });
   }
@@ -469,5 +508,6 @@ module.exports.resolvePitUniverse = resolvePitUniverse;
 module.exports.simulatePortfolio = simulatePortfolio;
 module.exports.positionDailyReturn = positionDailyReturn;
 module.exports.BACKTEST_VERSION = BACKTEST_VERSION;
+module.exports.LIVE_PARITY_STAMP = LIVE_PARITY_STAMP;
 module.exports.STOP_ATR = STOP_ATR;
 module.exports.TGT_ATR = TGT_ATR;

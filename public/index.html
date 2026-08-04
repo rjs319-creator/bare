@@ -1069,7 +1069,7 @@
           <li><b>Exchange</b> — filter by listing venue (NASDAQ/NYSE/AMEX). Most people can leave this on "All."</li>
           <li><b>Relaxed gate vs Strict breakout</b> — how picky the scan is. <b>Relaxed</b> (default) shows strong trending names broadly. <b>Strict</b> shows only textbook breakouts (tight base + volume spike) — far fewer names, higher bar. Start Relaxed; switch to Strict when you want only the cleanest setups.</li>
           <li><b>Momentum (3-mo ≥ X%)</b> — only show names already up at least X% over the last 3 months. <b>+11% = "top-quartile"</b>, the level our own study found best concentrates big movers. Use it to skip laggards and keep only names with real momentum behind them.</li>
-          <li><b>🎯 High-Conviction</b> — only setups that match the edges our backtest actually proved out-of-sample. Use it when you want quality over quantity.</li>
+          <li><b>🎯 High-Conviction</b> — setups matching the pattern-layer combos that held up in the legacy backtest's out-of-sample split. Note: that backtest tests raw patterns, not the live selection pipeline, so treat this as a filter, not proof of edge.</li>
           <li><b>🌱 Emerging</b> — early movers just <i>starting</i> a leg up (fresh leadership + accumulation, not yet stretched). Use it to get in early, RKLB-style. <i>Note: it can't catch oversold-bounce/squeeze spikes like FCEL — those launch from weakness and aren't predictable here.</i></li>
           <li><b>🤖 Model</b> — re-orders the list by a learned model score instead of the default score. The number is a rank (0–100), not a calibrated win probability. Use it to see which names the model likes most.</li>
         </ul>
@@ -1150,8 +1150,8 @@
   <section class="screener-section" id="backtest">
     <div class="section-label">
       <div class="accent-bar" style="background:#8a6dff"></div>
-      <h2 style="color:#8a6dff">Strategy Backtest</h2>
-      <span class="label-meta" id="bt-meta">· forward returns by tier · S&amp;P 500</span>
+      <h2 style="color:#8a6dff">Pattern Backtest (legacy)</h2>
+      <span class="label-meta" id="bt-meta">· raw chart-pattern layer only — NOT a replay of the live screener's selection (no RS gate, percentiles, caps or regime rules); cannot validate production picks</span>
       <div class="label-action">
         <button class="bt-view-btn active" id="bt-view-trades" data-view="trades">Trade Sim</button>
         <button class="bt-view-btn" id="bt-view-wf" data-view="walkforward">Walk-Forward (GAI)</button>
