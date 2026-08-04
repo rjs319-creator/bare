@@ -29,7 +29,10 @@ export const gradeFace = g => GRADE[g] || GRADE.experimental;
 const TAB_STRATEGY = {
   picks: 'momentum',
   rltlab: 'rlt',
-  aligned: 'screener',
+  // Dual Confirmed shows ONLY its own evidence (id 'aligned', registered 2026-08). It
+  // was previously mapped to 'screener', which dressed the tab in the production
+  // Breakout strategy's banner — another strategy's record must never stand in.
+  aligned: 'aligned',
   // Pattern Radar shows ONLY its own evidence (id 'chartpattern'). It was previously
   // mapped to 'coil', which displayed the Coil strategy's record as if it were Pattern
   // Radar's — another strategy's performance must never stand in as pattern evidence.

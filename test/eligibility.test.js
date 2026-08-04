@@ -12,7 +12,8 @@ const GOV_PROD = freshGov([
   { id: 'screener', status: 'production', weight: 1, version: 'screener-v1' },
   { id: 'gapgo', status: 'production', weight: 1, version: 'gapgo-v1' },
   { id: 'downday', status: 'production', weight: 1, version: 'downday-v1' },
-  { id: 'coil', status: 'probation', weight: 0.25, version: 'coil-v1' },
+  { id: 'ghost', status: 'probation', weight: 0.25, version: 'ghost-v1' },
+  { id: 'coil', status: 'probation', weight: 0.25, version: 'coil-v1' },   // irrelevant now: static shadow gates first
   { id: 'biotech', status: 'paper', weight: 0, version: 'biotech-v1' },
 ]);
 
@@ -37,16 +38,21 @@ test('scoring-version mismatch between governance evidence and registry ⇒ fail
 });
 
 test('production static + fresh cleared governance ⇒ trade-eligible with governance sizing weight', () => {
+  // 2026-08 reconciliation: coil/biotech are now registered SHADOW (watchlist detector /
+  // lead-only research), so they can never be trade-eligible regardless of governance —
+  // the probation case moves to ghost (still registry-production).
   const g = EL.gateSignals([
     { source: 'screener', ticker: 'AAA', side: 'long', entry: 1, stop: 0.9, target: 1.3, liquidity: { dollarVol: 5e7 } },
-    { source: 'coil', ticker: 'DDD', side: 'long', entry: 1, stop: 0.9, target: 1.3, liquidity: { dollarVol: 5e7 } },
+    { source: 'ghost', ticker: 'DDD', side: 'long', entry: 1, stop: 0.9, target: 1.3, liquidity: { dollarVol: 5e7 } },
+    { source: 'coil', ticker: 'EEE', side: 'long', entry: 1, stop: 0.9, target: 1.3, liquidity: { dollarVol: 5e7 } },
     { source: 'biotech', ticker: 'AGIO', side: 'long' },
   ], { governance: GOV_PROD, nowMs: NOW });
   assert.equal(g.perSource.screener.tradeEligible, true);
   assert.equal(g.perSource.screener.sizingWeight, 1);
-  assert.equal(g.perSource.coil.tradeEligible, true);       // probation = cleared, reduced
-  assert.equal(g.perSource.coil.sizingWeight, 0.25);
-  assert.equal(g.perSource.biotech.tradeEligible, false);   // paper = zero clearance
+  assert.equal(g.perSource.ghost.tradeEligible, true);       // probation = cleared, reduced
+  assert.equal(g.perSource.ghost.sizingWeight, 0.25);
+  assert.equal(g.perSource.coil.tradeEligible, false);       // shadow static maturity — fail closed
+  assert.equal(g.perSource.biotech.tradeEligible, false);    // shadow static maturity — fail closed
 });
 
 test('shadow static maturity ⇒ never trade-eligible regardless of governance', () => {
@@ -118,13 +124,15 @@ test('enforce: shadow sources can neither ORIGINATE a board row nor BOOST one vi
   // exact test started failing 6 days after it was written).
   const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'enforce', governance: gov, nowMs: NOW });
   const boardSources = new Set(Object.values(p.topByHorizon).flat().concat(...Object.values(p.horizons)).flatMap(x => x.sources || [x.source]));
-  // Shadow/ungoverned sources must be absent everywhere on the tradeable board:
-  for (const shadowSrc of ['gapdown', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'coremo', 'optionsflow', 'biotech', 'coil', 'downday']) {
+  // Shadow/ungoverned sources must be absent everywhere on the tradeable board.
+  // 2026-08 reconciliation: gapgo joins the shadow set (unproven prospective
+  // challenger) — a governance record alone can no longer clear it, because the
+  // registry's static maturity gates first.
+  for (const shadowSrc of ['gapdown', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'coremo', 'optionsflow', 'biotech', 'coil', 'gapgo', 'downday']) {
     assert.ok(!boardSources.has(shadowSrc), `${shadowSrc} must not reach the enforced board`);
   }
   // Cleared + pinned sources remain:
   assert.ok(boardSources.has('screener'));
-  assert.ok(boardSources.has('gapgo'));
   assert.ok(boardSources.has('daytrade'));
   // The exclusions are reported, not silently dropped:
   assert.ok(p.governanceGate.excludedCount > 0);

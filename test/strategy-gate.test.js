@@ -62,9 +62,29 @@ test('SAFETY: optionsflow + putsell are registered SHADOW (not trade-eligible)',
   assert.equal(gate.isTradeEligible('putsell'), false);
 });
 
-test('the backbone screeners remain trade-eligible (behavior preserved)', () => {
-  for (const id of ['screener', 'gapgo', 'daytrade', 'coil', 'ghost', 'biotech', 'downday']) {
+test('the production backbone screeners remain trade-eligible', () => {
+  for (const id of ['screener', 'daytrade', 'ghost', 'downday', 'ignition', 'custom']) {
     assert.equal(gate.isTradeEligible(id), true, `${id} must stay trade-eligible`);
+  }
+});
+
+test('2026-08 reconciliation: gapgo/coil/biotech are SHADOW — evidence and registration now agree', () => {
+  // Gap & Go: unproven prospective challenger on a daily-close proxy ledger.
+  // Coil: abnormal-expansion watchlist detector; trade utility (Stage B) unproven.
+  // Biotech: lead-only research system; only its episode lane grades executable fills.
+  for (const id of ['gapgo', 'coil', 'biotech']) {
+    assert.equal(gate.statusOf(id), 'shadow', `${id} must be shadow`);
+    assert.equal(gate.isTradeEligible(id), false, `${id} must not be trade-eligible`);
+  }
+});
+
+test('previously-unregistered screeners are now registered shadow with contracts', () => {
+  const SC = require('../lib/strategy-contracts');
+  for (const id of ['trendrider', 'aligned', 'confluence']) {
+    assert.equal(gate.statusOf(id), 'shadow', `${id} must be registered shadow`);
+    const c = SC.contractFor(id);
+    assert.ok(c, `${id} must have an outcome contract`);
+    assert.equal(c.fillVerified, false, `${id} grading is a proxy — fillVerified must be false`);
   }
 });
 

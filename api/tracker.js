@@ -55,7 +55,7 @@ const PRIVILEGED_OPS = new Set([
   'alertsassess', 'alertsgrade', 'alignedlog', 'apexlog', 'archive', 'attentiontick',
   'brieftick', 'cerntick', 'coiltick', 'confluencetick', 'corebuild', 'corelog',
   'crowdtick', 'daytradetick', 'downdaytick', 'dualreadlog', 'dualreadtune', 'edgelog',
-  'fadetick', 'gapdowntick', 'gapgotick', 'ghostlog', 'intracapture', 'leaderboardtick',
+  'fadetick', 'gapdowntick', 'gapgotick', 'gapgoverify', 'ghostlog', 'intracapture', 'leaderboardtick',
   'narrative', 'optionsassess', 'patternlog', 'patterngrade', 'patternresearch', 'predicttick', 'timinglog', 'timingtune', 'tonetick',
   // 'track' snapshots the day's Screener+Momentum picks to Blob (a state-changing WRITE).
   // The daily cron dispatches it with the internal bearer (warm-chains-routes.js), so gating
@@ -240,6 +240,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'coilbook') return runCoilBook(req, res);
   if (req.query.op === 'gapgo') return runGapGo(req, res);
   if (req.query.op === 'gapgotick') return runGapGoTick(req, res);
+  if (req.query.op === 'gapgoverify') return require('../lib/gapgo-verify').runGapGoVerify(req, res);
   if (req.query.op === 'gapgobook') return runGapGoBook(req, res);
   if (req.query.op === 'downday') return runDownDay(req, res);
   if (req.query.op === 'downdaytick') return runDownDayTick(req, res);
