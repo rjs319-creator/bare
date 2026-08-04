@@ -169,3 +169,63 @@ test('confluence singleFamily flag: multiple bullish votes from one family are f
   assert.equal(fams.filter(f => f === 'trend').length, 4);
   assert.equal(fams.filter(f => f === 'meanReversion').length, 1);
 });
+
+test('enforce mode: researchByHorizon carries the full ungated cross-section, RESEARCH-classed (visibility survives enforcement)', () => {
+  const gov = freshGov2([{ id: 'screener', status: 'production', weight: 1, version: 'screener-v1' }]);
+  const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'enforce', governance: gov, nowMs: NOW2 });
+  assert.ok(p.researchByHorizon, 'enforce mode must serve the research cross-section');
+  const rows = Object.values(p.researchByHorizon).flat();
+  assert.ok(rows.length > 0);
+  const srcs = new Set(rows.flatMap(x => x.sources || [x.source]));
+  const shadowVisible = [...srcs].some(s => !['screener', 'daytrade'].includes(s));
+  assert.ok(shadowVisible, 'shadow sources must remain VISIBLE as research under enforcement');
+  for (const x of rows) {
+    assert.ok(x.evidenceClass === 'ACTIONABLE' || x.evidenceClass === 'RESEARCH');
+    const rowSrcs = x.sources || [x.source];
+    if (rowSrcs.some(s => !['screener', 'daytrade'].includes(s))) {
+      assert.equal(x.evidenceClass, 'RESEARCH', 'an uncleared source must never wear ACTIONABLE');
+    }
+  }
+  // Annotate mode: null by design (topByHorizon already is the full cross-section).
+  const ann = buildToday(SOURCES, null, null, null, { governance: gov, nowMs: NOW2 });
+  assert.equal(ann.researchByHorizon, null);
+});
+
+// ── entry-v2: per-contract next-open grading basis ───────────────────────────
+test('forwardPath entryBasis next-open: enters at the NEXT session open, never the signal close or logged level', () => {
+  const { forwardPath, spyForwardReturn } = require('../lib/apex-routes');
+  const CAND = [
+    { date: '2026-01-05', open: 98, close: 100, high: 101, low: 97 },
+    { date: '2026-01-06', open: 104, close: 106, high: 107, low: 103 },   // entry bar: open 104
+    { date: '2026-01-07', open: 106, close: 110, high: 111, low: 105 },
+  ];
+  const legacy = forwardPath(CAND, { date: '2026-01-05', entry: 100 }, 2);
+  assert.equal(+legacy.ret.toFixed(2), 10);                    // 100 → 110 off the logged level
+  const v2 = forwardPath(CAND, { date: '2026-01-05', entry: 100 }, 2, { entryBasis: 'next-open' });
+  assert.equal(+v2.ret.toFixed(2), +(((110 - 104) / 104) * 100).toFixed(2));  // 104 → 110
+  // benchmark measured on the SAME basis
+  const bmLegacy = spyForwardReturn(CAND, { date: '2026-01-05' }, 2);
+  const bmV2 = spyForwardReturn(CAND, { date: '2026-01-05' }, 2, { entryBasis: 'next-open' });
+  assert.equal(+bmLegacy.toFixed(2), 10);
+  assert.equal(+bmV2.toFixed(2), +(((110 - 104) / 104) * 100).toFixed(2));
+});
+
+test('forwardPath entryBasis next-open: no next session yet → null (never a fabricated fill)', () => {
+  const { forwardPath } = require('../lib/apex-routes');
+  const CAND = [
+    { date: '2026-01-05', open: 98, close: 100, high: 101, low: 97 },
+    { date: '2026-01-06', open: 104, close: 106, high: 107, low: 103 },
+  ];
+  assert.equal(forwardPath(CAND, { date: '2026-01-06' }, 1, { entryBasis: 'next-open' }), null);
+});
+
+test('entry-v2 basis policy: next-open sections come from their contracts; daytrade + conditional contracts stay legacy', () => {
+  const src = require('node:fs').readFileSync(require.resolve('../lib/apex-routes.js'), 'utf8');
+  assert.match(src, /section === 'daytrade'\) return null/, 'daytrade section must be pinned to the legacy basis');
+  const { contractForSection } = require('../lib/strategy-contracts');
+  // Sanity: the contracts the policy reads say what we think they say.
+  assert.ok(contractForSection('screener').fillPolicy.startsWith('next-session-open'));
+  assert.ok(contractForSection('Ghost').fillPolicy.startsWith('next-session-open'));
+  assert.ok(!contractForSection('GapGo').fillPolicy.startsWith('next-session-open'), 'gapgo is conditional — stays legacy until verified fills');
+  assert.ok(!contractForSection('coil').fillPolicy.startsWith('next-session-open'), 'coil is conditional — stays legacy until verified fills');
+});

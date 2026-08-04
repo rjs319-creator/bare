@@ -326,14 +326,38 @@ export function renderCommandCenter(container, p) {
     + [['quickhit', '⚡ Quick Hit'], ['opportunities', '⭐ Opportunities'], ['edge', '📓 Edge Book'], ['gameplan', '🗞️ Game Plan']]
       .map(([t, l]) => `<button class="td-rel" data-go="${t}">${l}</button>`).join('') + `</div>`;
 
+  // ACTIONABLE LANE — evidence-cleared strategies ONLY (fail-closed, boost-free merge).
+  // When nothing is cleared this is honestly EMPTY; it is never backfilled with
+  // research signals. Rendered above the research cross-section so the separation is
+  // structural on the page, not just a per-card chip.
+  const abh = p.actionableByHorizon;
+  if (abh) {
+    const anyAct = Object.values(abh).some(l => l && l.length);
+    html += `<div class="td-top-plays"><div class="td-hz-h">✅ Actionable — evidence-cleared only `
+      + `<span class="td-dim">only strategies with earned, current governance clearance; an empty list is the honest answer, never padded with research</span></div>`;
+    if (anyAct) {
+      for (const [key, title] of HORIZONS) {
+        const list = (abh[key] || []).slice(0, 5);
+        if (!list.length) continue;
+        html += `<div class="td-hz-h" style="margin-top:6px">${title}</div>`
+          + `<div class="td-top-grid">` + list.map(s => signalCard(s, legend)).join('') + `</div>`;
+      }
+    } else {
+      html += `<div class="td-dim td-empty">No evidence-cleared setups today. Everything below is research — shown, tracked and graded, but not a cleared recommendation.</div>`;
+    }
+    html += `</div>`;
+  }
+
   // PER-HORIZON shortlists — deliberately NOT one global list. A same-session exit and a
   // quarterly hold answer different questions; each horizon is ranked within its own exact
-  // outcome contract and no cross-horizon "best overall" score exists.
-  const tbh = p.topByHorizon || {};
+  // outcome contract and no cross-horizon "best overall" score exists. Under enforcement
+  // the served topByHorizon is cleared-only, so the full ungated cross-section arrives in
+  // researchByHorizon — research stays fully visible either way.
+  const tbh = p.researchByHorizon || p.topByHorizon || {};
   const hasTop = Object.values(tbh).some(l => l && l.length);
   if (hasTop) {
-    html += `<div class="td-top-plays"><div class="td-hz-h">⭐ Top plays by horizon `
-      + `<span class="td-dim">ranked within each time frame — horizons are never mixed into one list</span></div>`;
+    html += `<div class="td-top-plays"><div class="td-hz-h">${abh ? '🔬 Full cross-section by horizon' : '⭐ Top plays by horizon'} `
+      + `<span class="td-dim">ranked within each time frame — horizons are never mixed into one list${abh ? '; research cards cannot size a position' : ''}</span></div>`;
     for (const [key, title] of HORIZONS) {
       const list = (tbh[key] || []).slice(0, 5);
       if (!list.length) continue;

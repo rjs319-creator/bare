@@ -176,6 +176,40 @@ production ranks. Flipping `DECISION_ELIGIBILITY_MODE=enforce` is now safe-by-co
   `test/eligibility.test.js`, `test/registry-coverage.test.js` (updated to the corrected
   contracts, each documented in-file).
 
+## 6b. Follow-on batch (same pass, second commit)
+
+1. **entry-v2 grading basis** — Scoreboard sections whose CONTRACT declares a
+   next-session-open fill (`screener`, `Ghost`, `momentum`, `DownDay`, `Ignition`,
+   `Fade`, `CERN`) are now graded from the NEXT session's open with a basis-consistent
+   benchmark (`forwardPath`/`spyForwardReturn` opt-in `entryBasis`); conditional-trigger
+   contracts (gapgo/gapdown/coil) and the FROZEN daytrade section keep the legacy basis
+   (default behavior byte-identical — the pinned `test/scoreboard.test.js` passes
+   untouched). Response `entryModel.basisVersion: 'entry-v2'`.
+2. **Enforce-mode research visibility** — `op=today` under `enforce` now also serves
+   `researchByHorizon` (the full ungated ranked cross-section, RESEARCH-classed), and
+   `public/js/today.js` renders the separation structurally: an "✅ Actionable —
+   evidence-cleared only" section (honest-empty message when nothing is cleared) above
+   the full cross-section. Flipping `DECISION_ELIGIBILITY_MODE=enforce` no longer hides
+   research from view.
+3. **Ignition broad shadow Stage-1** — an INDEPENDENT price/volume Stage-1 over the
+   large/small/micro candle caches (same frozen scoring engine, no catalyst enrichment,
+   deterministic, capped 40) rides the payload as `broadShadow` and ledgers under its own
+   `BROAD_IGNITION`/`BROAD_WATCH` tiers — a separate graded record; the funnel lane and
+   the broad lane never pool. Weight-0 until its own record clears promotion.
+4. **Gap & Go verified intraday channel** (`lib/gapgo-verify.js`, `op=gapgoverify`,
+   wired into the ticks1 warm chain) — real FMP 5-minute bars build the genuine 30-minute
+   opening range and resolve the frozen contract: OR-high stop-entry only after the range
+   completes, gap-through at the worse open, >5% open beyond trigger = gap-skip, OR-low
+   stop, 2R target, same-bar → stop, session-close time exit, tiered cost-net R; missing
+   bars fail closed (`bars-unavailable`, retried while young). Append-only
+   `gapgo/verified.json`, never rewriting the proxy ledger, no verdict emitted. This is
+   the record on which Gap & Go promotion will eventually be judged.
+5. **Promotion artifacts** — deliberately NOT written: no strategy has earned one, and
+   fabricating approvals is what gov-v2 exists to prevent. The path stays empty.
+
+Suite after the follow-on batch: **3,552 tests / 3,550 pass / 0 fail**; `npm run check`
+clean; `today.js`/`evidence-badge.js` module-parse verified.
+
 ## 7. Empirical results
 
 **None claimed.** This pass ran no new market experiment; the standing negative/null
