@@ -112,3 +112,18 @@ test('routes: scan universe is the full multi-band list, not a 16-name shortlist
   const bands = new Set(u.map(x => x.band));
   assert.ok(bands.has('large') && bands.has('small') && bands.has('micro'));
 });
+
+// The not-built-yet branch must expose scan-state. On a zero-episode night this is the ONLY
+// public evidence of whether the cron chain ran (patternlog is privileged) — without it,
+// "scan ran, nothing detected yet" and "chain never fired" are indistinguishable from
+// outside, which is exactly the blind spot the 2026-08-03 first-night check hit. The branch
+// is only reachable with live Blob storage, so this is a source-contract assertion (the
+// established pattern for reach-limited branches).
+test('routes: the not-built-yet response exposes scan-state, not just the ready path', () => {
+  const src = require('node:fs').readFileSync(require.resolve('../lib/pattern-routes.js'), 'utf8');
+  const i = src.indexOf("reason: 'not-built-yet'");
+  assert.ok(i > 0, 'not-built-yet branch exists');
+  const branch = src.slice(i, i + 1200);
+  assert.ok(/scan:\s*scanState\s*\?/.test(branch), 'not-built-yet branch includes the scan block');
+  assert.ok(branch.includes('scanState.cursor'), 'scan block carries the resumable cursor');
+});
