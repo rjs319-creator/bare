@@ -60,7 +60,7 @@ test('microstructureFeaturesOf: a ticker the provider did not cover is fully mis
 // ── Schema seam: backward-compatible, version contract untouched ─────────────
 test('schema exports MICRO_FEATURES separately; DATASET_FEATURES and the version are unchanged', () => {
   assert.deepEqual([...schema.MICRO_FEATURES], [...MICROSTRUCTURE_FIELDS, 'microAvailable']);
-  assert.equal(schema.FEATURE_SCHEMA_VERSION, 'intraday-features-v2', 'no silent version drift');
+  assert.equal(schema.FEATURE_SCHEMA_VERSION, 'intraday-features-v3', 'no silent version drift');
   for (const k of MICROSTRUCTURE_FIELDS) {
     assert.ok(!schema.DATASET_FEATURES.includes(k), `${k} joins DATASET_FEATURES only at the next version bump`);
     assert.ok(!schema.MODEL_FEATURES.includes(k), `${k} not silently added to the model design matrix`);

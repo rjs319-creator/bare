@@ -70,11 +70,53 @@ test('checkPromotion: fails closed on missing/insufficient stats', () => {
   assert.ok(r.failed.includes('episodes') && r.failed.includes('precisionLift'));
 });
 
+// A fully-passing v2 stats object — every pre-registered gate satisfied exactly.
+const GOOD_V2 = Object.freeze({
+  episodes: GATES.minEpisodes, testEpisodes: GATES.minTestEpisodes, distinctDates: GATES.minDistinctDates,
+  folds: GATES.minFolds, foldsPositive: GATES.minFolds,
+  precisionLift: GATES.minPrecisionLift, netReturnLift: GATES.minNetReturnLift,
+  adverseTopKNet: 0.001, tickerConcentration: 0.1,
+  beatsAllComparators: true, sliceStable: true,
+  ece: GATES.maxEce - 0.01, brier: GATES.maxBrier - 0.01,
+  joinLossRatio: 0.1, provenanceProspective: true, trials: 1,
+  shadowDays: GATES.minShadowDays, shadowEpisodes: GATES.minShadowEpisodes,
+});
+
 test('checkPromotion: promotes only when EVERY pre-registered gate passes', () => {
-  const good = { episodes: GATES.minEpisodes, testEpisodes: GATES.minTestEpisodes, folds: GATES.minFolds,
-    precisionLift: GATES.minPrecisionLift, netReturnLift: GATES.minNetReturnLift, ece: GATES.maxEce - 0.01, brier: GATES.maxBrier - 0.01 };
-  assert.equal(checkPromotion(good).promote, true);
-  assert.equal(checkPromotion({ ...good, ece: 0.5 }).promote, false, 'bad calibration blocks promotion');
+  assert.equal(checkPromotion(GOOD_V2).promote, true);
+  assert.equal(checkPromotion({ ...GOOD_V2, ece: 0.5 }).promote, false, 'bad calibration blocks promotion');
+});
+
+test('25. promotion is IMPOSSIBLE without prospective shadow evidence', () => {
+  const r = checkPromotion({ ...GOOD_V2, shadowDays: 0, shadowEpisodes: 0 });
+  assert.equal(r.promote, false);
+  assert.ok(r.failed.includes('prospectiveShadow'), 'the shadow gate is the blocker');
+  const thin = checkPromotion({ ...GOOD_V2, shadowDays: GATES.minShadowDays - 1 });
+  assert.equal(thin.promote, false, 'a shadow window below the minimum days blocks');
+});
+
+test('33. cost-adverse validation VETOES a seemingly profitable model', () => {
+  // Positive base-cost lift, but the top-K policy net goes NEGATIVE under 2× costs.
+  const r = checkPromotion({ ...GOOD_V2, netReturnLift: 0.01, adverseTopKNet: -0.0005 });
+  assert.equal(r.promote, false);
+  assert.ok(r.failed.includes('adverseCosts'));
+});
+
+test('multiple-testing: an unlogged search cannot promote; a logged search raises the lift bar', () => {
+  const unlogged = checkPromotion({ ...GOOD_V2, trials: null });
+  assert.equal(unlogged.promote, false, 'no trials ledger → fail closed');
+  assert.ok(unlogged.failed.includes('netReturnLift'));
+  // 16 logged variants → deflated bar = base × (1 + 0.15×4) = 1.6× base; the single-trial
+  // lift no longer clears it.
+  const searched = checkPromotion({ ...GOOD_V2, trials: 16 });
+  assert.equal(searched.promote, false, 'best-of-16 must beat a deflated bar');
+  const strong = checkPromotion({ ...GOOD_V2, trials: 16, netReturnLift: GATES.minNetReturnLift * 1.7 });
+  assert.equal(strong.promote, true, 'a genuinely stronger lift clears the deflated bar');
+});
+
+test('fold dominance and ticker concentration are hard gates', () => {
+  assert.equal(checkPromotion({ ...GOOD_V2, foldsPositive: 1 }).promote, false, 'one lucky fold cannot carry');
+  assert.equal(checkPromotion({ ...GOOD_V2, tickerConcentration: 0.5 }).promote, false, 'one ticker cannot carry the top-K');
 });
 
 // ── end-to-end evaluateSurvival ───────────────────────────────────────────────
