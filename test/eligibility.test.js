@@ -7,7 +7,9 @@ const { buildToday } = require('../lib/decision-routes');
 const { SOURCES } = require('../test/fixtures/today-sources');
 
 const NOW = Date.parse('2026-07-24T12:00:00Z');
-const freshGov = (strategies) => ({ savedAt: '2026-07-24T00:00:00.000Z', strategies });
+// Freshness is TWO proofs since gov-v2.1: the governance WRITE time (savedAt) and the
+// underlying Scoreboard EVIDENCE time (scoreboardGeneratedAt) — both must be current.
+const freshGov = (strategies) => ({ savedAt: '2026-07-24T00:00:00.000Z', scoreboardGeneratedAt: '2026-07-23T22:00:00.000Z', strategies });
 const GOV_PROD = freshGov([
   { id: 'screener', status: 'production', weight: 1, version: 'screener-v1' },
   { id: 'gapgo', status: 'production', weight: 1, version: 'gapgo-v1' },
@@ -24,10 +26,42 @@ test('missing governance state ⇒ NOT trade-eligible (fail closed), even for pr
 });
 
 test('stale governance ⇒ NOT trade-eligible (fail closed)', () => {
-  const stale = { savedAt: '2026-06-01T00:00:00.000Z', strategies: GOV_PROD.strategies };
+  const stale = { savedAt: '2026-06-01T00:00:00.000Z', scoreboardGeneratedAt: '2026-06-01T00:00:00.000Z', strategies: GOV_PROD.strategies };
   const g = EL.gateSignals([{ source: 'screener', ticker: 'AAA', side: 'long' }], { governance: stale, nowMs: NOW });
   assert.equal(g.perSource.screener.tradeEligible, false);
   assert.match(g.perSource.screener.reasons.join(' '), /stale/);
+});
+
+test('a FRESH governance write over a STALE Scoreboard ⇒ NOT trade-eligible — savedAt cannot launder old evidence', () => {
+  const laundered = { savedAt: '2026-07-24T00:00:00.000Z', scoreboardGeneratedAt: '2026-05-01T00:00:00.000Z', strategies: GOV_PROD.strategies };
+  const g = EL.gateSignals([{ source: 'screener', ticker: 'AAA', side: 'long' }], { governance: laundered, nowMs: NOW });
+  assert.equal(g.perSource.screener.tradeEligible, false);
+  assert.match(g.perSource.screener.reasons.join(' '), /cannot make old evidence current/i);
+});
+
+test('a governance doc with NO evidence timestamp at all ⇒ NOT trade-eligible (evidence age unprovable)', () => {
+  const noEvid = { savedAt: '2026-07-24T00:00:00.000Z', strategies: GOV_PROD.strategies };
+  const g = EL.gateSignals([{ source: 'screener', ticker: 'AAA', side: 'long' }], { governance: noEvid, nowMs: NOW });
+  assert.equal(g.perSource.screener.tradeEligible, false);
+});
+
+test('a governance record with NO scoring version cannot clear a versioned strategy (legacy-unversioned fails closed)', () => {
+  const gov = freshGov([{ id: 'screener', status: 'production', weight: 1, version: null }]);
+  const g = EL.gateSignals([{ source: 'screener', ticker: 'AAA', side: 'long' }], { governance: gov, nowMs: NOW });
+  assert.equal(g.perSource.screener.tradeEligible, false);
+  assert.match(g.perSource.screener.reasons.join(' '), /NO scoring version/i);
+});
+
+test('three-class taxonomy: ACTIONABLE (cleared+sizable), QUALIFIED_LEAD (cleared, not sizable), RESEARCH (uncleared)', () => {
+  const g = EL.gateSignals([
+    { source: 'screener', ticker: 'AAA', side: 'long', entry: 1, stop: 0.9, target: 1.3, liquidity: { dollarVol: 5e7 } },
+    { source: 'screener', ticker: 'BBB', side: 'long', liquidity: { dollarVol: 5e7 } },   // no plan → lead only
+    { source: 'coil', ticker: 'EEE', side: 'long', entry: 1, stop: 0.9, target: 1.3, liquidity: { dollarVol: 5e7 } },
+  ], { governance: GOV_PROD, nowMs: NOW });
+  assert.equal(g.annotated[0].eligibility.signalClass, 'ACTIONABLE');
+  assert.equal(g.annotated[1].eligibility.signalClass, 'QUALIFIED_LEAD');
+  assert.equal(g.annotated[1].eligibility.sizingWeight, 0, 'a qualified lead can never be sized');
+  assert.equal(g.annotated[2].eligibility.signalClass, 'RESEARCH');
 });
 
 test('scoring-version mismatch between governance evidence and registry ⇒ fail closed', () => {

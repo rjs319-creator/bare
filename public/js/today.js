@@ -216,7 +216,7 @@ function signalCard(sig, legend) {
     + `<div class="td-top"><span class="td-rank">#${sig.rank}</span>`
     + `<span class="td-tk" data-live="${esc(sig.ticker)}">${esc(sig.ticker)}</span>`
     + `<span class="td-co">${esc(sig.company || sig.setup || '')}</span>`
-    + `<span class="td-score" title="Composite: confidence × regime-fit × execution × validated-expectancy × independent-evidence">${sig.score}</span></div>`
+    + `<span class="td-score" title="Composite: confidence × regime-fit × execution × resolved-expectancy × independent-evidence">${sig.score}</span></div>`
     + `<div class="td-chips">` + classChip(sig) + `<span class="td-state ${scls}">${si} ${slbl}</span>` + ageChip(sig)
     + (sig.side === 'short' ? `<span class="td-short" title="A short setup — profits if it falls (favored in risk-off)">🔻 SHORT</span>` : '')
     + familyChip(sig)
@@ -274,7 +274,7 @@ function chalCard(d) {
     + `Residual score ${chalNum(d.residualScore)} · pctile ${chalNum(d.percentileRank)}<br>`
     + `Survival: P(target) ${chalNum(sv.pTargetBeforeStop)} · P(stop) ${chalNum(sv.pStopBeforeTarget)} · P(neither) ${chalNum(sv.pNeither)} · effN ${sv.effN ?? 0}${sv.shrunkToPrior ? ' (prior)' : ''}<br>`
     + `Entry state ${esc(sv.entryState || '—')} · edge now ${chalNum(sv.edgeNowPct, '%')} vs after-wait ${chalNum(sv.edgeAfterWaitPct, '%')} · basis ${esc(sv.basis || 'eod-next-session')}<br>`
-    + `Failure prob ${chalNum(d.failureProb)} · execution ${chalNum(d.executionQuality)} · regime-fit ${chalNum(d.regimeFit)}<br>`
+    + `Failure-risk score ${chalNum(d.failureProb)} · execution ${chalNum(d.executionQuality)} · regime-fit ${chalNum(d.regimeFit)}<br>`
     + `Reasons: ${esc((d.reasons || []).join(' · '))}`
     + `</div></details>`;
   return `<div class="td-action-card ${esc(d.decision)}"><div class="td-action-tk"><b>${esc(d.ticker)}</b> <span class="td-action-dec">${esc(d.decision)}</span></div>`
@@ -415,7 +415,7 @@ export function renderCommandCenter(container, p) {
   if (fr.warnings && fr.warnings.length) html += `<div class="dt-note" style="border-left-color:var(--amber,#f59e0b)">🔧 ${esc(fr.warnings.join(' · '))}</div>`;
   html += redundancyPanel(p.redundancy);
   html += dataTrustPanel(fr);
-  html += `<div class="td-dim td-cc-foot">One ranked table across ${p.counts?.signals ?? 0} signals — ranked by validated track record × confidence × regime-fit × execution × <b>independent evidence</b> (not a sum of screener scores). Leads, not advice; always confirm and use a stop.</div>`;
+  html += `<div class="td-dim td-cc-foot">One ranked table across ${p.counts?.signals ?? 0} signals — ranked by resolved track record × confidence × regime-fit × execution × <b>independent evidence</b> (not a sum of screener scores; resolved records are prospective samples, not validated edges). Leads, not advice; always confirm and use a stop.</div>`;
   html += `</div>`;
   container.innerHTML = html;
   const redunBtn = container.querySelector('[data-redun-load]');
