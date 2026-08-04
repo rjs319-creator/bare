@@ -7043,9 +7043,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const c = m[tier] || ['#94a3b8', tier];
       return `<span class="dt-tier-b" style="background:${c[0]}22;color:${c[0]};border-color:${c[0]}55" title="${tier}">${esc(tier)} · ${c[1]}</span>`;
     };
+    // Research-control chip (server-labeled): rows served OUTSIDE the validated red-tape
+    // sleeve are controls, not recommendations — say so on the card, not just the banner.
+    const controlChip = r => r.researchControl
+      ? ` <span class="dt-tier-b" style="background:#94a3b822;color:#94a3b8;border-color:#94a3b855" title="${esc(r.controlReason || 'research control')}">🔬 research control</span>`
+      : '';
     const longCard = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
-          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> ${tierBadge(r.tier)}</span>
+          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> ${tierBadge(r.tier)}${controlChip(r)}</span>
           <span class="dt-now"><b data-dd-price>$${r.price}</b> <span data-dd-change class="dt-dim">prev close</span></span>
         </div>
         <div class="dt-card-sub"><b style="color:#22c55e">🔄 Oversold bounce</b> <span class="dt-dim">· dropped ${r.geometry.dropPct}% into RSI ${r.geometry.rsiAtPivot} · up ${r.geometry.rallyOffLowPct}% off the low · score ${r.downScore}/100</span></div>
@@ -7056,7 +7061,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       </div>`;
     const shortCard = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
-          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> ${tierBadge(r.tier)}</span>
+          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> ${tierBadge(r.tier)}${controlChip(r)}</span>
           <span class="dt-now"><b data-dd-price>$${r.price}</b> <span data-dd-change class="dt-dim">prev close</span></span>
         </div>
         <div class="dt-card-sub"><b style="color:#ef4444">📉 Overheated / rollover</b> <span class="dt-dim">· ran ${r.geometry.risePct}% into RSI ${r.geometry.rsiAtPivot} · off the high ${r.geometry.dropOffHighPct}% · score ${r.score}/100</span>${r.learnedExcess != null ? ` <span class="dt-tier-b" title="Fade-engine per-stock learned edge (${r.nPriors || 0} priors). Positive = this name has historically reverted after such tops.${r.drifted ? ' ⚠ DRIFTED — the edge stopped working; deprioritized.' : ''}" style="background:${r.drifted ? '#94a3b822;color:#94a3b8' : (r.learnedExcess > 0 ? '#22c55e22;color:#22c55e' : '#ef444422;color:#ef4444')}">🧠 ${r.learnedExcess > 0 ? '+' : ''}${r.learnedExcess}%${r.drifted ? ' drift' : ''}</span>` : ''}</div>
@@ -7075,7 +7080,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const CERN_LBL = { FIRE_SALE: '🔥 ETF fire-sale', FORCED_DOWNGRADE: '📉 Forced downgrade', INDEX_DELETE: '🗑 Index deletion', LOCKUP_EXPIRY: '🔓 Lockup expiry', TAX_LOSS: '🧾 Tax-loss selling', MARGIN_SPIRAL: '⚠ Margin spiral' };
     const revCard = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
-          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> <span class="dt-tier-b" style="background:#a78bfa22;color:#a78bfa;border-color:#a78bfa55">${esc(CERN_LBL[r.type] || r.type)}</span></span>
+          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> <span class="dt-tier-b" style="background:#a78bfa22;color:#a78bfa;border-color:#a78bfa55">${esc(CERN_LBL[r.type] || r.type)}</span>${controlChip(r)}</span>
           <span class="dt-now"><b data-dd-price>$${r.entry != null ? (+r.entry).toFixed(2) : '—'}</b> <span data-dd-change class="dt-dim">prev close</span></span>
         </div>
         <div class="dt-card-sub"><b style="color:#22c55e">🎁 Forced-selling reversion</b> <span class="dt-dim">· mechanical selling overshot → tends to revert${r.pProfit != null ? ` · ${Math.round(r.pProfit * 100)}% model win-prob` : ''}${r.horizon ? ` · ~${r.horizon}d hold` : ''}</span></div>
@@ -7087,7 +7092,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       t.reversion, revCard, 'No active forced-selling reversion signals right now.');
 
     const fades = panel('📉 Overheated / Short <span class="dt-dim">(the mirror — fade a blow-off top)</span>',
-      'Blow-off top rolling over. Ranked by the 🔥 Overheated tab’s per-stock LEARNED edge (🧠 chip) — drifted names sink. Shorting is harder; CONFIRMED rollovers are the more reliable ones.',
+      'Blow-off top rolling over, ranked by pattern score. The 🧠 learned-edge chip is ANNOTATION (the learner is graded close-to-close, so it may sink drifted names but not rank the list). Shorting is harder; CONFIRMED rollovers are the more reliable ones.',
       t.fades, shortCard, 'No overheated rollovers right now.');
 
     // Sit-out honesty when nothing qualifies.
