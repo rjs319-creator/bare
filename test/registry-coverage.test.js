@@ -127,8 +127,9 @@ test('Validated still requires beating the SECTOR, not just the market', () => {
   // Guards the bar Ignition clears: a strategy that beats SPY purely by riding a hot
   // sector must NOT be able to reach Validated on the back of this registration.
   // Cost-net channel present (validated is unreachable on a gross-only record).
-  const beatsBoth = gradeTrack({ excessN: 173, avgExcess: 1.51, beatMktRate: 58, netExcessN: 173, avgNetExcess: 1.31, netBeatMktRate: 58, secExcN: 160, avgSecExcess: 0.99, beatSecRate: 48 });
-  const sectorBeta = gradeTrack({ excessN: 173, avgExcess: 1.51, beatMktRate: 58, netExcessN: 173, avgNetExcess: 1.31, netBeatMktRate: 58, secExcN: 160, avgSecExcess: -0.4, beatSecRate: 48 });
+  const full = { excessN: 173, avgExcess: 1.51, beatMktRate: 62, netExcessN: 173, avgNetExcess: 1.31, netBeatMktRate: 62, dates: 100, dateNet: { n: 100, avg: 0.9, sd: 1.5, ci95: { lo: 0.4, hi: 1.4 } } };
+  const beatsBoth = gradeTrack({ ...full, secExcN: 160, avgSecExcess: 0.99, beatSecRate: 48 }, { fillVerified: true });
+  const sectorBeta = gradeTrack({ ...full, secExcN: 160, avgSecExcess: -0.4, beatSecRate: 48 }, { fillVerified: true });
 
   assert.equal(beatsBoth.grade, 'validated');
   assert.equal(sectorBeta.grade, 'promising');

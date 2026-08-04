@@ -9,13 +9,49 @@ test('gradeTrack: no resolved picks → experimental (accruing)', () => {
   assert.equal(g.grade, 'experimental');
 });
 
-test('gradeTrack: significant positive over big sample → validated (cost-net channel)', () => {
-  // 40 resolved NET of costs, beats 70% (28/40) → Wilson lo > 50%, avg excess positive.
-  const g = M.gradeTrack({ excessN: 40, avgExcess: 2.6, beatMktRate: 72,
-    netExcessN: 40, avgNetExcess: 2.4, netBeatMktRate: 70 });
+// maturity-v2: Validated is the promotion grade and carries the full gate stack —
+// cost-net + sector control (fail closed) + ≥50 episodes + ≥20 KNOWN dates +
+// date-level portfolio CI clear of zero + fill-VERIFIED grading pipeline.
+const FULL_TRACK = Object.freeze({
+  excessN: 60, avgExcess: 2.6, beatMktRate: 72,
+  netExcessN: 60, avgNetExcess: 2.4, netBeatMktRate: 70,
+  secExcN: 60, avgSecExcess: 1.8, beatSecRate: 62,
+  dates: 30,
+  dateNet: { n: 30, avg: 1.2, sd: 2.0, ci95: { lo: 0.4, hi: 2.0 } },
+});
+
+test('gradeTrack: full gate stack + verified fills → validated', () => {
+  const g = M.gradeTrack({ ...FULL_TRACK }, { fillVerified: true });
   assert.equal(g.grade, 'validated');
   assert.ok(g.stats.beatLo > 50);
   assert.equal(g.stats.basis, 'net');
+});
+
+test('gradeTrack: each missing promotion gate fails CLOSED to promising with its reason', () => {
+  // no sector record at all → the sector control can no longer pass open
+  let g = M.gradeTrack({ ...FULL_TRACK, secExcN: 0, avgSecExcess: null, beatSecRate: null }, { fillVerified: true });
+  assert.equal(g.grade, 'promising');
+  assert.match(g.reason, /sector-relative record/i);
+  // under 50 resolved episodes
+  g = M.gradeTrack({ ...FULL_TRACK, excessN: 40, netExcessN: 40 }, { fillVerified: true });
+  assert.equal(g.grade, 'promising');
+  assert.match(g.reason, /≥50/);
+  // independent decision dates unknown (raw-pick fallback no longer promotes)
+  g = M.gradeTrack({ ...FULL_TRACK, dates: null }, { fillVerified: true });
+  assert.equal(g.grade, 'promising');
+  assert.match(g.reason, /dates are UNKNOWN/i);
+  // date-level portfolio evidence missing
+  g = M.gradeTrack({ ...FULL_TRACK, dateNet: null }, { fillVerified: true });
+  assert.equal(g.grade, 'promising');
+  assert.match(g.reason, /date-level/i);
+  // date-level CI includes zero
+  g = M.gradeTrack({ ...FULL_TRACK, dateNet: { n: 30, avg: 0.4, sd: 3, ci95: { lo: -0.2, hi: 1.0 } } }, { fillVerified: true });
+  assert.equal(g.grade, 'promising');
+  assert.match(g.reason, /does not exclude zero/i);
+  // proxy (fill-unverified) grading pipeline — the default — can never promote
+  g = M.gradeTrack({ ...FULL_TRACK });
+  assert.equal(g.grade, 'promising');
+  assert.match(g.reason, /proxy/i);
 });
 
 test('gradeTrack: a gross-only record can NEVER earn validated (fail closed on basis)', () => {
@@ -59,12 +95,11 @@ test('gradeTrack: beats SPY but NOT its sector → promising, not validated (sec
   assert.equal(g.stats.baselines.sector.avgExcess, -1.5);
 });
 
-test('gradeTrack: beats BOTH market and sector → validated', () => {
-  const g = M.gradeTrack({ excessN: 40, avgExcess: 2.4, beatMktRate: 70,
-    netExcessN: 40, avgNetExcess: 2.1, netBeatMktRate: 68,
-    secExcN: 40, avgSecExcess: 1.8, beatSecRate: 62 });
+test('gradeTrack: beats BOTH market and sector (all other gates met) → validated', () => {
+  const g = M.gradeTrack({ ...FULL_TRACK }, { fillVerified: true });
   assert.equal(g.grade, 'validated');
   assert.match(g.reason, /its sector/);
+  assert.match(g.reason, /verified executable fills/);
 });
 
 // ── poolSectionTrack: excessN-weighted pooling across tiers ───────────────────
@@ -79,6 +114,16 @@ test('poolSectionTrack: pools tiers by excessN at the intended horizon', () => {
   assert.equal(pooled.avgExcess, -0.25);
   // beat wins = round(.6*10)+round(.4*30) = 6+12 = 18 → 45%
   assert.equal(pooled.beatMktRate, 45);
+});
+
+test('poolSectionTrack: carries the largest-dates tier\'s dateNet block (conservative, labeled)', () => {
+  const groups = [
+    { tier: 'A', horizons: { '5d': { excessN: 10, avgExcess: 2, beatMktRate: 60, dates: 5, dateNet: { n: 5, avg: 1, sd: 1, ci95: { lo: 0.1, hi: 1.9 } } } } },
+    { tier: 'B', horizons: { '5d': { excessN: 30, avgExcess: 1, beatMktRate: 55, dates: 25, dateNet: { n: 25, avg: 0.8, sd: 2, ci95: { lo: 0.1, hi: 1.5 } } } } },
+  ];
+  const pooled = M.poolSectionTrack(groups, 'swing');
+  assert.equal(pooled.dateNet.n, 25);
+  assert.match(pooled.dateNet.poolingBasis, /largest-dates-tier/);
 });
 
 test('poolSectionTrack: no benchmarked picks → null stats', () => {
@@ -107,12 +152,20 @@ test('gradeStrategy: core backbone stays out of the lab even when unproven', () 
   assert.equal(g.inLab, false);
 });
 
-test('gradeStrategy: overlay graduates out of the lab once Validated', () => {
+test('gradeStrategy: a stellar record on a fill-UNVERIFIED pipeline caps at promising and stays in the lab', () => {
+  // maturity-v2: every current contract is fillVerified:false (the grading pipelines
+  // are close-to-close proxies), so even a record clearing every statistical bar
+  // cannot reach Validated — graduation now requires an executable-fill pipeline.
   const entry = { id: 'events', label: 'CERN', kind: 'signal', section: 'CERN', horizon: 'position', core: false };
-  const summary = { groups: [{ section: 'CERN', tier: 'FORCED_DOWNGRADE', horizons: { '1m': { excessN: 40, avgExcess: 3, beatMktRate: 72, netExcessN: 40, avgNetExcess: 2.7, netBeatMktRate: 70 } } }] };
+  const summary = { groups: [{ section: 'CERN', tier: 'FORCED_DOWNGRADE', horizons: { '1m': {
+    excessN: 60, avgExcess: 3, beatMktRate: 72, netExcessN: 60, avgNetExcess: 2.7, netBeatMktRate: 70,
+    secExcN: 60, avgSecExcess: 1.5, beatSecRate: 60, dates: 30,
+    dateNet: { n: 30, avg: 1.1, sd: 2.0, ci95: { lo: 0.3, hi: 1.9 } },
+  } } }] };
   const g = M.gradeStrategy(entry, summary);
-  assert.equal(g.grade, 'validated');
-  assert.equal(g.inLab, false);
+  assert.equal(g.grade, 'promising');
+  assert.match(g.reason, /proxy/i);
+  assert.equal(g.inLab, true, 'proxy-graded overlays stay in the Research Lab');
 });
 
 // ── classifyStrategies: sort + tally + lab list ──────────────────────────────
@@ -124,8 +177,9 @@ test('classifyStrategies: sorts strongest-first with a per-grade tally', () => {
   ];
   const summary = { generatedAt: 'x', groups: [{ section: 'B', tier: 'T', horizons: { '5d': { excessN: 30, avgExcess: 2, beatMktRate: 70, netExcessN: 30, avgNetExcess: 1.7, netBeatMktRate: 67 } } }] };
   const out = M.classifyStrategies(summary, registry);
-  assert.equal(out.strategies[0].id, 'b'); // validated ranks first
-  assert.equal(out.counts.validated, 1);
+  assert.equal(out.strategies[0].id, 'b'); // promising (v2: proxy pipeline caps below validated) still ranks first
+  assert.equal(out.counts.validated, 0);
+  assert.equal(out.counts.promising, 1);
   assert.equal(out.counts.experimental, 1);
-  assert.deepEqual(out.lab, ['a']);
+  assert.deepEqual(out.lab, ['a']); // b is core:true — backbone screeners never route to the lab
 });
