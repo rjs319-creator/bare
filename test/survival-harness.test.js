@@ -104,6 +104,137 @@ test('evaluateSurvival: runs walk-forward end-to-end on sufficient synthetic dat
   assert.equal(typeof out.promotion.promote, 'boolean');   // decision is computed, honest either way
 });
 
+// ── ranking-quality metrics (rocAuc / prAuc / topDecileLift) ─────────────────
+const { rocAuc, prAuc, topDecileLift } = require('../lib/survival-metrics');
+const { abstentionReport, sliceReport, liquidityTierOf, MIN_SLICE_ROWS, ABSTENTION_THRESHOLD } = require('../lib/intraday-training');
+
+test('rocAuc: 1 for perfect ranking, 0 for inverted, null when a class is empty', () => {
+  // Arrange
+  const perfect = [{ score: 0.9, label: 1 }, { score: 0.8, label: 1 }, { score: 0.2, label: 0 }];
+  const inverted = [{ score: 0.1, label: 1 }, { score: 0.9, label: 0 }];
+
+  // Act + Assert
+  assert.equal(rocAuc(perfect), 1);
+  assert.equal(rocAuc(inverted), 0);
+  assert.equal(rocAuc([{ score: 0.5, label: 1 }]), null, 'no negatives → null, not 0.5');
+  assert.equal(rocAuc([]), null);
+});
+
+test('rocAuc: symmetric interleaved fixture scores exactly 0.5', () => {
+  // pos scores {4,1}, neg scores {3,2}: 2 of 4 pairs concordant → 0.5.
+  const rows = [
+    { score: 4, label: 1 }, { score: 3, label: 0 },
+    { score: 2, label: 0 }, { score: 1, label: 1 },
+  ];
+  assert.equal(rocAuc(rows), 0.5);
+});
+
+test('rocAuc: tied scores are rank-averaged (count 1/2), not broken arbitrarily', () => {
+  // pos {3,2}, neg {2,1}: pairs (3>2)=1, (3>1)=1, (2==2)=0.5, (2>1)=1 → 3.5/4.
+  const rows = [
+    { score: 3, label: 1 }, { score: 2, label: 1 },
+    { score: 2, label: 0 }, { score: 1, label: 0 },
+  ];
+  assert.equal(rocAuc(rows), 0.875);
+  assert.equal(rocAuc([{ score: 2, label: 1 }, { score: 2, label: 0 }]), 0.5, 'all-tied → exactly 0.5');
+});
+
+test('rocAuc: weights change the estimate, never the ranking', () => {
+  // pos {3 w3, 1 w1}, neg {2 w1}: weighted concordant mass 3 of 4 → 0.75; unweighted 0.5.
+  const rows = [
+    { score: 3, label: 1, weight: 3 }, { score: 1, label: 1, weight: 1 },
+    { score: 2, label: 0, weight: 1 },
+  ];
+  assert.equal(rocAuc(rows), 0.5);
+  assert.equal(rocAuc(rows, { weighted: true }), 0.75);
+});
+
+test('prAuc: hand-computed average precision; null with no positives', () => {
+  // Ranked: pos@1 (prec 1), neg@2, pos@3 (prec 2/3) → AP = (1 + 2/3) / 2.
+  const rows = [{ score: 0.9, label: 1 }, { score: 0.8, label: 0 }, { score: 0.7, label: 1 }];
+  assert.equal(prAuc(rows), +((1 + 2 / 3) / 2).toFixed(4));
+  assert.equal(prAuc([{ score: 0.9, label: 1 }, { score: 0.1, label: 0 }]), 1, 'perfect ranking → AP 1');
+  assert.equal(prAuc([{ score: 0.5, label: 0 }]), null, 'no positive class → null, never a flattering number');
+  assert.equal(prAuc([]), null);
+});
+
+test('topDecileLift: top-10% label rate over base rate; null under 10 rows or zero base', () => {
+  // Arrange: 20 rows, 4 positives; the top-2 by score are both positive → lift 1/0.2 = 5.
+  const rows = [];
+  for (let i = 0; i < 20; i++) rows.push({ score: 20 - i, label: i < 2 || i === 10 || i === 15 ? 1 : 0, id: `r${i}` });
+
+  // Act + Assert
+  assert.equal(topDecileLift(rows), 5);
+  assert.equal(topDecileLift(rows.slice(0, 9)), null, '< 10 rows → no meaningful decile');
+  assert.equal(topDecileLift(rows.map(r => ({ ...r, label: 0 }))), null, 'zero base rate → lift undefined, not ∞');
+});
+
+// ── abstention report (research reporting, not a live gate) ──────────────────
+test('abstentionReport: pre-registered threshold 0, honest traded/abstained accounting', () => {
+  // Arrange: 3 decidable rows (2 positive-utility, 1 negative), 1 with utility null.
+  const oof = [
+    { utility: 0.5, netReturn: 0.02 },
+    { utility: -0.1, netReturn: -0.01 },
+    { utility: 0.2, netReturn: 0.01 },
+    { utility: null, netReturn: 0 },
+  ];
+
+  // Act
+  const r = abstentionReport(oof);
+
+  // Assert
+  assert.equal(r.threshold, ABSTENTION_THRESHOLD);
+  assert.equal(r.threshold, 0, 'threshold is pre-registered at 0 — utility must be positive after costs');
+  assert.equal(r.decisions, 3);
+  assert.equal(r.undecidable, 1, 'null-utility rows reported, not folded in');
+  assert.equal(r.abstainRate, +(1 / 3).toFixed(4));
+  assert.equal(r.tradedCount, 2);
+  assert.equal(r.tradedMeanNetReturn, 0.015);
+  assert.equal(r.allMeanNetReturn, +((0.02 - 0.01 + 0.01) / 3).toFixed(5));
+});
+
+test('abstentionReport: empty input degrades to nulls, never NaN', () => {
+  const r = abstentionReport([]);
+  assert.equal(r.decisions, 0);
+  assert.equal(r.abstainRate, null);
+  assert.equal(r.tradedMeanNetReturn, null);
+});
+
+// ── population slices ────────────────────────────────────────────────────────
+test('liquidityTierOf: pre-registered dollar-volume cutoffs at 5e6 / 5e7', () => {
+  assert.equal(liquidityTierOf(Math.log10(4e6)), 'micro-small');
+  assert.equal(liquidityTierOf(Math.log10(1e7)), 'mid');
+  assert.equal(liquidityTierOf(Math.log10(1e8)), 'large');
+  assert.equal(liquidityTierOf(null), 'unknown');
+});
+
+test('sliceReport: thin slices report insufficiency instead of numbers; thick slices report metrics', () => {
+  // Arrange: 60 open30/large rows (enough) + 10 midday/unknown-liquidity rows (thin).
+  const mkOof = (i, sessionBucket, logDollarVol) => ({
+    id: `s${sessionBucket}${i}`, sessionBucket,
+    pTarget: (i % 10) / 10, labelTarget: i % 10 >= 7 ? 1 : 0,
+    utility: ((i % 10) - 5) / 100, weight: 1,
+    features: { logDollarVol },
+  });
+  const oof = [
+    ...Array.from({ length: 60 }, (_, i) => mkOof(i, 'open30', 8)),
+    ...Array.from({ length: 10 }, (_, i) => mkOof(i, 'midday', null)),
+  ];
+
+  // Act
+  const slices = sliceReport(oof);
+
+  // Assert
+  const thick = slices.sessionBucket.open30;
+  assert.equal(thick.n, 60);
+  assert.ok(thick.n >= MIN_SLICE_ROWS);
+  assert.ok(thick.brier != null && thick.baseRate != null && thick.utilityPrecisionAtK != null);
+  assert.equal(thick.k, Math.max(1, Math.floor(60 * 0.05)), 'k adapts to slice size');
+  assert.deepEqual(slices.sessionBucket.midday, { n: 10, note: 'insufficient' }, 'thin slice: honest note, no numbers');
+  assert.equal(slices.liquidity.large.n, 60);
+  assert.deepEqual(slices.liquidity.unknown, { n: 10, note: 'insufficient' });
+});
+
 test('gradesToRows: keeps only gradeable entry episodes and labels by SUCCESS', () => {
   const grades = {
     a: { type: 'entry', ticker: 'A', decisionAt: '2026-06-01T14:00:00Z', features: { mom15: 0.02 }, ranking: { score: 5 }, outcome: { barrier: 'SUCCESS', netReturn: 0.01 } },

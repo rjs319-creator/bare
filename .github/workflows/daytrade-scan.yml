@@ -56,6 +56,17 @@ jobs:
             exit 1
           fi
 
+      # BOARD TICK — advance the lifecycle + emit alerts WITHOUT requiring a browser.
+      # op=daytrade is the Stage-2 evaluation + persisted lifecycle + alert emission path;
+      # before this tick existed those only ran while someone had the page open, so with the
+      # app closed no early-watch or confirmed-trigger alert could ever be produced (Web
+      # Push had nothing to deliver). Public op (CDN-coalesced 30s); best-effort — a slow
+      # cycle must not fail the scan job.
+      - name: Board tick (lifecycle advance + alert emission)
+        run: |
+          curl -sS --max-time 90 "$APP_URL/api/tracker?op=daytrade" -o /tmp/board.json || true
+          head -c 400 /tmp/board.json || true
+
   postclose:
     # Post-close: capture report (public op) + bounded label-grading passes (privileged).
     if: github.event.schedule == '0 23 * * 1-5'

@@ -107,16 +107,65 @@ test('hysteresis: after FAILED, cannot immediately re-ACTIONABLE (cooldown → A
   assert.equal(c.history.at(-1).reasonCode, REASON.ACTIONABLE_CONFIRMED);
 });
 
-test('a DIRECT retired → actionable jump is reason REVIVED', () => {
+test('a retired → actionable revival is DEBOUNCED: cooldown, then 2 consecutive confirmations', () => {
   let c = createCandidate({ ticker: 'ABC', at: at(13, 30) });
   c = advanceLifecycle(c, ev());                                          // ACTIONABLE_NOW
-  // Soft stall (no cooldown) — a momentum roll-over from actionable.
+  // Soft stall — a momentum roll-over from actionable. NOW arms a cooldown (the old engine
+  // set none, which is exactly what allowed ACTIONABLE ⇄ STALLING to cycle on 60s ticks).
   c = advanceLifecycle(c, ev({ now: at(14, 0), momentumOk: false, triggerConfirmed: false, relVolOk: false }));
   assert.equal(c.state, STATES.STALLING);
-  // Fully green again with NO cooldown in effect → direct revival.
+  assert.ok(c.cooldownUntil, 'a soft retirement must arm a cooldown');
+  // Fully green 5 min later — cooldown holds it at ARMED (waiting), never straight back in.
   c = advanceLifecycle(c, ev({ now: at(14, 5) }));
+  assert.equal(c.state, STATES.ARMED);
+  assert.equal(c.history.at(-1).reasonCode, REASON.COOLDOWN_HOLD);
+});
+
+test('a retired name held through cooldown revives only after CONSECUTIVE qualifying evals', () => {
+  let c = createCandidate({ ticker: 'ABC', at: at(13, 30) });
+  c = advanceLifecycle(c, ev());                                          // ACTIONABLE_NOW
+  c = advanceLifecycle(c, ev({ now: at(14, 0), momentumOk: false, triggerConfirmed: false, relVolOk: false }));
+  assert.equal(c.state, STATES.STALLING);
+  // Not eligible during the cooldown → stays STALLING (streak untouched).
+  c = advanceLifecycle(c, ev({ now: at(14, 10), momentumOk: false, triggerConfirmed: false, relVolOk: false }));
+  assert.equal(c.state, STATES.STALLING);
+  // Cooldown (20 min) elapsed. First fully-qualifying eval only ARMS the revival streak.
+  c = advanceLifecycle(c, ev({ now: at(14, 25) }));
+  assert.equal(c.state, STATES.STALLING, 'one qualifying eval after retirement must not revive');
+  assert.equal(c.reviveStreak, 1);
+  // Second consecutive qualifying eval → confirmed revival, reason REVIVED.
+  c = advanceLifecycle(c, ev({ now: at(14, 30) }));
   assert.equal(c.state, STATES.ACTIONABLE_NOW);
   assert.equal(c.history.at(-1).reasonCode, REASON.REVIVED);
+  assert.equal(c.reviveStreak, 0, 'streak resets after a confirmed revival');
+});
+
+test('a non-qualifying eval RESETS the revival streak (no slow-drip revival)', () => {
+  let c = createCandidate({ ticker: 'ABC', at: at(13, 30) });
+  c = advanceLifecycle(c, ev());
+  c = advanceLifecycle(c, ev({ now: at(14, 0), momentumOk: false, triggerConfirmed: false, relVolOk: false }));
+  assert.equal(c.state, STATES.STALLING);
+  c = advanceLifecycle(c, ev({ now: at(14, 25) }));                       // qualifies → streak 1
+  assert.equal(c.reviveStreak, 1);
+  c = advanceLifecycle(c, ev({ now: at(14, 30), momentumOk: false, triggerConfirmed: false, relVolOk: false }));
+  assert.equal(c.reviveStreak, 0, 'a failed eval must break the streak');
+  assert.equal(c.state, STATES.STALLING);
+});
+
+test('hysteresis band: post-retirement re-entry demands STRICTLY better evidence', () => {
+  let c = createCandidate({ ticker: 'ABC', at: at(13, 30) });
+  c = advanceLifecycle(c, ev());
+  c = advanceLifecycle(c, ev({ now: at(14, 0), momentumOk: false, triggerConfirmed: false, relVolOk: false }));
+  assert.equal(c.state, STATES.STALLING);
+  // remainingRR 1.05 passes the 1.0 FIRST-entry floor but NOT the 1.2 re-entry floor —
+  // evidence oscillating just above the entry threshold can never flap the state back.
+  c = advanceLifecycle(c, ev({ now: at(14, 25), remainingRR: 1.05 }));
+  c = advanceLifecycle(c, ev({ now: at(14, 30), remainingRR: 1.05 }));
+  c = advanceLifecycle(c, ev({ now: at(14, 35), remainingRR: 1.05 }));
+  assert.equal(c.state, STATES.STALLING, 'inside the hysteresis band the name stays retired');
+  // Extension 2.4 passes first-entry (2.5) but not re-entry (2.2) — same rule.
+  c = advanceLifecycle(c, ev({ now: at(14, 40), extensionAtr: 2.4, metrics: { extensionAtr: 2.4 } }));
+  assert.equal(c.state, STATES.STALLING);
 });
 
 test('post-entry lock: entry alert → MANAGING → CLOSED, and history is never rewound', () => {
