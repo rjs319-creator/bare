@@ -53,3 +53,7 @@ test('micro-capital scenario: smaller notional admits fills the default no-fills
   assert.match(big.noFillReason, /participation/);
   assert.equal(micro.status, 'filled');
 });
+
+test('vrp-overlay-synthetic ran its one pass — honest close-out locked', () => {
+  assert.equal(REG.find('vrp-overlay-synthetic').status, 'no-edge');
+});
