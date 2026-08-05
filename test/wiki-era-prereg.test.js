@@ -13,28 +13,32 @@ const RUN66 = require('../research/66-wiki-confirmatory');
 
 // ── registry ─────────────────────────────────────────────────────────────────
 
-test('momentum-wiki-2014-2018 is registered: confirmatory, open, swing-ranking, validator-clean', () => {
+test('momentum-wiki-2014-2018 is registered: confirmatory, EVALUATED no-edge, swing-ranking, validator-clean', () => {
   const h = REG.HYPOTHESES.find((x) => x.id === 'momentum-wiki-2014-2018');
   assert.ok(h, 'registry entry must exist');
   assert.strictEqual(h.familyId, 'swing-ranking');
   assert.strictEqual(h.mode, 'confirmatory');
-  assert.strictEqual(h.status, 'open');
+  assert.strictEqual(h.status, 'no-edge', 'the one-shot verdict is recorded and terminal');
   const v = REG.validateHypothesis(h);
   assert.strictEqual(v.valid, true, `validator errors: ${JSON.stringify(v.errors)}`);
   assert.match(h.stoppingRule, /NO tuning/i);
   assert.match(h.stoppingRule, /pass-provisional\(survivorship-reduced\)/);
   assert.match(h.stoppingRule, /NEVER, under any result, promote/);
+  assert.match(h.evidence, /NOT-CONFIRMED/, 'the evidence field must cite the recorded verdict');
+  assert.match(h.evidence, /7d56387ef59ceb72/, 'the evidence record hash must be cited');
 });
 
 test('the family denominator grew: swing-ranking counts the WIKI trial', () => {
   assert.ok(REG.familyTrials('swing-ranking') >= 12, 'registering the WIKI study must widen the BH denominator to ≥ 12');
 });
 
-test('the WIKI holdout is sealed and the original Era-A holdout REMAINS sealed', () => {
+test('the WIKI holdout is OPENED (irreversibly recorded) and the original Era-A holdout REMAINS sealed', () => {
   const wiki = REG.HOLDOUTS.find((x) => x.id === 'momentum-wiki-2014-2018-era');
   assert.ok(wiki, 'wiki holdout must exist');
-  assert.ok(wiki.sealedAt && wiki.openedAt === null && wiki.openedBy === null);
-  assert.ok(REG.untouchedHoldouts().some((x) => x.id === 'momentum-wiki-2014-2018-era'));
+  assert.strictEqual(wiki.sealedAt, '2026-08-04');
+  assert.strictEqual(wiki.openedAt, '2026-08-04', 'the one-shot evaluation opened the holdout — recorded forever');
+  assert.match(wiki.openedBy, /not-confirmed/, 'openedBy must record the verdict');
+  assert.ok(!REG.untouchedHoldouts().some((x) => x.id === 'momentum-wiki-2014-2018-era'), 'an opened holdout is never untouched again');
   const eraA = REG.HOLDOUTS.find((x) => x.id === 'momentum-historical-2010-2021');
   assert.ok(eraA, 'Era-A holdout must still exist');
   assert.strictEqual(eraA.openedAt, null, 'the WIKI study must NOT open the 2010-2021 holdout');
