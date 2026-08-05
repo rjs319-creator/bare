@@ -96,6 +96,9 @@ const PRIVILEGED_OPS = new Set([
   // GOV-DEMAND shadow vertical WRITES (USAspending collect + PIT prediction log / forward
   // outcome resolution). Cron/manual-with-bearer only.
   'govdemandtick', 'govdemandresolve',
+  // Alpha-archive collection streams (unrecoverable-data Blob WRITES: earnings-calendar
+  // snapshots+diffs, analyst-event feeds, per-name dealer-gamma shards). Cron/manual only.
+  'calarchive', 'revarchive', 'gexarchive',
   // GRIDLOCK shadow vertical WRITES (PJM/EIA/NWS collect + event ledger + PIT candidate
   // log / forward outcome resolution). Cron/manual-with-bearer only.
   'gridlocktick', 'gridlockresolve',
@@ -301,6 +304,9 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'trendtick') return runTrendTick(req, res);
   if (req.query.op === 'trendbook') return runTrendBook(req, res);
   if (req.query.op === 'archive') return runArchive(req, res);
+  if (req.query.op === 'calarchive') return require('../lib/alpha-archive-routes').runCalArchive(req, res);
+  if (req.query.op === 'revarchive') return require('../lib/alpha-archive-routes').runRevArchive(req, res);
+  if (req.query.op === 'gexarchive') return require('../lib/alpha-archive-routes').runGexArchive(req, res);
   if (req.query.op === 'intracapture') return runIntraCapture(req, res);
   if (req.query.op === 'intraday') return runIntraday(req, res);
   if (req.query.op === 'baseline') return runBaseline(req, res);
