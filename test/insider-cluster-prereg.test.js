@@ -14,6 +14,8 @@ test('insider-cluster-drawdown is registered, valid, exploratory', () => {
   assert.ok(v.valid, JSON.stringify(v.errors));
   assert.equal(h.mode, 'exploratory');
   assert.equal(h.familyId, 'alt-signals');
+  // The one registered pass ran 2026-08-05 → honest null (record 2b610a1f68ddbd7e).
+  assert.equal(h.status, 'no-edge');
 });
 
 test('frozen parameters match the preregistration', () => {
