@@ -325,3 +325,17 @@ test('no automated order placement exists anywhere in the new stack', () => {
   }
   assert.ok(files.length >= 12, `expected the new stack's modules, found ${files.length}`);
 });
+
+test('an enterable card never says "conditions are not met"', () => {
+  // A card whose headline reads PAPER ENTRY ONLY must not also tell the reader the entry
+  // conditions are unmet — that contradiction made the most important state unreadable.
+  const F = require('./lowfloat-fixtures');
+  const ic = require('../lib/intraday-continuation');
+  const ia = require('../lib/intraday-actionability');
+  const a = ic.analyzeIntradayContinuation(F.CONFIRMED_BREAKOUT_BARS, { now: F.at(F.CONFIRMED_BREAKOUT_BARS.length * 5 + 3) });
+  const d = ia.evaluateActionability(a, F.tradeableCtx({ price: a.price }));
+  assert.strictEqual(d.actionState, ia.ACTION_STATES.PAPER_ENTRY_ELIGIBLE);
+  assert.ok(!/conditions for an entry are not met/i.test(d.whatMustHappenNext), d.whatMustHappenNext);
+  assert.match(d.whatMustHappenNext, /Paper entry only/i);
+  assert.match(d.whatMustHappenNext, /not above it/i);
+});
