@@ -11,6 +11,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadEvolve } from './evolve.js';
   import { loadEnsemble } from './omega-ensemble.js';
   import { loadIgnition } from './ignition.js';
+  import { loadLowFloat, loadBreakoutRadar, loadMoverAudit, loadIntradayValidation } from './lowfloat.js';
   import { loadOmega } from './omega-swing.js';
   import { loadAtlas } from './atlas.js';
   import { loadSwingSupervisor } from './swing-supervisor.js';
@@ -35,17 +36,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // prediction-market read. Unproven overlays live in the Research Lab; the honest
     // report cards live in Evidence.
     home:       ['today', 'ensemble', 'start', 'quickhit'],
-    candidates: ['swingsup', 'premove', 'daytrade', 'gapgo', 'ignition', 'gapdown', 'opportunities', 'omega', 'atlas', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'patternradar', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
+    candidates: ['swingsup', 'premove', 'daytrade', 'lowfloat', 'breakoutradar', 'gapgo', 'ignition', 'gapdown', 'opportunities', 'omega', 'atlas', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'patternradar', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
     positions:  ['coremo', 'momentum', 'putsell', 'picks'],
     markets:    ['rotation', 'sectors', 'news', 'thesis', 'pulse', 'evolve'],
     predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
-    proof:      ['scoreboard', 'evidence', 'baselines', 'leaderboard', 'coreperf'],
+    proof:      ['scoreboard', 'evidence', 'movermiss', 'intradayval', 'baselines', 'leaderboard', 'coreperf'],
     lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge', 'orbitlab', 'rltlab', 'gridlock', 'peerlab'],
   };
   // Holding-horizon of each candidate/position sub-tab → drives the horizon dividers
   // in the sub-nav so the app is visibly separated by time horizon (the spec ask).
   const SUB_HZ = {
     daytrade: 'intraday', gapgo: 'intraday', gapdown: 'intraday',
+    lowfloat: 'intraday', breakoutradar: 'intraday',
     ignition: 'intraday',
     swingsup: 'swing', premove: 'swing', opportunities: 'swing', omega: 'swing', atlas: 'swing', aligned: 'swing', screener: 'swing', custom: 'swing', ghost: 'swing', coil: 'swing', patternradar: 'swing', downday: 'swing', confluence: 'swing', trendrider: 'swing', fade: 'swing', biotech: 'swing',
     coremo: 'portfolio', momentum: 'portfolio', putsell: 'portfolio', picks: 'portfolio',
@@ -55,7 +57,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
     today: '🏠 Today', ensemble: '🎯 OMEGA Ensemble', start: '📘 Guide',
-    quickhit: '⚡ Quick Hit', swingsup: '📋 Swing Supervisor', premove: '📡 Pre-Move', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', atlas: '🛰 ATLAS-X', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', patternradar: '📐 Pattern Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
+    quickhit: '⚡ Quick Hit', swingsup: '📋 Swing Supervisor', premove: '📡 Pre-Move', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', atlas: '🛰 ATLAS-X', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', lowfloat: '🧨 Low-Float Ignition', breakoutradar: '📉 Breakout Radar', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', patternradar: '📐 Pattern Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
+    movermiss: '🔍 Mover Miss Audit', intradayval: '🧪 Intraday Validation',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', thesis: '🧾 Thesis Changes', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
     backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)', rltlab: '🧭 Leadership (shadow)', gridlock: '⚡ GRIDLOCK (shadow)', peerlab: '🕸 Peers (shadow)',
@@ -80,6 +83,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     gapgo: 'Stocks gapping up on news and continuing — a shadow event challenger; its prospective ledger has not cleared promotion.',
     omega: 'OMEGA-SWING — liquid names with early-to-middle-stage momentum likely to keep rising over the next 5–10 trading days. Sector- and market-relative, ranked by expected utility, with an entry plan and invalidation for each. Not a chaser of already-vertical moves; won’t force picks in weak regimes.',
     atlas: 'ATLAS-X — a SHADOW / weight-0 swing research workspace. Expert-staged candidates are sorted into entry lanes (Enter Next Session / Wait-for-Breakout / -Pullback / -Confirmation / Do Not Chase / Avoid), tracked as episodes once live, and judged in an Evidence & Validation panel. It CANNOT originate or affect a live trade; failure-score and target-before-stop are qualitative bands (never percentages), and it is allowed to show nothing.',
+    lowfloat: 'Low-Float Ignition — the same-session explosion lane built on ACTUAL float (not market-cap as a proxy). Explosion potential and trade quality are scored separately, so a name can be flagged as likely to run and still be marked an unsuitable entry. Historically dormant stocks are NOT excluded: current-session dollar volume decides tradeability, not last month\'s average. Paper only — no template has passed the promotion gate.',
+    breakoutradar: 'Intraday Breakout Radar — five-minute structure sorted into one state per name: early ignition, compression, breakout pending/attempt/confirmed/retest, failed breakout, distribution, exhaustion, stale. Confirmations use COMPLETED bars only; a forming candle can never confirm a breakout.',
+    movermiss: 'Large-Mover Miss Audit — after the close, the day\'s biggest movers with the exact pipeline stage and reason we lost each one. Answers what percentage of the top movers we detected, how early, and which filter costs the most recall.',
+    intradayval: 'Intraday Validation — the forward record of every entry template, measured from the simulated fill at the first bar AFTER the signal became user-visible. Templates are never pooled, and only the promotion gate can turn one live.',
     ignition: 'One acceleration-ranked view over all the momentum scanners: catch names whose price AND volume are speeding up (up 10% and accelerating beats up 60% and slowing), with a catalyst tag, ignition score, and stage. EOD/daily data — no real-time or LULD halt prediction.',
     downday: 'What to trade when the market is red: oversold-bounce longs + overheated shorts, with the honest proof that chasing strength on down days loses.',
     coil: 'Names coiling in tight compression before a potential explosive move.',
@@ -420,6 +427,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'daytrade' && typeof ensureDaytrade === 'function') ensureDaytrade();
     if (sub === 'gapgo' && typeof ensureGapGo === 'function') ensureGapGo();
     if (sub === 'ignition' && typeof ensureIgnition === 'function') ensureIgnition();
+    if (sub === 'lowfloat' && typeof ensureLowFloat === 'function') ensureLowFloat();
+    if (sub === 'breakoutradar' && typeof ensureBreakoutRadar === 'function') ensureBreakoutRadar();
+    if (sub === 'movermiss' && typeof ensureMoverMiss === 'function') ensureMoverMiss();
+    if (sub === 'intradayval' && typeof ensureIntradayVal === 'function') ensureIntradayVal();
     if (sub === 'omega' && typeof ensureOmega === 'function') ensureOmega();
     if (sub === 'atlas' && typeof ensureAtlas === 'function') ensureAtlas();
     if (sub === 'swingsup' && typeof ensureSwingSup === 'function') ensureSwingSup();
@@ -3743,6 +3754,37 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     }
     loadIgnition(document.getElementById('ignition-container'));
   }
+
+  // ── The four new same-session sections (public/js/lowfloat.js renders; the server scores) ──
+  // Each is lazy: nothing fetches until its tab is opened, because each read runs the staged
+  // pipeline (a full-universe bulk quote snapshot plus a bounded five-minute chart fan-out).
+  function lazySection(id, loader) {
+    let loaded = false;
+    return function ensure() {
+      const el = document.getElementById(`${id}-container`);
+      if (!el) return;
+      if (!loaded) {
+        loaded = true;
+        const btn = document.getElementById(`${id}-refresh-btn`);
+        if (btn) btn.addEventListener('click', () => loader(el));
+      }
+      loader(el);
+    };
+  }
+  // Declared as hoisted FUNCTIONS, not consts. showTab's guard is
+  // `typeof ensureX === 'function'`, and a `const` in its temporal dead zone makes that guard
+  // THROW a ReferenceError instead of evaluating to 'undefined' — which would break tab
+  // switching for any tab opened before this point in module evaluation.
+  const _lowFloatLoaders = {
+    lowfloat: lazySection('lowfloat', loadLowFloat),
+    breakoutradar: lazySection('breakoutradar', loadBreakoutRadar),
+    movermiss: lazySection('movermiss', loadMoverAudit),
+    intradayval: lazySection('intradayval', loadIntradayValidation),
+  };
+  function ensureLowFloat() { _lowFloatLoaders.lowfloat(); }
+  function ensureBreakoutRadar() { _lowFloatLoaders.breakoutradar(); }
+  function ensureMoverMiss() { _lowFloatLoaders.movermiss(); }
+  function ensureIntradayVal() { _lowFloatLoaders.intradayval(); }
 
   // 💠 OMEGA-SWING — 5–10 day momentum continuation (loadOmega renders op=omega).
   let omegaLoaded = false;
