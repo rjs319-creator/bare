@@ -75,7 +75,7 @@ const GRID_FROM = '2022-01', GRID_TO = '2026-05';
 const GRID = pit.monthEnds(GRID_FROM, GRID_TO);
 const VOL_LB = 63;
 const HORIZONS = [21, 63, 126];
-const PANEL_VERSION = 'panel-v3.2';
+const PANEL_VERSION = 'panel-v3.3';   // v3.3: + overnight/intraday decomposition features (onShare63/tugOfWar63) — labels unchanged from v3.2
 const MIN_OUTCOME_COVERAGE = COHORT.DEFAULT_MIN_OUTCOME_COVERAGE;
 const CALENDAR_SOURCE_SYMBOL = 'SPY';
 const BUILD_COMMAND = 'node research/15-panel-features-v3.js';
@@ -164,7 +164,18 @@ function mergedIncome(cacheDir, members) {
   return [...byDate.values()];
 }
 
-function buildPanel({ master, symbols, cacheDir, corpDir }) {
+// opts (all optional, defaults byte-identical to the frozen v3.2 behavior):
+//   grid             — decision-date grid (default: the module GRID)
+//   requireShares    — false ⇒ no shares series required, cap = null (a source
+//                      with no fundamentals substitutes a declared band rule)
+//   bandCheck        — ({cap, adv}) => bool universe-band predicate (default:
+//                      the frozen cap∈[CAP_LO,CAP_HI] ∧ adv≥ADV_FLOOR rule)
+//   priceDataVersion — provenance string stamped into every outcome
+function buildPanel({ master, symbols, cacheDir, corpDir }, opts = {}) {
+  const grid = opts.grid || GRID;
+  const requireShares = opts.requireShares !== false;
+  const bandCheck = opts.bandCheck || null;
+  const priceDataVersion = opts.priceDataVersion || 'fmp-cache-v1+corpactions-v1-tr';
   const symsAll = Object.keys(symbols).sort();
   const exclusions = {};                       // symbol-level exclusion reason → count
   const excl = (reason) => { exclusions[reason] = (exclusions[reason] || 0) + 1; };
@@ -256,8 +267,8 @@ function buildPanel({ master, symbols, cacheDir, corpDir }) {
       if (extremeSummary.perSymbol.length < 500) extremeSummary.perSymbol.push({ sym: src, lid: g.listingId, events: audit.events, diagnostics });
     }
 
-    const ss = pit.sharesSeries(mergedIncome(cacheDir, g.members));
-    if (!ss.length) { excl('no-shares-series'); continue; }
+    const ss = requireShares ? pit.sharesSeries(mergedIncome(cacheDir, g.members)) : [];
+    if (requireShares && !ss.length) { excl('no-shares-series'); continue; }
 
     const meta = symbols[src] || symbols[g.members[0]] || {};
     const sec = meta.sector || 'Unknown';
@@ -284,26 +295,28 @@ function buildPanel({ master, symbols, cacheDir, corpDir }) {
   for (const g of groups) {
     if (!g._work) continue;
     const { ps, audit, ss, sec, security } = g._work;
-    const opts = { dataCutoffMs: labelObservationCutoffMs, securityMasterVersion: master.version, priceDataVersion: 'fmp-cache-v1+corpactions-v1-tr' };
+    const opts2 = { dataCutoffMs: labelObservationCutoffMs, securityMasterVersion: master.version, priceDataVersion };
     // Label series: TR index as the return basis (close ← tr), raw close kept
     // for entry-positivity semantics via tr>0 equivalence.
     const labelSeries = ps.map((b) => ({ ms: b.ms, close: b.tr }));
-    for (const d of GRID) {
+    for (const d of grid) {
       const ym = new Date(d).toISOString().slice(0, 7);
       const fun = (monthlyFunnel[ym] ||= { candidates: 0, priced: 0, bandPass: 0, featurePass: 0, emitted: 0 });
       fun.candidates++;
       const pa = pit.asOfPriceAdv(ps, d); if (!pa || pa.stale) continue;
       const i = pa.idx;
       fun.priced++;
-      const sh = pit.asOfShares(ss, d); if (!sh) continue;
-      const cap = pa.close * sh; if (cap < pit.CAP_LO || cap > pit.CAP_HI || pa.adv < pit.ADV_FLOOR) continue;
+      const sh = requireShares ? pit.asOfShares(ss, d) : null;
+      if (requireShares && !sh) continue;
+      const cap = sh ? pa.close * sh : null;
+      if (bandCheck ? !bandCheck({ cap, adv: pa.adv }) : (cap < pit.CAP_LO || cap > pit.CAP_HI || pa.adv < pit.ADV_FLOOR)) continue;
       fun.bandPass++;
       const m121 = ratio(ps, i, 252, 21); if (m121 == null) continue;
       fun.featurePass++;
       if (audit.poisonedMs.has(ps[i].ms)) { extremeSummary.poisonedEntriesSkipped++; continue; }
 
       const outcomes = HORIZONS.map((h) => {
-        const o = OV3.forwardOutcomeV3({ series: labelSeries, dateMs: d, bars: h, security, opts });
+        const o = OV3.forwardOutcomeV3({ series: labelSeries, dateMs: d, bars: h, security, opts: opts2 });
         // STRUCTURAL poison only (unadjusted split, duplicate/malformed bar,
         // OHLC conflict) — all decision-time evidence. Future persistence
         // plays no part here.
@@ -333,6 +346,7 @@ function buildPanel({ master, symbols, cacheDir, corpDir }) {
       }
       const m121lag = ratio(ps, i - 63, 252, 21);
       const v63 = annVol(ps, i, VOL_LB);
+      const onf = overnightFeatures(ps, i, 63);
       const a20 = advN(ps, i, 20), a60 = advN(ps, i, 60);
       const dt = new Date(d).toISOString().slice(0, 10);
       const row = {
@@ -345,6 +359,7 @@ function buildPanel({ master, symbols, cacheDir, corpDir }) {
         acc: m121lag == null ? null : m121 - m121lag,
         r21: ratio(ps, i, 21, 0), r5: ratio(ps, i, 5, 0),
         v63, ra: v63 ? m121 / v63 : null, vs: (a20 && a60) ? a20 / a60 : null,
+        onShare63: onf.onShare, tugOfWar63: onf.tugOfWar,
         ...labelFieldsV3(21, outcomes[0]), ...labelFieldsV3(63, outcomes[1]), ...labelFieldsV3(126, outcomes[2]),
       };
       // Sparse sensitivity flags (only when set — x{h}=1 ⇔ label window
@@ -439,8 +454,37 @@ function buildPanelCalendar(cacheDir) {
   return CAL.buildSessionCalendar(dates, { source: `${CALENDAR_SOURCE_SYMBOL} fmp-cache-v1 observed sessions` });
 }
 
+// Overnight/intraday decomposition over the trailing `lb` bars ending at i
+// (overnight-share-conditioning, EXPLORATORY — hypothesis registry + PREREGISTRATION-
+// ARCHIVE-STREAMS-2026-08.md §6; definitions are FROZEN by this function).
+// Overnight leg k = close_{k-1} → open_k, dividend-corrected via the divAmt that
+// withTotalReturn stashes on ex-div bars — vendor opens are split-adjusted but
+// NOT dividend-reinvested, so without the correction every ex-div overnight
+// shows a phantom drop. Intraday leg = open_k → close_k. Bars without a usable
+// open are skipped; fewer than 2/3 valid legs → null (fail closed, surfaces in
+// missingnessByFeature).
+//   onShare = Σo / (Σ|o| + Σ|d|)  — signed overnight contribution vs total absolute movement, bounded (−1, 1)
+//   tugOfWar = mean(o) − mean(d)  — the per-day overnight-minus-intraday spread
+function overnightFeatures(ps, i, lb) {
+  if (i - lb < 0) return { onShare: null, tugOfWar: null };
+  let so = 0, sd = 0, sabs = 0, valid = 0;
+  for (let k = i - lb + 1; k <= i; k++) {
+    const prev = ps[k - 1], b = ps[k];
+    if (!(prev && prev.close > 0 && b && b.open > 0 && b.close > 0)) continue;
+    const o = Math.log((b.open + (b.divAmt || 0)) / prev.close);
+    const d = Math.log(b.close / b.open);
+    if (!Number.isFinite(o) || !Number.isFinite(d)) continue;
+    so += o; sd += d; sabs += Math.abs(o) + Math.abs(d); valid++;
+  }
+  if (valid < Math.ceil((lb * 2) / 3)) return { onShare: null, tugOfWar: null };
+  return {
+    onShare: sabs > 0 ? +(so / sabs).toFixed(4) : null,
+    tugOfWar: +((so - sd) / valid).toFixed(6),
+  };
+}
+
 function missingnessByFeature(out) {
-  const keys = ['m61', 'm91', 'm121', 'm181', 'm63', 'm93', 'm122', 'acc', 'r21', 'r5', 'v63', 'ra', 'vs'];
+  const keys = ['m61', 'm91', 'm121', 'm181', 'm63', 'm93', 'm122', 'acc', 'r21', 'r5', 'v63', 'ra', 'vs', 'onShare63', 'tugOfWar63'];
   const nulls = Object.fromEntries(keys.map((k) => [k, 0]));
   let n = 0;
   for (const ym of Object.keys(out)) for (const r of out[ym]) { n++; for (const k of keys) if (r[k] == null) nulls[k]++; }
@@ -644,7 +688,7 @@ function main() {
 }
 
 module.exports = {
-  labelFieldsV3, buildPanel, classifyInstrument, lastLabelReadyByHorizon,
+  labelFieldsV3, buildPanel, classifyInstrument, lastLabelReadyByHorizon, overnightFeatures,
   buildPanelCalendar, hashPartitionDir, gitBuildFacts,
   OUT_PATH, BLOCKED_PATH, INVALID_PATH, MANIFEST_PATH, CALENDAR_PATH, COHORT_PATH,
   GRID, HORIZONS, STATUS_CHAR, PANEL_VERSION, MIN_OUTCOME_COVERAGE,
