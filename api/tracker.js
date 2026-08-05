@@ -261,6 +261,9 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'largemoveraudittick') return require('../lib/lowfloat-routes').runLargeMoverAuditTick(req, res);
   if (req.query.op === 'largemoverbook') return require('../lib/lowfloat-routes').runLargeMoverBook(req, res);
   if (req.query.op === 'positionsize') return require('../lib/lowfloat-routes').runPositionSize(req, res);
+  // Read-only provider health check: does the configured plan actually return share float?
+  // The whole low-float lane is worth exactly what this answers.
+  if (req.query.op === 'floatprobe') return require('../lib/lowfloat-routes').runFloatProbe(req, res);
 
   if (req.query.op === 'daytradetick') return runDaytradeTick(req, res);
   if (req.query.op === 'daytradebook') return runDaytradeBook(req, res);
