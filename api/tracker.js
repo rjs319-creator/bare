@@ -264,6 +264,9 @@ module.exports = async function handler(req, res) {
   // Read-only provider health check: does the configured plan actually return share float?
   // The whole low-float lane is worth exactly what this answers.
   if (req.query.op === 'floatprobe') return require('../lib/lowfloat-routes').runFloatProbe(req, res);
+  // Which bulk-quote provider answers, and does it carry volume? Decides three of the seven
+  // discovery lanes.
+  if (req.query.op === 'quoteprobe') return require('../lib/lowfloat-routes').runQuoteProbe(req, res);
 
   if (req.query.op === 'daytradetick') return runDaytradeTick(req, res);
   if (req.query.op === 'daytradebook') return runDaytradeBook(req, res);
