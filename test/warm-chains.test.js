@@ -263,3 +263,58 @@ test('detaching evolve did not orphan postdecision', () => {
   assert.ok(nested.has('postdecision'), 'postdecision must still be reachable');
   assert.ok(WC.CHAINS.evolve.includes('@postdecision'), 'via the evolve root');
 });
+
+// ── Expanded-universe refresh throughput (2026-08-05) ───────────────────────
+// The chain was already scheduled and completing nightly; it was under-provisioned at
+// 2 x 150 names against a multi-thousand candidate list (~3-week refresh cycle), which is
+// why the coil vintage gate found the `expanded` cohort five sessions behind and excluded
+// it from every ranking.
+test('the universe chain scans through NESTED chains so each gets its own invocation wall', () => {
+  const steps = WC.CHAINS.universe;
+  const nested = steps.filter(s => s.startsWith('@'));
+  assert.equal(nested.length, 4, 'four nested scan chains');
+  for (const n of nested) {
+    const name = n.slice(1);
+    assert.ok(WC.CHAINS[name], `${name} must be a defined chain`);
+    assert.ok(WC.pathFor(n).includes('op=warmchain&name=' + name), 'a nested step dispatches its own invocation');
+  }
+});
+
+test('the compile runs strictly AFTER every scan (the parent awaits the nested chains)', () => {
+  const steps = WC.CHAINS.universe;
+  const lastScan = Math.max(...steps.map((s, i) => (s.startsWith('@') ? i : -1)));
+  const compileAt = steps.indexOf('op=universecompile');
+  assert.ok(compileAt > lastScan, 'compile must not merge shards the night has not written yet');
+  assert.ok(steps.indexOf('op=secmasterbuild') > compileAt);
+});
+
+test('every scan step advances the SHARED cursor at the 200-name cap', () => {
+  const scanChains = ['universescan1', 'universescan2', 'universescan3', 'universescan4'];
+  let total = 0;
+  for (const c of scanChains) {
+    for (const step of WC.CHAINS[c]) {
+      assert.match(step, /^op=universescan&cursor=1&limit=200$/,
+        'cursor=1 keeps the scans sequential over one cursor — without it they would refetch the same slice');
+      total += 200;
+    }
+  }
+  assert.equal(total, 1600, 'nightly coverage: 1,600 names (was 300)');
+});
+
+test('the nested scan chains are NOT root chains (only the parent dispatches them)', () => {
+  for (const n of ['universescan1', 'universescan2', 'universescan3', 'universescan4']) {
+    assert.ok(!WC.ROOT_CHAINS.includes(n), `${n} must not be dispatched independently of its parent`);
+  }
+  assert.ok(WC.ROOT_CHAINS.includes('universe'));
+});
+
+test('no nested scan chain can exceed its own invocation budget', () => {
+  // Each scan self-bounds at 45s (lib/universe-routes) and the chain deadline is 48s, so a
+  // chain of 2 scans starts its second step at ~45s — inside the deadline — and the pair
+  // fits the 60s function wall. A third would start past the deadline and be budget-skipped,
+  // which is why the work is spread across chains rather than lengthening one.
+  for (const n of ['universescan1', 'universescan2', 'universescan3', 'universescan4']) {
+    assert.ok(WC.CHAINS[n].length <= 2, `${n} must stay at 2 steps to fit one invocation`);
+  }
+  assert.ok(WC.CHAIN_DEADLINE_MS <= 60000);
+});
