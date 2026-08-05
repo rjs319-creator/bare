@@ -241,4 +241,4 @@ async function main() {
 }
 
 if (require.main === module) main();
-module.exports = { sueEvents, longShort, HYP_ID };
+module.exports = { sueEvents, longShort, buildCongestionCounts, HYP_ID };
