@@ -371,3 +371,28 @@ test('the scheduler wires the low-float tick and the post-close chain', () => {
   assert.ok(tickBlock.includes('Authorization: Bearer $CRON_SECRET'));
   assert.ok(tickBlock.includes('CRON_SECRET repo secret not set'), 'missing the unset-secret guard');
 });
+
+test('a volume-capable provider is preferred over the price-only fallback', () => {
+  // REGRESSION: FMP's batch-quote answers 402 "Restricted Endpoint" on this subscription, so
+  // the scan silently fell through to the keyless spark endpoint, which carries no volume —
+  // disabling relative volume, volume acceleration and low-float turnover (three of the seven
+  // discovery lanes) while still reporting ok:true.
+  const qp = require('../lib/quote-provider');
+  assert.ok(typeof qp.yahooQuotes === 'function', 'the volume-capable Yahoo provider is missing');
+  assert.ok(qp.YAHOO_QUOTE_CHUNK <= 300, 'measured cap is 300 symbols per request');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'quote-provider.js'), 'utf8');
+  // Order of the fallback chain is the whole point: volume-capable providers come first.
+  assert.ok(src.indexOf('yahooQuotes(wanted)') < src.indexOf('yahooSparkQuotes(wanted)'),
+    'the volume-capable provider must be tried before the price-only one');
+});
+
+test('capability is read from what the provider returned, not from which key is configured', () => {
+  // Those diverged in production: FMP_API_KEY was present and valid, but its batch-quote
+  // endpoint was restricted — so keying the diagnostic off the key would have claimed full
+  // capability while three lanes were dark.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'lowfloat-pipeline.js'), 'utf8');
+  assert.ok(/volumeCapableProvider = discovery\.coverage\.volumeAvailable === true/.test(src),
+    'capability must be derived from the actual coverage');
+  assert.ok(!/volumeCapableProvider = !!process\.env\.FMP_API_KEY/.test(src),
+    'capability must not be inferred from the presence of an API key');
+});
