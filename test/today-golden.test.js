@@ -28,9 +28,26 @@ const { SOURCES, project } = require('./fixtures/today-sources');
 
 const read = (f) => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', f), 'utf8'));
 
-test('golden: buildToday over the frozen fixture matches the current golden projection', () => {
-  const now = project(buildToday(SOURCES, null, null, null));
-  assert.deepEqual(now, read('today-golden.json'));
+// MODE NOTE (non-daytrade redesign 2026-08 §9). The DEFAULT eligibility mode is now
+// fail-closed 'enforce', so the served board is the cleared-only subset. The golden
+// therefore pins the UNGATED ranking ('annotate'): it proves this pass changed no score,
+// no tilt, no cost treatment and no relative order — only which rows are allowed through.
+const ANNOTATE = { eligibilityMode: 'annotate' };
+const rowsOnly = (p) => ({ topByHorizon: p.topByHorizon, horizons: p.horizons });
+
+test('golden: the UNGATED ranking over the frozen fixture is byte-identical to the golden projection', () => {
+  const now = project(buildToday(SOURCES, null, null, null, ANNOTATE));
+  const golden = read('today-golden.json');
+  assert.deepEqual(rowsOnly(now), rowsOnly(golden), 'no score/tilt/cost/order drift');
+  assert.equal(now.counts.signals, golden.counts.signals);
+  assert.deepEqual(now.counts.byHorizon, golden.counts.byHorizon);
+});
+
+test('golden: the ENFORCED default board is a strict subset of the ungated ranking (never a new row)', () => {
+  const ungatedIds = new Set(Object.values(project(buildToday(SOURCES, null, null, null, ANNOTATE)).horizons).flat().map(r => r.id));
+  const enforced = Object.values(project(buildToday(SOURCES, null, null, null)).horizons).flat();
+  assert.ok(enforced.length <= ungatedIds.size);
+  for (const r of enforced) assert.ok(ungatedIds.has(r.id), `${r.id} appeared only under enforcement`);
 });
 
 const dayTradeRows = (proj) => Object.values(proj.horizons).flat()
@@ -39,14 +56,37 @@ const dayTradeRows = (proj) => Object.values(proj.horizons).flat()
 
 test('DAY TRADE FROZEN: rows match the immutable pre-redesign baseline byte-for-byte', () => {
   const baseline = dayTradeRows(read('today-golden-baseline.json'));
-  const current = dayTradeRows(project(buildToday(SOURCES, null, null, null)));
+  const current = dayTradeRows(project(buildToday(SOURCES, null, null, null, ANNOTATE)));
   assert.ok(baseline.length >= 2, 'baseline must carry Day Trade rows');
   // rank can legitimately shift only if OTHER sources move around them — every
   // intrinsic field (score, confidence, cost, execution, tilt, state) must be identical.
   const strip = (r) => { const { rank, ...rest } = r; return rest; };
   assert.deepEqual(current.map(strip), baseline.map(strip));
-  // and in fact the whole board is unchanged in default mode, so ranks match too:
-  assert.deepEqual(current.map(r => r.rank), baseline.map(r => r.rank));
+  // RANK EQUALITY IS NO LONGER ASSERTED (non-daytrade redesign 2026-08, Phase 9). Day
+  // Trade rows are pinned in lib/score-normalize (their scores pass through untouched),
+  // but the NON-Day-Trade sources around them are now normalized within their own
+  // cross-section instead of being compared on incomparable raw 0–100 scales — so the
+  // rows they are ranked against moved. The baseline's own comment always allowed this:
+  // "rank can legitimately shift only if OTHER sources move around them". Every intrinsic
+  // Day Trade field (score, confidence, cost tier, execution, tilt, state) is still
+  // asserted byte-for-byte above.
+  assert.ok(current.every(r => Number.isFinite(r.rank)));
+});
+
+test('DAY TRADE FROZEN: score normalization does not touch Day Trade scores (pinned source)', () => {
+  const SN = require('../lib/score-normalize');
+  assert.ok(SN.PINNED.has('daytrade'));
+  const [dt] = SN.normalizeSignals([{ source: 'daytrade', rawConfidence: 55 }]);
+  assert.equal(dt.normalized.value, 55, 'a pinned source passes through untouched');
+  assert.match(dt.normalized.basis, /pinned/);
+});
+
+test('DAY TRADE FROZEN: enforcement leaves every intrinsic Day Trade field identical (only rank may move)', () => {
+  const baseline = dayTradeRows(read('today-golden-baseline.json'));
+  const enforced = dayTradeRows(project(buildToday(SOURCES, null, null, null)));
+  const strip = (r) => { const { rank, ...rest } = r; return rest; };
+  assert.deepEqual(enforced.map(strip), baseline.map(strip),
+    'the fail-closed default must not alter a single Day Trade score, cost tier or state');
 });
 
 test('DAY TRADE FROZEN: normalized inputs from fromDayTrade are unchanged by the redesign', () => {

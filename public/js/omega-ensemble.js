@@ -148,6 +148,32 @@ function disclosurePanel(d) {
     </details>`;
 }
 
+// BOOK BASIS + RESEARCH ANNOTATIONS (non-daytrade redesign 2026-08, Phase 2/10). The Book
+// holds only sizing-eligible ACTIONABLE ideas; qualified leads and research overlays are
+// rendered in their own annotation column and contribute no weight, rank or slot.
+function bookBasisPanel(b) {
+  if (!b) return '';
+  return `<div class="oe-basis"><b>Book basis:</b> ${esc(b.basis)} — ${b.held} held of ${b.considered} considered`
+    + (b.annotationsOnly ? `; ${b.annotationsOnly} research/lead overlay${b.annotationsOnly === 1 ? '' : 's'} shown as annotation only` : '')
+    + `</div>`;
+}
+
+function annotationsPanel(rows) {
+  if (!rows || !rows.length) return '';
+  return `
+    <details class="oe-excl">
+      <summary>🔬 Research / lead overlays (${rows.length}) — annotation only, never sized</summary>
+      <div class="oe-excl-body">
+        ${rows.map(a => `
+          <div class="oe-excl-row">
+            <span class="oe-excl-tk">${esc(a.ticker)}</span>
+            <span class="oe-excl-score">${esc(a.signalClass || 'RESEARCH')}</span>
+            <span class="oe-excl-why">${esc(a.reason || a.note || '')}</span>
+          </div>`).join('')}
+      </div>
+    </details>`;
+}
+
 export function renderEnsemble(container, p) {
   if (!container) return;
   if (!p || p.ok === false) {
@@ -156,8 +182,10 @@ export function renderEnsemble(container, p) {
   }
   container.innerHTML = `
     ${summaryPanel(p.summary)}
+    ${bookBasisPanel(p.bookBasis)}
     ${portfolioPanel(p.portfolio)}
     ${rankingTable(p.ranking || [])}
+    ${annotationsPanel(p.annotations)}
     ${excludedPanel(p.excluded)}
     ${disclosurePanel(p.disclosures)}`;
 }

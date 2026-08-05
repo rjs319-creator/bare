@@ -18,14 +18,25 @@ const graded = (over = {}) => ({
 // limitations, approver identity, evidence hash, expiry) — { approve, version } alone
 // was a rubber stamp, not a reviewable promotion record.
 const NOW = Date.parse('2026-08-04T12:00:00Z');
+// gov-v3 (redesign Phase 3): the artifact is validated SEMANTICALLY — the VALUES must say
+// the gates were passed. Free-text values ('survives 2x spread') are no longer accepted:
+// they are unfalsifiable by a machine and were exactly how a failing study could promote.
 const FULL_ARTIFACT = Object.freeze({
   version: 'x-v1', approve: true, approvedAt: '2026-08-01T00:00:00Z', approvedBy: 'reviewer@example',
   codeCommit: 'abc1234', datasetHash: 'sha256:d', universeHash: 'sha256:u', featureHash: 'sha256:f',
   trainingCutoff: '2026-06-30', foldDefinition: 'nested chrono walk-forward, purged+embargoed',
-  primaryMetric: 'cost-net date-level excess CI > 0', validationResults: { ci95: [0.2, 1.4] },
-  costStress: 'survives 2x spread', survivorshipStatus: 'PIT universe, delistings included',
-  calibration: 'n/a (ranking objective)', tailRisk: 'ES95 -4.1%', prospectiveEvidence: '63 live sessions',
+  primaryMetric: 'cost-net date-level excess CI > 0',
+  validationResults: {
+    passed: true, sampleSize: 120, effectiveSampleSize: 34, positiveBlocks: 4,
+    multipleTestingCorrected: true, correctedPValue: 0.012, alpha: 0.05, ci95: { lo: 0.2, hi: 1.4 },
+  },
+  costStress: { passed: true, baseNet: 0.9, doubledCostNet: 0.4, stressedCostNet: 0.1 },
+  survivorshipStatus: { safe: true, note: 'PIT universe, delistings included' },
+  calibration: { required: false, passed: true, note: 'ranking objective' },
+  tailRisk: { es95: -4.1, maxDrawdown: -9.2 },
+  prospectiveEvidence: { passed: true, episodes: 63, sessions: 63 },
   limitations: 'single regime cycle', evidenceHash: 'sha256:e', expiresAt: '2026-12-31T00:00:00Z',
+  dataQualityBlockers: [],
 });
 
 test('validated + full sample WITHOUT a promotion artifact → paper (fail closed), never production', () => {
@@ -91,12 +102,18 @@ test('proven model whose edge is weakening → Reduced (half size)', () => {
   assert.equal(r.weight, 0.5);
 });
 
-test('promising fresh model → Paper-only; promising AFTER being live → Probation', () => {
+test('promising fresh model → Paper-only; promising AFTER being live → grandfathered REDUCE-ONLY', () => {
   const fresh = G.governStrategy(graded({ grade: 'promising', stats: { excessN: 10, avgExcess: 2, beatMktRate: 55, beatLo: 40 } }), null);
   assert.equal(fresh.status, 'paper');
-  const demoted = G.governStrategy(graded({ grade: 'promising', stats: { excessN: 10, avgExcess: 2, beatMktRate: 55, beatLo: 40 } }), { status: 'production', version: null });
-  assert.equal(demoted.status, 'probation');
+  assert.equal(fresh.newPositions, false);
+  // gov-v3: a previously-live strategy that no longer qualifies does not keep originating
+  // trades on probation — it lands reduce-only, time-limited, and expires by itself.
+  const demoted = G.governStrategy(graded({ grade: 'promising', stats: { excessN: 10, avgExcess: 2, beatMktRate: 55, beatLo: 40 } }), { status: 'production', version: null }, null, { nowMs: NOW });
+  assert.equal(demoted.status, 'reduce-only');
   assert.equal(demoted.weight, 0.25);
+  assert.equal(demoted.newPositions, false, 'a grandfathered strategy may not originate a new position');
+  assert.equal(demoted.grandfathered, true);
+  assert.ok(demoted.grandfatherExpiresAt);
 });
 
 test('disabled grade → Disabled, zero weight', () => {

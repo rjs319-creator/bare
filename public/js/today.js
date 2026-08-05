@@ -217,26 +217,118 @@ function signalCard(sig, legend) {
     + `<span class="td-tk" data-live="${esc(sig.ticker)}">${esc(sig.ticker)}</span>`
     + `<span class="td-co">${esc(sig.company || sig.setup || '')}</span>`
     + `<span class="td-score" title="Composite: confidence × regime-fit × execution × resolved-expectancy × independent-evidence">${sig.score}</span></div>`
-    + `<div class="td-chips">` + classChip(sig) + `<span class="td-state ${scls}">${si} ${slbl}</span>` + ageChip(sig)
+    + `<div class="td-chips">` + classChip(sig) + retainedChip(sig) + `<span class="td-state ${scls}">${si} ${slbl}</span>` + ageChip(sig)
     + (sig.side === 'short' ? `<span class="td-short" title="A short setup — profits if it falls (favored in risk-off)">🔻 SHORT</span>` : '')
     + familyChip(sig)
     + `<span class="td-setup">${esc(sig.setup || sig.source)}</span>`
     + (sig.sector ? `<span class="td-sect">${esc(sig.sector)}</span>` : '') + gradeChip(sig) + pctileChip(sig) + versionChip(sig) + exWarn + `</div>`
+    + classReasonLine(sig)
     + evidenceLine(sig, legend)
     + `<div class="td-breadth-row">${breadthChip(sig)}</div>`
     + remainingLine(sig)
     + failureLine(sig)
     + levels(sig)
+    + whyNowLine(sig)
     + `<div class="td-foot">${trackLine(sig)}${eventChip(sig.event)}${sig.catalyst ? `<span class="td-cat" title="${esc(sig.catalyst)}">📰 catalyst</span>` : ''}</div>`
+    + expertDetails(sig)
     + `</div>`;
 }
 
-// Unmistakable ACTIONABLE vs RESEARCH separation (governance §): research/shadow leads are
-// displayed and graded but are never implied recommendations.
+// NOVICE LANE — one plain sentence: what to do, what would invalidate it, what it costs.
+// Never states a probability (the composite is a rank, see rank-semantics).
+function whyNowLine(sig) {
+  if (sig.evidenceClass !== 'ACTIONABLE') return '';
+  const bits = [];
+  const act = sig.state === 'triggered' || sig.state === 'extended' ? 'HOLD / manage'
+    : sig.state === 'ready' ? 'ENTER on the trigger'
+      : 'WAIT for the trigger';
+  bits.push(`<b>${act}</b>`);
+  if (Number.isFinite(sig.entry)) bits.push(`entry ${sig.entry}`);
+  if (Number.isFinite(sig.stop)) bits.push(`invalidated below ${sig.stop}`);
+  if (Number.isFinite(sig.target)) bits.push(`target ${sig.target}`);
+  if (sig.holdWindow) bits.push(esc(sig.holdWindow));
+  if (sig.cost && sig.cost.known) bits.push(`round-trip cost ~${sig.cost.roundTripPct}%${sig.cost.tierAssumed ? ' (assumed tier)' : ''}`);
+  return `<div class="td-whynow">${bits.join(' · ')}</div>`;
+}
+
+// EXPERT LANE — collapsed by default: score decomposition, evidence identity, sample sizes,
+// calibration status and cost assumptions. Everything the number was built from.
+function expertDetails(sig) {
+  const d = sig.scoreDecomposition;
+  const exp = sig.expectancy || {};
+  const mc = sig.mergedConviction;
+  if (!d && !mc && !exp.known) return '';
+  const row = (k, v) => (v == null || v === '' ? '' : `<div class="td-xd-row"><span>${esc(k)}</span><b>${esc(String(v))}</b></div>`);
+  let body = '';
+  if (d) {
+    body += row('Comparable score', `${d.comparableConfidence} (${d.normalizationBasis})`)
+      + row('Formula', d.formula)
+      + row('confidence', d.confidence) + row('× regime fit', d.regimeFit) + row('× execution', d.execution)
+      + row('× realized tilt', d.expectancyTilt) + row('× evidence breadth', d.evidenceMult)
+      + row('× cost penalty', d.costPenalty) + row('× remaining edge', d.remainingMult);
+  }
+  if (mc && mc.decomposition) {
+    body += mc.decomposition.map(x => row(`${x.role === 'base' ? 'base' : x.role === 'cap' ? 'cap' : 'evidence'} · ${x.source || ''}`, `${x.contribution >= 0 ? '+' : ''}${x.contribution} — ${x.reason}`)).join('');
+  }
+  if (exp.known) {
+    body += row('Realized record', `${exp.n} resolved @${exp.horizonKey} · avg ${exp.avgExcess}% (${exp.basis || 'basis unstated'})`)
+      + row('95% band', exp.ci ? `[${exp.ci.lo}, ${exp.ci.hi}]` : 'not reported');
+  } else {
+    body += row('Realized record', 'building evidence — no resolved record at this exact horizon and scope');
+  }
+  body += row('Probability', 'none shown — this is a relative setup score, not an out-of-fold calibrated probability');
+  if (sig.eligibility) {
+    body += row('Evidence class', sig.eligibility.signalClass)
+      + row('Governance', sig.eligibility.governance ? `${sig.eligibility.governance.status} (weight ${sig.eligibility.governance.weight}, version ${sig.eligibility.governance.version || 'unversioned'})` : 'none')
+      + row('Sizing weight', sig.eligibility.sizingWeight);
+  }
+  return `<details class="td-xd"><summary class="td-dim">Expert detail — how this number was built</summary>${body}</details>`;
+}
+
+// THE THREE-CLASS SEPARATION (redesign Phase 2/10). Three classes, never two: a cleared
+// strategy without an executable plan is neither a recommendation nor unproven research.
 function classChip(sig) {
-  if (sig.evidenceClass === 'ACTIONABLE') return `<span class="td-class td-class-act" title="Evidence-cleared: explicitly production strategy with earned, current governance clearance.">✅ ACTIONABLE</span>`;
-  if (sig.evidenceClass === 'RESEARCH') return `<span class="td-class td-class-res" title="Research/shadow lead — shown and graded, but NOT an evidence-cleared recommendation. It cannot size a position.">🔬 RESEARCH</span>`;
+  if (sig.evidenceClass === 'ACTIONABLE') return `<span class="td-class td-class-act" title="Evidence-cleared AND executable: production strategy with earned, current governance clearance, a complete entry/stop/target plan, known liquidity and current data. This is the only class that can be sized.">✅ ACTIONABLE</span>`;
+  if (sig.evidenceClass === 'QUALIFIED_LEAD') return `<span class="td-class td-class-lead" title="Cleared evidence, but NOT an executable trade: something needed to size it is missing (no complete plan, unknown liquidity, or the strategy publishes leads rather than trade plans). Watch it; do not size it.">🟡 QUALIFIED LEAD</span>`;
+  if (sig.evidenceClass === 'RESEARCH') return `<span class="td-class td-class-res" title="Research/shadow lead — shown and graded, but NOT an evidence-cleared recommendation. It cannot originate, size or improve the rank of an actionable idea.">🔬 RESEARCH</span>`;
   return '';
+}
+
+// WHY it is not actionable — the specific machine-readable reason, in plain language.
+const REASON_TEXT = {
+  NOT_PRODUCTION: 'this strategy is not cleared for live trading',
+  NO_GOVERNANCE: 'no current governance record',
+  GOVERNANCE_STALE: 'the evidence behind its clearance is stale',
+  VERSION_MISMATCH: 'its evidence was earned by a different version',
+  NO_CLEARANCE: 'its clearance carries no sizing weight',
+  REDUCE_ONLY: 'reduce-only — manage existing exposure, no new entries',
+  NO_BORROW: 'no observed borrow for the short',
+  CONDITION_UNMET: 'today is outside the context it was validated in',
+  DATA_STALE: 'required data is stale or incomplete',
+  NO_PLAN: 'no complete entry / stop / target plan',
+  LEAD_ONLY: 'it publishes leads, not trade plans',
+  LIQUIDITY_UNKNOWN: 'liquidity is unknown',
+};
+function classReasonLine(sig) {
+  const el = sig.eligibility;
+  if (!el || sig.evidenceClass === 'ACTIONABLE') return '';
+  const codes = (el.reasonCodes || []).filter(c => c !== 'OK');
+  if (!codes.length) return '';
+  const txt = codes.map(c => REASON_TEXT[c] || c).join('; ');
+  return `<div class="td-dim td-classwhy" title="${esc((el.reasons || []).join(' · '))}">Not actionable: ${esc(txt)}.</div>`;
+}
+
+// What a holder of this name should do when it cannot be a fresh entry.
+const RETAINED_TEXT = {
+  HOLD: ['🤝 HOLD', 'Already triggered — manage the existing position; this is not a new entry.'],
+  MONITOR: ['👁 MONITOR', 'Still watchable, but not a fresh entry right now.'],
+  INVALIDATED: ['🚫 INVALIDATED', 'The original plan is broken (stop hit or expired) — not a trade.'],
+  DATA_STALE: ['🕓 DATA STALE', 'Required data is stale or incomplete — no fresh judgement is offered today.'],
+};
+function retainedChip(sig) {
+  const t = RETAINED_TEXT[sig.retainedLabel];
+  if (!t || sig.evidenceClass === 'ACTIONABLE') return '';
+  return `<span class="td-retained" title="${esc(t[1])}">${t[0]}</span>`;
 }
 // Lifecycle age from the immutable origin — a re-emitted pick shows its true age instead of
 // looking newly detected forever (defect #11).
@@ -301,6 +393,17 @@ function actionSection() {
   return h;
 }
 
+// Degraded-data banner + the per-source reason a source may not originate a new entry.
+function degradedBanner(dg) {
+  if (!dg || !dg.degraded) return '';
+  const rows = (dg.blockedSources || []).slice(0, 8)
+    .map(b => `<div class="td-dim">• <b>${esc(b.source)}</b> — ${esc(b.reason || 'unproven freshness')}</div>`).join('');
+  return `<div class="td-degraded" style="border-left-color:var(--amber,#f59e0b)">`
+    + `<b>⚠️ Degraded data</b> — ${esc(dg.banner || '')}`
+    + rows
+    + `<div class="td-dim">Names from these sources stay visible as monitor / hold; they are not offered as fresh entries.</div></div>`;
+}
+
 export function renderCommandCenter(container, p) {
   if (!container) return;
   if (!p || !p.ok) { container.innerHTML = `<div class="dt-note" style="border-left-color:var(--red)">⚠️ The command center couldn't load its signals right now — a data source may be down. Try Refresh.</div>`; return; }
@@ -330,22 +433,45 @@ export function renderCommandCenter(container, p) {
   // When nothing is cleared this is honestly EMPTY; it is never backfilled with
   // research signals. Rendered above the research cross-section so the separation is
   // structural on the page, not just a per-card chip.
+  // DEGRADED-DATA BANNER (Phase 8): which sources may not originate a new entry today.
+  html += degradedBanner(p.dataGate);
+
   const abh = p.actionableByHorizon;
-  if (abh) {
-    const anyAct = Object.values(abh).some(l => l && l.length);
-    html += `<div class="td-top-plays"><div class="td-hz-h">✅ Actionable — evidence-cleared only `
-      + `<span class="td-dim">only strategies with earned, current governance clearance; an empty list is the honest answer, never padded with research</span></div>`;
-    if (anyAct) {
-      for (const [key, title] of HORIZONS) {
-        const list = (abh[key] || []).slice(0, 5);
+  const laneBlock = (title, sub, byHorizon, emptyMsg, cls) => {
+    const any = Object.values(byHorizon || {}).some(l => l && l.length);
+    let h = `<div class="td-top-plays ${cls}"><div class="td-hz-h">${title} <span class="td-dim">${sub}</span></div>`;
+    if (any) {
+      for (const [key, hzTitle] of HORIZONS) {
+        const list = (byHorizon[key] || []).slice(0, 5);
         if (!list.length) continue;
-        html += `<div class="td-hz-h" style="margin-top:6px">${title}</div>`
+        h += `<div class="td-hz-h" style="margin-top:6px">${hzTitle}</div>`
           + `<div class="td-top-grid">` + list.map(s => signalCard(s, legend)).join('') + `</div>`;
       }
     } else {
-      html += `<div class="td-dim td-empty">No evidence-cleared setups today. Everything below is research — shown, tracked and graded, but not a cleared recommendation.</div>`;
+      h += `<div class="td-dim td-empty">${emptyMsg}</div>`;
     }
-    html += `</div>`;
+    return h + `</div>`;
+  };
+
+  // ── LANE 1: EXECUTABLE IDEAS ──────────────────────────────────────────────
+  // Evidence-cleared AND sizable. Honestly EMPTY when nothing clears; never backfilled.
+  if (abh) {
+    html += laneBlock('✅ Executable ideas',
+      'cleared strategy + complete plan + known liquidity + current data. The only lane that can be sized — an empty list is the honest answer, never padded.',
+      abh,
+      'No executable ideas today. Everything below is a lead or research — shown, tracked and graded, but not something to size.',
+      'td-lane-exec');
+  }
+
+  // ── LANE 2: QUALIFIED LEADS ───────────────────────────────────────────────
+  // Cleared evidence that is NOT an executable trade. A first-class lane: not a
+  // recommendation, not unproven research.
+  if (p.qualifiedLeadsByHorizon) {
+    html += laneBlock('🟡 Qualified leads',
+      'the evidence is cleared but the trade is not executable yet (no complete plan, unknown liquidity, or a lead-only strategy). Watch — do not size.',
+      p.qualifiedLeadsByHorizon,
+      'No qualified leads today.',
+      'td-lane-lead');
   }
 
   // PER-HORIZON shortlists — deliberately NOT one global list. A same-session exit and a
@@ -353,18 +479,14 @@ export function renderCommandCenter(container, p) {
   // outcome contract and no cross-horizon "best overall" score exists. Under enforcement
   // the served topByHorizon is cleared-only, so the full ungated cross-section arrives in
   // researchByHorizon — research stays fully visible either way.
+  // ── LANE 3: RESEARCH WATCHLIST ────────────────────────────────────────────
+  // The full ungated cross-section, explicitly classed. Visible so nothing is hidden;
+  // structurally incapable of sizing, boosting or inflating the lanes above.
   const tbh = p.researchByHorizon || p.topByHorizon || {};
-  const hasTop = Object.values(tbh).some(l => l && l.length);
-  if (hasTop) {
-    html += `<div class="td-top-plays"><div class="td-hz-h">${abh ? '🔬 Full cross-section by horizon' : '⭐ Top plays by horizon'} `
-      + `<span class="td-dim">ranked within each time frame — horizons are never mixed into one list${abh ? '; research cards cannot size a position' : ''}</span></div>`;
-    for (const [key, title] of HORIZONS) {
-      const list = (tbh[key] || []).slice(0, 5);
-      if (!list.length) continue;
-      html += `<div class="td-hz-h" style="margin-top:6px">${title}</div>`
-        + `<div class="td-top-grid">` + list.map(s => signalCard(s, legend)).join('') + `</div>`;
-    }
-    html += `</div>`;
+  if (Object.values(tbh).some(l => l && l.length)) {
+    html += laneBlock('🔬 Research watchlist',
+      'the full cross-section, ranked within each time frame. These rows never enter the book, never boost an executable idea and never raise the opportunity count.',
+      tbh, 'Nothing under research today.', 'td-lane-research');
   }
 
   // Top-3 per horizon (#2 — never mixed).

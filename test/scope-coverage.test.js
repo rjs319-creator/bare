@@ -53,7 +53,10 @@ test('a research observation that duplicates a production board row is retained 
     screener: sj('large', [row('SAME')]),
     screenerMicro: sj('micro', [row('SAME')]),
   };
-  const p = buildToday(sources, null, null, null);
+  // Annotate + no data gate: the production board must actually CONTAIN the row for the
+  // duplicate-detection branch to be reachable (the fail-closed default serves no
+  // uncleared screener rows at all).
+  const p = buildToday(sources, null, null, null, { eligibilityMode: 'annotate', dataGate: null });
   assert.strictEqual(p.swingResearch.inventory.filter(r => r.ticker === 'SAME').length, 0);
   const retained = p.swingResearch.retained.filter(r => r.ticker === 'SAME');
   assert.strictEqual(retained.length, 1);

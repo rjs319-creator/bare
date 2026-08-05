@@ -126,10 +126,14 @@ const { buildToday } = require('../lib/decision-routes');
 const { SOURCES } = require('./fixtures/today-sources');
 const NOW2 = Date.parse('2026-07-24T12:00:00Z');
 const freshGov2 = (strategies) => ({ savedAt: '2026-07-24T00:00:00.000Z', strategies });
+// The shared fixture carries no source timestamps, so the (separately tested) pre-ranking
+// data gate would block every source before governance is consulted. These suites are
+// about GOVERNANCE clearance and lane construction.
+const NO_DATA_GATE = { dataGate: null };
 
 test('actionableByHorizon contains ONLY trade-eligible sources; research signals cannot enter or boost it', () => {
   const gov = freshGov2([{ id: 'screener', status: 'production', weight: 1, version: 'screener-v1' }]);
-  const p = buildToday(SOURCES, null, null, null, { governance: gov, nowMs: NOW2 }); // default annotate
+  const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'annotate', governance: gov, nowMs: NOW2, ...NO_DATA_GATE });
   const lane = Object.values(p.actionableByHorizon).flat();
   for (const x of lane) {
     const srcs = x.sources || [x.source];
@@ -142,7 +146,7 @@ test('actionableByHorizon contains ONLY trade-eligible sources; research signals
 });
 
 test('nothing cleared → the actionable lane is honestly EMPTY (except the pinned daytrade), never backfilled with research', () => {
-  const p = buildToday(SOURCES, null, null, null, { governance: null, nowMs: NOW2 }); // no governance ⇒ fail closed
+  const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'annotate', governance: null, nowMs: NOW2, ...NO_DATA_GATE }); // no governance ⇒ fail closed
   const lane = Object.values(p.actionableByHorizon).flat();
   for (const x of lane) {
     const srcs = x.sources || [x.source];
@@ -172,7 +176,7 @@ test('confluence singleFamily flag: multiple bullish votes from one family are f
 
 test('enforce mode: researchByHorizon carries the full ungated cross-section, RESEARCH-classed (visibility survives enforcement)', () => {
   const gov = freshGov2([{ id: 'screener', status: 'production', weight: 1, version: 'screener-v1' }]);
-  const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'enforce', governance: gov, nowMs: NOW2 });
+  const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'enforce', governance: gov, nowMs: NOW2, ...NO_DATA_GATE });
   assert.ok(p.researchByHorizon, 'enforce mode must serve the research cross-section');
   const rows = Object.values(p.researchByHorizon).flat();
   assert.ok(rows.length > 0);
@@ -180,15 +184,15 @@ test('enforce mode: researchByHorizon carries the full ungated cross-section, RE
   const shadowVisible = [...srcs].some(s => !['screener', 'daytrade'].includes(s));
   assert.ok(shadowVisible, 'shadow sources must remain VISIBLE as research under enforcement');
   for (const x of rows) {
-    assert.ok(x.evidenceClass === 'ACTIONABLE' || x.evidenceClass === 'RESEARCH');
+    assert.ok(['ACTIONABLE', 'QUALIFIED_LEAD', 'RESEARCH'].includes(x.evidenceClass));
     const rowSrcs = x.sources || [x.source];
     if (rowSrcs.some(s => !['screener', 'daytrade'].includes(s))) {
       assert.equal(x.evidenceClass, 'RESEARCH', 'an uncleared source must never wear ACTIONABLE');
     }
   }
-  // Annotate mode: null by design (topByHorizon already is the full cross-section).
-  const ann = buildToday(SOURCES, null, null, null, { governance: gov, nowMs: NOW2 });
-  assert.equal(ann.researchByHorizon, null);
+  // The research lane is served in EVERY mode now (one payload shape for the UI).
+  const ann = buildToday(SOURCES, null, null, null, { eligibilityMode: 'annotate', governance: gov, nowMs: NOW2, ...NO_DATA_GATE });
+  assert.ok(ann.researchByHorizon && Object.values(ann.researchByHorizon).flat().length > 0);
 });
 
 // ── entry-v2: per-contract next-open grading basis ───────────────────────────

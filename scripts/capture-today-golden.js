@@ -21,7 +21,10 @@ const { SOURCES, project } = require('../test/fixtures/today-sources');
 const which = process.argv[2] === 'baseline' ? 'today-golden-baseline.json' : 'today-golden.json';
 const out = path.join(__dirname, '..', 'test', 'fixtures', which);
 
-const payload = buildToday(SOURCES, null, null, null);
+// The golden pins the UNGATED ranking (see test/today-golden.test.js): the default mode
+// is fail-closed 'enforce', and a golden of the cleared-only subset would change whenever
+// governance state changes rather than when the RANKER changes.
+const payload = buildToday(SOURCES, null, null, null, { eligibilityMode: 'annotate' });
 const golden = project(payload);
 fs.writeFileSync(out, JSON.stringify(golden, null, 2) + '\n');
 process.stdout.write(`wrote ${out}: signals=${golden.counts.signals}\n`);

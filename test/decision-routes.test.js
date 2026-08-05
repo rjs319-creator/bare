@@ -4,6 +4,12 @@ const assert = require('node:assert/strict');
 const N = require('../lib/decision-normalizers');
 const { buildToday } = require('../lib/decision-routes');
 
+// These suites exercise the RANKING engine over the full cross-section. Since the
+// non-daytrade redesign (2026-08) the default eligibility mode is fail-closed 'enforce',
+// which serves only cleared strategies — so the ranking tests ask explicitly for the
+// ungated 'annotate' board. Enforcement itself is covered in test/eligibility.test.js.
+const ANNOTATE = { eligibilityMode: 'annotate' };
+
 // Realistic-shaped fixtures (trimmed from live prod responses).
 const SCREENER = {
   regime: { indexAbove200: true, breadthPct: 69, bearish: false, riskOn: true, condition: 'mixed' },
@@ -64,13 +70,13 @@ test('fromCoreMomentum: fills the portfolio horizon with rank→percentile confi
 });
 
 test('buildToday: Core Momentum populates the portfolio bucket', () => {
-  const p = buildToday({ coremo: { book: [{ ticker: 'MMM', sector: 'Industrials', price: 100, rank: 1, marketCap: 5e9 }] }, scoreboard: SCOREBOARD });
+  const p = buildToday({ coremo: { book: [{ ticker: 'MMM', sector: 'Industrials', price: 100, rank: 1, marketCap: 5e9 }] }, scoreboard: SCOREBOARD }, null, null, null, ANNOTATE);
   assert.ok(p.horizons.portfolio.find(x => x.ticker === 'MMM'), 'MMM in portfolio horizon');
 });
 
 test('buildToday: gap-down shorts rank ABOVE longs in risk-off (validated lever)', () => {
   const off = { ...SCREENER, regime: { ...SCREENER.regime, bearish: true, riskOn: false } };
-  const p = buildToday({ screener: off, gapdown: GAPDOWN, sectors: SECTORS, scoreboard: SCOREBOARD });
+  const p = buildToday({ screener: off, gapdown: GAPDOWN, sectors: SECTORS, scoreboard: SCOREBOARD }, null, null, null, ANNOTATE);
   const zzz = p.horizons.intraday.find(x => x.ticker === 'ZZZ');
   const aaa = p.horizons.swing.find(x => x.ticker === 'AAA');
   assert.ok(zzz, 'short present in risk-off');
@@ -104,7 +110,7 @@ test('sectorStrength: ranks leading/weakening and scores names -1..1', () => {
 });
 
 test('buildToday: merges AAA across screener+gapgo into one multi-family signal', () => {
-  const p = buildToday({ screener: SCREENER, gapgo: GAPGO, daytrade: DAYTRADE, coil: COIL, sectors: SECTORS, scoreboard: SCOREBOARD, ai: AI });
+  const p = buildToday({ screener: SCREENER, gapgo: GAPGO, daytrade: DAYTRADE, coil: COIL, sectors: SECTORS, scoreboard: SCOREBOARD, ai: AI }, null, null, null, ANNOTATE);
   // AAA appears in screener(swing) and gapgo(intraday) — different horizons, so NOT merged,
   // but its swing copy carries priceTrend+volumeAccum (breakout+ghost).
   const swingAAA = p.horizons.swing.find(x => x.ticker === 'AAA');
@@ -114,7 +120,7 @@ test('buildToday: merges AAA across screener+gapgo into one multi-family signal'
 });
 
 test('buildToday: horizon buckets are disjoint and regime/sectors populated', () => {
-  const p = buildToday({ screener: SCREENER, gapgo: GAPGO, daytrade: DAYTRADE, coil: COIL, sectors: SECTORS, scoreboard: SCOREBOARD, ai: AI });
+  const p = buildToday({ screener: SCREENER, gapgo: GAPGO, daytrade: DAYTRADE, coil: COIL, sectors: SECTORS, scoreboard: SCOREBOARD, ai: AI }, null, null, null, ANNOTATE);
   assert.equal(p.regime.label, 'Risk-on');
   assert.equal(p.sectors.leading[0].name, 'Technology');
   assert.equal(p.counts.byHorizon.swing, p.horizons.swing.length);
@@ -123,7 +129,7 @@ test('buildToday: horizon buckets are disjoint and regime/sectors populated', ()
 });
 
 test('buildToday: NO global cross-horizon top list — per-horizon shortlists only (defect #9)', () => {
-  const p = buildToday({ screener: SCREENER, gapgo: GAPGO, daytrade: DAYTRADE, coil: COIL, sectors: SECTORS, scoreboard: SCOREBOARD, ai: AI });
+  const p = buildToday({ screener: SCREENER, gapgo: GAPGO, daytrade: DAYTRADE, coil: COIL, sectors: SECTORS, scoreboard: SCOREBOARD, ai: AI }, null, null, null, ANNOTATE);
   assert.ok(!('top' in p), 'the single global cross-horizon shortlist must not exist');
   assert.ok(p.topByHorizon && typeof p.topByHorizon === 'object');
   for (const [h, list] of Object.entries(p.topByHorizon)) {
@@ -136,8 +142,8 @@ test('buildToday: NO global cross-horizon top list — per-horizon shortlists on
 
 test('buildToday: risk-off buries longs (validated lever) + all-new lane on day 1', () => {
   const off = { ...SCREENER, regime: { ...SCREENER.regime, bearish: true, riskOn: false } };
-  const on = buildToday({ screener: SCREENER, sectors: SECTORS, scoreboard: SCOREBOARD });
-  const offP = buildToday({ screener: off, sectors: SECTORS, scoreboard: SCOREBOARD });
+  const on = buildToday({ screener: SCREENER, sectors: SECTORS, scoreboard: SCOREBOARD }, null, null, null, ANNOTATE);
+  const offP = buildToday({ screener: off, sectors: SECTORS, scoreboard: SCOREBOARD }, null, null, null, ANNOTATE);
   const onAAA = on.horizons.swing.find(x => x.ticker === 'AAA');
   const offAAA = offP.horizons.swing.find(x => x.ticker === 'AAA');
   assert.ok(offAAA.score < onAAA.score * 0.6);
@@ -145,9 +151,9 @@ test('buildToday: risk-off buries longs (validated lever) + all-new lane on day 
 });
 
 test('buildToday: lanes diff against a previous snapshot', () => {
-  const first = buildToday({ screener: SCREENER, sectors: SECTORS, scoreboard: SCOREBOARD });
+  const first = buildToday({ screener: SCREENER, sectors: SECTORS, scoreboard: SCOREBOARD }, null, null, null, ANNOTATE);
   const prevRow = first.horizons.swing.map(x => ({ id: x.id, state: x.state, rank: x.rank, score: x.score - 20 }));
-  const second = buildToday({ screener: SCREENER, sectors: SECTORS, scoreboard: SCOREBOARD }, { ids: prevRow });
+  const second = buildToday({ screener: SCREENER, sectors: SECTORS, scoreboard: SCOREBOARD }, { ids: prevRow }, null, null, ANNOTATE);
   assert.equal(second.lanes.new.length, 0);                 // all were in prev
   assert.ok(second.lanes.upgraded.length >= 1);             // score rose ≥8 vs prev
 });
@@ -159,10 +165,10 @@ test('buildToday: remaining-edge (§3) re-ranks a run-up name and emits the mode
     { ticker: 'RUN', company: 'R', sector: 'Technology', status: 'Setup', price: 15,
       levels: { entry: 10, stop: 4, target: 20, rr: 1.67 }, factors: { dollarVol: 5e8, mom63: 40 }, quant: { score: 80 } },
   ] };
-  const base = buildToday({ screener: RUNUP, sectors: SECTORS, scoreboard: SCOREBOARD });
+  const base = buildToday({ screener: RUNUP, sectors: SECTORS, scoreboard: SCOREBOARD }, null, null, null, ANNOTATE);
   const runId = base.horizons.swing.find(x => x.ticker === 'RUN').id;
   const origins = { [runId]: { firstPrice: 10, entry: 10, stop: 4, target: 20, side: 'long', horizon: 'swing', bars: 0 } };
-  const withOrigins = buildToday({ screener: RUNUP, sectors: SECTORS, scoreboard: SCOREBOARD }, null, null, origins);
+  const withOrigins = buildToday({ screener: RUNUP, sectors: SECTORS, scoreboard: SCOREBOARD }, null, null, origins, ANNOTATE);
 
   const baseRun = base.horizons.swing.find(x => x.ticker === 'RUN');
   const reRun = withOrigins.horizons.swing.find(x => x.ticker === 'RUN');
@@ -181,7 +187,7 @@ test('buildToday: emits an opportunity-density decision, and a bull tape alone d
     { ticker: 'ONE', company: 'One', sector: 'Technology', status: 'Setup', price: 20,
       levels: { entry: 20, stop: 18, target: 21, rr: 0.5 }, factors: { dollarVol: 3e7 }, quant: { score: 55 } },
   ] };
-  const p = buildToday({ screener: THIN, sectors: SECTORS, scoreboard: SCOREBOARD });
+  const p = buildToday({ screener: THIN, sectors: SECTORS, scoreboard: SCOREBOARD }, null, null, null, ANNOTATE);
   assert.ok(p.opportunity, 'payload carries the opportunity decision');
   assert.ok(['normal', 'selective', 'reduced', 'no-trade'].includes(p.opportunity.decision));
   assert.notEqual(p.opportunity.decision, 'normal', 'a bull tape + one thin name must not be normal');
@@ -190,7 +196,7 @@ test('buildToday: emits an opportunity-density decision, and a bull tape alone d
 });
 
 test('buildToday: attaches the adversarial failure model as SHADOW without reordering the board (#5)', () => {
-  const p = buildToday({ screener: SCREENER, gapgo: GAPGO, daytrade: DAYTRADE, coil: COIL, sectors: SECTORS, scoreboard: SCOREBOARD, ai: AI });
+  const p = buildToday({ screener: SCREENER, gapgo: GAPGO, daytrade: DAYTRADE, coil: COIL, sectors: SECTORS, scoreboard: SCOREBOARD, ai: AI }, null, null, null, ANNOTATE);
   assert.equal(p.failureModel.shadow, true, 'model status is shadow');
   // Every active signal carries a failure read with a bounded probability + size multiplier.
   for (const sHz of Object.values(p.horizons)) for (const sig of sHz) {

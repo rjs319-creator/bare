@@ -2690,6 +2690,20 @@
 .td-class { font-size:.6rem; font-weight:800; letter-spacing:.04em; padding:.08em .45em; border-radius:4px; }
 .td-class-act { color:#34d399; background:rgba(52,211,153,.14); border:1px solid rgba(52,211,153,.35); }
 .td-class-res { color:#c4b5fd; background:rgba(196,181,253,.12); border:1px solid rgba(196,181,253,.3); }
+/* Three-lane separation (non-daytrade redesign 2026-08): QUALIFIED LEAD is its own class,
+   never folded into actionable or research. */
+.td-class-lead { color:#fbbf24; background:rgba(251,191,36,.12); border:1px solid rgba(251,191,36,.35); }
+.td-retained { font-size:.6rem; font-weight:700; color:#94a3b8; background:rgba(148,163,184,.12); padding:.08em .4em; border-radius:4px; }
+.td-classwhy { font-size:.68rem; margin:.15rem 0 .1rem; }
+.td-whynow { font-size:.72rem; margin:.2rem 0; padding:.25rem .4rem; border-left:2px solid rgba(52,211,153,.5); background:rgba(52,211,153,.06); border-radius:0 4px 4px 0; }
+.td-xd { margin-top:.3rem; font-size:.68rem; }
+.td-xd summary { cursor:pointer; }
+.td-xd-row { display:flex; justify-content:space-between; gap:.6rem; padding:.06rem 0; border-bottom:1px dotted rgba(148,163,184,.18); }
+.td-xd-row b { font-weight:600; text-align:right; }
+.td-degraded { margin:.4rem 0; padding:.4rem .6rem; border-left:3px solid; background:rgba(245,158,11,.08); border-radius:0 6px 6px 0; font-size:.75rem; }
+.td-lane-exec { border-left:3px solid rgba(52,211,153,.5); padding-left:.5rem; }
+.td-lane-lead { border-left:3px solid rgba(251,191,36,.45); padding-left:.5rem; }
+.td-lane-research { border-left:3px solid rgba(196,181,253,.4); padding-left:.5rem; }
 .td-age { font-size:.62rem; color:var(--text-dim,#94a3b8); background:rgba(148,163,184,.1); padding:.08em .4em; border-radius:999px; }
 
 /* Data-trust provenance panel on the Today command center */

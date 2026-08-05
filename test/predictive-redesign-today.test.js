@@ -105,11 +105,13 @@ test('a swing pick that ages out does not vanish — it lands in the expired lan
 
 // ── Defects #12/#13: actionable vs research separation + liquidity sizing ───────
 
-test('every board row carries an unmistakable ACTIONABLE vs RESEARCH class (shadow sources are never implied recommendations)', () => {
-  const p = buildToday(SOURCES, null, null, null, {});
+test('every board row carries an unmistakable safety class (shadow sources are never implied recommendations)', () => {
+  // Annotate: the FULL cross-section is on the board, so every class is exercised. Under
+  // the fail-closed default the uncleared rows are not served at all.
+  const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'annotate', dataGate: null });
   const rows = Object.values(p.horizons).flat();
   assert.ok(rows.length > 0);
-  for (const r of rows) assert.ok(r.evidenceClass === 'ACTIONABLE' || r.evidenceClass === 'RESEARCH', `${r.id} classed`);
+  for (const r of rows) assert.ok(['ACTIONABLE', 'QUALIFIED_LEAD', 'RESEARCH'].includes(r.evidenceClass), `${r.id} classed`);
   // Without governance evidence, non-pinned sources fail closed to RESEARCH.
   const coremo = rows.find(r => r.source === 'coremo');
   if (coremo) assert.equal(coremo.evidenceClass, 'RESEARCH', 'a shadow source can never present as evidence-cleared');
