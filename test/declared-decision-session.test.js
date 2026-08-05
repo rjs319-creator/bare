@@ -80,10 +80,14 @@ test('cohortFreshness: nothing dated ⇒ NO session is invented (the source stay
 });
 
 test('COIL publishes the session its candle cohort was actually read through', () => {
+  // Strengthened after the live finding (2,122 stale of 3,169): the session is no longer
+  // the modal date of a mixed pile computed at response time — it is ADJUDICATED in the
+  // scan, and every ranked row provably carries that bar date. See
+  // test/coil-cohort-vintage.test.js for the ranking invariant.
   const s = src('screener-routes.js');
-  assert.match(s, /const coilFreshness = cohortFreshness\(ranked\)/);
-  assert.match(s, /decisionSession: coilFreshness\.decisionSession/);
-  assert.match(s, /staleCandidates: coilFreshness\.behind/);
+  assert.match(s, /const vintage = cohortFreshness\(cohort\)/);
+  assert.match(s, /decisionSession: decisionSession \|\| null/);
+  assert.match(s, /staleCandidates: excludedStale/);
 });
 
 test('GAP-DOWN publishes the benchmark session it already computed but never emitted', () => {
