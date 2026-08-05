@@ -489,3 +489,37 @@ next-session intraday archive (Gap & Go v2) · estimates PIT_UNPROVEN (Experimen
 borrow feed (shorts stay watch-only) · no pairwise ticker correlation matrix · the legacy
 Scoreboard sections still grade on a proxy basis (Day-Trade-fixture-coupled), which the
 derived `fillVerified` gate now neutralizes for promotion purposes.
+
+### 9.5 Migration & rollback
+
+**What migrates automatically.** Nothing is rewritten. Existing ledgers, snapshots and
+Scoreboard summaries are read as-is:
+
+- older summaries have no `dateNet.effectiveN` / `blockStability` ⇒ they fail the new gates
+  **closed** (Promising, with the reason stated) until the next Scoreboard write produces
+  them — no strategy silently keeps a grade it can no longer prove;
+- older governance records without `newPositions` derive it from the status ladder;
+- pre-v2 evidence identities classify as `LEGACY_CONTEXT`: visible as history, unable to
+  govern, calibrate or promote;
+- legacy Scoreboard rows map into the canonical episode ledger through
+  `fromScoreboardRow(...)` as `signal-close-proxy`, i.e. honestly fill-UNVERIFIED;
+- the new `3d` Scoreboard horizon is additive — every existing horizon key is untouched.
+
+**Rollback.** Each phase is a separate commit and independently revertible:
+
+| To undo | Do this |
+|---|---|
+| fail-closed default only | set `DECISION_ELIGIBILITY_MODE=annotate` (no deploy of code needed) |
+| the whole Phase-2 change | revert the fail-closed commit; the sizing-set filter goes with it |
+| score normalization (board ranks) | revert the Phase-9 commit and regenerate `test/fixtures/today-golden.json` |
+| the new maturity gates | revert the Phase-5 commit (`maturity-v4` → `v3` constants) |
+| the grandfather lane | revert the Phase-3 commit (`gov-v3` → `v2.1`) |
+
+**Irreversible by design:** the experiment registry is append-only. A rejected hypothesis
+stays rejected and findable.
+
+**Deploy note.** Production already runs with `DECISION_ELIGIBILITY_MODE=enforce` (set in
+the previous pass), so the default change aligns the code with the deployed configuration
+rather than altering live behavior on its own. The behavior that *does* change on deploy:
+the pre-ranking data gate, the three-lane payload/UI, score normalization for non-Day-Trade
+sources, and the ACTIONABLE-only sizing set.
