@@ -347,3 +347,145 @@ free verdicts are negative — building one would be BLOCKED_DATA theater).
 **Empirical results: none claimed.** No new market experiment ran. Promoted: none.
 Demoted: none (registry statuses unchanged; several strategies' *evidence pools*
 shrank to their honest cohorts, which can only lower future grades until earned).
+
+## 9. Full redesign pass (2026-08-05) — enforcement, identity, episodes, experiments
+
+Fourth pass. Thirteen phases against the current source, each verified at file:line before
+editing. Day Trade untouched throughout (pinned in eligibility AND in the new score
+normalizer; its intrinsic fields are asserted byte-for-byte under both modes). Baseline
+3,618 tests / 3,616 pass → **3,753 tests / 3,751 pass / 0 fail**; `npm run check` clean.
+
+**No model was promoted. No new alpha is claimed. Two experiments ran and both came back
+negative or blocked.**
+
+### 9.1 What changed
+
+1. **Fail-closed by default** (Phase 2). `DECISION_ELIGIBILITY_MODE` now defaults to
+   `enforce`; `annotate` is an explicit diagnostic override that labels itself on the
+   payload. **QUALIFIED_LEAD survives end to end** — it was being collapsed into
+   ACTIONABLE/RESEARCH at the payload boundary (`evidenceClass` now carries the eligibility
+   verdict verbatim). The portfolio, the ensemble Book and the opportunity density are built
+   from the ACTIONABLE + sizing-eligible set **in every mode**, so the diagnostic override
+   can no longer size anything. Lead-only contracts can never be sized. The shadow
+   comparison runs in both directions and is explicitly labeled non-actionable.
+2. **Semantic promotion artifacts + the grandfather lane** (Phase 3, `gov-v3`). Artifacts
+   are validated on their VALUES (`validationResults.passed`, `costStress.passed`,
+   `survivorshipStatus.safe`, calibration when probabilities are displayed, prospective
+   evidence, sample / effective-sample / block floors, multiple-testing correction, identity
+   match, evidence-hash binding, freshness, unresolved data-quality blockers) with
+   machine-readable codes. A previously-live strategy that no longer qualifies becomes
+   **reduce-only** — cannot originate new positions — and **expires automatically** after 90
+   days without renewed evidence.
+3. **Canonical evidence identity** (Phase 4). Eleven axes; any difference is a different
+   experiment; an incomplete identity is LEGACY_CONTEXT and cannot govern, calibrate or
+   promote. Gap & Go v1 → v2 is the worked test case.
+4. **One population, dependence-aware statistics** (Phase 5, `maturity-v4`). Every displayed
+   statistic derives from one deduplicated decision-date series; HAC + seeded moving-block
+   bootstrap (the reported interval is the wider); Student-t at the effective sample size
+   instead of a flat 1.96; effective-sample and 4-block stability are new fail-closed gates;
+   BH-FDR across attempts. Every governed core strategy declares its frozen `policyTiers`.
+5. **Canonical episode ledger** (Phase 6). One schema, attrition counted by reason, leakage
+   refused as `invalid-data`, unfilled plans never averaged as 0%, adapters for
+   swing-evaluate / gapgo-verify / legacy Scoreboard rows, a reconciliation report — and
+   **`fillVerified` is now DERIVED from resolved episodes**; a contract flag cannot grant it.
+6. **Contract/evaluator reconciliation** (Phase 7). Down-Day was graded on a 5-day bucket
+   while its contract claimed a 3-session red-tape window: the Scoreboard gained a `3d`
+   horizon and the contract now points at it. Breakout separates `promotionMetric` from
+   research horizons; Ghost is incremental-over-screener only; Coil is split into a
+   non-promotable expansion detector and a promotable Stage-B trade model; Gap & Go's
+   verified lane owns the same-session R label and inherits nothing from v1; options flow
+   declares what the data cannot support; Pattern Radar gained a contract.
+7. **Pre-ranking data gates** (Phase 8). Freshness/coverage is resolved BEFORE the merge and
+   rank. A fresh `generatedAt` over a stale information cutoff no longer passes. Blocked
+   sources cannot originate a new entry; their names stay visible as MONITOR / HOLD /
+   INVALIDATED / DATA_STALE with a degraded-data banner.
+8. **Score comparability** (Phase 9). Within-source percentiles (or neutral shrink when the
+   cross-section is too thin), frozen source priors, and an explicit merge model with
+   dependence discounts, decay and a hard cap replacing `Math.max(rawConfidence)`. The
+   historical rank tilt now reads the COST-NET record. Lead-only rows carry an execution-
+   uncertainty penalty. Every row exposes its score decomposition.
+9. **Three-lane UI** (Phase 10). EXECUTABLE IDEAS / QUALIFIED LEADS / RESEARCH WATCHLIST as
+   structural sections, a plain-language "not actionable because…" line from the reason
+   codes, novice enter/wait/hold guidance with the invalidation, and a collapsed expert
+   panel with the decomposition and an explicit "no calibrated probability is shown".
+10. **Experiments + registry** (Phases 11–12) and the **safe learning loop** (Phase 13):
+    automatic demotion allowed, automatic promotion structurally impossible.
+
+### 9.2 Empirical results (the only numbers claimed)
+
+**A — Down-Day exact contract** (`research/66-downday-exact-contract.js`). 1,200 names,
+256 red-tape sessions (2022-07-22 → 2026-06-26), 22,027 flagged bounce episodes vs 90,358
+matched same-date same-liquidity-band controls, next-open entry, 3 sessions, cost-net.
+
+| metric | result |
+|---|---|
+| flagged, cost-net excess vs SPY | **−0.29%** (254 dates, eff 193, 95% CI [−0.48, −0.11]) |
+| flagged, doubled / stressed costs | −0.45% / −0.61% |
+| flagged, vs same-sector cohort | −0.20% (CI [−0.30, −0.10]) |
+| matched controls | −0.25% (CI [−0.39, −0.11]) |
+| **lift vs matched controls (primary)** | **−0.04%** (254 dates, eff 254, CI [−0.16, +0.08]), 0/4 positive blocks |
+| holdout (final 25% of dates) | −0.03% (64 dates) |
+| p / q(BH) | 0.52 / 0.52 |
+
+**Verdict: NOT CONFIRMED.** The Down-Day bounce carried the app's most credible conditional
+evidence; measured on its OWN contract against matched controls it has no lift. The
+strategy's negative absolute number is mostly a red-day universe effect (the controls are
+negative too) — the honest reading is *no selection edge*, not *a bad strategy*.
+
+**B — Gap & Go v2** (`research/67-gapgo-orb-v2.js`). 11,264 EOD gap decisions found; the
+shipped resolver could grade **12** of them, because the local 5-minute cache is keyed by
+event day and 11,252 decisions have no bars for the exact next session (178 more had an
+uncertain entry session). **Verdict: BLOCKED_DATA.** Nothing imputed, nothing concluded; the
+live `op=gapgoverify` channel is the only path that accrues this record.
+
+**C — Unified swing baseline tournament** (`research/68-swing-baseline-tournament.js`).
+900 names, 193 decision dates (2022-07 → 2026-06), 21 sessions, top-10, next-open entry,
+identical eligibility and costs for every entrant. Harness verified by a within-date
+shuffled-label placebo (rank IC **−0.003** ≈ 0).
+
+| entrant | rank IC | cost-net top-10 excess (95% CI) | 2× cost | 3× cost | hit | turnover | q(BH) |
+|---|---|---|---|---|---|---|---|
+| production | +0.016 | **+0.04%** [−1.94, +1.76] | −0.26% | −0.56% | 45.2% | 0.37 | 0.96 |
+| sectorRelative | +0.015 | +1.05% [−1.96, +3.78] | +0.74% | +0.42% | 46.1% | 0.22 | 0.59 |
+| marketRelative | +0.014 | +0.86% [−2.08, +3.62] | +0.55% | +0.24% | 45.5% | 0.22 | 0.59 |
+| simpleMomentum | +0.014 | +0.86% [−2.08, +3.62] | +0.55% | +0.24% | 45.5% | 0.22 | 0.59 |
+| breakout ladder | +0.006 | −1.00% [−1.72, −0.35] | −1.30% | −1.61% | 45.4% | 0.86 | 0.009 |
+| ghost overlay | +0.014 | −1.03% [−1.89, −0.06] | −1.34% | −1.65% | 45.4% | 0.88 | 0.042 |
+| coil-triggered | +0.028 | −1.34% [−2.17, −0.47] | −1.64% | −1.94% | 40.4% | 0.35 | 0.008 |
+| equal-weight eligible | n/a | −0.91% [−1.41, −0.45] | −1.24% | −1.58% | 44.6% | 0.01 | 0.001 |
+| seeded random | +0.001 | −0.78% [−1.50, −0.10] | −1.12% | −1.45% | 45.8% | 0.99 | 0.043 |
+| placebo (shuffled label) | −0.003 | −0.88% | — | — | 43.9% | 0.37 | 0.042 |
+
+**Incremental value of the production score over the best simple baseline
+(sector-relative): −1.01%, CI [−2.68, +0.69] over 193 dates.**
+
+**Verdict: NO ENTRANT DEMONSTRATES DURABLE COST-NET EDGE.** Read honestly:
+- the production composite is indistinguishable from zero and from a simple momentum rank;
+- the Breakout ladder, the Ghost overlay and the Coil-triggered subset are *significantly
+  negative* cost-net as RANKERS — consistent with their new contract roles (candidate
+  generation, overlay, expansion detector), not with ranking alpha;
+- the whole eligible cohort underperformed SPY at 21 sessions in this window
+  (equal-weight −0.91%), so several negatives are partly a universe effect — which is why
+  the *lift versus baselines on identical dates* is the metric that matters;
+- the placebo is clean, so these negatives are the harness working, not a bug.
+
+**D — Analyst revision breadth/acceleration** (`research/69-revision-breadth-gate.js`): the
+frozen design is declared, the gate is implemented, and it **refuses to run** — estimates
+remain PIT_UNPROVEN. The question is unanswered, not answered "no".
+
+### 9.3 Promotions, demotions, unchanged
+
+- **Promoted: none.** No promotion artifact exists; the path is still empty.
+- **Demoted: none by status.** Several strategies' evidence pools shrank to honest cohorts
+  (frozen `policyTiers`), Down-Day's grade will now be read from the `3d` bucket it actually
+  claims, and `fillVerified` is derived — so every pipeline currently reports *no verified
+  fills*, which caps every strategy at Promising until a canonical ledger is reduced.
+- **Unchanged: Day Trade**, byte-for-byte.
+
+### 9.4 Still blocked
+
+Survivorship is reduced, not eliminated (no PIT constituents) · no PIT sector history · no
+next-session intraday archive (Gap & Go v2) · estimates PIT_UNPROVEN (Experiment D) · no
+borrow feed (shorts stay watch-only) · no pairwise ticker correlation matrix · the legacy
+Scoreboard sections still grade on a proxy basis (Day-Trade-fixture-coupled), which the
+derived `fillVerified` gate now neutralizes for promotion purposes.
