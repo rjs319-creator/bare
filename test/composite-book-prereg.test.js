@@ -40,3 +40,16 @@ test('wilsonLo: sane bounds (monotone in n at fixed rate, below the point estima
   assert.ok(wilsonLo(60, 100) > wilsonLo(6, 10), 'more evidence → tighter bound');
   assert.equal(wilsonLo(0, 0), 0);
 });
+
+test('micro-capital scenario: smaller notional admits fills the default no-fills (capacity asymmetry)', () => {
+  const EX = require('../lib/research/execution');
+  assert.equal(EX.MICRO_NOTIONAL_USD, 2500);
+  const DAY = 86_400_000;
+  const bars = Array.from({ length: 40 }, (_, k) => ({ ms: k * DAY, open: 10, high: 10.5, low: 9.5, close: 10, volume: 40_000 }));
+  const adv = 400_000;                          // $10k = 2.5% of ADV → capped; $2.5k = 0.625% → fills
+  const big = EX.executableOutcome({ bars, decisionIdx: 5, horizonSessions: 21, adv });
+  const micro = EX.executableOutcome({ bars, decisionIdx: 5, horizonSessions: 21, adv, notionalUsd: EX.MICRO_NOTIONAL_USD });
+  assert.equal(big.status, 'no_fill');
+  assert.match(big.noFillReason, /participation/);
+  assert.equal(micro.status, 'filled');
+});
