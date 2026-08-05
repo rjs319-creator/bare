@@ -307,6 +307,7 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'calarchive') return require('../lib/alpha-archive-routes').runCalArchive(req, res);
   if (req.query.op === 'revarchive') return require('../lib/alpha-archive-routes').runRevArchive(req, res);
   if (req.query.op === 'gexarchive') return require('../lib/alpha-archive-routes').runGexArchive(req, res);
+  if (req.query.op === 'archivehealth') return require('../lib/alpha-archive-routes').runArchiveHealth(req, res);
   if (req.query.op === 'intracapture') return runIntraCapture(req, res);
   if (req.query.op === 'intraday') return runIntraday(req, res);
   if (req.query.op === 'baseline') return runBaseline(req, res);
