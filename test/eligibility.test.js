@@ -134,18 +134,62 @@ test('DAY TRADE PIN: daytrade keeps its existing behavior — production static 
 });
 
 // ── buildToday integration ───────────────────────────────────────────────────
-test('annotate (default): board unchanged, every active signal carries an eligibility verdict, shadow comparison present', () => {
-  const off = buildToday(SOURCES, null, null, null, { eligibilityMode: 'off' });
-  const ann = buildToday(SOURCES, null, null, null, {});
+// `dataGate: null` in the governance suites: the shared fixture carries no source
+// timestamps, so the (separately tested) pre-ranking data gate would block every source
+// before governance was ever consulted. These tests are about GOVERNANCE clearance.
+const NO_DATA_GATE = { dataGate: null };
+
+test('FAIL-CLOSED DEFAULT: with no mode set the board is ENFORCED, not annotated', () => {
+  const def = buildToday(SOURCES, null, null, null, NO_DATA_GATE);
+  assert.equal(def.governanceGate.mode, 'enforce');
+  assert.equal(def.governanceGate.diagnosticOverride, false);
+  assert.equal(EL.DEFAULT_MODE, 'enforce');
+  // No governance doc ⇒ nothing but the pinned Day Trade source clears.
+  const sources = new Set(Object.values(def.horizons).flat().map(x => x.source));
+  assert.deepEqual([...sources], ['daytrade']);
+});
+
+test('annotate is an EXPLICIT diagnostic override: board ungated, every signal classed, shadow comparison present', () => {
+  const off = buildToday(SOURCES, null, null, null, { eligibilityMode: 'off', ...NO_DATA_GATE });
+  const ann = buildToday(SOURCES, null, null, null, { eligibilityMode: 'annotate', ...NO_DATA_GATE });
   assert.equal(ann.counts.signals, off.counts.signals);
   const flatTop = (pl) => Object.values(pl.topByHorizon).flat();
   assert.deepEqual(flatTop(ann).map(x => x.id), flatTop(off).map(x => x.id));
   assert.ok(flatTop(ann).every(x => x.eligibility && typeof x.eligibility.tradeEligible === 'boolean'));
-  assert.ok(flatTop(ann).every(x => x.evidenceClass === 'ACTIONABLE' || x.evidenceClass === 'RESEARCH'),
-    'every card carries the unmistakable ACTIONABLE vs RESEARCH class');
+  assert.ok(flatTop(ann).every(x => ['ACTIONABLE', 'QUALIFIED_LEAD', 'RESEARCH'].includes(x.evidenceClass)),
+    'every card carries one of the three safety classes');
   assert.ok(ann.governanceGate && ann.governanceGate.mode === 'annotate');
+  assert.equal(ann.governanceGate.diagnosticOverride, true);
+  assert.match(ann.governanceGate.note, /DIAGNOSTIC OVERRIDE/);
   assert.ok(ann.governanceGate.shadowComparison);
   assert.equal(off.governanceGate, null);
+});
+
+test('the annotate override still builds the portfolio + opportunity density from ACTIONABLE rows only', () => {
+  const ann = buildToday(SOURCES, null, null, null, { eligibilityMode: 'annotate', ...NO_DATA_GATE });
+  assert.equal(ann.portfolio.universe.basis, 'ACTIONABLE + sizing-eligible only');
+  for (const p of ann.portfolio.selected) {
+    assert.equal(p.evidenceClass, 'ACTIONABLE', `${p.id} is not actionable but reached the book`);
+    assert.equal(p.eligibility.sizingEligible, true);
+  }
+  assert.ok(ann.opportunity.activeCount <= ann.portfolio.universe.considered + 0,
+    'opportunity density reads the sizing set, not the display board');
+});
+
+test('QUALIFIED_LEAD survives end to end as its own lane and never enters the book', () => {
+  const gov = freshGov([{ id: 'screener', status: 'production', weight: 1, version: 'screener-v1' }]);
+  const p = buildToday(SOURCES, null, null, null, { governance: gov, nowMs: NOW, ...NO_DATA_GATE });
+  const leads = Object.values(p.qualifiedLeadsByHorizon || {}).flat();
+  const book = new Set(p.portfolio.selected.map(x => x.id));
+  for (const l of leads) {
+    assert.equal(l.evidenceClass, 'QUALIFIED_LEAD');
+    assert.equal(l.eligibility.sizingEligible, false);
+    assert.ok(!book.has(l.id), `${l.id} is a qualified lead but reached the portfolio`);
+  }
+  // and it is never relabeled as actionable
+  for (const a of Object.values(p.actionableByHorizon || {}).flat()) {
+    assert.equal(a.evidenceClass, 'ACTIONABLE');
+  }
 });
 
 test('enforce: shadow sources can neither ORIGINATE a board row nor BOOST one via merged evidence', () => {
@@ -156,7 +200,7 @@ test('enforce: shadow sources can neither ORIGINATE a board row nor BOOST one vi
   // nowMs pinned to the fixture epoch: freshGov pins savedAt, so an unpinned real
   // clock makes the governance doc read as stale once the calendar moves on (this
   // exact test started failing 6 days after it was written).
-  const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'enforce', governance: gov, nowMs: NOW });
+  const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'enforce', governance: gov, nowMs: NOW, ...NO_DATA_GATE });
   const boardSources = new Set(Object.values(p.topByHorizon).flat().concat(...Object.values(p.horizons)).flatMap(x => x.sources || [x.source]));
   // Shadow/ungoverned sources must be absent everywhere on the tradeable board.
   // 2026-08 reconciliation: gapgo joins the shadow set (unproven prospective
@@ -175,7 +219,7 @@ test('enforce: shadow sources can neither ORIGINATE a board row nor BOOST one vi
 
 test('enforce: the research cross-section still records the FULL ungated candidate set (selection-bias guard)', () => {
   const gov = freshGov([{ id: 'screener', status: 'production', weight: 1, version: 'screener-v1' }]);
-  const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'enforce', governance: gov, nowMs: NOW });
+  const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'enforce', governance: gov, nowMs: NOW, ...NO_DATA_GATE });
   assert.ok(p.research && Array.isArray(p.research.predictions));
   const researchTickers = new Set(p.research.predictions.map(r => r.ticker));
   // A name enforcement excluded from the board must still be observed by research:
@@ -184,8 +228,8 @@ test('enforce: the research cross-section still records the FULL ungated candida
 });
 
 test('enforce + Day Trade: daytrade rows survive with identical scores (frozen behavior)', () => {
-  const ann = buildToday(SOURCES, null, null, null, {});
-  const enf = buildToday(SOURCES, null, null, null, { eligibilityMode: 'enforce', governance: null });
+  const ann = buildToday(SOURCES, null, null, null, { eligibilityMode: 'annotate', ...NO_DATA_GATE });
+  const enf = buildToday(SOURCES, null, null, null, { eligibilityMode: 'enforce', governance: null, ...NO_DATA_GATE });
   const dtAnn = Object.values(ann.horizons).flat().filter(x => x.source === 'daytrade');
   const dtEnf = Object.values(enf.horizons).flat().filter(x => x.source === 'daytrade');
   assert.equal(dtEnf.length, dtAnn.length);
