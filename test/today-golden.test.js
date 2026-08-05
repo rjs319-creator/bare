@@ -62,8 +62,23 @@ test('DAY TRADE FROZEN: rows match the immutable pre-redesign baseline byte-for-
   // intrinsic field (score, confidence, cost, execution, tilt, state) must be identical.
   const strip = (r) => { const { rank, ...rest } = r; return rest; };
   assert.deepEqual(current.map(strip), baseline.map(strip));
-  // and the ungated board is unchanged by this pass, so ranks match too:
-  assert.deepEqual(current.map(r => r.rank), baseline.map(r => r.rank));
+  // RANK EQUALITY IS NO LONGER ASSERTED (non-daytrade redesign 2026-08, Phase 9). Day
+  // Trade rows are pinned in lib/score-normalize (their scores pass through untouched),
+  // but the NON-Day-Trade sources around them are now normalized within their own
+  // cross-section instead of being compared on incomparable raw 0–100 scales — so the
+  // rows they are ranked against moved. The baseline's own comment always allowed this:
+  // "rank can legitimately shift only if OTHER sources move around them". Every intrinsic
+  // Day Trade field (score, confidence, cost tier, execution, tilt, state) is still
+  // asserted byte-for-byte above.
+  assert.ok(current.every(r => Number.isFinite(r.rank)));
+});
+
+test('DAY TRADE FROZEN: score normalization does not touch Day Trade scores (pinned source)', () => {
+  const SN = require('../lib/score-normalize');
+  assert.ok(SN.PINNED.has('daytrade'));
+  const [dt] = SN.normalizeSignals([{ source: 'daytrade', rawConfidence: 55 }]);
+  assert.equal(dt.normalized.value, 55, 'a pinned source passes through untouched');
+  assert.match(dt.normalized.basis, /pinned/);
 });
 
 test('DAY TRADE FROZEN: enforcement leaves every intrinsic Day Trade field identical (only rank may move)', () => {
