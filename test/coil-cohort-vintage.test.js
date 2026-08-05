@@ -29,12 +29,12 @@ test('excluded names are COUNTED, never silently dropped', () => {
   assert.match(src, /excludedScopes: scan\.excludedScopes/);
 });
 
-test('the full scan refuses to merge scopes from different sessions', () => {
+test('the full scan delegates to the pure, exported merge (behavior is tested below)', () => {
   // The cap-band caches are rebuilt by the daily warm cron; `expanded` has no cron at all
   // (op=universescan → op=universecompile is manual), so merging them blends vintages.
-  assert.match(src, /const admitted = scopes\.filter\(\(\[, r\]\) => r\.decisionSession && r\.decisionSession === decisionSession\)/);
-  assert.match(src, /admitted\.flatMap/);
-  assert.match(src, /behind the newest adjudicated session/);
+  // The merge lives in mergeCoilScopes so its CONTRACT can be exercised, not regex-matched.
+  assert.match(src, /return mergeCoilScopes\(\[\['large', lg\]/);
+  assert.match(src, /function mergeCoilScopes\(scopes\)/);
 });
 
 test('cohortFreshness still names the modal session and counts the stragglers', () => {
@@ -83,4 +83,62 @@ test('a cohort with no dated bars ranks NOTHING rather than ranking a mixed pile
   // the scan's guard: no adjudicated session ⇒ atSession is empty ⇒ nothing is ranked
   assert.match(src, /const atSession = vintage\.decisionSession\s*\n\s*\? cohort\.filter/);
   assert.match(src, /: \[\];/);
+});
+
+// ── The merge CONTRACT, exercised for real ──────────────────────────────────
+// The first cut of this merge inlined its logic and silently dropped `ranked` from the
+// returned object. Every test above passed (they were source scans) and op=coil 500'd in
+// production on `ranked.slice(...)`. These tests call the function.
+const { mergeCoilScopes } = require('../lib/screener-routes');
+const scope = (session, tickers, scanned) => ({
+  cohortCount: scanned, rankedCount: tickers.length, decisionSession: session,
+  excludedStale: scanned - tickers.length,
+  ranked: tickers.map((t, i) => ({ ticker: t, score: 100 - i })),
+});
+
+test('mergeCoilScopes RETURNS A RANKED ARRAY (the regression that 500\'d production)', () => {
+  const out = mergeCoilScopes([['large', scope('2026-08-05', ['A', 'B'], 10)]]);
+  assert.ok(Array.isArray(out.ranked), 'ranked must be present and an array');
+  assert.deepEqual(out.ranked.map(r => r.ticker), ['A', 'B']);
+  assert.equal(out.rankedCount, 2);
+  // the shape runCoil destructures must be complete
+  for (const k of ['ranked', 'cohortCount', 'rankedCount', 'decisionSession', 'excludedStale', 'excludedScopes', 'byScope']) {
+    assert.ok(k in out, `missing ${k}`);
+  }
+});
+
+test('mergeCoilScopes admits only the scopes at the NEWEST adjudicated session', () => {
+  const out = mergeCoilScopes([
+    ['large', scope('2026-08-05', ['A', 'B'], 10)],
+    ['small', scope('2026-08-05', ['C'], 5)],
+    ['expanded', scope('2026-07-20', ['D'], 900)],
+  ]);
+  assert.deepEqual(out.ranked.map(r => r.ticker), ['A', 'C', 'B'], 'stale scope excluded, rest merged by score');
+  assert.equal(out.decisionSession, '2026-08-05');
+  assert.deepEqual(out.excludedScopes.map(s => s.scope), ['expanded']);
+  assert.match(out.excludedScopes[0].reason, /behind the newest/);
+  assert.equal(out.byScope.expanded.session, '2026-07-20', 'the lag stays visible per scope');
+});
+
+test('mergeCoilScopes dedupes overlapping scopes, cap-band ranking wins', () => {
+  const out = mergeCoilScopes([
+    ['large', scope('2026-08-05', ['DUP'], 5)],
+    ['expanded', { ...scope('2026-08-05', ['DUP', 'NEW'], 900), ranked: [{ ticker: 'DUP', score: 99 }, { ticker: 'NEW', score: 98 }] },
+    ],
+  ]);
+  assert.equal(out.ranked.filter(r => r.ticker === 'DUP').length, 1);
+  assert.deepEqual(out.ranked.map(r => r.ticker).sort(), ['DUP', 'NEW']);
+});
+
+test('mergeCoilScopes on empty / malformed input returns an empty ranking, never undefined', () => {
+  for (const input of [[], null, [['large', null]], [['large', { cohortCount: 0 }]]]) {
+    const out = mergeCoilScopes(input);
+    assert.ok(Array.isArray(out.ranked));
+    assert.equal(out.ranked.length, 0);
+    assert.equal(out.decisionSession, null);
+  }
+});
+
+test('runCoil cannot 500 on a scan that returns no ranking', () => {
+  assert.match(src, /const picks = \(ranked \|\| \[\]\)\.slice/, 'the call site must tolerate a missing ranking');
 });
