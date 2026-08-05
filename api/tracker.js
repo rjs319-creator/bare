@@ -118,6 +118,11 @@ const PRIVILEGED_OPS = new Set([
   'peerproplog', 'underreactionlog',
   // Expectation-Gap regime challenger WRITE (persist latest + RISK_REDUCE-day ledger).
   'expgaplog',
+  // LOW-FLOAT / INTRADAY-CONTINUATION stack WRITES. The public op=lowfloat and
+  // op=intradaycontinuation are READ-ONLY projections; only these authenticated ticks may
+  // persist discovery state, write the research snapshots, mint point-in-time entry events,
+  // emit alerts, resolve outcomes, move a template's promotion state, or store the audit.
+  'lowfloattick', 'intradaytick', 'intradayresolve', 'intradaypromote', 'largemoveraudittick',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
@@ -128,6 +133,11 @@ const EXPENSIVE_OPS = new Set([
   // discover: the Day Trade page fires it every 60s (CDN-coalesced at 45s), but unthrottled
   // anonymous callers could drive a ~2,500-name provider fan-out + Blob writes at will.
   'discover',
+  // The low-float / continuation reads run the whole staged pipeline (bulk quotes over the
+  // full eligible universe + a bounded 5-minute chart fan-out). They are CDN-cached at ~45s
+  // so normal page traffic coalesces, but an anonymous caller bypassing the cache with a
+  // cache-buster could otherwise drive the provider fan-out at will.
+  'lowfloat', 'intradaycontinuation', 'largemoveraudit',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -235,6 +245,23 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'swingsearchstatus') return require('../lib/swing-search-ledger').runSwingSearchStatus(req, res);
   if (req.query.op === 'swingmonitor') return require('../lib/swing-supervisor-routes').runSwingMonitor(req, res);
   if (req.query.op === 'swinggrade') return require('../lib/swing-supervisor-routes').runSwingGrade(req, res);
+  // ── LOW-FLOAT IGNITION / INTRADAY CONTINUATION (lib/lowfloat-routes.js) ──────
+  // Public reads are read-only projections; the *tick / resolve / promote ops are in
+  // PRIVILEGED_OPS above and are the only writers in this stack.
+  if (req.query.op === 'lowfloat') return require('../lib/lowfloat-routes').runLowFloat(req, res);
+  if (req.query.op === 'lowfloattick') return require('../lib/lowfloat-routes').runLowFloatTick(req, res);
+  if (req.query.op === 'lowfloatbook') return require('../lib/lowfloat-routes').runLowFloatBook(req, res);
+  if (req.query.op === 'intradaycontinuation') return require('../lib/lowfloat-routes').runIntradayContinuation(req, res);
+  if (req.query.op === 'intradaytick') return require('../lib/lowfloat-routes').runLowFloatTick(req, res);
+  if (req.query.op === 'intradaybook') return require('../lib/lowfloat-routes').runLowFloatBook(req, res);
+  if (req.query.op === 'intradayresolve') return require('../lib/lowfloat-routes').runIntradayResolve(req, res);
+  if (req.query.op === 'intradayvalidation') return require('../lib/lowfloat-routes').runIntradayValidation(req, res);
+  if (req.query.op === 'intradaypromote') return require('../lib/lowfloat-routes').runIntradayPromote(req, res);
+  if (req.query.op === 'largemoveraudit') return require('../lib/lowfloat-routes').runLargeMoverAudit(req, res);
+  if (req.query.op === 'largemoveraudittick') return require('../lib/lowfloat-routes').runLargeMoverAuditTick(req, res);
+  if (req.query.op === 'largemoverbook') return require('../lib/lowfloat-routes').runLargeMoverBook(req, res);
+  if (req.query.op === 'positionsize') return require('../lib/lowfloat-routes').runPositionSize(req, res);
+
   if (req.query.op === 'daytradetick') return runDaytradeTick(req, res);
   if (req.query.op === 'daytradebook') return runDaytradeBook(req, res);
   if (req.query.op === 'daytradeopt') return runDaytradeOpt(req, res);
