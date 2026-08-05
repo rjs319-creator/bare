@@ -8,9 +8,19 @@ name: Day Trade intraday scan
 #     window covers 04:00 ET premarket → 16:00 ET close in BOTH EDT and EST; off-session
 #     calls no-op server-side for pennies, and the runner's 40 s idempotency window +
 #     55 s lease make over-scheduling safe.
+#   • every 10 min inside the same window → op=lowfloattick (the same-session low-float /
+#     intraday-continuation stack: Stage-0 discovery, float + bar enrichment, structure,
+#     actionability, research snapshots, point-in-time paper-entry events, alerts). It is
+#     deliberately HALF the daytradescan cadence and self-skips outside regular hours
+#     (returning in ~10 ms with no provider calls), because the full pipeline costs ~24
+#     bulk-quote requests per run and this app has hit a provider plan limit before.
 #   • 23:00 UTC weekdays (after the 22:00 UTC daily warm cron has rebuilt the candle
 #     caches) → op=daytradecapture (runner-capture / miss-taxonomy report) + several
-#     bounded op=datasetgrade passes (attach strictly-after labels to the day's rows).
+#     bounded op=datasetgrade passes (attach strictly-after labels to the day's rows),
+#     then the low-float stack's own post-close chain: op=intradayresolve (resolve the
+#     day's paper-entry events from the user-visible fill) → op=largemoveraudittick (why
+#     each of the day's biggest movers was missed) → op=intradaypromote (recompute every
+#     template's promotion state and apply automatic demotion).
 #
 # HONESTY: GitHub cron is best-effort — real cadence is ~5–15 min with jitter, and
 # GitHub disables schedules in repos with no activity for 60 days. op=daytradescanhealth
@@ -79,6 +89,39 @@ jobs:
             exit 1
           fi
 
+      # LOW-FLOAT / INTRADAY-CONTINUATION TICK — the ONE writer for the same-session stack
+      # (discovery state, research snapshots, paper-entry events, alerts). The public
+      # op=lowfloat and op=intradaycontinuation are read-only projections and cannot write.
+      #
+      # Runs on even 10-minute boundaries only: GitHub fires this job every 5 minutes, and
+      # the pipeline is roughly ten times the cost of a discovery scan. A skipped run is not
+      # a failure — an off-session or odd-slot tick exits ~10 ms having called no provider.
+      - name: Low-float ignition tick (every 10 min)
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::warning::CRON_SECRET repo secret not set — skipping the low-float tick."
+            exit 0
+          fi
+          minute=$(date -u +%M)
+          if [ $((10#$minute % 10)) -ne 0 ]; then
+            echo "minute $minute is not a 10-minute boundary — skipping this slot"
+            exit 0
+          fi
+          code=$(curl -sS -o /tmp/lowfloat.json -w '%{http_code}' --max-time 120 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/tracker?op=lowfloattick")
+          head -c 800 /tmp/lowfloat.json; echo
+          if [ "$code" != "200" ]; then
+            echo "::error::op=lowfloattick returned HTTP $code"
+            exit 1
+          fi
+          if grep -q '"ok":false' /tmp/lowfloat.json; then
+            echo "::error::low-float tick reported ok:false"
+            exit 1
+          fi
+
   postclose:
     # Post-close: capture report (public op) + bounded label-grading passes (privileged).
     if: github.event.schedule == '0 23 * * 1-5'
@@ -106,4 +149,32 @@ jobs:
             echo "pass $i: $out" | head -c 1000; echo
             remaining=$(echo "$out" | sed -n 's/.*"remaining":\([0-9]*\).*/\1/p')
             if [ "${remaining:-0}" = "0" ]; then echo "grading complete"; break; fi
+          done
+      # LOW-FLOAT STACK POST-CLOSE CHAIN. Order matters and is not incidental:
+      #   resolve  — turn the day's paper-entry events into outcomes measured from the
+      #              simulated fill (needs the session's completed bars, so it must run
+      #              after the close and before the audit reads the event log)
+      #   audit    — rank the day's actual biggest movers and categorise every miss against
+      #              the evidence trail the ticks wrote during the session
+      #   promote  — recompute every template's promotion state over the whole outcome
+      #              history and apply automatic demotion
+      # Each step is tolerant of an empty day: with no events logged they return ok:true
+      # with zero counts rather than failing.
+      - name: Low-float post-close (resolve outcomes, audit misses, recompute promotion)
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::warning::CRON_SECRET repo secret not set — skipping the low-float post-close chain."
+            exit 0
+          fi
+          for op in intradayresolve largemoveraudittick intradaypromote; do
+            code=$(curl -sS -o "/tmp/$op.json" -w '%{http_code}' --max-time 180 \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              "$APP_URL/api/tracker?op=$op")
+            echo "--- $op (HTTP $code) ---"; head -c 800 "/tmp/$op.json"; echo
+            if [ "$code" != "200" ]; then
+              echo "::error::op=$op returned HTTP $code"
+              exit 1
+            fi
           done

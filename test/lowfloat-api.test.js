@@ -339,3 +339,35 @@ test('an enterable card never says "conditions are not met"', () => {
   assert.match(d.whatMustHappenNext, /Paper entry only/i);
   assert.match(d.whatMustHappenNext, /not above it/i);
 });
+
+test('the scheduled tick skips off-session without calling any provider', () => {
+  // A cron fires on a fixed UTC window that necessarily overshoots both DST regimes. Running
+  // the full pipeline outside regular hours costs ~24 bulk-quote requests to learn something
+  // the stale-quote guard would reject anyway — and this app has hit a provider plan limit
+  // before. The guard must therefore be decided BEFORE any network call.
+  const { offSessionSkip } = require('../lib/lowfloat-routes');
+  const closed = { isRegularHours: false, minutesSinceOpen: 549, minutesUntilClose: 0 };
+  const preOpen = { isRegularHours: false, minutesSinceOpen: -60, minutesUntilClose: 450 };
+  const leadIn = { isRegularHours: false, minutesSinceOpen: -5, minutesUntilClose: 395 };
+  const open = { isRegularHours: true, minutesSinceOpen: 90, minutesUntilClose: 300 };
+
+  assert.match(offSessionSkip(closed, {}), /after the close/);
+  assert.match(offSessionSkip(preOpen, {}), /before the open/);
+  assert.strictEqual(offSessionSkip(leadIn, {}), null, 'a short pre-open lead-in still runs');
+  assert.strictEqual(offSessionSkip(open, {}), null);
+  // force=1 overrides it for manual verification (the op is privileged).
+  assert.strictEqual(offSessionSkip(closed, { query: { force: '1' } }), null);
+});
+
+test('the scheduler wires the low-float tick and the post-close chain', () => {
+  const wf = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'daytrade-scan.yml'), 'utf8');
+  assert.ok(wf.includes('op=lowfloattick'), 'the intraday writer is not scheduled');
+  for (const op of ['intradayresolve', 'largemoveraudittick', 'intradaypromote']) {
+    assert.ok(wf.includes(op), `post-close op ${op} is not scheduled`);
+  }
+  // Every scheduled call must carry the bearer, or the writer ops 401.
+  assert.ok(/op=lowfloattick[\s\S]{0,200}?/.test(wf));
+  const tickBlock = wf.slice(wf.indexOf('Low-float ignition tick'), wf.indexOf('postclose:'));
+  assert.ok(tickBlock.includes('Authorization: Bearer $CRON_SECRET'));
+  assert.ok(tickBlock.includes('CRON_SECRET repo secret not set'), 'missing the unset-secret guard');
+});
