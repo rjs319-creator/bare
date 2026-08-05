@@ -173,3 +173,14 @@ test('gexUniverse: deduped, uppercase, liquid-options names lead the order', () 
   const { LIQUID_OPTIONS } = require('../lib/optionsflow');
   assert.equal(u[0], String(LIQUID_OPTIONS[0]).toUpperCase());
 });
+
+test('archivehealth: exported, and counts-only by construction (no symbol/value fields emitted)', () => {
+  const { runArchiveHealth } = require('../lib/alpha-archive-routes');
+  assert.equal(typeof runArchiveHealth, 'function');
+  const src = runArchiveHealth.toString();
+  // The public telemetry view may expose counts and dates ONLY — emitting event
+  // rows or per-name records from it would be an outcome-shaped read.
+  for (const banned of ['.revisions,', 'records:', 'grades:', 'targets:', 'netGex']) {
+    assert.ok(!src.includes(banned), `archivehealth must not emit ${banned}`);
+  }
+});
