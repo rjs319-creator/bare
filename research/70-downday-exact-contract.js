@@ -34,7 +34,7 @@
 // WHAT THIS CANNOT DO. The universe is survivorship-REDUCED, not survivorship-safe (see
 // research/lib/experiment-kit.js), so a positive result here can never promote anything.
 //
-// Usage: node research/66-downday-exact-contract.js [--step 1] [--maxNames 1500]
+// Usage: node research/70-downday-exact-contract.js [--step 1] [--maxNames 1500]
 
 const path = require('node:path');
 const K = require('./lib/experiment-kit');

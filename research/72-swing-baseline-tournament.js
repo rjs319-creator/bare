@@ -29,7 +29,7 @@
 // comparison is what matters: every entrant sees the same dates, the same eligibility, the
 // same costs and the same execution (next-open entry).
 //
-// Usage: node research/68-swing-baseline-tournament.js [--step 5] [--maxNames 1500] [--topK 10]
+// Usage: node research/72-swing-baseline-tournament.js [--step 5] [--maxNames 1500] [--topK 10]
 
 const path = require('node:path');
 const K = require('./lib/experiment-kit');

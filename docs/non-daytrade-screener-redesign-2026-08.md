@@ -413,7 +413,7 @@ negative or blocked.**
 
 ### 9.2 Empirical results (the only numbers claimed)
 
-**A — Down-Day exact contract** (`research/66-downday-exact-contract.js`). 1,200 names,
+**A — Down-Day exact contract** (`research/70-downday-exact-contract.js`). 1,200 names,
 256 red-tape sessions (2022-07-22 → 2026-06-26), 22,027 flagged bounce episodes vs 90,358
 matched same-date same-liquidity-band controls, next-open entry, 3 sessions, cost-net.
 
@@ -432,13 +432,13 @@ evidence; measured on its OWN contract against matched controls it has no lift. 
 strategy's negative absolute number is mostly a red-day universe effect (the controls are
 negative too) — the honest reading is *no selection edge*, not *a bad strategy*.
 
-**B — Gap & Go v2** (`research/67-gapgo-orb-v2.js`). 11,264 EOD gap decisions found; the
+**B — Gap & Go v2** (`research/71-gapgo-orb-v2.js`). 11,264 EOD gap decisions found; the
 shipped resolver could grade **12** of them, because the local 5-minute cache is keyed by
 event day and 11,252 decisions have no bars for the exact next session (178 more had an
 uncertain entry session). **Verdict: BLOCKED_DATA.** Nothing imputed, nothing concluded; the
 live `op=gapgoverify` channel is the only path that accrues this record.
 
-**C — Unified swing baseline tournament** (`research/68-swing-baseline-tournament.js`).
+**C — Unified swing baseline tournament** (`research/72-swing-baseline-tournament.js`).
 900 names, 193 decision dates (2022-07 → 2026-06), 21 sessions, top-10, next-open entry,
 identical eligibility and costs for every entrant. Harness verified by a within-date
 shuffled-label placebo (rank IC **−0.003** ≈ 0).
@@ -469,7 +469,7 @@ shuffled-label placebo (rank IC **−0.003** ≈ 0).
   the *lift versus baselines on identical dates* is the metric that matters;
 - the placebo is clean, so these negatives are the harness working, not a bug.
 
-**D — Analyst revision breadth/acceleration** (`research/69-revision-breadth-gate.js`): the
+**D — Analyst revision breadth/acceleration** (`research/73-revision-breadth-gate.js`): the
 frozen design is declared, the gate is implemented, and it **refuses to run** — estimates
 remain PIT_UNPROVEN. The question is unanswered, not answered "no".
 

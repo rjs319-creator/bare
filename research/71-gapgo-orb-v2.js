@@ -32,7 +32,7 @@
 // Point `--barsDir` at a directory of `TICKER_YYYY-MM-DD.json` 5-minute files (ascending,
 // regular session) to run it for real.
 //
-// Usage: node research/67-gapgo-orb-v2.js [--barsDir research/data/intra5] [--minGapPct 5]
+// Usage: node research/71-gapgo-orb-v2.js [--barsDir research/data/intra5] [--minGapPct 5]
 
 const fs = require('node:fs');
 const path = require('node:path');

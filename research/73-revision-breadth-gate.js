@@ -22,7 +22,7 @@
 // identical dates and universe, with the incremental value over that baseline as the
 // primary metric.
 //
-// Usage: node research/69-revision-breadth-gate.js [--sample research/data/estimates/sample.csv]
+// Usage: node research/73-revision-breadth-gate.js [--sample research/data/estimates/sample.csv]
 
 const fs = require('node:fs');
 const path = require('node:path');
