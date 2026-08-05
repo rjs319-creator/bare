@@ -19,7 +19,7 @@ const LOW_HIT_HIGH_PAYOFF = Object.freeze({
   netExcessN: 60, avgNetExcess: 2.4, netBeatMktRate: 36,
   secExcN: 60, avgSecExcess: 1.8, beatSecRate: 40,
   dates: 30,
-  dateNet: { n: 30, avg: 1.2, sd: 2.0, ci95: { lo: 0.4, hi: 2.0 } },
+  dateNet: { n: 30, avg: 1.2, sd: 2.0, ci95: { lo: 0.4, hi: 2.0 }, effectiveN: 22, positiveBlocks: 4, blockStability: { blocks: 4, positive: 4, means: [1.1, 1.3, 1.0, 1.4], usable: true } },
 });
 
 test('v3: low-hit/high-payoff with positive date-level utility CI qualifies when every other gate passes', () => {

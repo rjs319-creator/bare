@@ -17,7 +17,7 @@ const FULL_TRACK = Object.freeze({
   netExcessN: 60, avgNetExcess: 2.4, netBeatMktRate: 70,
   secExcN: 60, avgSecExcess: 1.8, beatSecRate: 62,
   dates: 30,
-  dateNet: { n: 30, avg: 1.2, sd: 2.0, ci95: { lo: 0.4, hi: 2.0 } },
+  dateNet: { n: 30, avg: 1.2, sd: 2.0, ci95: { lo: 0.4, hi: 2.0 }, effectiveN: 22, positiveBlocks: 4, blockStability: { blocks: 4, positive: 4, means: [1.1, 1.3, 1.0, 1.4], usable: true } },
 });
 
 test('gradeTrack: full gate stack + verified fills → validated', () => {
@@ -160,7 +160,7 @@ test('gradeStrategy: a stellar record on a fill-UNVERIFIED pipeline caps at prom
   const summary = { groups: [{ section: 'CERN', tier: 'FORCED_DOWNGRADE', horizons: { '1m': {
     excessN: 60, avgExcess: 3, beatMktRate: 72, netExcessN: 60, avgNetExcess: 2.7, netBeatMktRate: 70,
     secExcN: 60, avgSecExcess: 1.5, beatSecRate: 60, dates: 30,
-    dateNet: { n: 30, avg: 1.1, sd: 2.0, ci95: { lo: 0.3, hi: 1.9 } },
+    dateNet: { n: 30, avg: 1.1, sd: 2.0, ci95: { lo: 0.3, hi: 1.9 }, effectiveN: 21, positiveBlocks: 4, blockStability: { blocks: 4, positive: 4, means: [1, 1.2, 0.9, 1.3], usable: true } },
   } } }] };
   const g = M.gradeStrategy(entry, summary);
   assert.equal(g.grade, 'promising');
