@@ -11,6 +11,9 @@ test('gapgo-congestion-interaction is registered, valid, exploratory, in intrada
   assert.ok(REG.validateHypothesis(h).valid);
   assert.equal(h.mode, 'exploratory');
   assert.equal(h.familyId, 'intraday-gap');
+  // The one registered pass ran 2026-08-05: spread SIGNIFICANTLY NEGATIVE
+  // (reversed sign, confounded) → honest close-out (record 765ec41f52f2ee7a).
+  assert.equal(h.status, 'no-edge');
 });
 
 test('congestion-21s-prospective is registered, valid, confirmatory, with the frozen boundaries', () => {
