@@ -248,16 +248,27 @@ scenario remains the guaranteed fallback.
 
 ## 7. Operations
 
-**Scheduling.** Point an authenticated scheduler at:
+**Scheduling.** `.github/workflows/tech-command-tick.yml` drives both writers:
 
 ```
-GET /api/tracker?op=techcommandtick       # every ~15 min during market hours
-GET /api/tracker?op=techcommandresolve    # once daily after the close
+*/15 12-21 * * 1-5   op=techcommandtick      premarket -> after-hours, both DST regimes
+10 23 * * 1-5        op=techcommandresolve   post-close, after the daytrade capture
 ```
 
-Both require `Authorization: Bearer $CRON_SECRET`. Without a schedule the page
-still works: public reads fall back to the bounded `lite` build, clearly labelled,
-with the long-term board and news reported as unavailable.
+It needs the repo secret `CRON_SECRET` (same value as the Vercel Production env var,
+already required by `daytrade-scan.yml` and `evidence-tick.yml`). **Without that
+secret the workflow no-ops with a warning rather than failing** — and the page then
+runs permanently in the bounded `lite` build: the long-term board, technology
+breadth, news, lifecycle persistence and the evaluation ledger all stay dark, each
+labelled as unavailable. `workflow_dispatch` accepts `op: tick | resolve | both`
+for manual verification, and every run prints `op=techcommandhealth` so a failure
+still leaves the snapshot age, universe basis and ledger status in the log.
+
+The 15-minute cadence matches the 20-minute in-session snapshot freshness window, so
+a public read almost always serves a persisted snapshot instead of rebuilding. The
+only unbounded-looking cost is the fundamentals fan-out, capped at
+`LIMITS.full.fundamentals` (18 names x 2 Finnhub calls); lower that constant before
+thinning the schedule, since the long-term board is what the tick exists to produce.
 
 **Rollback.** The page is additive. To disable it, remove `tech` from `TAB_GROUPS`
 in `public/js/app.js` and the three `data-tab="tech"` nav links in
