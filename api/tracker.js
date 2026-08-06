@@ -101,6 +101,8 @@ const PRIVILEGED_OPS = new Set([
   'calarchive', 'revarchive', 'gexarchive',
   // VRP live paper put-write ledger WRITE (entry + resolution). Cron/manual only.
   'vrptick',
+  // Ephemeral edge factory WRITE (grammar rescan + paper-pick log + resolutions). Cron/manual only.
+  'ephemeraltick',
   // GRIDLOCK shadow vertical WRITES (PJM/EIA/NWS collect + event ledger + PIT candidate
   // log / forward outcome resolution). Cron/manual-with-bearer only.
   'gridlocktick', 'gridlockresolve',
@@ -346,6 +348,8 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'alphabook') return require('../lib/alphabook-routes').runAlphaBook(req, res);
   if (req.query.op === 'vrptick') return require('../lib/vrp-routes').runVrpTick(req, res);
   if (req.query.op === 'vrpbook') return require('../lib/vrp-routes').runVrpBook(req, res);
+  if (req.query.op === 'ephemeraltick') return require('../lib/ephemeral-routes').runEphemeralTick(req, res);
+  if (req.query.op === 'ephemeral') return require('../lib/ephemeral-routes').runEphemeral(req, res);
   if (req.query.op === 'intracapture') return runIntraCapture(req, res);
   if (req.query.op === 'intraday') return runIntraday(req, res);
   if (req.query.op === 'baseline') return runBaseline(req, res);
