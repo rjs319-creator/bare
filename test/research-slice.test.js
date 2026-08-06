@@ -135,6 +135,46 @@ test('harness: control-random scores ~0 IC while residual-momentum recovers the 
   assert.ok(out.perRanker['residual-momentum'].meanIC > out.perRanker['control-random'].meanIC, 'momentum should beat control on planted data');
 });
 
+test('harness: per-date uniqueness weights down-weight overlapping label windows', () => {
+  // Two isolated dates (non-overlapping 5-day windows) stay at weight 1; three dates
+  // clustered inside one window are each down-weighted below 1.
+  const isolated = [
+    { decisionTs: '2021-01-01', labelEndDate: '2021-01-03' },
+    { decisionTs: '2021-06-01', labelEndDate: '2021-06-03' },
+  ];
+  const wIso = H.datedUniquenessWeights(isolated);
+  assert.equal(wIso.get('2021-01-01'), 1);
+  assert.equal(wIso.get('2021-06-01'), 1);
+
+  const clustered = [
+    { decisionTs: '2021-01-01', labelEndDate: '2021-01-10' },
+    { decisionTs: '2021-01-02', labelEndDate: '2021-01-11' },
+    { decisionTs: '2021-01-03', labelEndDate: '2021-01-12' },
+  ];
+  const wClu = H.datedUniquenessWeights(clustered);
+  assert.ok(wClu.get('2021-01-02') < 1, 'a date sharing its window is down-weighted');
+});
+
+test('harness: uniqueness-adjusted effective sample is below the raw date count on overlapping labels', () => {
+  const events = makeStudy(11);
+  const out = H.compareRankers(events, BR.ALL_RANKERS, { folds: 4, embargo: 1 });
+  const rm = out.perRanker['residual-momentum'];
+  assert.ok(rm.effectiveDates != null, 'effective-sample battery is reported');
+  assert.ok(rm.effectiveDates < rm.dates, 'effective dates < raw dates (labels overlap)');
+  assert.ok(rm.uniquenessRatio > 0 && rm.uniquenessRatio < 1, 'uniqueness ratio in (0,1)');
+  assert.ok(rm.weightedTstat != null && rm.weightedMeanIC != null, 'weighted significance is applied, not just reported');
+  // Legacy naive fields are untouched (additive), so both views are visible.
+  assert.ok(rm.tstat != null && rm.meanIC != null);
+});
+
+test('harness: summarizeICs without weights is unchanged (no effective-sample fields)', () => {
+  const ics = [{ date: '2021-01-01', ic: 0.1, n: 5 }, { date: '2021-01-02', ic: 0.2, n: 5 }, { date: '2021-01-03', ic: 0.15, n: 5 }];
+  const s = H.summarizeICs(ics);
+  assert.equal(s.effectiveDates, undefined);
+  assert.equal(s.weightedTstat, undefined);
+  assert.ok(s.meanIC != null);
+});
+
 test('harness: runExperiment is deterministic and stamps survivorship-unsafe / PROVISIONAL', () => {
   const events = makeStudy(11);
   const a = H.runExperiment(events, BR.ALL_RANKERS, { folds: 4, embargo: 1 }, { experimentId: 'e', primaryMetric: 'ic', datasetHash: 'h', survivorshipSafe: false });

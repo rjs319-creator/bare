@@ -56,6 +56,26 @@ test('cernPicksFrom: uses signal.entryPrice when present, else null', () => {
   assert.equal(picks.find(p => p.ticker === 'ENPH').entry, null);
 });
 
+test('cernPicksFrom: a signaled event anchors the pick date to the signal day, not the event day', () => {
+  // The forced-flow event is detected on Jan 5 but the signal (and its entry price)
+  // is captured on Jan 12. The pick date must be the signal day so the forward
+  // window starts on the same bar as the entry price (the mismeasurement fix).
+  const state = { ledger: [{
+    type: 'FIRE_SALE', symbol: 'FSLR', dateMs: Date.UTC(2026, 0, 5), direction: -1,
+    signal: { dateMs: Date.UTC(2026, 0, 12), entryPrice: 142.5 },
+  }] };
+  const [pick] = cernPicksFrom(state);
+  assert.equal(pick.date, '2026-01-12'); // signal day, NOT the Jan 5 event day
+  assert.equal(pick.entry, 142.5);
+});
+
+test('cernPicksFrom: an unsignaled event keeps the event date with a null entry', () => {
+  const state = { ledger: [{ type: 'INDEX_DELETE', symbol: 'POOL', dateMs: Date.UTC(2026, 0, 9), direction: -1 }] };
+  const [pick] = cernPicksFrom(state);
+  assert.equal(pick.date, '2026-01-09');
+  assert.equal(pick.entry, null);
+});
+
 test('cernPicksFrom: first-appearance dedup per event-type:symbol keeps the earliest', () => {
   const state = { ledger: [
     { type: 'FORCED_DOWNGRADE', symbol: 'RIVN', dateMs: Date.UTC(2026, 2, 10), direction: -1 },

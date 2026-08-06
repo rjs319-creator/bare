@@ -6550,7 +6550,31 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const good = edge.edge;
     el.innerHTML = `<div class="cx-portfolio" style="border-color:${good ? '#10d98a55' : '#ef505044'}">
       <div class="cx-pf-head">📊 Edge test · ${edge.n} graded calls <span style="margin-left:auto;color:${good ? 'var(--green)' : 'var(--red)'}">${good ? '✅ EDGE' : '❌ NO EDGE'}</span></div>
-      <p class="cx-mp-p" style="margin:8px 0 0">Hit rate <b>${edge.hitRatePct}%</b> [${edge.hitRateCI90[0]}–${edge.hitRateCI90[1]}] vs 50% base · conviction rank-IC <b>${edge.convictionRankIC}</b> (t ${edge.rankICtStat}) · mean excess ${edge.meanExcessPct}%/call. <b>${esc(edge.verdict)}.</b></p></div>`;
+      <p class="cx-mp-p" style="margin:8px 0 0">Hit rate <b>${edge.hitRatePct}%</b> [${edge.hitRateCI90[0]}–${edge.hitRateCI90[1]}] vs 50% base · conviction rank-IC <b>${edge.convictionRankIC}</b> (t ${edge.rankICtStat}) · mean excess ${edge.meanExcessPct}%/call. <b>${esc(edge.verdict)}.</b></p></div>` + fadeHtml(edge.fade);
+  }
+  // 🔄 Fade-the-loudest panel — when the mechanical signal is anti-predictive,
+  // betting AGAINST each call ("fade") is what backtests positive. The by-direction
+  // split is the tradeability tell: fading a bullish pump = SHORT (often illiquid,
+  // borrow can erase the edge); fading a bearish call = cheap LONG. Mean is gross.
+  const sgn = v => (v > 0 ? '+' : '') + v;
+  function fadeDirRow(o, label, isLong) {
+    if (!o || o.n == null) return '';
+    const pos = o.meanExcessPct > 0;
+    return `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;margin-top:5px;min-width:0">
+      <span class="xa-chip">${label}</span>
+      <b style="color:${pos ? 'var(--green)' : 'var(--red)'}">${sgn(o.meanExcessPct)}%</b>
+      <span style="color:var(--text-dim);overflow-wrap:anywhere">hit ${o.hitRatePct}% [${o.hitRateCI90[0]}–${o.hitRateCI90[1]}] · n ${o.n}</span>
+      ${isLong ? '<span style="color:var(--green)">✔ cheap long</span>' : '<span style="color:var(--amber,#f0a832)">⚠ short — check borrow</span>'}</div>`;
+  }
+  function fadeHtml(f) {
+    if (!f || f.meanExcessPct == null) return '';
+    const b = f.byDirection || {};
+    return `<div class="cx-portfolio" style="margin-top:8px;border-style:dashed;border-color:#8a6dff33">
+      <div class="cx-pf-head">🔄 Fade-the-loudest test <span style="margin-left:auto;color:${f.edge ? 'var(--green)' : 'var(--text-dim)'}">${f.edge ? '✅ FADE EDGE' : '↔ contrarian read'}</span></div>
+      <p class="cx-mp-p" style="margin:8px 0 0">Betting <b>against</b> each call: mean <b>${sgn(f.meanExcessPct)}%</b>/call (gross) · trimmed <b>${sgn(f.trimmedMeanExcessPct)}%</b> · median ${sgn(f.medianExcessPct)}% · hit ${f.hitRatePct}% [${f.hitRateCI90[0]}–${f.hitRateCI90[1]}] · loudness rank-IC <b>${f.convictionRankIC}</b> (t ${f.rankICtStat}, &gt;0 = louder→better fade).</p>
+      ${fadeDirRow(b.bull, 'fade 🐂 bull', false)}
+      ${fadeDirRow(b.bear, 'fade 🐻 bear', true)}
+      <p class="cx-mp-p" style="margin:6px 0 0;color:var(--text-dim);font-size:.85em">Mean is gross (no borrow/slippage). Trimmed mean drops the 5% tails so a few pump implosions can't fake a broad edge — trust it over the raw mean.</p></div>`;
   }
   // 🧠 Fable A/B panel — does the AI's directional read beat the keyword bot? Stays
   // in "tracking" until enough paired calls grade, then flips to PROMOTED (Fable drives

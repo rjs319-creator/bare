@@ -83,6 +83,33 @@ test('sentimentOf + moneyness', () => {
   assert.equal(of.moneyness({ strike: 100.5 }, 100, 'put'), 'ATM');
 });
 
+test('sentimentOf: a seller-initiated print on the directional side is UNKNOWN, not directional', () => {
+  // A call sold AT THE BID could be a covered-call write / closing sale / hedge leg
+  // — it is NOT a bullish opening bet, so it must not be tagged bullish.
+  assert.equal(of.sentimentOf('call', 'bid'), 'unknown');
+  assert.equal(of.sentimentOf('put', 'bid'), 'unknown');
+  // Buyer lifting the ask CONFIRMS the lean; mid / no quote keeps the raw lean.
+  assert.equal(of.sentimentOf('call', 'ask'), 'bullish');
+  assert.equal(of.sentimentOf('put', 'ask'), 'bearish');
+  assert.equal(of.sentimentOf('call', 'mid'), 'bullish');
+  assert.equal(of.sentimentOf('call', null), 'bullish');
+});
+
+test('sentimentBasis reports how the direction was established', () => {
+  assert.equal(of.sentimentBasis('ask'), 'confirmed');
+  assert.equal(of.sentimentBasis('bid'), 'ambiguous');
+  assert.equal(of.sentimentBasis('mid'), 'lean');
+  assert.equal(of.sentimentBasis(null), 'lean');
+});
+
+test('flowOutcome does not grade unknown/informational flow as directional', () => {
+  // bullish/bearish grade normally...
+  assert.ok(of.flowOutcome(100, 110, 'bullish') > 0);
+  assert.ok(of.flowOutcome(100, 110, 'bearish') < 0);
+  // ...but unknown flow makes no directional claim → null (skipped by the grader).
+  assert.equal(of.flowOutcome(100, 110, 'unknown'), null);
+});
+
 test('scoreSignal rewards bigger premium', () => {
   const big = of.scoreSignal({ premium: 1_000_000, volOi: 5, moneyness: 'OTM' });
   const small = of.scoreSignal({ premium: 60_000, volOi: 1, moneyness: 'ITM' });

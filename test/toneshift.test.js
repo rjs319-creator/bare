@@ -37,3 +37,13 @@ test('tierFor: shift → Scoreboard tier', () => {
   assert.equal(tierFor({ shift: 'STABLE' }), 'Stable');
   assert.equal(tierFor({ shift: 'DARKENING' }), 'Darkening');
 });
+
+// ── Honest proxy labeling (coverage tone, not transcript tone) ────────────────
+const TSR = require('../lib/toneshift-routes');
+test('toneshift labels its coverage-proxy data basis honestly (not transcript tone)', () => {
+  assert.equal(TSR.DATA_BASIS, 'coverage-proxy');
+  assert.match(TSR.PROXY_NOTE, /coverage/i);
+  assert.match(TSR.PROXY_NOTE, /not raw transcripts/i);
+  // The user-facing disclaimer must also disclose the proxy, never imply transcripts.
+  assert.match(TSR.DISCLAIMER, /coverage/i);
+});
