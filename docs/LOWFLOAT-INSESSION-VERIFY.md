@@ -124,15 +124,32 @@ resistance rather than below the current price?
 
 ---
 
-## Reporting
+## Reporting — ALWAYS open a PR, even when everything passes
 
-Write a findings report covering: what worked, what did not, exact numbers observed, and any
-defect with the specific file and line implicated.
+The person who asked for this verification will not be watching the run. **A PR is the
+notification channel** — GitHub emails them, and the report stays durable and reviewable.
+So the run is not finished until a PR exists, pass or fail.
 
-**If you find a defect:** fix it on a branch and open a PR — do not push to `main` (concurrent
-sessions push there frequently and you will collide). Every fix needs a regression test in
-`test/lowfloat-*.test.js`. Before opening the PR run `npm test` (expect ~3,900 passing, 0
-failing, 2 pre-existing skips) and `npm run check`.
+1. Write the findings to `docs/verification/lowfloat-insession-YYYY-MM-DD.md`, covering:
+   what worked, what did not, **exact numbers observed** (candidate counts, lane counts,
+   coverage percentages, runtimes), and any defect with the specific file and line implicated.
+   Lead the file with a one-line verdict.
+2. Commit on a branch named `verify/lowfloat-insession-YYYY-MM-DD`.
+3. Open a PR whose **title carries the verdict**, so it is readable from an email subject line
+   without opening anything — e.g.
+   - `verify: low-float in-session PASS — 47 candidates, all 7 lanes firing`
+   - `verify: low-float in-session — 2 defects (float enrichment empty, 5m accel null)`
+4. Put the headline numbers in the PR body, not just the file.
+
+**If you find a defect:** fix it on the same branch with a regression test in
+`test/lowfloat-*.test.js`, and say so in the PR title. Never push to `main` — concurrent
+sessions push there constantly and you will collide.
+
+Before opening the PR run `npm test` (expect ~3,900 passing, 0 failing, 2 pre-existing skips)
+and `npm run check`.
+
+If `gh pr create` fails for any reason, push the branch anyway and print the full report in
+your final message — never let the findings exist only inside a transcript nobody opens.
 
 **Constraints that must not be violated:** no new files under `api/` (the plan caps deployed
 serverless functions — new ops fold into `api/tracker.js`); no LLM calls in the live scoring
