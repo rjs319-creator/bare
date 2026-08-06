@@ -372,18 +372,35 @@ test('the scheduler wires the low-float tick and the post-close chain', () => {
   assert.ok(tickBlock.includes('CRON_SECRET repo secret not set'), 'missing the unset-secret guard');
 });
 
-test('a volume-capable provider is preferred over the price-only fallback', () => {
+test('a volume-capable provider is preferred over the price-only fallback', async () => {
   // REGRESSION: FMP's batch-quote answers 402 "Restricted Endpoint" on this subscription, so
   // the scan silently fell through to the keyless spark endpoint, which carries no volume —
   // disabling relative volume, volume acceleration and low-float turnover (three of the seven
   // discovery lanes) while still reporting ok:true.
+  //
+  // Asserted through BEHAVIOUR rather than by scraping the source: the price-only provider must
+  // run second, and only over the symbols the volume-capable one left behind.
   const qp = require('../lib/quote-provider');
   assert.ok(typeof qp.yahooQuotes === 'function', 'the volume-capable Yahoo provider is missing');
   assert.ok(qp.YAHOO_QUOTE_CHUNK <= 300, 'measured cap is 300 symbols per request');
-  const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'quote-provider.js'), 'utf8');
-  // Order of the fallback chain is the whole point: volume-capable providers come first.
-  assert.ok(src.indexOf('yahooQuotes(wanted)') < src.indexOf('yahooSparkQuotes(wanted)'),
-    'the volume-capable provider must be tried before the price-only one');
+
+  const wanted = Array.from({ length: 100 }, (_, i) => `T${i}`);
+  const order = [];
+  const out = await qp.fetchBulkQuotes(wanted, {
+    fmpKey: null,
+    quoteImpl: async syms => {
+      order.push('yahoo-quote');
+      return { rows: syms.slice(0, 10).map(s => ({ ticker: s, price: 10, dayVolume: 1e6 })), diag: {} };
+    },
+    sparkImpl: async syms => {
+      order.push('spark');
+      assert.ok(!syms.includes('T0'), 'the fallback must only be asked for the names still missing');
+      return { rows: syms.map(s => ({ ticker: s, price: 10, dayVolume: null })), diag: {} };
+    },
+  });
+
+  assert.deepStrictEqual(order, ['yahoo-quote', 'spark']);
+  assert.strictEqual(out.rows.filter(r => r.dayVolume != null).length, 10, 'volume rows survive the fallback');
 });
 
 test('capability is read from what the provider returned, not from which key is configured', () => {

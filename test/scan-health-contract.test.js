@@ -64,7 +64,12 @@ test('a scan that actually scanned stamps lastSuccessAt and reports coverage/dur
   assert.equal(health.lastSuccessAt, IN_SESSION.toISOString());
   assert.equal(health.consecutiveErrors, 0);
   assert.equal(health.lastDurationMs, 1234);
-  assert.deepEqual(health.lastCoverage, { requested: 100, returned: 100, provider: 'fmp-batch', volumeAvailable: true });
+  // volumeCoveragePct / diagnostics come from lib/quote-provider; a scan fixture that predates
+  // them records null rather than omitting the field (absence must be legible, not implicit).
+  assert.deepEqual(health.lastCoverage, {
+    requested: 100, returned: 100, provider: 'fmp-batch', volumeAvailable: true,
+    volumeCoveragePct: null, diagnostics: null,
+  });
   assert.equal(health.lastCoveragePct, 100);
   assert.equal(health.lastUniverse, 100);
   assert.equal(health.lastEligible, 98);
