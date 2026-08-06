@@ -99,15 +99,23 @@ jobs:
       - name: Low-float ignition tick (every 10 min)
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          # A manual dispatch lands on an arbitrary minute, so applying the 10-minute gate to
+          # it would make this step effectively untestable by hand — which is the one time you
+          # most want it to run. The gate exists to halve the SCHEDULED cadence, so it only
+          # applies to scheduled events.
+          IS_SCHEDULED: ${{ github.event_name == 'schedule' }}
         run: |
           if [ -z "$CRON_SECRET" ]; then
             echo "::warning::CRON_SECRET repo secret not set — skipping the low-float tick."
             exit 0
           fi
           minute=$(date -u +%M)
-          if [ $((10#$minute % 10)) -ne 0 ]; then
+          if [ "$IS_SCHEDULED" = "true" ] && [ $((10#$minute % 10)) -ne 0 ]; then
             echo "minute $minute is not a 10-minute boundary — skipping this slot"
             exit 0
+          fi
+          if [ "$IS_SCHEDULED" != "true" ]; then
+            echo "manual dispatch — running regardless of the 10-minute gate"
           fi
           code=$(curl -sS -o /tmp/lowfloat.json -w '%{http_code}' --max-time 120 \
             -H "Authorization: Bearer $CRON_SECRET" \
