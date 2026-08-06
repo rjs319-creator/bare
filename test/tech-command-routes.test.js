@@ -146,6 +146,22 @@ test('lifecycle rows are derived per horizon and never merged', () => {
   assert.equal(rows.daytrade[0].attentionState, 'STICKY_ATTENTION');
 });
 
+// ── Long-term shortlist reservation ─────────────────────────────────────────
+test('the long-term shortlist reserves slots for mega-caps — intraday movers cannot crowd them out', () => {
+  // The defect this pins: the shortlist was [...boardNames, ...megaNames].slice(0, limit),
+  // so a busy intraday board filled every slot and the 6-36 month model evaluated
+  // nothing but today's movers. Found by running the real build.
+  const src = require('node:fs').readFileSync(require.resolve('../lib/tech-command-build.js'), 'utf8');
+  const fn = src.slice(src.indexOf('async function buildLongTermSection'), src.indexOf('// News + scheduled events'));
+  assert.ok(!/\[\.\.\.boardNames,\s*\.\.\.megaNames\]/.test(fn),
+    'the naive concat-then-slice lets board names occupy the whole budget');
+  assert.ok(/megaReserve/.test(fn), 'mega-caps must hold a protected reservation');
+  // The reservation must be a real majority of the budget.
+  const m = /const megaReserve = Math\.ceil\(limit \* ([\d.]+)\)/.exec(fn);
+  assert.ok(m, 'megaReserve must be a documented fraction of the budget');
+  assert.ok(Number(m[1]) >= 0.5, `mega-cap reservation ${m[1]} is not a majority of the long-term budget`);
+});
+
 // ── Evaluation ledger contract ──────────────────────────────────────────────
 test('the evaluation ledger claims no edge and names its inference requirements', async () => {
   const s = await EVAL.status();

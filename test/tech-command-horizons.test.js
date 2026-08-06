@@ -237,6 +237,52 @@ test('the long-term score is never labeled a return probability', () => {
   assert.equal(b.rows[0].probability, null);
 });
 
+test('MISSING VALUATION IS NOT A FREE PASS — it cannot be accumulated', () => {
+  // The defect this pins: with no P/E the valuation brake never engaged, so a name
+  // with LESS data reached ACCUMULATE more easily than one with more. Found by
+  // running the real build: 9 of 18 names were ACCUMULATE, nearly all of them with
+  // "expects: Not derivable".
+  const noValuation = {
+    ...ltStrong,
+    fundamentals: { ...ltStrong.fundamentals, pe: null },
+  };
+  const b = LT.buildLongTermBoard({ candidates: [noValuation], universe });
+  const r = b.rows[0];
+  assert.notEqual(r.action, 'ACCUMULATE', 'a name whose embedded expectations are unknown must not be accumulated');
+  assert.equal(r.action, 'WATCH_VALUATION');
+  assert.equal(r.valuation.available, false);
+  assert.match(r.valuation.note, /cannot be assessed/i);
+  // …and the same name WITH a cheap valuation still can be.
+  const withValuation = LT.buildLongTermBoard({ candidates: [ltStrong], universe });
+  assert.equal(withValuation.rows[0].action, 'ACCUMULATE');
+  assert.equal(withValuation.rows[0].valuation.available, true);
+});
+
+test('a PEG built from a recovery base is reported but NOT relied on', () => {
+  // Observed live: MU P/E 20.2 with trailing EPS growth 700.7% -> PEG 0.03, which
+  // would read as "expectations look subdued" on any multiple whatsoever. A base
+  // effect is not evidence of cheapness.
+  const recovery = {
+    ...ltStrong,
+    fundamentals: { ...ltStrong.fundamentals, pe: 20.2, epsGrowth: 700.7 },
+  };
+  const b = LT.buildLongTermBoard({ candidates: [recovery], universe });
+  const r = b.rows[0];
+  assert.equal(r.valuation.available, false, 'a base-effect PEG must not count as an available valuation');
+  assert.equal(r.valuation.reportedPeToGrowth, 0.03, 'the raw ratio is still shown for transparency');
+  assert.match(r.valuation.unreliableBasis, /base effect/);
+  assert.notEqual(r.action, 'ACCUMULATE', 'cannot accumulate on a ratio that cannot mean what it appears to mean');
+  assert.equal(r.action, 'WATCH_VALUATION');
+
+  // A normal growth rate is unaffected.
+  const normal = LT.buildLongTermBoard({
+    candidates: [{ ...ltStrong, fundamentals: { ...ltStrong.fundamentals, pe: 35.3, epsGrowth: 32.6 } }],
+    universe,
+  });
+  assert.equal(normal.rows[0].valuation.available, true);
+  assert.equal(normal.rows[0].valuation.peToGrowth, 1.08);
+});
+
 test('the long-term board does not force picks', () => {
   const b = LT.buildLongTermBoard({ candidates: [], universe });
   assert.equal(b.empty, true);
