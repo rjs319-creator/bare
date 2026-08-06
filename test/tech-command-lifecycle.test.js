@@ -91,6 +91,55 @@ test('a new contradiction, a changed options read and stale data are all reporta
   assert.ok(b.alerts.length >= 1);
 });
 
+test('A PROVIDER BLIP MUST NOT MANUFACTURE ALERTS', () => {
+  // The defect this pins, found by running two real ticks minutes apart: the
+  // long-term catalyst was keyed on nextProofPoints[0].what, which flips between
+  // "Next earnings report" and the generic "Next revenue-growth print…" depending on
+  // whether the earnings-calendar call answered. One rate-limited provider rewrote
+  // the catalyst for EVERY name at once — 18 transitions and 9 alerts on a board
+  // where nothing had moved.
+  const t1 = LIFE.advance({ horizon: 'longterm', rows: [row({ action: 'ACCUMULATE', catalyst: 'earnings 2026-08-25' })], now: NOW1, sessionDay: DAY });
+  assert.equal(t1.transitions.length, 1, 'first sight is a new candidate');
+
+  // Provider blips: the field comes back unknown. Nothing changed about the company.
+  const t2 = LIFE.advance({ prior: t1, horizon: 'longterm', rows: [row({ action: 'ACCUMULATE', catalyst: null })], now: NOW2, sessionDay: DAY });
+  assert.equal(t2.transitions.length, 0, 'a missing field is not a change');
+  assert.equal(t2.alerts.length, 0);
+  assert.equal(t2.records.AAAA.catalyst, 'earnings 2026-08-25', 'the known value must carry forward, not be erased');
+
+  // Provider recovers with the SAME value — must not read as "a new catalyst".
+  const t3 = LIFE.advance({ prior: t2, horizon: 'longterm', rows: [row({ action: 'ACCUMULATE', catalyst: 'earnings 2026-08-25' })], now: NOW3, sessionDay: DAY });
+  assert.equal(t3.transitions.length, 0, 'rediscovering what we already knew is not news');
+  assert.equal(t3.alerts.length, 0);
+
+  // A GENUINE catalyst change still reports.
+  const t4 = LIFE.advance({ prior: t3, horizon: 'longterm', rows: [row({ action: 'ACCUMULATE', catalyst: 'earnings 2026-11-04' })], now: NOW3, sessionDay: DAY });
+  assert.equal(t4.transitions.length, 1);
+  assert.equal(t4.transitions[0].catalystAdded, true);
+});
+
+test('a candidate that is ALREADY stale on first sight does not alert as "became stale"', () => {
+  // Observed live: 76 prior-session day-trade names, all with currentSessionFresh
+  // false, each firing data-became-stale the moment they entered the lifecycle.
+  // Becoming stale is a transition; arriving stale is just a fact about the row.
+  const a = LIFE.advance({ horizon: 'daytrade', rows: [row({ action: 'WATCH', stale: true })], now: NOW1, sessionDay: DAY });
+  assert.equal(a.alerts.filter(x => x.kind === 'data-became-stale').length, 0);
+  assert.equal(a.records.AAAA.stale, true, 'the fact is still recorded');
+
+  // Fresh -> stale IS a transition and must still alert.
+  const b = LIFE.advance({ horizon: 'daytrade', rows: [row({ action: 'WATCH', stale: false })], now: NOW1, sessionDay: DAY });
+  const c = LIFE.advance({ prior: b, horizon: 'daytrade', rows: [row({ action: 'WATCH', stale: true })], now: NOW2, sessionDay: DAY });
+  assert.equal(c.alerts.filter(x => x.kind === 'data-became-stale').length, 1);
+});
+
+test('an options/attention blip is carried forward the same way', () => {
+  const t1 = LIFE.advance({ horizon: 'swing', rows: [row({ action: 'READY', optionsState: 'MIXED', attentionState: 'STICKY_ATTENTION' })], now: NOW1, sessionDay: DAY });
+  const t2 = LIFE.advance({ prior: t1, horizon: 'swing', rows: [row({ action: 'READY', optionsState: null, attentionState: null })], now: NOW2, sessionDay: DAY });
+  assert.equal(t2.transitions.length, 0, 'an unavailable overlay is not a state change');
+  assert.equal(t2.records.AAAA.optionsState, 'MIXED');
+  assert.equal(t2.records.AAAA.attentionState, 'STICKY_ATTENTION');
+});
+
 test('each horizon keeps its OWN lifecycle — they never share records', () => {
   const sw = LIFE.advance({ horizon: 'swing', rows: [row({ action: 'ENTER' })], now: NOW1, sessionDay: DAY });
   const lt = LIFE.advance({ horizon: 'longterm', rows: [row({ action: 'ACCUMULATE' })], now: NOW1, sessionDay: DAY });
