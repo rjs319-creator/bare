@@ -120,7 +120,22 @@ jobs:
           code=$(curl -sS -o /tmp/lowfloat.json -w '%{http_code}' --max-time 120 \
             -H "Authorization: Bearer $CRON_SECRET" \
             "$APP_URL/api/tracker?op=lowfloattick")
-          head -c 800 /tmp/lowfloat.json; echo
+          # Print a SUMMARY, not the first N bytes. The response opens with ~800 bytes of
+          # version/flag/limitation boilerplate, so a byte-truncated dump shows none of the
+          # fields an operator actually needs (did it skip, how many candidates, what was
+          # written). jq is preinstalled on the runner; the fallback keeps the step honest
+          # if that ever stops being true.
+          if command -v jq >/dev/null 2>&1; then
+            jq -c '{ok, skipped, reason, candidatesRanked, alertsEmitted,
+                    events: (.entryEvents.appended // null),
+                    snapshots, elapsedMs,
+                    quotes: .coverage.bulkQuotesReceived, volume: .coverage.volumeAvailable,
+                    discovered: .coverage.candidatesDiscovered,
+                    float: .coverage.floatEnriched, bars: .coverage.intradayEnriched}' \
+              /tmp/lowfloat.json || cat /tmp/lowfloat.json
+          else
+            tail -c 900 /tmp/lowfloat.json; echo
+          fi
           if [ "$code" != "200" ]; then
             echo "::error::op=lowfloattick returned HTTP $code"
             exit 1
@@ -180,7 +195,12 @@ jobs:
             code=$(curl -sS -o "/tmp/$op.json" -w '%{http_code}' --max-time 180 \
               -H "Authorization: Bearer $CRON_SECRET" \
               "$APP_URL/api/tracker?op=$op")
-            echo "--- $op (HTTP $code) ---"; head -c 800 "/tmp/$op.json"; echo
+            echo "--- $op (HTTP $code) ---"
+            if command -v jq >/dev/null 2>&1; then
+              jq -c 'del(.limitations, .versions, .flags)' "/tmp/$op.json" | head -c 1200; echo
+            else
+              tail -c 900 "/tmp/$op.json"; echo
+            fi
             if [ "$code" != "200" ]; then
               echo "::error::op=$op returned HTTP $code"
               exit 1
