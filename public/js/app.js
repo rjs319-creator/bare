@@ -1017,6 +1017,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     ['contradictions', '⚠️ Contradictions & Risk'],
     ['raw', '📊 Raw Activity'],
     ['income', '🅿️ Income & Entry'],
+    ['vrp', '🛡 Put-Write Ledger (paper)'],
   ];
   const OF_PRIMARY_IDS = OF_PRIMARY.map(v => v[0]);
   let ofPrimaryView = (() => { try { const v = localStorage.getItem('ofPrimaryView'); return OF_PRIMARY_IDS.includes(v) ? v : 'confirmations'; } catch { return 'confirmations'; } })();
@@ -1318,6 +1319,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       loadOptionsPerf();
       return;
     }
+    // VRP put-write — the PAPER preregistered ledger (op=vrpbook).
+    if (ofPrimaryView === 'vrp') {
+      optionsContainer.innerHTML = `<div id="of-summary"></div>` + shadowBanner + primaryNav
+        + `<div id="of-vrp"><div class="mom-status"><div class="mom-spinner"></div><p>Loading paper put-write ledger…</p></div></div>`;
+      wirePrimaryNav();
+      loadVrpView();
+      return;
+    }
     // Income & Entry — real listed cash-secured puts (reuses the CSP renderer inline).
     if (ofPrimaryView === 'income') {
       optionsContainer.innerHTML = `<div id="of-summary"></div>` + shadowBanner + primaryNav
@@ -1455,6 +1464,42 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const t = await fetchJSON('/api/tracker?op=putsell');
       renderPutSell(t, 'of-income');
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load income &amp; entry setups.</p></div>`; }
+  }
+
+  // ── 🛡 VRP put-write — the PAPER preregistered ledger (op=vrpbook) ──────────
+  // Displays the ledger exactly as logged: open paper positions ("picks"), the
+  // resolved history, and recorded entry skips. Deliberately NO performance
+  // claim beyond the raw numbers — the hypothesis is sealed until its
+  // preregistered evaluation (see the banner).
+  async function loadVrpView() {
+    const el = document.getElementById('of-vrp'); if (!el) return;
+    try {
+      const b = await fetchJSON('/api/tracker?op=vrpbook');
+      const money = (v) => (v == null ? '—' : `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`);
+      const banner =
+        `<div class="dt-note" style="margin-bottom:14px;border-left:3px solid #8b7bd8;padding:8px 10px;background:rgba(139,123,216,0.08)">`
+        + `<b>📋 Paper ledger · preregistered · no performance claim.</b> Every 5th trading session this book "sells" one ~30-day at-the-money SPY put at the real end-of-day bid (cash-secured, held to expiry) — on paper only. `
+        + `It exists to test, prospectively, whether the option market's insurance premium compensates its seller — a bet that <b>loses in crashes by design</b>. `
+        + `The evaluation is sealed until ≥60 entries spanning ≥18 months incl. a real drawdown month (no earlier than Feb 2028); until then these numbers are an accruing record, not evidence of anything.</div>`;
+      const openRows = (b.open || []).map((o) =>
+        `<tr><td>${o.entryDate}</td><td>${o.expiry}</td><td>$${o.strike}</td><td>${money(o.premium)}</td><td>$${o.spotAtEntry}</td><td>${o.iv != null ? (o.iv * 100).toFixed(0) + '%' : '—'}</td></tr>`).join('');
+      const histRows = ((b.resolved && b.resolved.history) || []).map((h) =>
+        `<tr><td>${h.entryDate}</td><td>${h.expiry}</td><td>$${h.strike}</td><td>${money(h.premium)}</td><td>$${h.settleClose}</td><td style="color:${h.pnl >= 0 ? 'var(--green,#2fbf71)' : 'var(--red,#e5484d)'}">${money(h.pnl)}</td></tr>`).join('');
+      const r = b.resolved || {};
+      const skips = (b.entrySkips || []).map((s) => `<li>${s.date}: ${s.reason}</li>`).join('');
+      el.innerHTML = banner
+        + `<h3 style="margin:6px 0 8px">Open paper positions</h3>`
+        + (openRows
+          ? `<div style="overflow-x:auto"><table class="dt-table"><thead><tr><th>Entered</th><th>Expiry</th><th>Strike</th><th>Premium collected</th><th>SPY at entry</th><th>IV</th></tr></thead><tbody>${openRows}</tbody></table></div>`
+          : `<div class="rot-sub dt-dim">No open paper position — the next grid entry is made by the nightly tick.</div>`)
+        + `<h3 style="margin:18px 0 8px">Resolved entries</h3>`
+        + `<div class="rot-sub" style="margin-bottom:8px">${r.n || 0} resolved · ${r.n ? `${(r.winRate * 100).toFixed(0)}% kept the premium · avg ${r.avgPeriodReturnPct}% of collateral per entry · cumulative paper P&L ${money(r.totalPnl)}` : 'accrues as entries expire'}</div>`
+        + (histRows
+          ? `<div style="overflow-x:auto"><table class="dt-table"><thead><tr><th>Entered</th><th>Expiry</th><th>Strike</th><th>Premium</th><th>SPY at settle</th><th>P&L</th></tr></thead><tbody>${histRows}</tbody></table></div>`
+          : '')
+        + (skips ? `<details class="dt-note" style="margin-top:14px"><summary style="cursor:pointer">Recorded entry skips (${(b.entrySkips || []).length})</summary><ul style="margin:8px 0;padding-left:18px">${skips}</ul></details>` : '')
+        + `<div class="dt-dim" style="font-size:0.76rem;margin-top:14px">Design frozen in the hypothesis registry (vrp-put-write-live): sell at bid (the spread is paid in the mark), $1/contract cost, settle to intrinsic at expiry. Skipped entries stand as recorded — never backfilled.</div>`;
+    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the paper put-write ledger.</p></div>`; }
   }
 
   function applyOptionsView() {

@@ -99,6 +99,8 @@ const PRIVILEGED_OPS = new Set([
   // Alpha-archive collection streams (unrecoverable-data Blob WRITES: earnings-calendar
   // snapshots+diffs, analyst-event feeds, per-name dealer-gamma shards). Cron/manual only.
   'calarchive', 'revarchive', 'gexarchive',
+  // VRP live paper put-write ledger WRITE (entry + resolution). Cron/manual only.
+  'vrptick',
   // GRIDLOCK shadow vertical WRITES (PJM/EIA/NWS collect + event ledger + PIT candidate
   // log / forward outcome resolution). Cron/manual-with-bearer only.
   'gridlocktick', 'gridlockresolve',
@@ -342,6 +344,8 @@ module.exports = async function handler(req, res) {
   if (req.query.op === 'gexarchive') return require('../lib/alpha-archive-routes').runGexArchive(req, res);
   if (req.query.op === 'archivehealth') return require('../lib/alpha-archive-routes').runArchiveHealth(req, res);
   if (req.query.op === 'alphabook') return require('../lib/alphabook-routes').runAlphaBook(req, res);
+  if (req.query.op === 'vrptick') return require('../lib/vrp-routes').runVrpTick(req, res);
+  if (req.query.op === 'vrpbook') return require('../lib/vrp-routes').runVrpBook(req, res);
   if (req.query.op === 'intracapture') return runIntraCapture(req, res);
   if (req.query.op === 'intraday') return runIntraday(req, res);
   if (req.query.op === 'baseline') return runBaseline(req, res);
