@@ -1,4 +1,4 @@
-name: Evidence tick (Thesis Changes)
+name: Evidence tick (Thesis Changes) + revarchive
 
 # EXTERNAL SCHEDULER for op=evidencetick (Evidence Consensus & Thesis Change engine).
 # It used to run as a root chain inside the 22:00 UTC /api/warm burst, where every
@@ -50,5 +50,20 @@ jobs:
           cat /tmp/tick.json; echo
           if [ "$code" != "200" ]; then
             echo "::error::op=evidencetick returned HTTP $code"
+            exit 1
+          fi
+      - name: Run revarchive (analyst-event archive)
+        # Moved here from the 22:00 warm burst (same reason as evidencetick): the
+        # burst 429s FMP for minutes, longer than any in-process retry can outlast
+        # — revarchive lost its first two days to it. 22:30 is a quiet window.
+        # Idempotent per day (rewrites revarchive/<date>.json; read-side dedup).
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then exit 0; fi
+          code=$(curl -sS -o /tmp/rev.json -w '%{http_code}' --max-time 120             -H "Authorization: Bearer $CRON_SECRET"             "$APP_URL/api/tracker?op=revarchive")
+          cat /tmp/rev.json; echo
+          if [ "$code" != "200" ]; then
+            echo "::error::op=revarchive returned HTTP $code"
             exit 1
           fi
