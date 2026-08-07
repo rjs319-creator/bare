@@ -236,3 +236,26 @@ test('benchmark-relative return is computed against the same window', () => {
   assert.equal(EVAL.relativeTo(bench, 'd0', 'd2', 10), 6);
   assert.equal(EVAL.relativeTo(null, 'd0', 'd2', 10), null);
 });
+
+// ── Universe rebuild lever ──────────────────────────────────────────────────
+test('the universe rebuild lever exists, is threaded, and is reachable ONLY from the tick', () => {
+  const fs = require('node:fs');
+  const routes = fs.readFileSync(require.resolve('../lib/tech-command-routes.js'), 'utf8');
+  const build = fs.readFileSync(require.resolve('../lib/tech-command-build.js'), 'utf8');
+
+  // Threaded: route reads the query param -> buildSnapshot -> loadTechUniverse.
+  assert.ok(/req\.query\.universerebuild/.test(routes), 'the tick must accept ?universerebuild=1');
+  assert.ok(/forceUniverseRebuild/.test(build), 'buildSnapshot must accept the flag');
+  assert.ok(/loadTechUniverse\(\{\s*now,\s*forceRebuild: forceUniverseRebuild/.test(build),
+    'the flag must reach loadTechUniverse, not be accepted and dropped');
+
+  // ONLY the tick. A public read must never be able to trigger a universe rebuild —
+  // it costs a directory fetch plus one screener call per exchange.
+  const publicRead = routes.slice(routes.indexOf('async function runTechCommand('), routes.indexOf('async function runTechCommandTicker('));
+  assert.ok(!/universerebuild/.test(publicRead), 'the public board read must not expose a rebuild lever');
+  const dossierRead = routes.slice(routes.indexOf('async function runTechCommandTicker('), routes.indexOf('async function runTechCommandHealth('));
+  assert.ok(!/universerebuild/.test(dossierRead), 'the public dossier read must not expose a rebuild lever');
+
+  // The tick reports whether it forced one, so a log can be read after the fact.
+  assert.ok(/universeRebuildForced/.test(routes), 'tick health must record whether a rebuild was forced');
+});

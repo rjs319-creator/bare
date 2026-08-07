@@ -119,3 +119,20 @@ test('enrichment still never decides eligibility (only an explicit inactive flag
   assert.equal(applied.rows.find(r => r.symbol === 'BBBB').isActivelyTrading, true);
   assert.equal(applied.delisted, 1);
 });
+
+// ── Artifact version identity ───────────────────────────────────────────────
+test('the universe artifact version tracks its CONTENTS, so a stale build self-invalidates', () => {
+  // The gap this closes: the per-exchange fix shipped, but every consumer kept
+  // serving the pre-fix artifact from cache until its 20-hour age-out — production
+  // showed 646 technology names instead of 837 for most of a session. The cache is
+  // keyed on `schema`, so the version must move whenever the artifact's contents do.
+  const { UNIVERSE_VERSION } = require('../lib/lowfloat-config');
+  assert.notEqual(UNIVERSE_VERSION, 'tradable-universe-v1',
+    'the per-exchange enrichment changed the artifact materially — v1 would keep serving truncated coverage from cache');
+  assert.match(UNIVERSE_VERSION, /^tradable-universe-v\d+$/);
+
+  // And the loader must actually gate on it (this is what makes the bump work).
+  const src = require('node:fs').readFileSync(require.resolve('../lib/tradable-universe.js'), 'utf8');
+  assert.ok(/cached\.schema === UNIVERSE_VERSION/.test(src),
+    'the cache must discard an artifact built under a different version');
+});
