@@ -140,7 +140,15 @@ async function enrichCandidates(candidates, isWarm, scope) {
   }
 }
 
+// Every log line emitted while handling this request carries the op that caused it,
+// so a `no daily data` warning names its own caller instead of having to be inferred.
+const { withLogContext } = require('../lib/log');
+
 module.exports = async function handler(req, res) {
+  return withLogContext({ op: String(req.query.op || 'screen'), route: '/api/screener' }, () => handleRequest(req, res));
+};
+
+async function handleRequest(req, res) {
   const reqT0 = Date.now();
   const mark = {};
   const scope = (req.query.scope || 'large').toLowerCase();
