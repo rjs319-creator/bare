@@ -127,6 +127,11 @@ const PRIVILEGED_OPS = new Set([
   // persist discovery state, write the research snapshots, mint point-in-time entry events,
   // emit alerts, resolve outcomes, move a template's promotion state, or store the audit.
   'lowfloattick', 'intradaytick', 'intradayresolve', 'intradaypromote', 'largemoveraudittick',
+  // 🖥 TECHNOLOGY COMMAND CENTER WRITES. op=techcommand / op=techcommandticker /
+  // op=techcommandhealth are READ-ONLY projections; only these authenticated ops may
+  // build+persist the snapshot, advance the candidate lifecycle, emit alerts, append the
+  // immutable evaluation record, or resolve matured outcomes.
+  'techcommandtick', 'techcommandresolve',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
@@ -142,6 +147,11 @@ const EXPENSIVE_OPS = new Set([
   // so normal page traffic coalesces, but an anonymous caller bypassing the cache with a
   // cache-buster could otherwise drive the provider fan-out at will.
   'lowfloat', 'intradaycontinuation', 'largemoveraudit',
+  // techcommand: normally serves a persisted snapshot, but when none is fresh it runs a
+  // BOUNDED live rebuild (cached public ops + benchmark candles). CDN-cached at ~45s so
+  // page traffic coalesces; the throttle stops a cache-busting caller from driving the
+  // rebuild at will.
+  'techcommand', 'techcommandticker',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -271,6 +281,16 @@ module.exports = async function handler(req, res) {
   // Which bulk-quote provider answers, and does it carry volume? Decides three of the seven
   // discovery lanes.
   if (req.query.op === 'quoteprobe') return require('../lib/lowfloat-routes').runQuoteProbe(req, res);
+
+  // ── 🖥 TECHNOLOGY COMMAND CENTER (lib/tech-command-routes.js) ────────────────
+  // Public reads are read-only projections over a persisted snapshot (with a bounded
+  // live fallback); the *tick / *resolve ops are in PRIVILEGED_OPS above and are the
+  // only writers in this stack. The frozen Day Trade engine is consumed, never modified.
+  if (req.query.op === 'techcommand') return require('../lib/tech-command-routes').runTechCommand(req, res);
+  if (req.query.op === 'techcommandticker') return require('../lib/tech-command-routes').runTechCommandTicker(req, res);
+  if (req.query.op === 'techcommandhealth') return require('../lib/tech-command-routes').runTechCommandHealth(req, res);
+  if (req.query.op === 'techcommandtick') return require('../lib/tech-command-routes').runTechCommandTick(req, res);
+  if (req.query.op === 'techcommandresolve') return require('../lib/tech-command-routes').runTechCommandResolve(req, res);
 
   if (req.query.op === 'daytradetick') return runDaytradeTick(req, res);
   if (req.query.op === 'daytradebook') return runDaytradeBook(req, res);

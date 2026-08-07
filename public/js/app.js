@@ -20,6 +20,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadRltLab } from './rlt-lab.js';
   import { loadPeerLab } from './peer-lab.js';
   import { loadGridlock } from './gridlock.js';
+  import { loadTechCommand } from './tech-command.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { loadCern, eventName as cernEventName } from './cern.js';
   import { mountVerdict } from './evidence-badge.js';
@@ -37,6 +38,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // report cards live in Evidence.
     home:       ['today', 'ensemble', 'start', 'quickhit'],
     candidates: ['swingsup', 'premove', 'daytrade', 'lowfloat', 'breakoutradar', 'gapgo', 'ignition', 'gapdown', 'opportunities', 'omega', 'atlas', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'patternradar', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
+    // Technology Command Center — its own top-level destination. One sector, three
+    // INDEPENDENT horizon conclusions; it consumes the other engines read-only.
+    tech:       ['tech-command'],
     positions:  ['coremo', 'momentum', 'putsell', 'picks'],
     markets:    ['rotation', 'sectors', 'news', 'thesis', 'pulse', 'evolve'],
     predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
@@ -58,6 +62,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const SUB_LABEL = {
     today: '🏠 Today', ensemble: '🎯 OMEGA Ensemble', start: '📘 Guide',
     quickhit: '⚡ Quick Hit', swingsup: '📋 Swing Supervisor', premove: '📡 Pre-Move', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', atlas: '🛰 ATLAS-X', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', lowfloat: '🧨 Low-Float Ignition', breakoutradar: '📉 Breakout Radar', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', patternradar: '📐 Pattern Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
+    'tech-command': '🖥 Technology Command Center',
     movermiss: '🔍 Mover Miss Audit', intradayval: '🧪 Intraday Validation',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', thesis: '🧾 Thesis Changes', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
@@ -100,6 +105,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     rltlab: 'Relative Leadership Transition — shadow system finding stocks BEGINNING to outperform their sector peers (rank change, not just high rank). Watch/armed/triggered states only; zero weight, never a buy signal, no probabilities until calibration is earned.',
     peerlab: 'Peer Propagation — shadow engine flagging stocks whose PEERS and historical leaders have moved while their own price has not yet reacted. Early/confirming stages only; zero weight, never a buy signal, no probabilities until out-of-fold calibration is earned.',
     gridlock: 'GRIDLOCK — shadow engine mapping PHYSICAL constraints (AI data-center power demand, plant retirements, turbine orders — PJM first) to companies with VERIFIED exposure. Decomposed research scores only; zero weight, no probabilities, never a buy signal.',
+    'tech-command': 'One technology universe, three INDEPENDENT conclusions: a day-trade board projected read-only from the frozen Day Trade engine, a swing board that inherits the app\u2019s governed eligibility gate, and a separate long-term investment model. Every candidate states why now, the exact trigger and what invalidates it; an \u201cAround the Corner\u201d timeline covers past, present and scheduled events. Options and social attention are weight-zero annotations that can never originate a trade, and no probability is shown because none is calibrated.',
     rotation: 'Which sectors money is rotating into and out of, week over week.',
     sectors: 'Sector performance heatmap — what’s leading and lagging.',
     momentum: 'Strong-buy and strong-sell momentum calls right now.',
@@ -135,7 +141,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // Mark each section as a switchable screen
   SECTION_IDS.forEach(id => document.getElementById(id)?.classList.add('tabbable'));
 
-  let hubSub = { home: 'today', candidates: 'opportunities', positions: 'coremo', markets: 'rotation', predict: 'gameplan', proof: 'scoreboard', lab: 'events' };
+  let hubSub = { home: 'today', candidates: 'opportunities', tech: 'tech-command', positions: 'coremo', markets: 'rotation', predict: 'gameplan', proof: 'scoreboard', lab: 'events' };
   try { const hs = JSON.parse(localStorage.getItem('hubSub')); if (hs) hubSub = { ...hubSub, ...hs }; } catch {}
   // Sanitize stored hubSub: after the nav regrouping a saved sub may no longer
   // belong to its group (e.g. markets→screener). Reset any stale entry to the
@@ -161,6 +167,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // (tabs that already have their own inline guide — trendrider/daytrade/coil/
   // confluence/gapgo/gapdown/fade/aligned/putsell — are deliberately omitted).
   const HOWTO = {
+    'tech-command': {
+      what: `<b>One technology universe, three separate answers.</b> The same stock is judged independently as a <b>day trade</b>, a <b>swing trade</b> and a <b>long-term investment</b> — because those are different questions with different holding periods, features, risks and benchmarks. A name can be a poor day trade, a promising swing setup and an attractive long-term holding <i>at the same time</i>, and the page will say exactly that.`,
+      read: `Start at the <b>regime header</b> (is technology leading, and is the move broad or narrow?). Then each board gives you: the <b>action</b>, <b>why now</b>, the <b>exact trigger</b>, and <b>what invalidates it</b>. "<b>Around the Corner</b>" lists what already happened, what is happening now, and what is scheduled next — with the source and timestamp on every item. Turn on <b>Expert view</b> for score decompositions, evidence quality, and every timestamp.`,
+      act: `Only the top of each board is an action, and only when it says so — <b>Triggered / Enter / Accumulate</b>. Everything else is a watch item, and the card tells you which gate it failed. Click any ticker for its <b>dossier</b>, and read the <b>Contradictions</b> block first: it is the part most likely to change your mind.`,
+      catch: `<b>Nothing here is a proven edge.</b> The day-trade board is a read-only view of the frozen Day Trade engine (this page cannot change it). The swing board inherits the app's existing eligibility gate. The long-term model is a documented heuristic with no track record. Options and social attention are <b>weight-zero annotations</b> that can never create a trade — the delayed option feed cannot tell buyer from seller, and "trending" is not "bullish". No probabilities are shown anywhere, because none has been calibrated.`,
+    },
     patternradar: {
       what: `A <b>stateful setup engine</b> for classic chart structures — bull/bear flag, VCP, flat base, cup & handle, double bottom/top, triangles, wedges, breakout-retest, failed breakout, undercut & reclaim — each found by its <b>own structural detector</b> (real pivots, fitted trendlines, necklines), not a generic shape match. A detected setup becomes an <b>episode</b> with a <b>frozen trigger, invalidation and target</b> that never drift as new bars arrive.`,
       read: `Each card shows the episode's <b>state</b> (Emerging → Forming → Ready → Triggered → Confirmed → Retesting → In position → Target/Stopped/Failed/Expired), a <b>position-aware action</b> (long-entry vs short-entry vs hold vs exit — a short setup never says "buy"), the frozen levels with their structural source, distance to trigger in % and ATR, remaining reward:risk, and the exact rule behind its last upgrade or downgrade. Expand a card for the transition history and an <b>annotated chart</b> (pivots + levels drawn on).`,
@@ -417,6 +429,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'rltlab' && typeof ensureRltLab === 'function') ensureRltLab();
     if (sub === 'peerlab' && typeof ensurePeerLab === 'function') ensurePeerLab();
     if (sub === 'gridlock' && typeof ensureGridlock === 'function') ensureGridlock();
+    if (sub === 'tech-command' && typeof ensureTechCommand === 'function') ensureTechCommand();
     if (sub === 'evidence' && typeof ensureEvidence === 'function') ensureEvidence();
     if (sub === 'thesis' && typeof ensureThesis === 'function') ensureThesis();
     if (sub === 'baselines' && typeof ensureBaselines === 'function') ensureBaselines();
@@ -3929,6 +3942,20 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (btn) btn.addEventListener('click', () => loadGridlock(document.getElementById('gridlock-container')));
     }
     loadGridlock(document.getElementById('gridlock-container'));
+  }
+
+  // 🖥 TECHNOLOGY COMMAND CENTER — reads the versioned op=techcommand projection.
+  // The module owns its own adaptive polling (paused while the tab is hidden) and
+  // its own filters; nothing is scored or ranked client-side.
+  let techCommandLoaded = false;
+  function ensureTechCommand() {
+    const container = document.getElementById('tech-command-container');
+    if (!techCommandLoaded) {
+      techCommandLoaded = true;
+      const btn = document.getElementById('tech-command-refresh-btn');
+      if (btn) btn.addEventListener('click', () => loadTechCommand(container));
+    }
+    loadTechCommand(container);
   }
 
   // 🎯 OMEGA ENSEMBLE — the composed board (loadEnsemble renders the op=ensemble payload,

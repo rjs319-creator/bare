@@ -1,0 +1,106 @@
+name: Tech Command Center tick
+
+# EXTERNAL SCHEDULER for the Technology Command Center's two writers.
+#
+# WHY THIS EXISTS. op=techcommand is a public READ-ONLY projection. When no fresh
+# persisted snapshot exists it falls back to a deliberately BOUNDED "lite" build —
+# already-cached public ops plus benchmark candles only. That fallback cannot
+# compute the long-term board, technology breadth, or the news half of the
+# Around-the-Corner timeline, it never advances the candidate lifecycle, and the
+# prospective evaluation ledger never starts accruing. Without this workflow the
+# page permanently renders about half of itself, honestly labelled but empty.
+#
+#   op=techcommandtick     build -> advance lifecycle -> emit alerts -> write the
+#                          immutable per-day decision record -> persist the snapshot.
+#                          Lease-guarded (55s), so overlapping runs yield rather
+#                          than double-write or double-alert.
+#   op=techcommandresolve  resolve matured swing (5/10/21) and long-term
+#                          (63/126/252) outcomes. Idempotent; re-running only
+#                          advances days that have newly matured.
+#
+# CADENCE. Every 15 minutes matches the snapshot freshness window (20 min during a
+# session), so a public read almost always serves a persisted snapshot rather than
+# rebuilding. Both ops no-op cleanly outside market hours and on a cold store.
+#
+# PROVIDER COST. The full build makes a BOUNDED fundamentals fan-out — at most
+# LIMITS.full.fundamentals (18) names x 2 Finnhub calls, plus the earnings calendar.
+# Everything else is served from already-cached public ops and the shared candle
+# cache. If the Finnhub budget ever gets tight, lower that constant in
+# lib/tech-command-build.js rather than thinning this schedule: the long-term board
+# is what disappears first, and it is the part that most needs the tick.
+#
+# One-time setup: repo secret CRON_SECRET (same value as the Vercel Production env
+# var) — already required by daytrade-scan.yml and evidence-tick.yml.
+
+on:
+  schedule:
+    # Every 15 min across premarket -> regular -> after-hours, in UTC, covering both
+    # DST regimes (EDT 08:00-20:00 ET = 12:00-00:00 UTC; EST shifts one hour later).
+    - cron: '*/15 12-21 * * 1-5'
+    # Post-close: resolve matured outcomes, after the 23:00 UTC daytrade capture.
+    - cron: '10 23 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      op:
+        description: "Which op to run: tick | resolve | both"
+        required: false
+        default: 'tick'
+
+env:
+  APP_URL: https://market-news-app-chi.vercel.app
+
+concurrency:
+  group: tech-command-tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Run the Tech Command Center tick / resolve
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          DISPATCH_OP: ${{ github.event.inputs.op }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          set -uo pipefail
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "::warning::CRON_SECRET repo secret not set — skipping. Add it (repo Settings → Secrets and variables → Actions) with the same value as the Vercel Production CRON_SECRET."
+            exit 0
+          fi
+
+          # The post-close cron resolves; every other schedule ticks. A manual
+          # dispatch says explicitly which it wants.
+          run_tick=1; run_resolve=0
+          if [ "${SCHEDULE:-}" = "10 23 * * 1-5" ]; then run_tick=0; run_resolve=1; fi
+          case "${DISPATCH_OP:-}" in
+            resolve) run_tick=0; run_resolve=1 ;;
+            both)    run_tick=1; run_resolve=1 ;;
+            tick)    run_tick=1; run_resolve=0 ;;
+          esac
+
+          fail=0
+          call() {
+            op="$1"
+            echo "── op=$op ─────────────────────────────────────────────"
+            code=$(curl -sS -o "/tmp/$op.json" -w '%{http_code}' --max-time 120 \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              "$APP_URL/api/tracker?op=$op")
+            head -c 2000 "/tmp/$op.json"; echo
+            if [ "$code" != "200" ]; then
+              echo "::error::op=$op returned HTTP $code"
+              fail=1
+            fi
+          }
+
+          [ "$run_tick" = "1" ] && call techcommandtick
+          [ "$run_resolve" = "1" ] && call techcommandresolve
+
+          # Health is a public read — always print it so a failed run leaves the
+          # snapshot age, the universe basis and the ledger status in the log.
+          echo "── op=techcommandhealth (public) ──────────────────────"
+          curl -sS --max-time 60 "$APP_URL/api/tracker?op=techcommandhealth" \
+            | head -c 2000; echo
+
+          exit $fail
