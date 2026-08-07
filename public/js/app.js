@@ -7347,6 +7347,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // (a SHORT never reads as "Buy") and evidence-gated: an unvalidated family caps at
   // "research only" no matter how clean the chart looks.
   let patternRadarLoaded = false, patternRadarView = 'all';
+  // A populated radar can hold 1,000+ episodes per bucket; rendering them in one innerHTML
+  // pass froze the tab on phones, so each bucket pages in PR_PAGE_SIZE-card chunks.
+  const PR_PAGE_SIZE = 30;
+  let prRadarBuckets = null;
   const PR_ACTION_LABEL = {
     LONG_ENTRY_READY: 'Long — near trigger', LONG_TRIGGERED: 'Long entry triggered',
     SHORT_ENTRY_READY: 'Short — near trigger', SHORT_TRIGGERED: 'Short entry triggered',
@@ -7371,7 +7375,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading pattern radar…</p></div>`;
     try {
-      const t = await fetchJSON(`/api/tracker?op=patterns&view=${patternRadarView}`);
+      const t = await fetchJSON(`/api/tracker?op=patterns&view=${patternRadarView}`, { timeoutMs: HEAVY_TIMEOUT_MS });
       renderPatternRadar(t, el);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the pattern radar.</p></div>`; }
   }
@@ -7399,14 +7403,20 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       ['developing', '🌱 Developing'], ['manage', '📊 Manage Existing Setups'], ['failedToday', '❌ Failed Today'],
       ['expired', '⌛ Expired'], ['resolved', '🏁 Resolved (target/stop)'], ['failedEarlier', '🗄 Failed Earlier'],
     ];
+    prRadarBuckets = r;
     const body = buckets.map(([k, lbl]) => {
       const items = r[k] || [];
       if (!items.length) return '';
       const collapsed = k === 'failedEarlier' || k === 'expired' || k === 'resolved';
-      const cards = items.map(prCard).join('');
+      const cards = items.slice(0, PR_PAGE_SIZE).map(prCard).join('');
+      const hidden = items.length - PR_PAGE_SIZE;
+      const pager = hidden > 0
+        ? `<button class="hub-sub-btn" data-pr-more="${k}" data-pr-next="${PR_PAGE_SIZE}" style="margin:6px 0">Show ${Math.min(PR_PAGE_SIZE, hidden)} more (${hidden} hidden)</button>`
+        : '';
+      const inner = `<div data-pr-cards="${k}">${cards}</div>${pager}`;
       return collapsed
-        ? `<details class="pr-bucket"><summary><h3 style="display:inline">${lbl} (${items.length})</h3></summary>${cards}</details>`
-        : `<div class="pr-bucket"><h3>${lbl} (${items.length})</h3>${cards}</div>`;
+        ? `<details class="pr-bucket"><summary><h3 style="display:inline">${lbl} (${items.length})</h3></summary>${inner}</details>`
+        : `<div class="pr-bucket"><h3>${lbl} (${items.length})</h3>${inner}</div>`;
     }).filter(Boolean).join('');
     el.innerHTML = `${prEvidenceBanner(t.evidence)}${prScanLine(t.scan)}
       <div class="hub-subnav" style="margin-bottom:10px">${filters}</div>
@@ -7416,10 +7426,33 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.querySelectorAll('[data-prview]').forEach(b => b.addEventListener('click', () => {
       patternRadarView = b.dataset.prview; runPatternRadarUI();
     }));
-    el.querySelectorAll('[data-pr-tk]').forEach(a => a.addEventListener('click', (e) => {
+    el.querySelectorAll('[data-pr-more]').forEach(b => b.addEventListener('click', () => prShowMore(b, el)));
+    prWireCards(el);
+  }
+  function prWireCards(scope) {
+    scope.querySelectorAll('[data-pr-tk]').forEach(a => a.addEventListener('click', (e) => {
       e.preventDefault(); openTickerLookup(a.dataset.prTk);
     }));
-    el.querySelectorAll('[data-pr-chart]').forEach(b => b.addEventListener('click', () => prLoadChart(b)));
+    scope.querySelectorAll('[data-pr-chart]').forEach(b => b.addEventListener('click', () => prLoadChart(b)));
+  }
+  function prShowMore(btn, el) {
+    const k = btn.dataset.prMore;
+    const items = (prRadarBuckets && prRadarBuckets[k]) || [];
+    const holder = el.querySelector(`[data-pr-cards="${k}"]`);
+    const start = Number(btn.dataset.prNext) || 0;
+    const chunk = items.slice(start, start + PR_PAGE_SIZE);
+    if (!holder || !chunk.length) { btn.remove(); return; }
+    // Build the chunk detached and wire it there — appendChild moves the nodes with their
+    // listeners intact, so revealed cards behave exactly like first-page cards.
+    const tpl = document.createElement('template');
+    tpl.innerHTML = chunk.map(prCard).join('');
+    prWireCards(tpl.content);
+    holder.appendChild(tpl.content);
+    const next = start + chunk.length;
+    const hidden = items.length - next;
+    if (hidden <= 0) { btn.remove(); return; }
+    btn.dataset.prNext = String(next);
+    btn.textContent = `Show ${Math.min(PR_PAGE_SIZE, hidden)} more (${hidden} hidden)`;
   }
   function prFamiliesTable(families) {
     if (!Array.isArray(families) || !families.length) return '';
