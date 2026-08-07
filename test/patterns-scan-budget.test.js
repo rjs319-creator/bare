@@ -95,3 +95,32 @@ test('scanPass: same-day resume keeps both cursor and accumulated stats', async 
   assert.strictEqual(seen[0], 'T003');
   assert.ok(state.stats.dataFailures >= 2, 'same-day stats accumulate, not reset');
 });
+
+// ── Creation-loop wall fix (2026-08-07) ─────────────────────────────────────
+// The advance loop and the scan pass were deadline-checked, but episode CREATION was
+// not — and each creation did an inline hash-chained ledger append (stream LIST +
+// write-once put + head put). On a fresh universe with hundreds of passing detections
+// the tick died at the function wall every night from 2026-08-04 (reproduced at the
+// raised 300s wall on 2026-08-07), the durable writes never ran, and the cursor reset
+// to 0. These tests pin the shape of the fix in the source: creation deadline-checked,
+// durable writes before the ledger flush, flush bounded by count + deadline.
+test('patternlog: the soft deadline fits inside the pattern chain step budget', () => {
+  const WC = require('../lib/warm-chains');
+  assert.ok(PATTERNLOG_SOFT_DEADLINE_MS < WC.CHAIN_DEADLINE_MS,
+    `patternlog deadline ${PATTERNLOG_SOFT_DEADLINE_MS}ms must be under the chain deadline ${WC.CHAIN_DEADLINE_MS}ms`);
+  assert.ok(PATTERNLOG_SOFT_DEADLINE_MS <= 240000);
+});
+
+test('patternlog source: creation loop is deadline-checked and ledger appends are deferred + bounded', () => {
+  const src = require('fs').readFileSync(require.resolve('../lib/pattern-routes.js'), 'utf8');
+  // The creation loop must consult the deadline (labelled break out of the nested loop).
+  assert.match(src, /outer: for \(const \{ ticker, report \} of results\)/);
+  assert.match(src, /creationTruncated = true; break outer/);
+  // Durable writes must precede the ledger flush: EPISODES_PATH write appears before the
+  // MAX_LEDGER_APPENDS_PER_TICK flush loop in source order.
+  const durableAt = src.indexOf('DURABLE WRITES FIRST');
+  const flushAt = src.indexOf('BOUNDED LEDGER FLUSH');
+  assert.ok(durableAt > 0 && flushAt > durableAt, 'durable writes must come before the ledger flush');
+  // The flush is bounded by BOTH a per-tick cap and the deadline.
+  assert.match(src, /ledgerAppends >= MAX_LEDGER_APPENDS_PER_TICK \|\| Date\.now\(\) >= deadlineAt/);
+});
