@@ -47,7 +47,11 @@ jobs:
     # Runs on the 5-minute schedule and on manual dispatch; not on the post-close tick.
     if: github.event.schedule != '0 23 * * 1-5'
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    # MUST exceed the sum of the steps' own curl budgets, or a slow-but-healthy prod fails
+    # the job on the runner's clock rather than on any real error. The three steps below
+    # allow 90 + 90 + 120 = 300s, so 4 minutes (240s) was under-provisioned; 6 leaves
+    # headroom for runner startup without letting a truly hung job idle for long.
+    timeout-minutes: 6
     steps:
       - name: Trigger one locked scan cycle
         env:
