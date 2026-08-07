@@ -80,6 +80,22 @@ for (const [file, op] of OPTIONAL_SITES) {
   });
 }
 
+// op=patterns builds its URL as a template literal (the view filter is interpolated), so it
+// can't ride the HEAVY_SITES quote-matcher above. It became a heavy payload the first night
+// the radar populated (2026-08-07: ~2,800 episodes, 3.7MB) — on mobile data that transfer
+// alone can blow the 20s default and blank the tab.
+test('app.js op=patterns passes the HEAVY timeout budget', () => {
+  // Arrange: isolate this call site.
+  const src = readJs('app.js');
+  const idx = src.indexOf('fetchJSON(`/api/tracker?op=patterns');
+  assert.ok(idx > -1, 'no fetchJSON call site for op=patterns in app.js');
+  const callSite = src.slice(idx, idx + 200);
+
+  // Assert: must not ride the 20s default.
+  assert.match(callSite, /timeoutMs:\s*HEAVY_TIMEOUT_MS/,
+    'app.js op=patterns rides the 20s default — a slow transfer will blank the tab');
+});
+
 test('every file using a shared budget actually imports it', () => {
   const files = [...new Set([...HEAVY_SITES, ...OPTIONAL_SITES].map(([f]) => f))];
   for (const f of files) {
