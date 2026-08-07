@@ -134,10 +134,16 @@ module.exports = async function handler(req, res) {
   const warmedExtra = await extraWarm;   // already resolved — ran during the tail above
 
   // Await the dispatched chains only to REPORT. Each is running in its own tracker
-  // invocation with its own 60s budget, so this deadline decides how much we get to SAY
+  // invocation with its own budget, so this deadline decides how much we get to SAY
   // about them, not how much of them runs. That is the whole point of the fix: warm's
   // death used to kill the work; now it only truncates the report.
-  const DRAIN_CEIL_MS = 55000;
+  //
+  // RAISED 55s → 280s with warm's maxDuration raise to 300s (vercel.json): at the old
+  // ceiling, 10 of 27 roots were still running when warm reported, so their outcomes
+  // (including the 2026-08-06 `ledger` @decision budget-skip and four wall-killed
+  // chains) never reached op=health — it showed green while the day's decision snapshot
+  // was silently lost. The chains' own deadline is 240s, so 280s hears ~every report.
+  const DRAIN_CEIL_MS = 280000;
   const chainReports = {};
   await Promise.race([
     Promise.all(chainKicks.map(async (k) => {

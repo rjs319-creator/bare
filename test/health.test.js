@@ -201,3 +201,71 @@ test('buildHealthResponse: empty history never throws and is not healthy', () =>
   assert.strictEqual(r.lastRun, null);
   assert.deepStrictEqual(r.chronicSkips, []);
 });
+
+// ── Persisted chain-report overlay (2026-08-07) ─────────────────────────────
+// Warm's drain only hears chains that report before its ceiling. On 2026-08-06 the
+// `ledger` chain budget-skipped @decision AFTER warm's report window closed — the day's
+// decision snapshot was silently lost while op=health read green — and four roots died
+// at the function wall with no report at all. Each warmchain invocation now persists its
+// own report (warm/chains/<name>.json); these tests pin the read-time overlay.
+const { overlayPersistedChains } = require('../lib/health');
+
+test('overlayPersistedChains: a fresh persisted report replaces running-past-warm with the real outcome', () => {
+  const run = { at: '2026-08-06T22:01:06Z', ok: true, chains: {
+    ledger: { dispatched: true, status: 'running-past-warm' },
+    vrp: { dispatched: true, httpStatus: 200, complete: true, stepFails: [], skipped: [] },
+  } };
+  const persisted = { ledger: { name: 'ledger', at: '2026-08-06T22:02:30Z', complete: false, failed: [], skipped: ['op=runmanifest', '@decision'], failDetail: [], elapsedMs: 52478 } };
+  const r = overlayPersistedChains(run, persisted);
+  assert.notEqual(r, run, 'returns a new object (no mutation)');
+  assert.equal(run.chains.ledger.status, 'running-past-warm', 'input untouched');
+  assert.equal(r.chains.ledger.persistedReport, true);
+  assert.equal(r.chains.ledger.complete, false);
+  assert.deepEqual(r.chains.ledger.skipped, ['op=runmanifest', '@decision']);
+  assert.equal(r.chains.vrp.complete, true, 'heard chains are untouched');
+  assert.ok(!(r.lateChainFails || []).length, 'skips alone are not late FAILURES');
+});
+
+test('overlayPersistedChains: persisted step failures surface as lateChainFails', () => {
+  const run = { at: '2026-08-06T22:01:06Z', chains: { alphacal: { dispatched: true, status: 'running-past-warm' } } };
+  const persisted = { alphacal: { name: 'alphacal', at: '2026-08-06T22:03:00Z', complete: true, failed: ['op=revarchive'], skipped: [], failDetail: [{ op: 'op=revarchive', status: 'http:503' }], elapsedMs: 36022 } };
+  const r = overlayPersistedChains(run, persisted);
+  assert.deepEqual(r.lateChainFails, ['alphacal']);
+  assert.deepEqual(r.chains.alphacal.stepFails, ['op=revarchive']);
+});
+
+test('overlayPersistedChains: a chain with NO fresh report is marked no-report and counted failed', () => {
+  const run = { at: '2026-08-06T22:01:06Z', chains: {
+    pattern: { dispatched: true, status: 'running-past-warm' },       // died at the wall — never persisted
+    pulse: { dispatched: true, status: 'running-past-warm' },
+  } };
+  // pulse has only a STALE report from a previous night — must not masquerade as tonight's.
+  const persisted = { pulse: { name: 'pulse', at: '2026-08-05T22:02:00Z', complete: true, failed: [], skipped: [] } };
+  const r = overlayPersistedChains(run, persisted);
+  assert.equal(r.chains.pattern.status, 'no-report');
+  assert.equal(r.chains.pulse.status, 'no-report', 'stale report rejected');
+  assert.deepEqual([...r.lateChainFails].sort(), ['pattern', 'pulse']);
+});
+
+test('overlayPersistedChains: null/absent inputs pass through unchanged', () => {
+  assert.equal(overlayPersistedChains(null, {}), null);
+  const run = { at: 'x', chains: { a: { dispatched: true, status: 'running-past-warm' } } };
+  assert.equal(overlayPersistedChains(run, null), run);
+});
+
+test('buildHealthResponse: lateChainFails flip healthy false with a warning', () => {
+  const runs = [{ at: '2026-08-06T22:01:06Z', ok: true, failCount: 0, chains: { pattern: { dispatched: true, status: 'running-past-warm' } } }];
+  const r = buildHealthResponse(runs, { spyDate: '2026-08-06', ageDays: 0.5, persistedChains: {} });
+  assert.strictEqual(r.healthy, false);
+  assert.ok(/pattern/.test(r.warning));
+});
+
+test('compactChainReport: health-shaped, bounded, and pure', () => {
+  const { compactChainReport } = require('../lib/warm-chains-routes');
+  const result = { name: 'ledger', complete: false, failed: ['x'], skipped: ['y'], failDetail: Array(20).fill({ op: 'z' }), elapsedMs: 52478, steps: [{ op: 'op=track' }] };
+  const rep = compactChainReport(result, '2026-08-06T22:02:30Z');
+  assert.deepEqual(Object.keys(rep).sort(), ['at', 'complete', 'elapsedMs', 'failDetail', 'failed', 'name', 'skipped']);
+  assert.equal(rep.failDetail.length, 12, 'detail bounded');
+  assert.equal(rep.at, '2026-08-06T22:02:30Z');
+  assert.equal(result.failDetail.length, 20, 'input not mutated');
+});

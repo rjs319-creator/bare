@@ -309,12 +309,23 @@ test('the nested scan chains are NOT root chains (only the parent dispatches the
 });
 
 test('no nested scan chain can exceed its own invocation budget', () => {
-  // Each scan self-bounds at 45s (lib/universe-routes) and the chain deadline is 48s, so a
-  // chain of 2 scans starts its second step at ~45s — inside the deadline — and the pair
-  // fits the 60s function wall. A third would start past the deadline and be budget-skipped,
-  // which is why the work is spread across chains rather than lengthening one.
+  // Each scan self-bounds at 45s (lib/universe-routes). Under the 300s function wall
+  // (vercel.json) the chain deadline is 240s, so both scans in a nested chain now run to
+  // completion (at the old 48s deadline the second scan started at ~45s and squeaked in);
+  // the work stays spread across chains so no single invocation carries the whole night.
   for (const n of ['universescan1', 'universescan2', 'universescan3', 'universescan4']) {
     assert.ok(WC.CHAINS[n].length <= 2, `${n} must stay at 2 steps to fit one invocation`);
   }
-  assert.ok(WC.CHAIN_DEADLINE_MS <= 60000);
+  // Deadline must leave headroom under the 300s wall for one slow awaited step started
+  // near the deadline — a hard wall kill is a 504 that persists no report at all.
+  assert.ok(WC.CHAIN_DEADLINE_MS <= 240000, 'chain deadline must leave >=60s headroom under the 300s function wall');
+});
+
+test('the universe chain refreshes its candidate list BEFORE scanning (op=universebuild first)', () => {
+  // universe/candidates.json was never wired to a cron and silently aged 29 days past the
+  // 10-day staleness bound data-health itself enforces. The build is the cheap free-
+  // directory ingest, so it leads the chain: scans below always draw from a fresh list.
+  assert.equal(WC.CHAINS.universe[0], 'op=universebuild');
+  assert.ok(WC.CHAINS.universe.includes('op=universecompile'));
+  assert.ok(WC.CHAINS.universe.indexOf('op=universebuild') < WC.CHAINS.universe.indexOf('@universescan1'));
 });
