@@ -1,9 +1,15 @@
 .vercel
 .env*
+# root template only — deeper .env.example files have held real values, keep them ignored
+!/.env.example
 node_modules
 .DS_Store
 research/data/
 research/.env
+
+# licensed vendor data samples (never commit)
+research/private-data/
+private-data/
 
 # Claude Code local settings (personal, not committed)
 .claude/settings.local.json
