@@ -37,3 +37,24 @@ test('tierFor: shift → Scoreboard tier', () => {
   assert.equal(tierFor({ shift: 'STABLE' }), 'Stable');
   assert.equal(tierFor({ shift: 'DARKENING' }), 'Darkening');
 });
+
+// ── Honest proxy labeling (coverage tone, not transcript tone) ────────────────
+const TSR = require('../lib/toneshift-routes');
+test('toneshift labels its coverage-proxy data basis honestly (not transcript tone)', () => {
+  assert.equal(TSR.DATA_BASIS, 'coverage-proxy');
+  assert.match(TSR.PROXY_NOTE, /coverage/i);
+  assert.match(TSR.PROXY_NOTE, /not raw transcripts/i);
+  // The user-facing disclaimer must also disclose the proxy, never imply transcripts.
+  assert.match(TSR.DISCLAIMER, /coverage/i);
+});
+
+test('a stale cached document cannot override the data-basis label', () => {
+  // The label must describe what THIS code does, not whatever a doc written by an older
+  // deploy happened to carry — otherwise a cache entry could silently claim transcript
+  // provenance the engine never had.
+  const cached = { dataBasis: 'transcript', proxyNote: 'stale claim', items: [] };
+  const payload = { disclaimer: TSR.DISCLAIMER, ...cached, dataBasis: TSR.DATA_BASIS, proxyNote: TSR.PROXY_NOTE };
+
+  assert.equal(payload.dataBasis, 'coverage-proxy');
+  assert.equal(payload.proxyNote, TSR.PROXY_NOTE);
+});
