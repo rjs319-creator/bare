@@ -45,6 +45,10 @@ on:
         description: "Which op to run: tick | resolve | both"
         required: false
         default: 'tick'
+      universerebuild:
+        description: "Set to 1 to force a fresh tradable-universe build (directory + one screener call per exchange). Normally unnecessary — the artifact's version stamp invalidates the cache whenever a code change alters its contents."
+        required: false
+        default: ''
 
 env:
   APP_URL: https://market-news-app-chi.vercel.app
@@ -62,6 +66,7 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           DISPATCH_OP: ${{ github.event.inputs.op }}
+          UNIVERSE_REBUILD: ${{ github.event.inputs.universerebuild }}
           SCHEDULE: ${{ github.event.schedule }}
         run: |
           set -uo pipefail
@@ -81,12 +86,18 @@ jobs:
           esac
 
           fail=0
+          # Only the tick accepts the rebuild flag; resolve ignores it.
+          REBUILD=""
+          if [ "${UNIVERSE_REBUILD:-}" = "1" ]; then REBUILD="&universerebuild=1"; fi
+
           call() {
             op="$1"
-            echo "── op=$op ─────────────────────────────────────────────"
+            extra=""
+            [ "$op" = "techcommandtick" ] && extra="$REBUILD"
+            echo "── op=$op$extra ─────────────────────────────────────────────"
             code=$(curl -sS -o "/tmp/$op.json" -w '%{http_code}' --max-time 120 \
               -H "Authorization: Bearer $CRON_SECRET" \
-              "$APP_URL/api/tracker?op=$op")
+              "$APP_URL/api/tracker?op=$op$extra")
             head -c 2000 "/tmp/$op.json"; echo
             if [ "$code" != "200" ]; then
               echo "::error::op=$op returned HTTP $code"

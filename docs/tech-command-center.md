@@ -270,6 +270,23 @@ only unbounded-looking cost is the fundamentals fan-out, capped at
 `LIMITS.full.fundamentals` (18 names x 2 Finnhub calls); lower that constant before
 thinning the schedule, since the long-term board is what the tick exists to produce.
 
+**Forcing a universe rebuild.** Normally unnecessary: the tradable-universe artifact
+carries a version stamp (`UNIVERSE_VERSION` in `lib/lowfloat-config.js`) and
+`loadTradableUniverse` discards any cached doc whose schema does not match, so a code
+change that alters the artifact's contents invalidates the cache by itself. Bump that
+constant whenever you change what the artifact contains — not just its shape. For the
+cases the stamp cannot cover (a provider outage that poisoned a build, a directory
+correction landing mid-day):
+
+```
+GET /api/tracker?op=techcommandtick&universerebuild=1     # bearer CRON_SECRET
+```
+
+or run the workflow manually with `universerebuild: 1`. It costs a directory fetch
+plus one screener call per exchange, is reachable **only** from the authenticated tick
+(a test fails if either public read ever exposes it), and the tick's health record
+reports `universeRebuildForced` and `universeAsOf` so a forced run is auditable.
+
 **Rollback.** The page is additive. To disable it, remove `tech` from `TAB_GROUPS`
 in `public/js/app.js` and the three `data-tab="tech"` nav links in
 `public/index.html`; the ops keep working and nothing else changes. To remove it
