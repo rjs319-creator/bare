@@ -44,8 +44,8 @@ test('THE BUDGET INVARIANT: the route stops before its parent chain does', () =>
   // and no outcomes would be written at all — losing even days already graded.
   assert.ok(RG.RUN_DEADLINE_MS < WC.CHAIN_DEADLINE_MS,
     `route deadline ${RG.RUN_DEADLINE_MS}ms must be under chain deadline ${WC.CHAIN_DEADLINE_MS}ms`);
-  // And both must clear the 60s function wall with headroom.
-  assert.ok(WC.CHAIN_DEADLINE_MS < 60000);
+  // And both must clear the 300s function wall (vercel.json) with headroom.
+  assert.ok(WC.CHAIN_DEADLINE_MS < 300000);
 });
 
 test('grading rides its own invocation, not the decision chain', () => {

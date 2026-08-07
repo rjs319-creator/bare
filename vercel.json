@@ -6,8 +6,8 @@
     "api/backtest.js": { "maxDuration": 60 },
     "api/sectors.js":  { "maxDuration": 30 },
     "api/price.js":    { "maxDuration": 30 },
-    "api/warm.js":     { "maxDuration": 60 },
-    "api/tracker.js":  { "maxDuration": 60 }
+    "api/warm.js":     { "maxDuration": 300 },
+    "api/tracker.js":  { "maxDuration": 300 }
   },
   "crons": [
     { "path": "/api/warm", "schedule": "0 22 * * *" }
