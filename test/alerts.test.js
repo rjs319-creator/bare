@@ -2,6 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { mineText, rankPosts, analyzeEdge, CFG } = require('../lib/alerts');
+const alerts = require('../lib/alerts');
 
 // Build N graded directional entries with a fixed per-direction excess.
 function gradedEntries({ bull = [], bear = [], score = 3, account = 'x' } = {}) {
@@ -97,4 +98,70 @@ test('analyzeEdge: trimmedMean strips outliers so a few pump implosions cannot f
   const r = analyzeEdge(entries);
   assert.ok(r.fade.meanExcessPct > r.fade.trimmedMeanExcessPct, 'mean is inflated by the tail');
   assert.ok(Math.abs(r.fade.trimmedMeanExcessPct) < 0.5, 'trimmed center reveals no broad edge');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UNGRADEABLE SYMBOLS — the alert log is built from social $cashtags, so it carries
+// StockTwits symbology (BTC.X, USDJPY, RTY_F, BB.TSX) that fetchDailyHistory can never
+// serve. Before this, a missed fetch skipped the entry WITHOUT marking it, so it stayed
+// pending forever and was re-fetched on every grade run — ~120 futile fetches per run
+// against a 60s budget, which is what produced the daily 22:00Z 504s.
+// ─────────────────────────────────────────────────────────────────────────────
+test('isGradeableSymbol rejects crypto, forex, futures and foreign symbology', () => {
+  // Arrange / Act / Assert — every one of these was observed in production logs.
+  for (const sym of ['BTC.X', 'PEPE.X', 'TRUMP.X', 'BB.TSX', 'TATAPOWER.NSE', 'RTY_F',
+                     'USDJPY', 'GBPUSD', 'CADJPY', 'XAUUSD', 'OPEAZZX.P', '401JK.X']) {
+    assert.equal(alerts.isGradeableSymbol(sym), false, `${sym} should be rejected`);
+  }
+});
+
+test('isGradeableSymbol keeps ordinary US equity tickers', () => {
+  for (const sym of ['AAPL', 'A', 'BRK-B', 'GOOGL', 'DOCS', 'BROS', 'SBAQU']) {
+    assert.equal(alerts.isGradeableSymbol(sym), true, `${sym} should be kept`);
+  }
+});
+
+test('isGradeableSymbol does NOT guess at SPAC units — those are real listings', () => {
+  // A 5-letter symbol ending in U is a Nasdaq unit, but it IS US-listed. Filtering it at
+  // ingest would silently drop real alerts; the retry cap handles it empirically instead.
+  assert.equal(alerts.isGradeableSymbol('SBAQU'), true);
+  assert.equal(alerts.isGradeableSymbol('ALUBU'), true);
+});
+
+test('isGradeableSymbol rejects empty and malformed input rather than throwing', () => {
+  for (const sym of ['', null, undefined, '   ', 'TOOLONGSYM']) {
+    assert.equal(alerts.isGradeableSymbol(sym), false);
+  }
+});
+
+test('markUngradeable retires an entry only after the attempt cap, not on first miss', () => {
+  // Arrange: a fresh pending entry.
+  const e = { ticker: 'SBAQU', graded: false, excess: null };
+
+  // Act + Assert: the first misses must NOT retire it — a transient provider blip is not
+  // proof the symbol is unfetchable.
+  for (let i = 1; i < alerts.CFG.maxFetchAttempts; i++) {
+    alerts.markUngradeable(e);
+    assert.equal(e.ungradeable, undefined, `retired too early at attempt ${i}`);
+    assert.equal(e.fetchFails, i);
+  }
+
+  alerts.markUngradeable(e);
+  assert.equal(e.ungradeable, true);
+  assert.equal(e.ungradeableReason, 'no-daily-history');
+});
+
+test('an ungradeable entry NEVER counts as graded — edge stats must stay clean', () => {
+  // Arrange: a log where the only directional entries are retired ones.
+  const log = [
+    { ticker: 'BTC.X', direction: 'bullish', graded: false, ungradeable: true, excess: null, weightedSignal: 9, score: 5, account: 'a' },
+    { ticker: 'RTY_F', direction: 'bearish', graded: false, ungradeable: true, excess: null, weightedSignal: 8, score: 4, account: 'b' },
+  ];
+
+  // Act
+  const edge = alerts.analyzeEdge(log);
+
+  // Assert: retired entries contribute nothing to the sample the verdict is built on.
+  assert.equal(edge.n, 0);
+  assert.equal(edge.edge, false);
 });
