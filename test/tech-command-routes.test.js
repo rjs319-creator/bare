@@ -259,3 +259,38 @@ test('the universe rebuild lever exists, is threaded, and is reachable ONLY from
   // The tick reports whether it forced one, so a log can be read after the fact.
   assert.ok(/universeRebuildForced/.test(routes), 'tick health must record whether a rebuild was forced');
 });
+
+// ── Tick-health observability ───────────────────────────────────────────────
+test('a stale health record is REPORTED as stale, not left for the reader to notice', () => {
+  const now = new Date('2026-08-07T01:00:00Z');
+  // A record whose expected next run has passed — observed live: the endpoint sat
+  // 30 minutes behind, reporting an old universe count, while ticks were succeeding.
+  const overdue = RT.tickFreshness({
+    lastAttemptAt: '2026-08-07T00:15:00Z', expectedNextAt: '2026-08-07T00:30:00Z',
+  }, now);
+  assert.equal(overdue.recordStale, true);
+  assert.equal(overdue.recordAgeMinutes, 45);
+  assert.match(overdue.recordNote, /not running, or its health write failed/);
+
+  // A current record is not flagged.
+  const fresh = RT.tickFreshness({
+    lastAttemptAt: '2026-08-07T00:55:00Z', expectedNextAt: '2026-08-07T01:10:00Z',
+  }, now);
+  assert.equal(fresh.recordStale, false);
+  assert.equal(fresh.recordNote, null);
+
+  // An undated record cannot be assessed and must say so rather than read as fresh.
+  const undated = RT.tickFreshness({}, now);
+  assert.equal(undated.recordStale, null);
+  assert.match(undated.recordNote, /cannot be assessed/);
+});
+
+test('a failed health write is surfaced on the tick response, never swallowed', () => {
+  const src = require('node:fs').readFileSync(require.resolve('../lib/tech-command-routes.js'), 'utf8');
+  const tickFn = src.slice(src.indexOf('async function runTechCommandTick'), src.indexOf('// ── Privileged: resolve'));
+  assert.ok(/healthWriteError/.test(tickFn), 'the health write must report its failure');
+  assert.ok(!/catch \{ \/\* health writing is best-effort \*\/ \}/.test(tickFn),
+    'the bare swallow left the endpoint silently describing an older run');
+  // The board/ledger persist first, so a health-write failure must NOT fail the tick.
+  assert.ok(/ok: !failure/.test(tickFn), 'a health-write failure is reported, not fatal');
+});
