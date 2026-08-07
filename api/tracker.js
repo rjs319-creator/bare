@@ -174,7 +174,15 @@ const SHARED_FORCE_OPS = new Set([
 // Ingest endpoints: POST-only + their own token/secret gate inside the route.
 const INGEST_OPS = new Set(['insideringest', 'alertsingest']);
 
+// Every log line emitted while handling this request carries the op that caused it,
+// so a `no daily data` warning names its own caller instead of having to be inferred.
+const { withLogContext } = require('../lib/log');
+
 module.exports = async function handler(req, res) {
+  return withLogContext({ op: String(req.query.op || 'scoreboard'), route: '/api/tracker' }, () => handleRequest(req, res));
+};
+
+async function handleRequest(req, res) {
   // Deploy version — the client compares this against the value it booted with and
   // prompts a refresh when a new deploy lands. Cheap (env read), never cached.
   if (req.query.op === 'version') {
