@@ -110,8 +110,11 @@ test('carryInsight: no match → item unchanged (never invents)', () => {
 });
 
 // ── Stale-state thresholds ────────────────────────────────────────────────────
-test('freshnessOf: <4h live, <12h stale, older very-stale', () => {
+// DEFECT FIX (Pulse v2 audit #1): a multi-hour-old narrative snapshot must never be
+// labeled "live". live < 1h, recent < 4h, stale < 12h, then very-stale.
+test('freshnessOf: <1h live, <4h recent, <12h stale, older very-stale', () => {
   assert.equal(routes.freshnessOf(30), 'live');
+  assert.equal(routes.freshnessOf(230), 'recent');   // 3.9h was "live" in v1 — the defect
   assert.equal(routes.freshnessOf(300), 'stale');
   assert.equal(routes.freshnessOf(1000), 'very-stale');
   assert.equal(routes.freshnessOf(null), 'unknown');
