@@ -108,3 +108,18 @@ test('playbook: no fabricated levels — without an unbroken range the decision 
   const pb = M.buildPlaybook(state, {});
   assert.ok(!/\d+ \/ \d+/.test(pb.nextDecisionPoint.text), 'no invented numeric levels');
 });
+
+// ── Last-known-good snapshot guard (found in live weekend verification) ──────
+test('a zero-coverage tick never clobbers a snapshot that had real intraday data', () => {
+  const good = { state: { coverage: { intradayCount: 14 } } };
+  const emptyState = { coverage: { intradayCount: 0 } };
+  const v = M.shouldReplaceSnapshot(good, emptyState);
+  assert.equal(v.replace, false);
+  assert.match(v.reason, /keeping the last good snapshot/);
+});
+
+test('fresh intraday data always replaces; empty replaces only empty/absent', () => {
+  assert.equal(M.shouldReplaceSnapshot({ state: { coverage: { intradayCount: 14 } } }, { coverage: { intradayCount: 9 } }).replace, true);
+  assert.equal(M.shouldReplaceSnapshot(null, { coverage: { intradayCount: 0 } }).replace, true);
+  assert.equal(M.shouldReplaceSnapshot({ state: { coverage: { intradayCount: 0 } } }, { coverage: { intradayCount: 0 } }).replace, true);
+});
