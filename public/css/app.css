@@ -3390,3 +3390,59 @@
   .tc-ctl select, .tc-ctl input { min-width:0; width:100%; }
   .tc-ctl { flex:1 1 140px; }
 }
+
+/* ── 📡 Market Pulse v2 (Market Intelligence Center) — scoped under #pulse ── */
+#pulse .p2-note { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+#pulse .p2-toggle-wrap { display:inline-flex; border:1px solid #333; border-radius:6px; overflow:hidden; }
+#pulse .p2-vtab { background:#111; color:#9ca3af; border:none; padding:4px 10px; font-size:0.74rem; cursor:pointer; }
+#pulse .p2-vtab.p2-active { background:#1f2937; color:#f9fafb; }
+#pulse .p2-dim { color:#6b7280; font-size:0.72rem; }
+#pulse .p2-basis { font-size:0.62rem; border:1px solid currentColor; border-radius:4px; padding:0 4px; margin-left:6px; white-space:nowrap; }
+#pulse .p2-clock { font-size:0.68rem; margin-left:8px; white-space:nowrap; }
+#pulse .p2-health { font-size:0.7rem; color:#6b7280; margin:6px 0; }
+#pulse .p2-unavail-row { color:#f87171; font-size:0.72rem; margin-top:2px; }
+#pulse .p2-now { background:#0b0f17; border:1px solid #1f2937; border-radius:10px; padding:10px 12px; margin:8px 0; }
+#pulse .p2-now-head { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+#pulse .p2-mode { font-weight:700; font-size:0.95rem; color:#ec4899; letter-spacing:0.02em; }
+#pulse .p2-modechg { color:#eab308; font-size:0.72rem; }
+#pulse .p2-mode-why { margin:2px 0 6px; }
+#pulse .p2-tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(86px,1fr)); gap:6px; margin:6px 0; }
+#pulse .p2-tile { background:#101623; border:1px solid #1f2937; border-radius:8px; padding:6px 8px; text-align:center; }
+#pulse .p2-tile.p2-unavail { opacity:0.5; }
+#pulse .p2-tk { font-size:0.7rem; color:#9ca3af; }
+#pulse .p2-val { font-weight:700; font-size:0.9rem; }
+#pulse .p2-sub { font-size:0.64rem; color:#6b7280; }
+#pulse .p2-line { font-size:0.76rem; margin:3px 0; color:#d1d5db; }
+#pulse .p2-play { background:#0b0f17; border:1px solid #1f2937; border-radius:10px; padding:10px 12px; margin:8px 0; }
+#pulse .p2-play-title { font-weight:700; color:#ec4899; margin-bottom:6px; }
+#pulse .p2-play-row { display:flex; flex-wrap:wrap; gap:6px; align-items:baseline; padding:3px 0; border-top:1px solid #111827; }
+#pulse .p2-play-lbl { flex:0 0 150px; font-size:0.68rem; color:#9ca3af; text-transform:uppercase; letter-spacing:0.04em; }
+#pulse .p2-play-txt { flex:1 1 260px; font-size:0.8rem; color:#e5e7eb; }
+#pulse .p2-views { margin:8px 0; }
+#pulse .p2-vtabs { display:flex; gap:4px; margin:6px 0; }
+#pulse .p2-sec { margin:12px 0; }
+#pulse .p2-sec-head { font-weight:700; color:#f9fafb; margin-bottom:6px; font-size:0.85rem; }
+#pulse .p2-sec-n { color:#6b7280; font-weight:400; font-size:0.72rem; }
+#pulse .p2-card { background:#0d1220; border:1px solid #1f2937; border-left:3px solid #374151; border-radius:8px; padding:8px 10px; margin:6px 0; }
+#pulse .p2-card[data-state="PRICE_CONFIRMED"] { border-left-color:#22c55e; }
+#pulse .p2-card[data-state="ARMED"] { border-left-color:#f97316; }
+#pulse .p2-card[data-state="CONTRADICTED"], #pulse .p2-card[data-state="INVALIDATED"] { border-left-color:#ef4444; }
+#pulse .p2-card-head { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:4px; }
+#pulse .p2-card-title { font-size:0.84rem; color:#f3f4f6; }
+#pulse .p2-card-plain { font-size:0.76rem; color:#a5b4fc; margin:4px 0; }
+#pulse .p2-pill { font-size:0.64rem; border:1px solid; border-radius:10px; padding:1px 8px; font-weight:700; }
+#pulse .p2-evid, #pulse .p2-life, #pulse .p2-react { font-size:0.66rem; color:#9ca3af; }
+#pulse .p2-dir { font-size:0.7rem; }
+#pulse .p2-tkbtn { background:#1f2937; color:#93c5fd; border:none; border-radius:4px; padding:1px 6px; font-size:0.7rem; cursor:pointer; }
+#pulse .p2-pro { margin-top:6px; }
+#pulse .p2-pro summary { font-size:0.7rem; color:#9ca3af; cursor:pointer; }
+#pulse .p2-contract, #pulse .p2-pro[open] { font-size:0.72rem; }
+#pulse .p2-c-row { display:flex; justify-content:space-between; gap:10px; padding:2px 0; border-top:1px solid #111827; font-size:0.72rem; color:#d1d5db; }
+#pulse .p2-claim { font-size:0.72rem; margin:4px 0; color:#d1d5db; }
+#pulse .p2-src { color:#60a5fa; margin-left:6px; font-size:0.68rem; }
+#pulse .p2-empty { background:#0b0f17; border:1px dashed #374151; border-radius:8px; padding:8px 10px; color:#6b7280; font-size:0.74rem; margin:6px 0; }
+#pulse .p2-recent-row, #pulse .p2-alert-row { font-size:0.74rem; color:#d1d5db; padding:2px 0; }
+@media (max-width:640px) {
+  #pulse .p2-play-lbl { flex-basis:100%; }
+  #pulse .p2-tiles { grid-template-columns:repeat(3,1fr); }
+}

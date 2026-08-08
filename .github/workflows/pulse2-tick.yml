@@ -1,0 +1,56 @@
+# Market Pulse v2 intraday scheduler.
+#
+# Vercel Hobby allows exactly one daily cron (22:00 UTC warm burst), so intraday
+# cadence lives here, mirroring daytrade-scan.yml:
+#   • market-state tick  — every 5 minutes through the US session window (deterministic,
+#     NO LLM, keyless Yahoo bars; cheap and safe at this cadence).
+#   • narrative collect (+refine) — once an hour during regular hours (one bounded
+#     Haiku web-search call + one bounded Fable call; hourly respects LLM cost).
+# The page's clocks report the ACTUAL cadence — if this workflow is disabled, Pulse v2
+# honestly shows stale/market-closed states rather than claiming intraday updates.
+name: pulse2-tick
+on:
+  schedule:
+    - cron: '*/5 13-21 * * 1-5'   # market-state tick window (UTC; covers 9:30-16:00 ET incl. DST drift)
+  workflow_dispatch: {}
+env:
+  APP_URL: https://market-news-app-chi.vercel.app
+concurrency:
+  group: pulse2-tick
+  cancel-in-progress: false
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Market-state tick (every 5 min)
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then echo "::warning::CRON_SECRET not set; skipping"; exit 0; fi
+          code=$(curl -s -o /tmp/state.json -w '%{http_code}' --max-time 120 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/tracker?op=pulse2statetick")
+          cat /tmp/state.json
+          if [ "$code" != "200" ]; then echo "::error::pulse2statetick HTTP $code"; exit 1; fi
+      - name: Narrative collect + refine (top of the hour only)
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then echo "::warning::CRON_SECRET not set; skipping"; exit 0; fi
+          # Self-gate to the first firing of each hour so the LLM collect runs hourly,
+          # not every 5 minutes (cost control; manual dispatch always runs it).
+          MIN=$(date -u +%M)
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ] && [ "$MIN" -ge 10 ]; then
+            echo "not the top-of-hour slot (minute $MIN); skipping collect"; exit 0
+          fi
+          code=$(curl -s -o /tmp/collect.json -w '%{http_code}' --max-time 180 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/tracker?op=pulse2collect")
+          cat /tmp/collect.json
+          if [ "$code" != "200" ]; then echo "::error::pulse2collect HTTP $code"; exit 1; fi
+          code=$(curl -s -o /tmp/refine.json -w '%{http_code}' --max-time 120 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/tracker?op=pulse2refine")
+          cat /tmp/refine.json
+          if [ "$code" != "200" ]; then echo "::warning::pulse2refine HTTP $code (draft stage remains served)"; fi
