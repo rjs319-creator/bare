@@ -56,7 +56,7 @@ const PRIVILEGED_OPS = new Set([
   'brieftick', 'cerntick', 'coiltick', 'confluencetick', 'corebuild', 'corelog',
   'crowdtick', 'daytradetick', 'downdaytick', 'dualreadlog', 'dualreadtune', 'edgelog',
   'fadetick', 'gapdowntick', 'gapgotick', 'gapgoverify', 'ghostlog', 'intracapture', 'leaderboardtick',
-  'narrative', 'optionsassess', 'patternlog', 'patterngrade', 'patternresearch', 'predicttick', 'timinglog', 'timingtune', 'tonetick',
+  'narrative', 'optionsassess', 'optionsscan2', 'optionsresolve2', 'patternlog', 'patterngrade', 'patternresearch', 'predicttick', 'timinglog', 'timingtune', 'tonetick',
   // 'track' snapshots the day's Screener+Momentum picks to Blob (a state-changing WRITE).
   // The daily cron dispatches it with the internal bearer (warm-chains-routes.js), so gating
   // it here blocks an anonymous public GET from mutating the ledger without breaking the cron.
@@ -356,6 +356,12 @@ async function handleRequest(req, res) {
   if (req.query.op === 'optionsperf') return runOptionsPerf(req, res);
   if (req.query.op === 'optionsepisodes') return runOptionsEpisodes(req, res);
   if (req.query.op === 'optionsassess') return runOptionsAssess(req, res);
+  // Options Intelligence Engine v2 (lib/optionsflow-v2-routes.js)
+  if (req.query.op === 'optionsscan2') return require('../lib/optionsflow-v2-routes').runOptionsScanV2(req, res);
+  if (req.query.op === 'optionsresolve2') return require('../lib/optionsflow-v2-routes').runOptionsResolveV2(req, res);
+  if (req.query.op === 'optionsradar') return require('../lib/optionsflow-v2-routes').runOptionsRadar(req, res);
+  if (req.query.op === 'optionsevidence2') return require('../lib/optionsflow-v2-routes').runOptionsEvidenceV2(req, res);
+  if (req.query.op === 'optionshealth2') return require('../lib/optionsflow-v2-routes').runOptionsHealthV2(req, res);
   if (req.query.op === 'perf') return require('../lib/perf-routes').runPerf(req, res);
   if (req.query.op === 'brief') return runBrief(req, res);
   if (req.query.op === 'brieftick') return runBriefTick(req, res);

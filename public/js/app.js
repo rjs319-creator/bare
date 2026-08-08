@@ -1024,16 +1024,32 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   let ofSort = (() => { try { return localStorage.getItem('ofSort') || 'premium'; } catch { return 'premium'; } })();
   let ofNovice = (() => { try { return localStorage.getItem('ofNovice') !== 'pro'; } catch { return true; } })();
   let ofView = (() => { try { return localStorage.getItem('ofView') === 'contracts' ? 'contracts' : 'ticker'; } catch { return 'ticker'; } })();
-  // The FOUR coordinated views (step 10). Default is decision-oriented (Swing Confirmations).
+  // ── v2: the Options Intelligence Engine views (op=optionsradar). DISCOVERY is
+  // the default so genuine anomalies are never hidden behind a setup filter. The
+  // legacy v1 views remain reachable below them (compatibility, income, VRP).
+  const OF2_VIEWS = [
+    ['discovery', '🔭 Discovery'],
+    ['watch', '⏳ Watch for Trigger'],
+    ['confirmed', '✅ Price Confirmed'],
+    ['risks', '⚠️ Risks & Contradictions'],
+    ['rawv2', '📊 Raw Activity'],
+    ['evidence', '🧾 Evidence & Track Record'],
+    ['datahealth', '🩺 Data Health'],
+  ];
+  const OF2_IDS = OF2_VIEWS.map(v => v[0]);
+  let of2 = null;          // the v2 radar doc (null until fetched / when flag off)
+  let of2Evidence = null;  // lazy op=optionsevidence2
+  let of2Health = null;    // lazy op=optionshealth2
+  // Legacy v1 views (kept: compatibility + income/VRP have no v2 equivalent yet).
   const OF_PRIMARY = [
     ['confirmations', '✅ Swing Confirmations'],
     ['contradictions', '⚠️ Contradictions & Risk'],
-    ['raw', '📊 Raw Activity'],
+    ['raw', '📜 Legacy Contracts'],
     ['income', '🅿️ Income & Entry'],
     ['vrp', '🛡 Put-Write Ledger (paper)'],
   ];
   const OF_PRIMARY_IDS = OF_PRIMARY.map(v => v[0]);
-  let ofPrimaryView = (() => { try { const v = localStorage.getItem('ofPrimaryView'); return OF_PRIMARY_IDS.includes(v) ? v : 'confirmations'; } catch { return 'confirmations'; } })();
+  let ofPrimaryView = (() => { try { const v = localStorage.getItem('ofPrimaryView'); return (OF2_IDS.includes(v) || OF_PRIMARY_IDS.includes(v)) ? v : 'discovery'; } catch { return 'discovery'; } })();
   let ofDecisions = [];   // per-ticker deterministic decision records (from op=optionsflow)
   // Confluence cross-reference: ticker -> [{icon,label,route,color,title}] of the
   // app's OWN screeners that currently flag the same name. Built lazily.
@@ -1050,8 +1066,19 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     optionsRefreshBtn.disabled = true;
     optionsContainer.innerHTML = skeletonGrid(4);
     try {
-      const data = await fetchJSON('/api/tracker?op=optionsflow' + (refresh ? '&refresh=1' : ''));
-      if (!data.ok) { showOptionsError(data.error || 'No options flow available right now.'); return; }
+      // v2 radar + legacy flow in parallel — the radar drives the primary views;
+      // legacy powers the compatibility views (contracts/income/VRP) untouched.
+      const [radar, data] = await Promise.all([
+        fetchJSON('/api/tracker?op=optionsradar' + (refresh ? '&_cb=' + Date.now() : '')).catch(() => null),
+        fetchJSON('/api/tracker?op=optionsflow' + (refresh ? '&refresh=1' : '')),
+      ]);
+      of2 = radar && radar.ok && Array.isArray(radar.events) ? radar : null;
+      // Flag-off / pre-first-scan: fall back to a legacy default view.
+      if (!of2 && OF2_IDS.includes(ofPrimaryView)) ofPrimaryView = 'confirmations';
+      if (!data.ok) {
+        if (of2) { renderOptionsFlowShell({ ok: true, count: 0, universe: 0, signals: [], byTicker: [] }); return; }
+        showOptionsError(data.error || 'No options flow available right now.'); return;
+      }
       optionsFlowAll = data.signals || [];
       ofBaseline = {};
       (data.byTicker || []).forEach(r => { if (r && r.ticker) ofBaseline[r.ticker] = { abnormalVsNormal: !!r.abnormalVsNormal, baselineNote: r.baselineNote || '', optVol: r.baseline && r.baseline.optVol }; });
@@ -1302,8 +1329,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
 
   function renderOptionsFlowShell(data) {
-    if (optionsGenTime) optionsGenTime.textContent = data.generatedAt ? `Updated ${new Date(data.generatedAt).toLocaleTimeString()}` : '';
-    if (optionsMeta) optionsMeta.textContent = `· ${data.count} unusual signals across ${data.universe} liquid names`;
+    if (optionsGenTime) optionsGenTime.textContent = (of2 && of2.generatedAt) ? `Updated ${new Date(of2.generatedAt).toLocaleTimeString()}`
+      : data.generatedAt ? `Updated ${new Date(data.generatedAt).toLocaleTimeString()}` : '';
+    if (optionsMeta) optionsMeta.textContent = of2
+      ? `· ${(of2.events || []).length} event(s) across ${of2.universe && of2.universe.scanned != null ? of2.universe.scanned : '?'} scanned names · session ${of2.session || '?'}`
+      : `· ${data.count} unusual signals across ${data.universe} liquid names`;
     const vtab = (id, lbl, on) => `<button id="${id}" class="dt-btn" style="border-radius:0;border:none;${on ? 'background:#06c4d4;color:#001' : 'background:transparent'}">${lbl}</button>`;
     const shadowBanner =
       `<div class="dt-note" style="margin-bottom:12px;border-left:3px solid var(--amber,#f0a832);padding:8px 10px;background:rgba(240,168,50,0.07)">`
@@ -1311,16 +1341,37 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + `We <b>cannot</b> tell whether a trade opened or closed, was bought or sold, or was a hedge — so every directional read here is <b>provisional</b> `
       + `(<i>provisional bullish/bearish, mixed, or direction-unknown</i>), never proof and never "smart money". `
       + `It <b>cannot by itself create or boost a Today's Pick</b> — it only confirms, contradicts, or flags risk on an independent price setup.</div>`;
-    // ── The FOUR coordinated views (primary nav) ──
+    // ── Primary nav: v2 Intelligence-Engine views first (when the radar exists),
+    // then the legacy/compat views. One handler for both groups. ──
     const pvBtn = (id, lbl, on) => `<button data-pv="${id}" class="dt-btn of-pv" style="border-radius:0;border:none;${on ? 'background:#06c4d4;color:#001' : 'background:transparent'}">${lbl}</button>`;
     const cCount = (ofDecisions || []).filter(d => d.view === 'confirmation').length;
     const xCount = (ofDecisions || []).filter(d => d.view === 'contradiction').length;
-    const pvLabel = (id, lbl) => id === 'confirmations' && cCount ? `${lbl} (${cCount})` : id === 'contradictions' && xCount ? `${lbl} (${xCount})` : lbl;
-    const primaryNav = `<div style="display:inline-flex;border:1px solid #333;border-radius:6px;overflow:hidden;flex-wrap:wrap;margin-bottom:12px">${OF_PRIMARY.map(([v, l]) => pvBtn(v, pvLabel(v, l), ofPrimaryView === v)).join('')}</div>`;
+    const pvLabel = (id, lbl) => {
+      if (of2 && of2.views) {
+        if (id === 'discovery' && of2.events.length) return `${lbl} (${of2.events.length})`;
+        if (id === 'watch' && of2.views.watch.length) return `${lbl} (${of2.views.watch.length})`;
+        if (id === 'confirmed' && of2.views.confirmed.length) return `${lbl} (${of2.views.confirmed.length})`;
+        if (id === 'risks' && of2.views.risks.length) return `${lbl} (${of2.views.risks.length})`;
+      }
+      return id === 'confirmations' && cCount ? `${lbl} (${cCount})` : id === 'contradictions' && xCount ? `${lbl} (${xCount})` : lbl;
+    };
+    const navGroup = (entries) => `<div style="display:inline-flex;border:1px solid #333;border-radius:6px;overflow:hidden;flex-wrap:wrap">${entries.map(([v, l]) => pvBtn(v, pvLabel(v, l), ofPrimaryView === v)).join('')}</div>`;
+    const primaryNav = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">`
+      + (of2 ? navGroup(OF2_VIEWS) : '')
+      + navGroup(OF_PRIMARY)
+      + `</div>`;
     const wirePrimaryNav = () => optionsContainer.querySelectorAll('.of-pv').forEach(b => b.addEventListener('click', () => {
       ofPrimaryView = b.dataset.pv; try { localStorage.setItem('ofPrimaryView', ofPrimaryView); } catch {}
       renderOptionsFlowShell(data);
     }));
+
+    // ── v2 views (Discovery default) ──
+    if (of2 && OF2_IDS.includes(ofPrimaryView)) {
+      optionsContainer.innerHTML = of2Banner() + primaryNav + `<div id="of2-body"></div>`;
+      wirePrimaryNav();
+      renderOptionsV2View(document.getElementById('of2-body'));
+      return;
+    }
 
     // Confirmations / Contradictions — the interpreted, decision-oriented views.
     if (ofPrimaryView === 'confirmations' || ofPrimaryView === 'contradictions') {
@@ -1419,6 +1470,200 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // Populate the Raw grid now — this branch also runs when switching TO Raw via the
     // primary nav (which only rebuilds the shell), so the grid must fill itself here.
     applyOptionsView();
+  }
+
+  // ══ v2 OPTIONS INTELLIGENCE ENGINE RENDERERS (op=optionsradar/evidence2/health2) ══
+  const OF2_ACT_STYLE = {
+    EXCEPTIONAL: ['#c084fc', 'EXCEPTIONAL'], HIGHLY_UNUSUAL: ['#f0a832', 'HIGHLY UNUSUAL'],
+    UNUSUAL: ['#06c4d4', 'UNUSUAL'], UNUSUAL_LOW_QUALITY: ['#8a8f98', 'UNUSUAL · LOW QUALITY'], NORMAL: ['#555', 'NORMAL'],
+  };
+  const OF2_TRADE_STYLE = {
+    PRICE_CONFIRMED: ['var(--green)', '✅ Price confirmed'], READY: ['#06c4d4', '🎯 Ready — trigger nearby'],
+    WATCH_FOR_PRICE_TRIGGER: ['var(--amber,#f0a832)', '⏳ Watch for trigger'],
+    CONTRADICTS_SETUP: ['var(--red)', '⚔️ Contradicts setup'], AVOID_EVENT_RISK: ['var(--red)', '🚫 Event risk'],
+    POSSIBLE_HEDGE: ['#8a8f98', '🛡 Possible hedge'], POSSIBLE_SPREAD: ['#8a8f98', '🧩 Possible spread'],
+    MIXED: ['#8a8f98', '↔ Mixed'], NO_DIRECTION: ['#8a8f98', '❔ No direction'],
+    ACTIVITY_ONLY: ['#8a8f98', '👁 Activity only'], INVALIDATED: ['var(--red)', '✖ Invalidated'], STALE: ['#555', '💤 Stale'],
+  };
+  const OF2_INTERP_LBL = {
+    BULLISH_PROVISIONAL: '▲ provisional bullish (unverified)', BEARISH_PROVISIONAL: '▼ provisional bearish (unverified)',
+    POSSIBLE_HEDGE: '🛡 possible hedge', POSSIBLE_SPREAD: '🧩 possible spread', MIXED: '↔ mixed', UNKNOWN: '❔ direction unknown',
+  };
+  const of2Money = v => (v == null ? '—' : v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `$${Math.round(v / 1e3)}k` : `$${Math.round(v)}`);
+
+  function of2Banner() {
+    const cap = of2.capabilities || {};
+    const h = of2.health || {};
+    const cov = h.coveragePct != null ? `${h.tickersSucceeded}/${h.tickersAttempted} names (${h.coveragePct}%)` : '—';
+    return `<div class="dt-note" style="margin-bottom:12px;border-left:3px solid #06c4d4;padding:8px 10px;background:rgba(6,196,212,0.06)">`
+      + `<b>📡 ${esc(of2.featureName || 'Options Activity Radar — Delayed Chain Anomalies')}</b>`
+      + ` · <b>${esc(cap.sourceModeLabel || 'Delayed chain snapshots')}</b>${cap.dataDelayed ? ' (delayed — not live tape)' : ''}`
+      + ` · session <b>${esc(of2.session || '?')}</b> · scanned ${cov} · baseline history ${of2.baselineDays || 0} sessions`
+      + `<div class="dt-dim" style="margin-top:4px;font-size:0.78rem">Unusualness ≠ direction ≠ trade signal. Every event carries a separate <b>activity status</b> (how abnormal vs the name's own history) and <b>trade status</b> (whether an independent price setup makes it actionable). `
+      + `Direction on delayed chains is provisional at best and often honestly UNKNOWN. This layer is registry-shadow: it cannot create or boost a live pick.</div>`
+      + (h.note ? `<div style="margin-top:4px;color:var(--amber,#f0a832);font-size:0.78rem">⚠ ${esc(h.note)}</div>` : '')
+      + ((cap.misconfigured || []).length ? `<div style="margin-top:4px;color:var(--amber,#f0a832);font-size:0.78rem">⚠ ${esc(cap.misconfigured.join(' · '))}</div>` : '')
+      + `</div>`;
+  }
+
+  function of2QualityBar(label, v, warnBelow) {
+    const col = v == null ? '#555' : v >= 80 ? 'var(--green)' : v >= warnBelow ? 'var(--amber,#f0a832)' : 'var(--red)';
+    return `<span class="dt-dim" style="font-size:0.72rem">${label} <b style="color:${col}">${v != null ? v : '—'}</b></span>`;
+  }
+
+  function of2EventCard(c) {
+    const [aCol, aLbl] = OF2_ACT_STYLE[c.anomaly.activityStatus] || OF2_ACT_STYLE.NORMAL;
+    const [tCol, tLbl] = OF2_TRADE_STYLE[c.gate.tradeStatus] || ['#555', c.gate.tradeStatus];
+    const interp = c.interpretation || {};
+    const contracts = c.contracts || [];
+    const dteMix = [...new Set(contracts.map(x => x.dteBucket).filter(Boolean))].join(', ');
+    const callN = contracts.filter(x => x.side === 'call').length, putN = contracts.length - callN;
+    const oi = c.oiConfirmation || {};
+    const oiLbl = oi.status === 'PENDING' ? '⏳ OI check pending (next session)'
+      : oi.status === 'CONFIRMED_BUILDING' ? '📈 OI built next session — positioning confirmed'
+      : oi.status === 'WEAKENED' ? '📉 OI did not build — likely day-traded/closed'
+      : oi.status === 'FLAT' ? '➖ OI flat — no new positioning'
+      : oi.status === 'UNAVAILABLE' ? '∅ OI follow-up unavailable' : '';
+    const chg = c.changeSincePrev;
+    const chgLine = chg ? [chg.activityStatus, chg.tradeStatus, chg.anomalyScore != null && chg.anomalyScore !== 0 ? `score ${chg.anomalyScore > 0 ? '+' : ''}${chg.anomalyScore}` : null].filter(Boolean).join(' · ') : '';
+    const setup = c.setup;
+    const plan = c.plan;
+    const wwmt = (c.gate.whatWouldMakeTradeable || []);
+    const warn = (c.anomaly.warnings || []);
+
+    const expander = `<details${ofNovice ? '' : ' open'} style="margin-top:8px"><summary class="dt-dim" style="cursor:pointer;font-size:0.78rem">🔬 Expert detail</summary>
+      <div style="margin-top:6px;font-size:0.78rem;line-height:1.55">
+        <div><b>Contracts retained (${contracts.length}; per-ticker cap keeps ranking fair):</b></div>
+        <table style="width:100%;font-size:0.74rem;border-collapse:collapse;margin:4px 0">
+          <tr class="dt-dim"><td>type</td><td>strike</td><td>exp</td><td>DTE</td><td>vol</td><td>OI</td><td>v/OI</td><td>bid/ask</td><td>last</td><td>est $</td></tr>
+          ${contracts.map(x => `<tr><td>${x.side === 'call' ? 'C' : 'P'}</td><td>${x.strike ?? '—'}</td><td>${esc(x.expiry || '—')}</td><td>${x.dte ?? '—'}</td><td>${x.volume}</td><td>${x.openInterest}</td><td>${x.volOiBounded ?? '—'}</td><td>${x.bid ?? '—'}/${x.ask ?? '—'}</td><td>${x.lastPrice ?? '—'}</td><td>${of2Money(x.estNotional)}</td></tr>`).join('')}
+        </table>
+        ${(interp.evidenceFor || []).length ? `<div><b>Evidence for the read:</b> ${interp.evidenceFor.map(esc).join(' · ')}</div>` : ''}
+        ${(interp.evidenceAgainst || []).length ? `<div><b>Evidence against / limits:</b> ${interp.evidenceAgainst.map(esc).join(' · ')}</div>` : ''}
+        ${(c.anomaly.reasons || []).length ? `<div><b>Why it's unusual:</b> ${c.anomaly.reasons.map(esc).join(' · ')}</div>` : ''}
+        ${oi.detail && Array.isArray(oi.detail) ? `<div><b>OI detail:</b> ${oi.detail.map(d => `${esc(d.contractSymbol || '')}: ${esc(d.state || '')}${d.oiChange != null ? ` (${d.oiChange > 0 ? '+' : ''}${d.oiChange})` : ''}`).join(' · ')}</div>` : ''}
+        <div class="dt-dim">model ${esc(c.modelVersion || '')} · gate ${esc(c.gateVersion || '')} · first seen ${esc(c.firstSeenSession || '')} · appearances ${c.appearances || 1}</div>
+        ${(c.transitions || []).length ? `<div class="dt-dim">recent transitions: ${c.transitions.map(t => `${esc(t.kind)}@${esc(t.session)}`).join(', ')}</div>` : ''}
+      </div></details>`;
+
+    return `<div class="dt-card" style="margin-bottom:12px;border-left:3px solid ${aCol}">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <b style="font-size:1.05rem">${esc(c.ticker)}</b>
+        <span style="background:${aCol}22;color:${aCol};border:1px solid ${aCol};border-radius:4px;padding:1px 7px;font-size:0.72rem;font-weight:700" title="ACTIVITY status — how abnormal today's options activity is vs this name's OWN history. Not a direction, not a probability.">${aLbl}</span>
+        <span style="background:${tCol}22;color:${tCol};border:1px solid ${tCol};border-radius:4px;padding:1px 7px;font-size:0.72rem;font-weight:700" title="TRADE status — whether an INDEPENDENT price setup makes this actionable. Activity alone never does.">${tLbl}</span>
+        ${c.seenThisSession === false ? '<span class="dt-dim" style="font-size:0.7rem">(carried — not re-observed this session)</span>' : ''}
+        <span class="dt-dim" style="margin-left:auto;font-size:0.72rem">${esc(c.lastSeenSession || '')}</span>
+      </div>
+      <div style="margin:7px 0;font-size:0.85rem;line-height:1.55">${esc(c.novice || '')}</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+        <span class="dt-dim" style="font-size:0.72rem" title="0–100 unusualness vs this name's own history — explicitly NOT a probability of any price move">Anomaly <b style="color:${aCol}">${c.anomaly.anomalyScore ?? '—'}</b>${c.anomaly.anomalyPercentile != null ? ` (${c.anomaly.anomalyPercentile}th pctile)` : ''}</span>
+        <span class="dt-dim" style="font-size:0.72rem">Baseline n=${c.anomaly.baselineSampleSize ?? 0}${c.anomaly.baselineScored === false ? ' (immature)' : ''}</span>
+        ${of2QualityBar('Data quality', c.anomaly.dataQuality, 60)}
+        ${of2QualityBar('Liquidity', c.anomaly.liquidityQuality, 50)}
+        <span class="dt-dim" style="font-size:0.72rem" title="${esc(c.estNotionalMethod || '')}">Est. notional <b>${of2Money(c.estNotional)}</b> <i>(estimate)</i></span>
+        <span class="dt-dim" style="font-size:0.72rem">${callN}C / ${putN}P${dteMix ? ` · ${esc(dteMix)} DTE` : ''}</span>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+        <span style="font-size:0.78rem">${OF2_INTERP_LBL[interp.state] || '❔ direction unknown'}${interp.confidence ? ` <span class="dt-dim">(confidence ${interp.confidence}/100${interp.confidenceCap ? `, capped ${interp.confidenceCap} on delayed data` : ''})</span>` : ''}</span>
+        ${oiLbl ? `<span class="dt-dim" style="font-size:0.75rem">${oiLbl}</span>` : ''}
+        ${c.earningsInDays != null && c.earningsInDays >= 0 ? `<span style="color:var(--amber,#f0a832);font-size:0.75rem">⚠ ER in ${c.earningsInDays}d</span>` : ''}
+      </div>
+      ${setup ? `<div style="font-size:0.78rem;margin-bottom:4px"><b>Underlying setup (${esc(setup.direction || '')}):</b> trigger ${setup.trigger ?? '—'} · invalidation ${setup.invalidation ?? '—'} · target ${setup.target ?? '—'} · R:R ${setup.rr ?? '—'}${plan ? ` · time stop ${plan.timeStopSessions} sessions` : ''}</div>` : ''}
+      ${chgLine ? `<div class="dt-dim" style="font-size:0.74rem">Since prev scan: ${esc(chgLine)}</div>` : ''}
+      ${warn.length ? `<div style="color:var(--amber,#f0a832);font-size:0.74rem">⚠ ${warn.map(esc).join(' · ')}</div>` : ''}
+      ${wwmt.length ? `<div style="font-size:0.76rem;margin-top:4px"><b>What would make this tradeable?</b> ${wwmt.map(esc).join('; ')}</div>` : ''}
+      ${(c.gate.reasons || []).length && c.gate.tradeStatus === 'PRICE_CONFIRMED' ? `<div style="font-size:0.76rem;color:var(--green);margin-top:4px">${c.gate.reasons.map(esc).join(' ')}</div>` : ''}
+      ${expander}
+    </div>`;
+  }
+
+  function of2AlertsStrip() {
+    const alerts = of2.alerts || [];
+    if (!alerts.length) return '';
+    return `<details class="dt-note" style="margin-bottom:12px"><summary style="cursor:pointer;font-weight:600">🔔 ${alerts.length} state-transition alert${alerts.length > 1 ? 's' : ''} this scan</summary>
+      <div style="margin-top:6px;font-size:0.78rem;line-height:1.7">${alerts.map(a =>
+        `<div>• <b>${esc(a.ticker)}</b> — ${esc(a.whatChanged || a.kind)} <span class="dt-dim">(${esc(a.activityStatus || '')} / ${esc(a.tradeStatus || '')}${a.directionKnown ? '' : ' · direction unknown'} · delayed data)${a.notActionableWhy ? ' · ' + esc(a.notActionableWhy) : ''}</span></div>`).join('')}
+      </div></details>`;
+  }
+
+  function renderOptionsV2View(el) {
+    if (!el) return;
+    const view = ofPrimaryView;
+    if (view === 'evidence') return loadOf2Evidence(el);
+    if (view === 'datahealth') return loadOf2Health(el);
+    if (view === 'rawv2') return el.innerHTML = of2RawTable();
+    const ids = view === 'discovery' ? (of2.views ? of2.views.discovery : []) : (of2.views ? of2.views[view] || [] : []);
+    const byId = new Map((of2.events || []).map(e => [e.eventId, e]));
+    const cards = ids.map(id => byId.get(id)).filter(Boolean);
+    const emptyCopy = {
+      discovery: 'No unusual activity detected in the latest scan — with the coverage shown above. Absent names are unscanned or normal vs their own history, and provider failures are never shown as "quiet".',
+      watch: 'No events currently have an aligned setup waiting on a price trigger.',
+      confirmed: 'No price-confirmed events. That is the honest norm: most unusual activity never earns an independent price confirmation.',
+      risks: 'No contradictions, hedges/spreads, or event-risk flags right now.',
+    };
+    el.innerHTML = of2AlertsStrip()
+      + (view === 'discovery' && of2.weightsDisclosure ? `<div class="dt-dim" style="font-size:0.72rem;margin-bottom:8px">Scoring config <b>${esc(of2.weightsDisclosure.config)}</b> — weights are initial hypotheses under prospective challenger evaluation, not validated predictors.</div>` : '')
+      + (cards.length ? cards.map(of2EventCard).join('') : `<div class="dt-note">${emptyCopy[view] || 'Nothing here yet.'}</div>`);
+  }
+
+  function of2RawTable() {
+    const rows = of2.rawActivity || [];
+    if (!rows.length) return '<div class="dt-note">No raw activity rows in the latest scan.</div>';
+    return `<div class="dt-dim" style="font-size:0.76rem;margin-bottom:6px">Every scanned name with option volume — transparent measurements, no interpretation filter. Call/put mix is NOT a direction read.</div>
+      <div style="overflow-x:auto"><table style="width:100%;font-size:0.76rem;border-collapse:collapse">
+      <tr class="dt-dim" style="text-align:left"><th>Ticker</th><th>Status</th><th>Anomaly</th><th>Baseline n</th><th>Call vol</th><th>Put vol</th><th>Est. notional</th><th>Direction read</th><th>DQ</th><th>Source</th></tr>
+      ${rows.map(r => {
+        const [aCol, aLbl] = OF2_ACT_STYLE[r.activityStatus] || OF2_ACT_STYLE.NORMAL;
+        return `<tr style="border-top:1px solid #222"><td><b>${esc(r.ticker)}</b>${r.isIndex ? ' 🛡' : ''}</td><td style="color:${aCol}">${aLbl}</td><td>${r.anomalyScore ?? '—'}${r.anomalyPercentile != null ? ` (${r.anomalyPercentile}p)` : ''}</td><td>${r.baselineSampleSize ?? 0}</td><td>${r.callVol.toLocaleString()}</td><td>${r.putVol.toLocaleString()}</td><td>${of2Money(r.totalNotional)}</td><td>${OF2_INTERP_LBL[r.interpretation] || '❔'}</td><td>${r.dataQuality ?? '—'}</td><td class="dt-dim">${esc(r.source || '')}</td></tr>`;
+      }).join('')}
+      </table></div>`;
+  }
+
+  async function loadOf2Evidence(el) {
+    el.innerHTML = '<div class="mom-status"><div class="mom-spinner"></div><p>Loading evidence…</p></div>';
+    if (!of2Evidence) of2Evidence = await fetchJSON('/api/tracker?op=optionsevidence2').catch(() => null);
+    const d = of2Evidence;
+    if (!d || d.empty || !d.detection) {
+      el.innerHTML = `<div class="dt-note">🧾 <b>No evidence report yet.</b> ${esc((d && d.note) || 'Events must mature (~6+ weeks of forward sessions) before grading can say anything. This page will fill in honestly — no backfilled or invented results.')}</div>`;
+      return;
+    }
+    const s21 = d.directional && d.directional.horizons && d.directional.horizons['21'];
+    const sum = s21 && s21.vsSpy && s21.vsSpy.n ? s21.vsSpy : null;
+    const inc = d.incremental || {};
+    el.innerHTML = `
+      <div class="dt-note" style="margin-bottom:10px"><b>🧾 Prospective evidence</b> — every number below is out-of-sample forward tracking of REAL logged events (no backfill). Small n = noise; the report says so instead of pretending.</div>
+      <div class="dt-card" style="margin-bottom:10px"><b>1 · Detection quality</b> (was flagged activity real positioning?)<div style="font-size:0.8rem;margin-top:4px;line-height:1.7">
+        Events: ${d.detection.n} · persisted ≥2 sessions: ${d.detection.persistedPct ?? '—'}% · next-session OI confirmed: ${d.detection.oiConfirmedPct ?? '—'}% of ${d.detection.oiResolved} resolved · spread/hedge-suspect: ${d.detection.spreadOrHedgeSuspectPct ?? '—'}% · direction unknown at detection: ${d.detection.unknownDirectionPct ?? '—'}%</div></div>
+      <div class="dt-card" style="margin-bottom:10px"><b>2 · Directional value</b> (21-session, SPY-relative, cost-aware)<div style="font-size:0.8rem;margin-top:4px;line-height:1.7">
+        ${sum ? `n=${sum.n} (${sum.independentDates} independent dates) · hit rate ${sum.hitRate}% · mean excess ${sum.meanExcess}% · 95% CI [${sum.ci95[0]}, ${sum.ci95[1]}]` : 'Not enough matured directional events yet — no claim made.'}
+        ${d.directional && d.directional.targetBeforeStop ? `<br>Target-before-stop: ${d.directional.targetBeforeStop.targetFirstPct}% target-first vs ${d.directional.targetBeforeStop.stopFirstPct}% stop-first (n=${d.directional.targetBeforeStop.n})` : ''}</div></div>
+      <div class="dt-card" style="margin-bottom:10px"><b>3 · Incremental value</b> (price+options vs identical price-only setups)<div style="font-size:0.8rem;margin-top:4px;line-height:1.7">
+        ${inc.ready ? `With options: ${inc.withOptions.mean}% (n=${inc.withOptions.n}) · price-only control: ${inc.priceOnly.mean}% (n=${inc.priceOnly.n}) · gap ${inc.incrementalMeanExcess}% → <b>${esc(inc.verdict)}</b>` : `OPEN QUESTION — ${esc(inc.note || 'cohorts not mature yet')} (with-options n=${inc.withOptionsN ?? 0}, control n=${inc.controlN ?? 0})`}</div></div>
+      <div class="dt-card"><b>Champion / challengers</b> (shadow weight-sets)<div style="font-size:0.8rem;margin-top:4px;line-height:1.7">
+        ${d.challengers && d.challengers.scorers ? Object.entries(d.challengers.scorers).map(([id, r]) => `${esc(id)}: n=${r.n}${r.ready ? `, OOS-positive blocks ${r.positiveBlocks}/${r.testedBlocks}` : ' (not enough independent dates yet)'} — <span class="dt-dim">${esc(r.state)}</span>`).join('<br>') : '—'}
+        <div class="dt-dim" style="margin-top:4px">${esc((d.challengers && d.challengers.note) || '')}</div></div></div>
+      <div class="dt-dim" style="font-size:0.72rem;margin-top:8px">Model ${esc(d.modelVersion || '')} · as of ${esc(d.asOf || '')} · registry maturity: shadow (cannot affect live picks)</div>`;
+  }
+
+  async function loadOf2Health(el) {
+    el.innerHTML = '<div class="mom-status"><div class="mom-spinner"></div><p>Loading data health…</p></div>';
+    if (!of2Health) of2Health = await fetchJSON('/api/tracker?op=optionshealth2').catch(() => null);
+    const d = of2Health;
+    const h = d && d.latest;
+    if (!h) { el.innerHTML = `<div class="dt-note">🩺 No scan health yet — the v2 scan has not run.</div>`; return; }
+    const fr = h.failureReasons || {};
+    el.innerHTML = `
+      <div class="dt-card" style="margin-bottom:10px"><b>🩺 Latest scan</b> — ${esc(h.session || '')} <span class="dt-dim">(${esc(h.scanId || '')})</span>
+        <div style="font-size:0.8rem;margin-top:4px;line-height:1.8">
+        Coverage: <b>${h.coveragePct}%</b> (${h.tickersSucceeded}/${h.tickersAttempted} names; ${h.tickersFailed} failed) · Expiries: ${h.expiriesReturned}/${h.expiriesRequested} (${h.expiryCoveragePct}%) · Contracts inspected: ${(h.contractsInspected || 0).toLocaleString()}<br>
+        Source: <b>${esc(h.sourceMode || '')}</b> · provider delay ≤ ${h.delayedByMin ?? '?'} min · latency p50 ${h.providerLatency ? h.providerLatency.p50 : '—'}ms / p90 ${h.providerLatency ? h.providerLatency.p90 : '—'}ms · rate-limit suspected: ${h.rateLimitSuspected ? '<span style="color:var(--red)">YES</span>' : 'no'}<br>
+        Universe: budget ${h.universe ? h.universe.budget : '—'}, rotating shard ${h.universe && h.universe.shardIndex != null ? `${h.universe.shardIndex + 1}/${h.universe.shardCount}` : '—'}${h.universe && h.universe.truncated ? ' · <span style="color:var(--amber,#f0a832)">truncated by budget</span>' : ''} · last successful session: ${esc(d.lastSuccessfulSession || '—')} · model ${esc(h.modelVersion || '')}</div>
+        ${h.note ? `<div style="color:var(--amber,#f0a832);font-size:0.78rem;margin-top:4px">⚠ ${esc(h.note)}</div>` : ''}
+        ${Object.keys(fr).length ? `<div style="font-size:0.76rem;margin-top:4px"><b>Failure reasons:</b> ${Object.entries(fr).map(([k, v]) => `${esc(k)} ×${v}`).join(' · ')}</div>` : ''}
+        ${(h.failedTickers || []).length ? `<div class="dt-dim" style="font-size:0.72rem;margin-top:4px">Failed: ${h.failedTickers.map(f => `${esc(f.ticker)} (${esc(f.reason || '?')})`).join(', ')}</div>` : ''}
+      </div>
+      ${(d.history || []).length > 1 ? `<div class="dt-card"><b>Recent scans</b><div style="font-size:0.76rem;margin-top:4px;line-height:1.7">${d.history.slice(-8).reverse().map(x => `${esc(x.session)}: ${x.coveragePct}% coverage, ${x.tickersFailed} failed${x.ok ? '' : ' — <span style="color:var(--red)">FAILED</span>'}`).join('<br>')}</div></div>` : ''}
+      <div class="dt-dim" style="font-size:0.72rem;margin-top:8px">Provider failure is never shown as "no unusual activity" — a bad scan says so here and on the Discovery banner.</div>`;
   }
 
   // ── The four-view decision renderers (Swing Confirmations / Contradictions & Risk) ──
