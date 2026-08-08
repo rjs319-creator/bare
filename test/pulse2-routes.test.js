@@ -127,3 +127,17 @@ test('storage keys are versioned under pulse/v2/ and never collide with the lega
   const { KEYS } = require('../lib/pulse2-store');
   for (const k of Object.values(KEYS)) assert.ok(String(k).startsWith('pulse/v2/'), k);
 });
+
+// ── Blob write semantics (found in live verification: overwrite read-back lag) ──
+test('writeChecked: a write that lands but reads back stale is written:true (diagnostic), never a failure', async () => {
+  const storeMod = require('../lib/pulse2-store');
+  assert.equal(typeof storeMod.writeChecked, 'function');
+  // Without a Blob store, nothing can be written — both flags false, no throw.
+  const r = await storeMod.writeChecked('pulse/v2/test.json', { a: 1 }, b => b.a === 1);
+  assert.deepEqual(r, { written: false, verified: false });
+  // Contract lock in the ticks: HTTP status keys off written, verification is health-only.
+  const TICKS = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'lib', 'pulse2-ticks.js'), 'utf8');
+  assert.ok(!/status\(\s*persisted \? 200 : 500/.test(TICKS), 'no tick may 500 on a verification-only miss');
+  assert.match(TICKS, /wr\.written \? 200 : 500/);
+  assert.match(TICKS, /verifiedReadback/);
+});
