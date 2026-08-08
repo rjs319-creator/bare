@@ -81,6 +81,10 @@ const PRIVILEGED_OPS = new Set([
   // Market Pulse SHADOW grader — forward-grades matured first-seen episodes (heavy dated
   // candle fetches + grader-owned outcome ledger write). Cron/manual only.
   'pulsegrade',
+  // Market Pulse v2 privileged WRITER ticks: deterministic market-state snapshot,
+  // LLM narrative collection/refinement, and the per-horizon outcome grader. An
+  // anonymous page load must never reach these (LLM spend + ledger mutation).
+  'pulse2statetick', 'pulse2collect', 'pulse2refine', 'pulse2grade',
   // ATLAS-X shadow ledger WRITES (build+persist episodes/ledger/predictions; grade terminals).
   'atlasxlog', 'atlasxresolve',
   // Pre-move inventory shadow cross-section capture (immutable daily WRITE) +
@@ -329,6 +333,14 @@ async function handleRequest(req, res) {
   if (req.query.op === 'pulserefine') return runPulseRefine(req, res);
   if (req.query.op === 'pulsegrade') return runPulseGrade(req, res);
   if (req.query.op === 'pulseepisodes') return runPulseEpisodes(req, res);
+  // Market Pulse v2 — public read-only reads + privileged writer ticks.
+  if (req.query.op === 'pulse2') return require('../lib/pulse2-routes').runPulse2(req, res);
+  if (req.query.op === 'pulse2health') return require('../lib/pulse2-routes').runPulse2Health(req, res);
+  if (req.query.op === 'pulse2evidence') return require('../lib/pulse2-routes').runPulse2Evidence(req, res);
+  if (req.query.op === 'pulse2statetick') return require('../lib/pulse2-ticks').runPulse2StateTick(req, res);
+  if (req.query.op === 'pulse2collect') return require('../lib/pulse2-ticks').runPulse2Collect(req, res);
+  if (req.query.op === 'pulse2refine') return require('../lib/pulse2-ticks').runPulse2Refine(req, res);
+  if (req.query.op === 'pulse2grade') return require('../lib/pulse2-ticks').runPulse2Grade(req, res);
   if (req.query.op === 'leadtime') return require('../lib/leadtime-routes').runLeadTime(req, res);
   if (req.query.op === 'leadtime2') return require('../lib/leadtime2-routes').runLeadTime2(req, res);
   if (req.query.op === 'failuremodel') return require('../lib/failure-model-routes').runFailureModel(req, res);

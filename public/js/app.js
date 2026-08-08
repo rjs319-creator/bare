@@ -20,6 +20,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadRltLab } from './rlt-lab.js';
   import { loadPeerLab } from './peer-lab.js';
   import { loadGridlock } from './gridlock.js';
+  import { renderShell as renderPulse2Shell } from './pulse2-render.js';
   import { loadTechCommand } from './tech-command.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { loadCern, eventName as cernEventName } from './cern.js';
@@ -258,10 +259,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       catch: `Options flow is noisy and often just hedging, not conviction. This uses free data with real gaps — treat it as a hint only.`,
     },
     pulse: {
-      what: `A plain-English distillation of what traders are <b>buzzing about</b> right now, gathered from social/video chatter and ranked by popularity and how fast it's spreading.`,
-      read: `Top items are the loudest and fastest-rising topics and tickers.`,
-      act: `Awareness — know what the crowd is watching. Cross-check any ticker against a real signal tab before acting.`,
-      catch: `Popular ≠ profitable. By the time something is loud the move may be done, and hype is often a <b>fade</b> signal.`,
+      what: `A <b>measured read of the market right now</b> (indexes, sectors, breadth, regime) plus <b>evidence-graded events</b> — each claim mapped to real sources, each story checked against its actual price reaction, split into Day / Swing / Investor horizons.`,
+      read: `Start at Market Now and the tape playbook (all measured). Cards show a trade state — Context, Investigate, Watch, Armed, Price-confirmed — plus what must happen next and what invalidates it. Two freshness clocks: one for the story snapshot, one for market data.`,
+      act: `Nothing here is a buy signal. "Price-confirmed" means a trigger fired on fresh data — it still needs your own risk plan. Unverified stories stay visible but clearly labeled.`,
+      catch: `Verified ≠ profitable, and a story that already ran is labeled <b>extended</b> — chasing it is the classic mistake. Whether these reads add value is being measured prospectively on the Evidence panel, not assumed.`,
     },
     readthrough: {
       what: `The <b>second-order</b> play — when a stock makes a big move, this finds other companies with a direct business link that <b>haven't moved yet</b>.`,
@@ -4037,11 +4038,57 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // source of truth, shared with the validation cron). The UI just renders op=brief.
   const TONE_COL = { bull: 'var(--green)', bear: 'var(--red)', neutral: 'var(--amber,#f59e0b)' };
   const LEAN_TXT = { 1: ['▲', 'bullish', 'var(--green)'], '-1': ['▼', 'bearish', 'var(--red)'], 0: ['▬', 'neutral', 'var(--text-dim)'] };
-  // ── 📡 MARKET PULSE — top-10 trending distillations from social + finance media
-  // (server-side lib/pulse-routes.js via Claude web search). Ranked by popularity +
-  // how fast the news is trending. Attention digest, NOT buy signals. Refreshes ~4h.
+  // ── 📡 MARKET PULSE — v2 Market Intelligence Center (measured market state +
+  // evidence-graded events, lib/pulse2-routes.js) with automatic fallback to the
+  // legacy v1 attention feed when v2 has no data yet or is flagged off.
   let pulseLoaded = false, pulseRefining = false;
-  function ensurePulse() { if (!pulseLoaded) { pulseLoaded = true; runPulseUI(false); } }
+  function ensurePulse() { if (!pulseLoaded) { pulseLoaded = true; runPulse2UI(); } }
+
+  let pulse2Novice = (() => { try { return localStorage.getItem('pulse2Novice') !== 'pro'; } catch { return true; } })();
+  let pulse2Payload = null;
+
+  function wirePulse2(el) {
+    const setMode = (novice) => {
+      if (novice === pulse2Novice) return;
+      pulse2Novice = novice;
+      try { localStorage.setItem('pulse2Novice', novice ? 'novice' : 'pro'); } catch {}
+      renderPulse2(pulse2Payload);
+    };
+    const simple = el.querySelector('#p2-m-simple'); if (simple) simple.onclick = () => setMode(true);
+    const pro = el.querySelector('#p2-m-pro'); if (pro) pro.onclick = () => setMode(false);
+    for (const v of ['day', 'swing', 'investor']) {
+      const btn = el.querySelector(`#p2-v-${v}`);
+      if (btn) btn.onclick = () => {
+        el.querySelectorAll('.p2-view-body').forEach(b => { b.style.display = b.dataset.view === v ? '' : 'none'; });
+        el.querySelectorAll('.p2-vtabs .p2-vtab').forEach(b => b.classList.toggle('p2-active', b.id === `p2-v-${v}`));
+      };
+    }
+  }
+
+  function renderPulse2(p) {
+    const el = document.getElementById('pulse-container');
+    if (!el || !p) return;
+    pulse2Payload = p;
+    el.innerHTML = renderPulse2Shell({ payload: p, novice: pulse2Novice });
+    wirePulse2(el);
+    const gt = document.getElementById('pulse-gen-time');
+    if (gt && p.clocks && p.clocks.narrativeGeneratedAt) {
+      gt.textContent = `· stories ${p.clocks.narrativeAgeMinutes != null ? p.clocks.narrativeAgeMinutes + 'm old' : ''} · data ${p.clocks.marketDataFreshness || ''}`;
+    }
+    const rb = document.getElementById('pulse-refresh-btn');
+    if (rb) rb.onclick = () => runPulse2UI();
+  }
+
+  async function runPulse2UI() {
+    const el = document.getElementById('pulse-container');
+    if (el) el.innerHTML = '<div class="mom-status"><div class="mom-spinner"></div><p>Loading the market intelligence read…</p></div>';
+    let p = null;
+    try { p = await fetchJSON('/api/tracker?op=pulse2', { timeoutMs: HEAVY_TIMEOUT_MS }); } catch { p = null; }
+    // Fall back to the legacy v1 feed when v2 is flagged off or has no data yet.
+    const hasV2 = p && p.ok && (p.marketState || (p.narratives && (p.narratives.items || []).length));
+    if (!hasV2) { runPulseUI(false); return; }
+    renderPulse2(p);
+  }
 
   // Both pulse stages make a LIVE bounded LLM call when the 4h cache has lapsed (gather:
   // Haiku + web_search ~30-45s, refine: Fable ~35s) — far past the 20s default, which aborted
@@ -4298,7 +4345,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const PULSE_SENT = { bullish: ['var(--green)', '▲ Bullish'], bearish: ['var(--red)', '▼ Bearish'], mixed: ['var(--text-dim)', '▬ Mixed'] };
   const PULSE_CROWD = { early: ['🌱', 'var(--green)', 'Early'], building: ['📶', '#f59e0b', 'Building'], crowded: ['🫧', '#ef4444', 'Crowded'], capitulation: ['💥', '#a855f7', 'Capitulation'] };
   const PULSE_FRESH = {
-    live: ['🟢', 'var(--green)', 'Live'], stale: ['🟠', '#f59e0b', 'Stale'],
+    live: ['🟢', 'var(--green)', 'Live'], recent: ['🟡', '#eab308', 'Recent'], stale: ['🟠', '#f59e0b', 'Stale'],
     'very-stale': ['🔴', '#ef4444', 'Very stale'], cached: ['🟢', 'var(--green)', 'Cached'], unknown: ['⚪', '#9ca3af', ''],
   };
 
