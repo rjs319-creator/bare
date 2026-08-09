@@ -15,7 +15,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 const M = require('../lib/maturity');
-const { momentumLedgerTier } = require('../lib/apex-routes');
+const { momentumLedgerTier, momentumLedgerRow } = require('../lib/apex-routes');
 const { STRATEGY_REGISTRY } = require('../lib/strategy-registry');
 const { shortlistFromToday } = require('../lib/omega-swing-routes');
 const { isPolicyAction } = require('../lib/fade-engine');
@@ -34,6 +34,18 @@ test('momentumLedgerTier: pre-v2 rows reclassify to HIST_* at read time, v2 rows
   assert.equal(momentumLedgerTier({ tier: 'StrongSell', signalVersion: 'momentum-v2' }), 'StrongSell');
   assert.equal(momentumLedgerTier({ tier: 'StrongBuy' }), 'HIST_StrongBuy');
   assert.equal(momentumLedgerTier({ tier: 'StrongSell', signalVersion: 'momentum-v1' }), 'HIST_StrongSell');
+});
+
+test('momentumLedgerRow: a reclassified StrongSell keeps its short direction (the resolvers invert on the exact tier string)', () => {
+  const hist = momentumLedgerRow({ tier: 'StrongSell', ticker: 'X', signalVersion: 'momentum-v1' });
+  assert.equal(hist.tier, 'HIST_StrongSell');
+  assert.equal(hist.short, true, 'without short:true the whole HIST short cohort grades sign-flipped as longs');
+  const histLong = momentumLedgerRow({ tier: 'StrongBuy', ticker: 'X' });
+  assert.equal(histLong.tier, 'HIST_StrongBuy');
+  assert.notEqual(histLong.short, true);
+  // v2 rows pass through untouched (the exact-tier inversion already applies to them).
+  const live = { tier: 'StrongSell', ticker: 'X', signalVersion: 'momentum-v2' };
+  assert.equal(momentumLedgerRow(live), live);
 });
 
 test('momentum grades on the v2 cohort only — HIST_* era lanes never pool', () => {

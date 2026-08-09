@@ -47,20 +47,29 @@ test('auto: idles when the evidence artifact is fresh (no collection, no writes)
   assert.deepEqual(writes, [], 'an idle tick must not touch the store');
 });
 
-test('auto: a completed sweep evaluates and persists a terminal cursor state', async () => {
-  // Cursor already past the end of the universe → the collect slice is empty, so the
-  // call must fall through to evaluate (no shards mocked → honest no-shards result)
-  // and persist a terminal (nextStart null) state instead of looping forever.
+test('auto: a completed sweep with a failed evaluate parks the cursor for ONE retry, then restarts', async () => {
+  // Cursor already past the end of the universe → the collect slice is empty (and must
+  // write NO shard), so the call falls through to evaluate. No shards are mocked and
+  // no Blob token exists → evaluate honestly fails. First failure: the cursor parks
+  // past the end (note evaluate-retry) so the multi-night sweep is NOT discarded.
   const universeSize = routes.scanUniverse().length;
   docs[routes.RESEARCH_STATE_PATH] = { nextStart: universeSize, startedAt: '2026-08-01T00:00:00.000Z' };
-  const res = fakeRes();
+  let res = fakeRes();
   await routes.runPatternResearch({ query: { op: 'patternresearch', mode: 'auto' } }, res);
-  assert.equal(res.body.ok, true);
+  assert.equal(res.body.ok, false, 'a failed final evaluate must be visible in the chain report');
   assert.equal(res.body.phase, 'evaluate');
   assert.equal(res.body.startedAt, '2026-08-01T00:00:00.000Z');
-  const state = docs[routes.RESEARCH_STATE_PATH];
-  assert.equal(state.nextStart, null, 'the sweep must terminate');
-  assert.equal(state.completedAt != null, true);
+  let state = docs[routes.RESEARCH_STATE_PATH];
+  assert.equal(state.nextStart, universeSize, 'first failure keeps the sweep intact for an evaluate retry');
+  assert.equal(state.note, 'evaluate-retry');
+  assert.ok(!writes.some(w => w.path.includes('shard-')), 'a past-the-end slice must not write an empty shard');
+  // Second consecutive failure: the shards are genuinely unusable — clear the cursor so
+  // the next tick starts a fresh sweep instead of retrying forever.
+  res = fakeRes();
+  await routes.runPatternResearch({ query: { op: 'patternresearch', mode: 'auto' } }, res);
+  state = docs[routes.RESEARCH_STATE_PATH];
+  assert.equal(state.nextStart, null);
+  assert.equal(state.note, 'evaluate-failed-restart');
 });
 
 test('auto: a stale artifact with no in-flight cursor restarts the sweep from 0', async () => {
@@ -70,7 +79,7 @@ test('auto: a stale artifact with no in-flight cursor restarts the sweep from 0'
   // only, with the slice neutralized through a temporary empty-universe patch.
   const src = require('node:fs').readFileSync(require.resolve('../lib/pattern-routes.js'), 'utf8');
   assert.ok(/ageMs < RESEARCH_REBUILD_MS/.test(src), 'freshness guard must compare against the rebuild window');
-  assert.ok(/const start = inFlight \? state\.nextStart : 0/.test(src), 'a stale artifact restarts from 0');
+  assert.ok(/let cursor = inFlight \? state\.nextStart : 0/.test(src), 'a stale artifact restarts from 0');
 });
 
 test('collect cursor advances past dead tickers (advanced, not processed, drives nextStart)', () => {
@@ -79,9 +88,19 @@ test('collect cursor advances past dead tickers (advanced, not processed, drives
     'a slice of short-history/delisted names must never wedge the sweep');
 });
 
-test('warm chains: patternresearch is its own root with three self-cursoring auto steps', () => {
+test('warm chains: patternresearch is its own root with ONE in-process auto step (Blob read-back lag forbids a multi-step cursor handoff)', () => {
   assert.ok(WC.ROOT_CHAINS.includes('patternresearch'));
-  assert.deepEqual(WC.CHAINS.patternresearch, [
-    'op=patternresearch&mode=auto', 'op=patternresearch&mode=auto', 'op=patternresearch&mode=auto',
-  ]);
+  assert.deepEqual(WC.CHAINS.patternresearch, ['op=patternresearch&mode=auto']);
+});
+
+test('auto: slices loop in-process with a single end-of-run state write (no cursor handoff between invocations)', () => {
+  const src = require('node:fs').readFileSync(require.resolve('../lib/pattern-routes.js'), 'utf8');
+  assert.ok(/while \(Date\.now\(\) - t0 < AUTO_BUDGET_MS\)/.test(src));
+  assert.ok(/if \(r\.advanced === 0\) break/.test(src), 'a zero-progress slice must break the loop, not spin');
+});
+
+test('evaluate merges only current-model, current-sweep shards and dedups record identities', () => {
+  const src = require('node:fs').readFileSync(require.resolve('../lib/pattern-routes.js'), 'utf8');
+  assert.ok(/s\.modelVersion === MODEL_VERSION && \(!sweepId \|\| s\.sweepId === sweepId\)/.test(src));
+  assert.ok(/dedupResearchRecords/.test(src));
 });
