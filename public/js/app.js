@@ -6154,7 +6154,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     }
 
     // --- The Avoid/Trim list ---
-    const picks = (sig.recommendations || []).filter(r => (r.action === 'SHORT' || r.action === 'SHORT_LIGHT') && r.geomFavorable).slice(0, 20);
+    // Policy cohort only (matches lib/fade-engine isPolicyAction): SHORT_LIGHT's resolved
+    // record showed those names do NOT reliably lag, so they are no longer shown as avoid/caution.
+    const picks = (sig.recommendations || []).filter(r => r.action === 'SHORT' && r.geomFavorable).slice(0, 20);
     const cards = picks.map(r => {
       const s = coolOffScore(r);
       const g = r.geometry || {}; const ref = r.refLevels || {};
