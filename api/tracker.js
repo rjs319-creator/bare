@@ -103,7 +103,7 @@ const PRIVILEGED_OPS = new Set([
   // Alpha-archive collection streams (unrecoverable-data Blob WRITES: earnings-calendar
   // snapshots+diffs, analyst-event feeds, per-name dealer-gamma shards, analyst-estimate
   // vintages). Cron/manual only.
-  'calarchive', 'revarchive', 'gexarchive', 'estarchive',
+  'calarchive', 'revarchive', 'gexarchive', 'estarchive', 'sec8karchive', 'insarchive',
   // FMP subscription capability auditor — spends ~25 FMP probe calls + writes the
   // capability doc. Cron/manual-with-bearer only.
   'fmpaudit',
@@ -396,6 +396,8 @@ async function handleRequest(req, res) {
   if (req.query.op === 'gexarchive') return require('../lib/alpha-archive-routes').runGexArchive(req, res);
   if (req.query.op === 'archivehealth') return require('../lib/alpha-archive-routes').runArchiveHealth(req, res);
   if (req.query.op === 'estarchive') return require('../lib/est-archive').runEstArchive(req, res);
+  if (req.query.op === 'sec8karchive') return require('../lib/filing-archives').runSec8kArchive(req, res);
+  if (req.query.op === 'insarchive') return require('../lib/filing-archives').runInsiderArchive(req, res);
   if (req.query.op === 'fmpaudit') return require('../lib/fmp-audit').runFmpAudit(req, res);
   if (req.query.op === 'alphabook') return require('../lib/alphabook-routes').runAlphaBook(req, res);
   if (req.query.op === 'vrptick') return require('../lib/vrp-routes').runVrpTick(req, res);
