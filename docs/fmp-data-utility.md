@@ -85,6 +85,28 @@ stay RESEARCH/SHADOW until vintages accrue (≥60 snapshot days before any
 walk-forward claim, matching the alpha-archive preregistration discipline) and a
 promotion rule is declared **before** evaluation.
 
+## Filing-feed archives (`sec8karchive/`, `insarchive/`)
+
+Both established AVAILABLE by the 2026-08-09 audit and collected since
+2026-08-09 (`lib/filing-archives.js`):
+
+- **`op=sec8karchive`** — market-wide 8-K filing feed (`/sec-filings-8k`,
+  3-day from/to window). Compact rows keep symbol, CIK, filingDate,
+  acceptedDate, formType, hasFinancials and the SEC document URL (the dedup
+  key). `acceptedDate` is the first tradable timestamp.
+- **`op=insarchive`** — market-wide insider-transaction feed
+  (`/insider-trading/latest`). Vendor Form 4 transaction codes are archived
+  VERBATIM (P-Purchase, S-Sale, A-Award, M-Exercise, G-Gift…); the Phase-8
+  open-market/grant/routine normalization is a feature-layer concern built
+  later on preserved codes. `filingDate` (not transactionDate) is the first
+  tradable timestamp.
+
+Shared sweep: pages 0..7 × limit 100, stops on short page / recorded page cap /
+lookback cutoff; plan-gate → 200 `gated:true` no write; transient page-0 loss →
+503. Same-day pulls merge via dedup keys. Scheduled at BOTH evidence-tick crons
+(13:30 + 22:30 UTC — frequency is the coverage for rolling feeds), sequential
+after the heavier sweeps. Telemetry in `op=archivehealth` (counts only).
+
 ## Call & bandwidth budget
 
 Plan limit ~300 calls/min (research fetchers throttle to ~260/min). Daily
