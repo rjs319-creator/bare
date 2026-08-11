@@ -288,6 +288,23 @@ async function handleRequest(req, res) {
     const freshness = sel.freshness;
     let candidates = sel.candidates;
 
+    // CFL decision snapshot (warm cron, canonical unfiltered universe only): persist
+    // the FULL reason-coded decision record — including every rejection the response
+    // below truncates to 50 — so misses can later be attributed to a real stage
+    // instead of guessed. Idempotent per (scope, session); never throws.
+    if (isWarm && isFullUniverse && exchangeFilter === 'ALL' && freshness && freshness.decisionSession) {
+      const SCHEMA = require('../lib/swing-candidate-schema');
+      await require('../lib/cfl/capture').captureDecisionSnapshot({
+        sel, scope, decisionDate: freshness.decisionSession, macroRiskOff,
+        engineVersion: ENGINE.ENGINE_VERSION, scoringVersion: 'screener-v1',
+        candidateSetHash: SCHEMA.candidateSetHash(sel.candidates.slice(0, sel.cap).map(c => SCHEMA.candidateId({
+          strategyId: 'screener', scoringVersion: 'screener-v1', universeScope: scope,
+          ticker: c.ticker, decisionCutoff: freshness.decisionSession,
+        }))),
+        dataCutoff: freshness.decisionSession,
+      });
+    }
+
     // Sector rotation: how many names per sector qualified vs. were scanned
     const rot = {};
     valid.forEach(c => {
