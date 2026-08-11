@@ -143,13 +143,17 @@ const PRIVILEGED_OPS = new Set([
   // build+persist the snapshot, advance the candidate lifecycle, emit alerts, append the
   // immutable evaluation record, or resolve matured outcomes.
   'techcommandtick', 'techcommandresolve',
+  // 🪜 PSRL WRITES. op=psrl / op=psrldetail / op=psrlhealth are READ-ONLY projections;
+  // only this authenticated nightly tick may scan, score and persist the snapshot +
+  // trend-episode ledger (shadow, weight-0).
+  'psrltick',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
   'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'leadtime2', 'failuremodel', 'complab', 'challengereval', 'router', 'routercf', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward', 'rltwalkforward', 'evidencediag', 'datasetsurvival',
-  'peerprop', 'peerpropwf', 'underreaction', 'targetcompare', 'expgap',
+  'peerprop', 'peerpropwf', 'underreaction', 'targetcompare', 'expgap', 'psrlresearch',
   // discover: the Day Trade page fires it every 60s (CDN-coalesced at 45s), but unthrottled
   // anonymous callers could drive a ~2,500-name provider fan-out + Blob writes at will.
   'discover',
@@ -410,6 +414,12 @@ async function handleRequest(req, res) {
   if (req.query.op === 'cflforecast') return require('../lib/cfl-routes').runCflForecast(req, res);
   if (req.query.op === 'cfltick') return require('../lib/cfl-routes').runCflTick(req, res);
   if (req.query.op === 'cflbackfill') return require('../lib/cfl-routes').runCflBackfill(req, res);
+  // PSRL — Persistent Staircase Relative Leadership (shadow, weight-0).
+  if (req.query.op === 'psrl') return require('../lib/psrl-routes').runPsrlBoard(req, res);
+  if (req.query.op === 'psrldetail') return require('../lib/psrl-routes').runPsrlDetail(req, res);
+  if (req.query.op === 'psrlhealth') return require('../lib/psrl-routes').runPsrlHealth(req, res);
+  if (req.query.op === 'psrltick') return require('../lib/psrl-routes').runPsrlTick(req, res);
+  if (req.query.op === 'psrlresearch') return require('../lib/psrl-routes').runPsrlResearch(req, res);
   if (req.query.op === 'alphabook') return require('../lib/alphabook-routes').runAlphaBook(req, res);
   if (req.query.op === 'vrptick') return require('../lib/vrp-routes').runVrpTick(req, res);
   if (req.query.op === 'vrpbook') return require('../lib/vrp-routes').runVrpBook(req, res);
