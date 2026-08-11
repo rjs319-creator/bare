@@ -329,3 +329,46 @@ test('the universe chain refreshes its candidate list BEFORE scanning (op=univer
   assert.ok(WC.CHAINS.universe.includes('op=universecompile'));
   assert.ok(WC.CHAINS.universe.indexOf('op=universebuild') < WC.CHAINS.universe.indexOf('@universescan1'));
 });
+
+test('dispatchDelayMs: the first wave dispatches immediately, later waves are gapped', () => {
+  // The 2026-08-07→11 OOM regression: all roots fired at t=0 shared Fluid instances and
+  // the instance was killed out-of-memory on every cron run, taking unrelated in-flight
+  // invocations with it. Waves are the fix — wave membership must be stable arithmetic.
+  const { dispatchDelayMs, DISPATCH_WAVE_SIZE, DISPATCH_WAVE_GAP_MS } = WC;
+  for (let i = 0; i < DISPATCH_WAVE_SIZE; i++) assert.equal(dispatchDelayMs(i), 0, `index ${i} is wave 0`);
+  assert.equal(dispatchDelayMs(DISPATCH_WAVE_SIZE), DISPATCH_WAVE_GAP_MS);
+  assert.equal(dispatchDelayMs(2 * DISPATCH_WAVE_SIZE), 2 * DISPATCH_WAVE_GAP_MS);
+  // Monotone: a later chain never dispatches before an earlier one.
+  for (let i = 1; i < WC.ROOT_CHAINS.length; i++) {
+    assert.ok(dispatchDelayMs(i) >= dispatchDelayMs(i - 1), `delay must be monotone at ${i}`);
+  }
+});
+
+test('dispatchDelayMs: every root chain is dispatched well inside warm\'s 280s drain', () => {
+  const last = dispatchDelayLast();
+  assert.ok(last <= 90000, `last wave at ${last}ms leaves too little of the 280s drain to hear reports`);
+  function dispatchDelayLast() { return WC.dispatchDelayMs(WC.ROOT_CHAINS.length - 1); }
+});
+
+test('dispatchDelayMs: degenerate options never divide by zero or go negative', () => {
+  assert.equal(WC.dispatchDelayMs(5, { waveSize: 0, waveGapMs: 1000 }), 5000);
+  assert.equal(WC.dispatchDelayMs(-3), 0);
+  assert.equal(WC.dispatchDelayMs(9, { waveGapMs: -50 }), 0);
+});
+
+test('the heavy decision spine (ledger) dispatches in wave 0', () => {
+  // ledger → @decision → @reprime is the one lineage that uses most of its 240s budget;
+  // starting it in a later wave would push its report past warm's drain ceiling.
+  assert.ok(WC.ROOT_CHAINS.indexOf('ledger') < WC.DISPATCH_WAVE_SIZE);
+});
+
+test('ticks3 forces the challenger eval strictly AFTER the resolve that feeds it', () => {
+  // The eval endpoint returns its cache unless force=1 — no cron forced it before
+  // 2026-08-11, so it sat at its first-ever computation (n=0) while 109 resolved
+  // outcomes accrued invisibly. It must recompute nightly, after resolution.
+  const t3 = WC.CHAINS.ticks3;
+  const resolveIdx = t3.indexOf('op=challengerresolve');
+  const evalIdx = t3.indexOf('op=challengereval&force=1');
+  assert.ok(resolveIdx >= 0, 'challengerresolve must stay in ticks3');
+  assert.ok(evalIdx > resolveIdx, 'challengereval&force=1 must run after challengerresolve');
+});
