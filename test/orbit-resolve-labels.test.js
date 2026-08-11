@@ -71,9 +71,9 @@ test('exposuresFor prefers the PIT exposures logged with the prediction', () => 
 });
 
 test('needsResidualRepair flags exactly the null-residual done records', () => {
-  assert.equal(needsResidualRepair({ horizons: { days5: { resolved: true, positiveResidual: null } } }), true);
-  assert.equal(needsResidualRepair({ horizons: { days5: { resolved: true, positiveResidual: 1 } } }), false);
-  assert.equal(needsResidualRepair({ horizons: { days5: { resolved: false } } }), false);
+  assert.equal(needsResidualRepair({ probs: null, horizons: { days5: { resolved: true, positiveResidual: null } } }), true);
+  assert.equal(needsResidualRepair({ probs: null, horizons: { days5: { resolved: true, positiveResidual: 1 } } }), false);
+  assert.equal(needsResidualRepair({ probs: null, horizons: { days5: { resolved: false } } }), false);
   assert.equal(needsResidualRepair(null), false);
 });
 
@@ -84,4 +84,20 @@ test('wiring: the resolver passes exposures + sector candles into the label engi
   assert.match(resolveFn, /orbitLabels\([^)]*exposures/s, 'labels must receive the exposures');
   const logFn = SRC.slice(SRC.indexOf('async function runOrbitLog'), SRC.indexOf('runOrbitResolve'));
   assert.match(logFn, /exposures: p\.factorExposures \|\| null/, 'op=orbitlog must persist PIT exposures');
+});
+
+test('resolved records carry per-horizon scores so the monitor can compute IC and brier', () => {
+  const SRC = read('lib/orbit-routes.js');
+  const resolveFn = SRC.slice(SRC.indexOf('async function runOrbitResolve'), SRC.indexOf('runOrbitWalkForward'));
+  assert.match(resolveFn, /probs: p\.horizonProbabilities \|\| null/, 'the resolver must persist the prediction probabilities');
+  const flat = SRC.slice(SRC.indexOf('function flattenResolved'), SRC.indexOf('function orbitRouterWeight'));
+  assert.match(flat, /pb\.rankScore/, 'flattenResolved must surface rankScore as the IC score');
+  assert.match(flat, /pb\.residualUp/, 'flattenResolved must surface the calibrated probability');
+  assert.ok(!/score: null, calUp: null/.test(flat), 'the hardcoded nulls that starved the monitor must be gone');
+});
+
+test('needsResidualRepair also flags records written without probs', () => {
+  assert.equal(needsResidualRepair({ horizons: { days5: { resolved: true, positiveResidual: 1 } } }), true, 'no probs field → repair');
+  assert.equal(needsResidualRepair({ probs: null, horizons: { days5: { resolved: true, positiveResidual: 1 } } }), false, 'probs:null is an honest logged absence');
+  assert.equal(needsResidualRepair({ probs: { days5: { rankScore: 1 } }, horizons: { days5: { resolved: true, positiveResidual: 1 } } }), false);
 });
