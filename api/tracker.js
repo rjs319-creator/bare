@@ -107,6 +107,9 @@ const PRIVILEGED_OPS = new Set([
   // FMP subscription capability auditor — spends ~25 FMP probe calls + writes the
   // capability doc. Cron/manual-with-bearer only.
   'fmpaudit',
+  // CFL reconstruction jobs: full-cohort replays + Blob day-doc/summary WRITES
+  // (cfltick nightly, cflbackfill caller-cursor sweeps). Cron/manual only.
+  'cfltick', 'cflbackfill',
   // VRP live paper put-write ledger WRITE (entry + resolution). Cron/manual only.
   'vrptick',
   // Ephemeral edge factory WRITE (grammar rescan + paper-pick log + resolutions). Cron/manual only.
@@ -399,6 +402,14 @@ async function handleRequest(req, res) {
   if (req.query.op === 'sec8karchive') return require('../lib/filing-archives').runSec8kArchive(req, res);
   if (req.query.op === 'insarchive') return require('../lib/filing-archives').runInsiderArchive(req, res);
   if (req.query.op === 'fmpaudit') return require('../lib/fmp-audit').runFmpAudit(req, res);
+  // CFL — Counterfactual Opportunity & Forecastability Lab (shadow, weight-0).
+  if (req.query.op === 'cfl') return require('../lib/cfl-routes').runCflSummary(req, res);
+  if (req.query.op === 'cflmissed') return require('../lib/cfl-routes').runCflMissed(req, res);
+  if (req.query.op === 'cflduds') return require('../lib/cfl-routes').runCflDuds(req, res);
+  if (req.query.op === 'cfltrace') return require('../lib/cfl-routes').runCflTrace(req, res);
+  if (req.query.op === 'cflforecast') return require('../lib/cfl-routes').runCflForecast(req, res);
+  if (req.query.op === 'cfltick') return require('../lib/cfl-routes').runCflTick(req, res);
+  if (req.query.op === 'cflbackfill') return require('../lib/cfl-routes').runCflBackfill(req, res);
   if (req.query.op === 'alphabook') return require('../lib/alphabook-routes').runAlphaBook(req, res);
   if (req.query.op === 'vrptick') return require('../lib/vrp-routes').runVrpTick(req, res);
   if (req.query.op === 'vrpbook') return require('../lib/vrp-routes').runVrpBook(req, res);

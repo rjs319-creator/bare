@@ -20,6 +20,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadRltLab } from './rlt-lab.js';
   import { loadPeerLab } from './peer-lab.js';
   import { loadGridlock } from './gridlock.js';
+  import { loadCflLab } from './cfl-lab.js';
   import { renderShell as renderPulse2Shell } from './pulse2-render.js';
   import { loadTechCommand } from './tech-command.js';
   import { loadLeaderboard } from './leaderboard.js';
@@ -46,7 +47,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     markets:    ['rotation', 'sectors', 'news', 'thesis', 'pulse', 'evolve'],
     predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     proof:      ['scoreboard', 'evidence', 'movermiss', 'intradayval', 'baselines', 'leaderboard', 'coreperf'],
-    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge', 'orbitlab', 'rltlab', 'gridlock', 'peerlab'],
+    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge', 'cfl', 'orbitlab', 'rltlab', 'gridlock', 'peerlab'],
   };
   // Holding-horizon of each candidate/position sub-tab → drives the horizon dividers
   // in the sub-nav so the app is visibly separated by time horizon (the spec ask).
@@ -67,7 +68,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     movermiss: '🔍 Mover Miss Audit', intradayval: '🧪 Intraday Validation',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', thesis: '🧾 Thesis Changes', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
-    backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)', rltlab: '🧭 Leadership (shadow)', gridlock: '⚡ GRIDLOCK (shadow)', peerlab: '🕸 Peers (shadow)',
+    backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)', rltlab: '🧭 Leadership (shadow)', gridlock: '⚡ GRIDLOCK (shadow)', peerlab: '🕸 Peers (shadow)', cfl: '🔭 Counterfactual Lab',
     leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', evidence: '🎖️ Evidence', baselines: '🧪 Baselines', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
   // Plain-English "what is this tab?" hovers for a novice investor — one line per
@@ -106,6 +107,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     rltlab: 'Relative Leadership Transition — shadow system finding stocks BEGINNING to outperform their sector peers (rank change, not just high rank). Watch/armed/triggered states only; zero weight, never a buy signal, no probabilities until calibration is earned.',
     peerlab: 'Peer Propagation — shadow engine flagging stocks whose PEERS and historical leaders have moved while their own price has not yet reacted. Early/confirming stages only; zero weight, never a buy signal, no probabilities until out-of-fold calibration is earned.',
     gridlock: 'GRIDLOCK — shadow engine mapping PHYSICAL constraints (AI data-center power demand, plant retirements, turbine orders — PJM first) to companies with VERIFIED exposure. Decomposed research scores only; zero weight, no probabilities, never a buy signal.',
+    cfl: 'Counterfactual Lab — which big winners the pipeline MISSED (and at exactly which stage: universe, data, screeners, ranking, timing, risk gate, display), which picks became duds and why, and whether each miss was preventable or genuinely unforecastable. Measurement only; never a buy signal.',
     'tech-command': 'One technology universe, three INDEPENDENT conclusions: a day-trade board projected read-only from the frozen Day Trade engine, a swing board that inherits the app\u2019s governed eligibility gate, and a separate long-term investment model. Every candidate states why now, the exact trigger and what invalidates it; an \u201cAround the Corner\u201d timeline covers past, present and scheduled events. Options and social attention are weight-zero annotations that can never originate a trade, and no probability is shown because none is calibrated.',
     rotation: 'Which sectors money is rotating into and out of, week over week.',
     sectors: 'Sector performance heatmap — what’s leading and lagging.',
@@ -336,6 +338,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       act: `Awareness — follow up on a real signal tab before acting on any alert.`,
       catch: `Alerts flag activity, not opportunity — always confirm before trading.`,
     },
+    cfl: {
+      what: `The app's <b>report card on itself</b>: big movers it missed (and the exact pipeline stage responsible), picks that flopped (and why), and how much advance warning existed.`,
+      read: `"Preventable" means a fixable stage lost the winner (screener, ranking, timing, display). "Unforeseeable" means no supported evidence existed before the move — no honest system would have caught it.`,
+      act: `Nothing to trade here. Use it to understand WHICH component needs work — e.g. if most misses are "ranked below the cut", ranking is the bottleneck, not discovery.`,
+      catch: `Historical sweeps can't see delisted stocks (survivorship), so past miss rates are estimates. Probabilities are deliberately withheld until enough graded history exists.`,
+    },
   };
 
   // Render one collapsed "how to use" panel from the config (author-trusted HTML,
@@ -430,6 +438,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'rltlab' && typeof ensureRltLab === 'function') ensureRltLab();
     if (sub === 'peerlab' && typeof ensurePeerLab === 'function') ensurePeerLab();
     if (sub === 'gridlock' && typeof ensureGridlock === 'function') ensureGridlock();
+    if (sub === 'cfl' && typeof ensureCflLab === 'function') ensureCflLab();
     if (sub === 'tech-command' && typeof ensureTechCommand === 'function') ensureTechCommand();
     if (sub === 'evidence' && typeof ensureEvidence === 'function') ensureEvidence();
     if (sub === 'thesis' && typeof ensureThesis === 'function') ensureThesis();
@@ -4234,6 +4243,20 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (btn) btn.addEventListener('click', () => loadGridlock(document.getElementById('gridlock-container')));
     }
     loadGridlock(document.getElementById('gridlock-container'));
+  }
+
+  // 🔭 Counterfactual Lab (shadow) — read-only Research Lab panel (loadCflLab
+  // renders op=cfl / cflmissed / cflduds / cflforecast). Weight-0 measurement:
+  // missed-winner attribution, dud grading, funnel + forecastability — never a
+  // buy signal, never affects the live rank.
+  let cflLabLoaded = false;
+  function ensureCflLab() {
+    if (!cflLabLoaded) {
+      cflLabLoaded = true;
+      const btn = document.getElementById('cfl-refresh-btn');
+      if (btn) btn.addEventListener('click', () => loadCflLab(document.getElementById('cfl-container')));
+    }
+    loadCflLab(document.getElementById('cfl-container'));
   }
 
   // 🖥 TECHNOLOGY COMMAND CENTER — reads the versioned op=techcommand projection.
