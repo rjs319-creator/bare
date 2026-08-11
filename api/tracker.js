@@ -162,6 +162,11 @@ const EXPENSIVE_OPS = new Set([
   // so normal page traffic coalesces, but an anonymous caller bypassing the cache with a
   // cache-buster could otherwise drive the provider fan-out at will.
   'lowfloat', 'intradaycontinuation', 'largemoveraudit',
+  // ignitionreplay/ignitionleadtime: read-only, but each call lists + fetches a whole day of
+  // per-scan Blob snapshots (up to ~200 documents) — cheap for the CDN window, expensive for
+  // a cache-busting anonymous loop. op=ignitionlive reads ONE latest snapshot and stays
+  // unthrottled like the other cached projections.
+  'ignitionreplay', 'ignitionleadtime',
   // techcommand: normally serves a persisted snapshot, but when none is fresh it runs a
   // BOUNDED live rebuild (cached public ops + benchmark candles). CDN-cached at ~45s so
   // page traffic coalesces; the throttle stops a cache-busting caller from driving the
@@ -298,6 +303,13 @@ async function handleRequest(req, res) {
   if (req.query.op === 'largemoveraudittick') return require('../lib/lowfloat-routes').runLargeMoverAuditTick(req, res);
   if (req.query.op === 'largemoverbook') return require('../lib/lowfloat-routes').runLargeMoverBook(req, res);
   if (req.query.op === 'positionsize') return require('../lib/lowfloat-routes').runPositionSize(req, res);
+  // ── IGNITION LIVE (lib/ignition-live-routes.js) ──────────────────────────────
+  // Spec-shaped synthesis over the low-float pipeline. ALL THREE ops are read-only
+  // projections of snapshots the privileged op=lowfloattick persisted — there is no separate
+  // ignition writer op, so nothing here belongs in PRIVILEGED_OPS.
+  if (req.query.op === 'ignitionlive') return require('../lib/ignition-live-routes').runIgnitionLive(req, res);
+  if (req.query.op === 'ignitionreplay') return require('../lib/ignition-live-routes').runIgnitionReplay(req, res);
+  if (req.query.op === 'ignitionleadtime') return require('../lib/ignition-live-routes').runIgnitionLeadtime(req, res);
   // Read-only provider health check: does the configured plan actually return share float?
   // The whole low-float lane is worth exactly what this answers.
   if (req.query.op === 'floatprobe') return require('../lib/lowfloat-routes').runFloatProbe(req, res);
