@@ -91,7 +91,7 @@ test('resolved records carry per-horizon scores so the monitor can compute IC an
   const resolveFn = SRC.slice(SRC.indexOf('async function runOrbitResolve'), SRC.indexOf('runOrbitWalkForward'));
   assert.match(resolveFn, /probs: p\.horizonProbabilities \|\| null/, 'the resolver must persist the prediction probabilities');
   const flat = SRC.slice(SRC.indexOf('function flattenResolved'), SRC.indexOf('function orbitRouterWeight'));
-  assert.match(flat, /pb\.rankScore/, 'flattenResolved must surface rankScore as the IC score');
+  assert.match(flat, /pb\.uncalibratedRankScore/, 'flattenResolved must read the field decideCandidate actually publishes');
   assert.match(flat, /pb\.residualUp/, 'flattenResolved must surface the calibrated probability');
   assert.ok(!/score: null, calUp: null/.test(flat), 'the hardcoded nulls that starved the monitor must be gone');
 });
