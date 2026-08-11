@@ -40,6 +40,23 @@ function arrowCell(g) {
   return one('price trend', g?.price) + one('vs market', g?.vsMarket) + one('vs sector', g?.vsSector) + one('trajectory', g?.trajectory);
 }
 
+function marketStrip(d) {
+  const m = d.market;
+  if (!m) return '';
+  const fitNote = d.trendLifeFit?.available
+    ? `trend-life table fitted on ${d.trendLifeFit.resolved} resolved episodes (uncalibrated)`
+    : `trend-life abstaining — ${esc(d.trendLifeFit?.reason || 'accruing episodes')} (${d.trendLifeFit?.resolved ?? 0} resolved, ${d.trendLifeFit?.censored ?? 0} censored)`;
+  const secs = Object.entries(d.sectorBreadth?.sectors || {}).filter(([, s]) => s.available);
+  const secBits = secs.slice(0, 11).map(([name, s]) =>
+    `<span style="margin-right:10px;white-space:nowrap">${esc(name)}: <b style="color:${s.pctAboveSma50 >= 0.6 ? 'var(--green)' : s.pctAboveSma50 <= 0.35 ? 'var(--red)' : '#c7c7cc'}">${pct(s.pctAboveSma50, 0)}</b><span class="expert-only" style="color:#8e8e93"> >SMA50</span></span>`).join('');
+  return card('🌐 Market & sector breadth',
+    `graded market state (never a green/red switch) · sector labels are today's, not historical`,
+    `<div style="font-size:.85em">Market: <b>${esc(m.state)}</b>` +
+    `<span class="expert-only" style="color:#8e8e93"> · ${pct(m.drawdownFrom252High, 1)} from 252d high · 21d ${pct(m.ret21, 1)}</span></div>` +
+    (secBits ? `<div style="margin-top:6px;font-size:.78em">${secBits}</div>` : '') +
+    `<div style="margin-top:6px;font-size:.75em;color:#8e8e93">${esc(fitNote)}</div>`);
+}
+
 function boardTable(cards) {
   if (!cards?.length) return `<p style="color:#8e8e93">No scored names yet — the nightly tick has not produced a snapshot.</p>`;
   const rows = cards.map((c) => `
@@ -56,18 +73,22 @@ function boardTable(cards) {
       <td class="expert-only">${num(c.continuity, 2)}</td>
       <td>${esc(c.plateauRisk || '·')}${Number.isFinite(c.jumpConcentration) ? `<div class="expert-only" style="font-size:.7em;color:#8e8e93">top1 ${pct(c.jumpConcentration, 0)}</div>` : ''}</td>
       <td class="expert-only">${num(c.extensionAtr, 1)}</td>
+      <td class="expert-only">${Number.isFinite(c.trendAge) ? c.trendAge : '·'}${c.trendLife?.expectedRemaining != null ? `<div style="font-size:.7em;color:#8e8e93">~${Math.round(c.trendLife.expectedRemaining)}s left*</div>` : ''}</td>
+      <td class="expert-only">${c.vetoed ? `<span style="color:var(--red)">⛔ ${esc((c.vetoCodes || []).join(','))}</span>` : '·'}${c.changepoint && c.changepoint !== 'NO_RELIABLE_CHANGE' ? `<div style="font-size:.7em;color:#ff9f0a">Δ ${esc(c.changepoint.replaceAll('_', ' ').toLowerCase())}</div>` : ''}</td>
       <td class="expert-only">${esc(c.support || '·')}</td>
       <td style="font-size:.75em;color:#c7c7cc;max-width:260px">${esc(c.novice?.read || '')}<div style="font-size:.9em;color:#8e8e93">risk: ${esc(c.novice?.risk || '·')}</div></td>
     </tr>`).join('');
   return `<div style="overflow-x:auto"><table class="mom-table" style="font-size:.82em">
     <thead><tr><th>#</th><th>Sym</th><th>Px</th><th title="price · vs market · vs sector · trajectory">Arrows</th><th>Entry</th><th>Evidence</th>
     <th class="expert-only">21/63/126d</th><th class="expert-only">Resid 21/63</th><th class="expert-only">Cont.</th><th>Plateau</th>
-    <th class="expert-only">Ext (ATR)</th><th class="expert-only">Support</th><th>Read</th></tr></thead>
+    <th class="expert-only">Ext (ATR)</th><th class="expert-only" title="trend age (sessions above rising SMA50) and expected remaining life from the episode life-table — uncalibrated evidence, not a forecast">Age/Life*</th><th class="expert-only" title="independent failure vetoes + causal change-point warnings">Veto/Δ</th><th class="expert-only">Support</th><th>Read</th></tr></thead>
     <tbody>${rows}</tbody></table></div>
     <details class="expert-only" style="margin-top:8px;font-size:.75em;color:#8e8e93"><summary>🔬 Definitions</summary>
     Arrows: price trend · vs market (beta-adjusted) · vs sector · leadership trajectory. Evidence = combined score after penalties (T=trend, L=leadership components).
     Resid = beta-adjusted stock-specific relative trend (not called alpha, not a probability). Cont. = information-discreteness continuity (1 = gradual staircase).
-    Plateau = jump-then-plateau risk from concentration + flat aftermath. Support grades: FULL / REDUCED (short history or missing sector) / LOW (weak beta support).</details>`;
+    Plateau = jump-then-plateau risk from concentration + flat aftermath. Support grades: FULL / REDUCED (short history or missing sector) / LOW (weak beta support).
+    *Age/Life: trend age in sessions; "~Ns left" is the episode life-table's expected remaining duration — an UNCALIBRATED sample statistic that abstains below 30 resolved episodes, never a validated forecast.
+    Veto/Δ: independent stagnation/plateau/breakdown/data vetoes (a veto caps the entry state — continuation evidence cannot erase it) and causal change-point transitions (deterministic CUSUM; not calibrated probabilities).</details>`;
 }
 
 function ledgerPanel(led) {
@@ -102,6 +123,7 @@ export async function loadPsrlLab(container) {
   }
   container.innerHTML = [
     shadowBanner(d),
+    marketStrip(d),
     card('🪜 Leadership board', `staircase continuity × beta-adjusted leadership · ${d.counts?.scored ?? 0} scored of ${d.counts?.input ?? 0} scanned`, boardTable(d.cards)),
     ledgerPanel(d.ledger),
   ].join('');

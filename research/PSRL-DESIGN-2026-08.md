@@ -99,7 +99,7 @@ All exploratory-mode until a sealed confirmatory design is declared; they widen 
 denominator; spent windows disclosed; runners go through `runRltComparison` folds and the
 research harness with purge/embargo.
 
-## Addendum (phase 2, extends the above)
+## Addendum (phase 2 — IMPLEMENTED 2026-08-11)
 
 Episode ledger → discrete-time hazard baselines (Kaplan-Meier-style, right-censored, competing
 risks) with insufficient-sample abstention · fast/intermediate/slow states (already in base) ·
@@ -112,3 +112,19 @@ horizon with disagreement exposed, never averaged. Trained gradient boosting is 
 this runtime (plain-CJS serverless, no Python); the in-repo standard is deterministic ridge
 logistic (`rlt-stage-a` pattern) trained in-process with versioned artifacts — anything heavier
 is an offline artifact, documented as such.
+
+Implemented modules: `lib/psrl/survival.js` (life-table trend-life, competing-risk families,
+right-censored exposure, abstains < 30 resolved episodes), `lib/psrl/changepoint.js` (causal
+two-sided CUSUM on trailing-standardized returns; alarms within 21 sessions coalesce into one
+event; BOCPD documented as not implemented; probabilityRecentChange stays null),
+`lib/psrl/vetoes.js` (independent stagnation/plateau/breakdown/data vetoes + the explicit
+stage-3 rule: any veto ≥ 0.7 caps entry at WATCH and haircuts rankScore by (1 − 0.5·maxVeto);
+OpportunityValue(h) per 5/21/63 with disagreement exposed, never averaged),
+`lib/psrl/breadth.js` (graded market state BULL/CORRECTION/BEAR/REBOUND/PANIC_REVERSAL_RISK/
+UNCERTAIN — never a binary switch; per-sector breadth vectors; within-sector states incl.
+ISOLATED_LEADER kept sign-neutral), `lib/psrl/catalyst.js` (PIT catalyst mapper; future events
+dropped; estimate-revision features structurally unavailable on the current plan and emitted as
+null with reasons), forecastability dispositions in `engine.applyPredictive` (deterministic
+abstention ladder; analogue-density/OOD/conformal documented unavailable), CFL attribution
+categories in `lib/psrl/research.js`, and the fourth registered trial `psrl-predictive-layer`
+(feature-family ablation, one evaluation at ESS ≥ 30, no interim peeking).
