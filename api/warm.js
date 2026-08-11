@@ -17,6 +17,16 @@ const PATHS = [
   '/api/tracker?op=optionsflow&refresh=1',  // build + log the day's options flow (~1.5s) for the track record
 ];
 
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// A warmOne whose DISPATCH is deferred — used to keep the fire-and-forget kicks out of
+// the t=0 burst (they each become a heavy invocation of their own). The kick still
+// happens while warm is draining the chain reports, long before warm returns.
+const delayedWarmOne = (path, delayMs) => (async () => {
+  if (delayMs) await sleep(delayMs);
+  return warmOne(path);
+})().catch(() => null);
+
 async function warmOne(p) {
   const t0 = Date.now();
   try {
@@ -77,9 +87,17 @@ module.exports = async function handler(req, res) {
   // tracker invocation, with its own 60s budget, independent of warm's lifetime. Warm
   // still awaits them in the bounded drain below, but only to REPORT: a truncated report
   // no longer means the work was lost, because the chain is not running in this process.
-  const chainKicks = WC.ROOT_CHAINS.map(name => ({
+  // STAGGERED dispatch (see lib/warm-chains.js dispatchDelayMs): a simultaneous 30+ chain
+  // burst shared Fluid instances and got /api/tracker OOM-killed on every cron run
+  // 2026-08-07 → 2026-08-11, taking down whichever unrelated invocations were in flight.
+  // Waves flatten the peak; every chain is still dispatched well inside the drain below.
+  const chainKicks = WC.ROOT_CHAINS.map((name, i) => ({
     name,
-    p: warmChainOne(name).catch(e => ({ name, error: String((e && e.message) || e) })),
+    p: (async () => {
+      const delay = WC.dispatchDelayMs(i);
+      if (delay) await sleep(delay);
+      return warmChainOne(name);
+    })().catch(e => ({ name, error: String((e && e.message) || e) })),
   }));
 
   // NOTE: the per-screener resolve/learn/log ticks (trend, daytrade, confluence, coil,
@@ -94,38 +112,45 @@ module.exports = async function handler(req, res) {
   // is what blew warm's own 60s wall → 504). The kicks dispatch during warm's long tail
   // below; each tick then runs + logs independently of warm's lifetime. `.catch` only to
   // avoid unhandled rejections.
+  // Deferred to the third dispatch wave: 6 more simultaneous heavy invocations at t=0
+  // were part of the OOM burst the staggering exists to remove.
+  const AI_TICKS_DELAY_MS = 2 * WC.DISPATCH_WAVE_GAP_MS;
   const aiTicks = [
     '/api/tracker?op=readthroughtick', '/api/tracker?op=anomalytick', '/api/tracker?op=secondwavetick',
     '/api/tracker?op=crossassettick', '/api/tracker?op=toneshifttick', '/api/tracker?op=biotechtick',
-  ].map(p => warmOne(p).catch(() => null));
+  ].map(p => delayedWarmOne(p, AI_TICKS_DELAY_MS));
 
   // 🧠 Options-flow Fable analysis — reads today's flow snapshot (built by op=optionsflow
   // in PATHS above) and writes per-ticker trade plans + a desk read + stamps the ledger
   // for the A/B. Fire-and-forget: it's a ~30-50s Fable call in its own 60s budget, so it
   // must NOT be awaited on warm's critical path.
-  const optionsAssessKick = warmOne('/api/tracker?op=optionsassess').catch(() => null);
+  const SINGLE_KICKS_DELAY_MS = 3 * WC.DISPATCH_WAVE_GAP_MS;
+  const optionsAssessKick = delayedWarmOne('/api/tracker?op=optionsassess', SINGLE_KICKS_DELAY_MS);
 
   // ── SINGLE-DISPATCH KICKS ──────────────────────────────────────────────────
   // These were never broken by the .then()-chain bug: one dispatch each, no ordering, so
   // the request going out is the whole job. They stay here rather than becoming chains.
+  // All deferred to the last dispatch wave (same OOM-burst reasoning as the chains);
+  // op=optionsassess / op=optionsepisodes additionally get their op=optionsflow input
+  // built by PATHS long before the delay elapses.
   //
   // 💰 Options Moves — put-selling setups (full-market scan + IV/earnings).
-  const putsellKick = warmOne('/api/tracker?op=putsell').catch(() => null);
+  const putsellKick = delayedWarmOne('/api/tracker?op=putsell', SINGLE_KICKS_DELAY_MS);
   // 📏 Options episode grading — next-open, SPY-relative, cost-aware grading of the
   // immutable decision episodes (folded by op=optionsflow above). Heavy (candle fetches
   // per resolvable episode) → its own 60s budget, off warm's critical path.
-  const optionsEpisodesKick = warmOne('/api/tracker?op=optionsepisodes&refresh=1').catch(() => null);
+  const optionsEpisodesKick = delayedWarmOne('/api/tracker?op=optionsepisodes&refresh=1', SINGLE_KICKS_DELAY_MS);
   // Predict-tab feedback loop — recompute each class's Wilson-bounded track-record grade
   // so cards auto-feature/demote as picks resolve. Heavy (fetches history), own budget.
-  const calibKick = warmOne('/api/tracker?op=calibration&force=1').catch(() => null);
+  const calibKick = delayedWarmOne('/api/tracker?op=calibration&force=1', SINGLE_KICKS_DELAY_MS);
   // 🧪 Baseline factor scan — refresh the point-in-time cross-section (rank-IC + top-
   // quintile excess for momentum / 52-week / rel-volume) that the Baselines tab reads via
   // op=baselines. The bearer (internalHeaders) exempts it from the op=research rate limit.
-  const researchKick = warmOne('/api/tracker?op=research&scope=large').catch(() => null);
+  const researchKick = delayedWarmOne('/api/tracker?op=research&scope=large', SINGLE_KICKS_DELAY_MS);
   // 🧬 Biotech episode grading — next-open, XBI-relative, multi-horizon (3/5/10/21) grading of
   // the biotech research ledger, stratified by archetype. Heavy (candle fetch per ledger
   // ticker) → its own 60s budget, off warm's critical path. Shadow measurement only.
-  const biotechGradeKick = warmOne('/api/tracker?op=biotechgrade').catch(() => null);
+  const biotechGradeKick = delayedWarmOne('/api/tracker?op=biotechgrade', SINGLE_KICKS_DELAY_MS);
 
   // The tick chains are now warmchain roots (ticks1/ticks2/ticks3 in lib/warm-chains.js).
   // They were previously built HERE as `.then()` chains and drained for whatever was left
@@ -154,8 +179,14 @@ module.exports = async function handler(req, res) {
       // truth is in the body. Surface it, so op=health grades the real outcome instead of
       // rubber-stamping every 200. This is the same "200 == healthy" trap, one layer up.
       const b = r && r.body;
+      // A chain-level NON-200 with a JSON body is the warmchain handler's own catch
+      // ({ok:false, error}) — that body has no `complete` field, so the old
+      // `complete: b.complete !== false` recorded the crashed chain as complete:true and
+      // DROPPED the error text. Grade non-200 as failed and surface the error.
+      const chainOk = !r || r.httpStatus == null || r.httpStatus === 200;
       chainReports[k.name] = b && typeof b === 'object'
-        ? { dispatched: true, httpStatus: r.httpStatus, complete: b.complete !== false,
+        ? { dispatched: true, httpStatus: r.httpStatus, complete: chainOk ? b.complete !== false : false,
+            ...(chainOk ? {} : { chainError: String(b.error || `chain HTTP ${r.httpStatus}`).slice(0, 200) }),
             stepFails: Array.isArray(b.failed) ? b.failed : [], skipped: Array.isArray(b.skipped) ? b.skipped : [],
             // The status/error behind each failed step. Names alone cannot distinguish a
             // 401 from a 504 from a throw, which left the evolve sub-chain's 3-run fail
