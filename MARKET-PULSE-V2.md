@@ -31,8 +31,10 @@ cannot start an LLM call, hit a market-data provider, or write storage (test-loc
   (`eventOccurredAt/firstPublishedAt/firstSeenAt/lastSeenAt/lastCorroboratedAt`),
   freshness reasons (`NEW_PUBLICATION/NEW_MATERIAL_UPDATE/NEW_CORROBORATION/
   REDISCOVERED/SYNDICATED_COPY/ONGOING_EVENT/UNKNOWN`), horizon age gates
-  (Day ≤24h event + ≤18h publication; Swing ≤7d; Investor age-exposed only;
-  Fresh-verified ≤6h publication + ≤12h event — env-overridable via `PULSE2_<KEY>`),
+  (Day placement = decision relevance: event ≤24h OR publication ≤18h OR material
+  update — unverified-publication items surface with visible date confidence;
+  Swing ≤7d; Investor age-exposed only; Fresh-verified = the strict verification
+  bar, ≤6h KNOWN publication + ≤12h event — env-overridable via `PULSE2_<KEY>`),
   and recency-aware ranking (exponential decay + age/duplicate/unknown penalties,
   deterministic timestamp/id tie-breaks).
 - `lib/pulse2-provenance.js` — source index, stable source IDs, syndication lineage,

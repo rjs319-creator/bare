@@ -123,12 +123,21 @@ test('fresh-verified is publication-gated: a 7h-old publication misses the 6h li
 });
 
 // ── 3. horizon gates + exact boundaries ────────────────────────────────────
-test('Day gate at its EXACT boundary: 24.0h event with fresh publication is current; a minute more is not', () => {
-  assert.equal(F.dayGate(evAges({ eventH: 24, pubH: 1 }), NOW).group, 'current');
-  assert.equal(F.dayGate(evAges({ eventH: 24 + 1 / 60, pubH: 1 }), NOW).group, 'context');
-  // publication boundary: 18.0h passes, beyond it drops to context
-  assert.equal(F.dayGate(evAges({ eventH: 20, pubH: 18 }), NOW).group, 'current');
-  assert.equal(F.dayGate(evAges({ eventH: 20, pubH: 18.1 }), NOW).group, 'context');
+test('Day gate at its EXACT boundaries: event 24.0h OR publication 18.0h is current; past both is not', () => {
+  // event boundary (publication already stale — the event clock alone decides)
+  assert.equal(F.dayGate(evAges({ eventH: 24, pubH: 20 }), NOW).group, 'current');
+  assert.equal(F.dayGate(evAges({ eventH: 24 + 1 / 60, pubH: 20 }), NOW).group, 'context');
+  // publication boundary (event clock already past — a fresh first publication still qualifies)
+  assert.equal(F.dayGate(evAges({ eventH: 30, pubH: 18 }), NOW).group, 'current');
+  assert.equal(F.dayGate(evAges({ eventH: 30, pubH: 18.1 }), NOW).group, 'context');
+});
+
+test('Day placement is decision-relevance: a recent event with UNVERIFIED publication surfaces, but never as Fresh verified', () => {
+  const ev = { ...evAges({ eventH: 1.5 }), dateConfidence: 'inferred' };   // model-claimed date, no publication time
+  const g = F.dayGate(ev, NOW);
+  assert.equal(g.group, 'current');
+  assert.match(g.why, /publication time unverified/);
+  assert.equal(F.freshVerifiedGate(ev, NOW).pass, false);   // verification bar unchanged
 });
 
 test('Swing and Investor use their own policies', () => {
