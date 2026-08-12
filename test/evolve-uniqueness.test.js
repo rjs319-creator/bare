@@ -45,9 +45,16 @@ test('weighted fitPerf lowers effective sample vs unweighted on overlapping labe
     ticker: 'AAA', horizon: 'position', predDate: isoDay(i * 5), barsToBarrier: 63,
     contextKey: 'risk-on|large|position', specialists: ['S'], won: i % 2, terminalReturn: i % 2 ? 0.1 : -0.05,
   }));
-  const plain = WF.fitPerf(events);
+  // `weighted` now DEFAULTS TO TRUE (alpha-research pass 3) — the unweighted arm must be
+  // requested explicitly. Previously the default was false, which meant the correction was
+  // computed and reported but never applied to the fit or the deflated Sharpe.
+  const plain = WF.fitPerf(events, { weighted: false });
   const weighted = WF.fitPerf(events, { weighted: true });
   assert.strictEqual(plain.bySpecialist.S.global.n, 8, 'unweighted counts every label');
   assert.ok(weighted.bySpecialist.S.global.n < 8, `weighted effective n < 8 (got ${weighted.bySpecialist.S.global.n})`);
   assert.ok(weighted.bySpecialist.S.global.n > 0, 'still positive');
+  // THE DEFAULT is the overlap-corrected one: calling with no options must match the
+  // weighted arm, not the raw count.
+  assert.strictEqual(WF.fitPerf(events).bySpecialist.S.global.n, weighted.bySpecialist.S.global.n,
+    'default fitPerf must apply uniqueness weighting');
 });
