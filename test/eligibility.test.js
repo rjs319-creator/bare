@@ -9,14 +9,38 @@ const { SOURCES } = require('../test/fixtures/today-sources');
 const NOW = Date.parse('2026-07-24T12:00:00Z');
 // Freshness is TWO proofs since gov-v2.1: the governance WRITE time (savedAt) and the
 // underlying Scoreboard EVIDENCE time (scoreboardGeneratedAt) — both must be current.
+// A still-production, non-Day-Trade registry id to stand in for the "cleared source"
+// cases below. DERIVED rather than hardcoded: `ghost` and `downday` previously played
+// these roles and were demoted to shadow on 2026-08-11, which broke three tests that
+// were not actually about either strategy. Deriving keeps them meaningful across future
+// status flips instead of pinning whichever strategy happens to be live today.
+const { STRATEGY_REGISTRY } = require('../lib/strategy-registry');
+const DT_ID = /^(daytrade|gapgo|gapdown|ignition|lowfloat|intraday)/;
+const CLEARED_ENTRY = STRATEGY_REGISTRY.find(e =>
+  e.maturity === 'production' && e.kind === 'signal' && e.id !== 'screener' && !DT_ID.test(e.id)) || {};
+const CLEARED = CLEARED_ENTRY.id;
+// The governance doc's version must MATCH the registry's scoringVersion or eligibility
+// fails closed with VERSION_MISMATCH — a scoring change resets earned evidence. Derived
+// for the same reason the id is.
+const CLEARED_VERSION = CLEARED_ENTRY.scoringVersion;
+
+test('fixture sanity: a non-Day-Trade production strategy exists to stand in for cleared sources', () => {
+  // If this ever fails, every "cleared source" case below is vacuous rather than wrong —
+  // so it must fail loudly rather than silently testing nothing.
+  assert.ok(CLEARED, 'no non-Day-Trade production strategy remains in the registry');
+});
+
 const freshGov = (strategies) => ({ savedAt: '2026-07-24T00:00:00.000Z', scoreboardGeneratedAt: '2026-07-23T22:00:00.000Z', strategies });
 const GOV_PROD = freshGov([
   { id: 'screener', status: 'production', weight: 1, version: 'screener-v2' },
   { id: 'gapgo', status: 'production', weight: 1, version: 'gapgo-v1' },
-  { id: 'downday', status: 'production', weight: 1, version: 'downday-v1' },
-  { id: 'ghost', status: 'probation', weight: 0.25, version: 'ghost-v1' },
+  { id: CLEARED, status: 'probation', weight: 0.25, version: CLEARED_VERSION },
   { id: 'coil', status: 'probation', weight: 0.25, version: 'coil-v1' },   // irrelevant now: static shadow gates first
   { id: 'biotech', status: 'paper', weight: 0, version: 'biotech-v1' },
+  // Demoted 2026-08-11 — retained here to prove the STATIC registry status gates ahead
+  // of a stale governance clearance that still says production.
+  { id: 'downday', status: 'production', weight: 1, version: 'downday-v1' },
+  { id: 'ghost', status: 'production', weight: 1, version: 'ghost-v1' },
 ]);
 
 test('missing governance state ⇒ NOT trade-eligible (fail closed), even for production sources', () => {
@@ -72,21 +96,26 @@ test('scoring-version mismatch between governance evidence and registry ⇒ fail
 });
 
 test('production static + fresh cleared governance ⇒ trade-eligible with governance sizing weight', () => {
-  // 2026-08 reconciliation: coil/biotech are now registered SHADOW (watchlist detector /
-  // lead-only research), so they can never be trade-eligible regardless of governance —
-  // the probation case moves to ghost (still registry-production).
+  // 2026-08 reconciliation: coil/biotech are registered SHADOW (watchlist detector /
+  // lead-only research), so they can never be trade-eligible regardless of governance.
+  // The probation case uses CLEARED — a still-production id derived from the registry.
   const g = EL.gateSignals([
     { source: 'screener', ticker: 'AAA', side: 'long', entry: 1, stop: 0.9, target: 1.3, liquidity: { dollarVol: 5e7 } },
-    { source: 'ghost', ticker: 'DDD', side: 'long', entry: 1, stop: 0.9, target: 1.3, liquidity: { dollarVol: 5e7 } },
+    { source: CLEARED, ticker: 'DDD', side: 'long', entry: 1, stop: 0.9, target: 1.3, liquidity: { dollarVol: 5e7 } },
     { source: 'coil', ticker: 'EEE', side: 'long', entry: 1, stop: 0.9, target: 1.3, liquidity: { dollarVol: 5e7 } },
     { source: 'biotech', ticker: 'AGIO', side: 'long' },
+    { source: 'ghost', ticker: 'GGG', side: 'long', entry: 1, stop: 0.9, target: 1.3, liquidity: { dollarVol: 5e7 } },
   ], { governance: GOV_PROD, nowMs: NOW });
   assert.equal(g.perSource.screener.tradeEligible, true);
   assert.equal(g.perSource.screener.sizingWeight, 1);
-  assert.equal(g.perSource.ghost.tradeEligible, true);       // probation = cleared, reduced
-  assert.equal(g.perSource.ghost.sizingWeight, 0.25);
+  assert.equal(g.perSource[CLEARED].tradeEligible, true);    // probation = cleared, reduced
+  assert.equal(g.perSource[CLEARED].sizingWeight, 0.25);
   assert.equal(g.perSource.coil.tradeEligible, false);       // shadow static maturity — fail closed
   assert.equal(g.perSource.biotech.tradeEligible, false);    // shadow static maturity — fail closed
+  // Demoted 2026-08-11: the STATIC registry status must gate ahead of a governance doc
+  // that still carries a stale production clearance for it.
+  assert.equal(g.perSource.ghost.tradeEligible, false);
+  assert.match(g.perSource.ghost.reasons.join(' '), /not production/);
 });
 
 test('shadow static maturity ⇒ never trade-eligible regardless of governance', () => {
@@ -102,17 +131,34 @@ test('unregistered source (fabricated id) fails closed centrally', () => {
 });
 
 test('SHORT without observed borrow fails closed even when its source is cleared', () => {
+  // The borrow gate keys off SC.borrowRequired(source), and after the 2026-08-11
+  // demotion EVERY borrow-requiring strategy (downday, fade, gapdown, chartpattern,
+  // optionsflow) is shadow — so this scenario is currently unreachable against the live
+  // registry. That is a real consequence, asserted separately below; here we inject a
+  // registry where the source IS production so the test isolates its actual subject:
+  // the borrow gate, not the maturity gate.
+  const REG = [{ ...STRATEGY_REGISTRY.find(e => e.id === 'downday'), maturity: 'production' }];
   const sig = { source: 'downday', ticker: 'HOT', side: 'short', entry: 205, stop: 216, target: 188, liquidity: { dollarVol: 6e7 } };
-  const g1 = EL.gateSignals([sig], { governance: GOV_PROD, nowMs: NOW });
+  const g1 = EL.gateSignals([sig], { registry: REG, governance: GOV_PROD, nowMs: NOW });
   assert.equal(g1.annotated[0].eligibility.tradeEligible, false);
   assert.match(g1.annotated[0].eligibility.reasons.join(' '), /borrow/);
   // With an observed borrow record for the name, the same short becomes eligible.
-  const g2 = EL.gateSignals([sig], { governance: GOV_PROD, nowMs: NOW, borrowFeed: { HOT: { available: true, feeBps: 80 } } });
+  const g2 = EL.gateSignals([sig], { registry: REG, governance: GOV_PROD, nowMs: NOW, borrowFeed: { HOT: { available: true, feeBps: 80 } } });
   assert.equal(g2.annotated[0].eligibility.tradeEligible, true);
 });
 
+test('after the 2026-08-11 demotion, no borrow-requiring strategy is production', () => {
+  // Consequence of demoting downday: every strategy whose contract requires borrow is
+  // now shadow, so no live short can be originated at all. Stated rather than left as
+  // an accident — and it will fail if one is ever promoted without a borrow feed.
+  const SC = require('../lib/strategy-contracts');
+  const live = STRATEGY_REGISTRY.filter(e => SC.borrowRequired(e.id) && e.maturity === 'production');
+  assert.deepEqual(live.map(e => e.id), [],
+    'a borrow-requiring strategy went production while lib/eligibility still has no borrow feed');
+});
+
 test('LONGS from the same cleared source are unaffected by the borrow gate', () => {
-  const g = EL.gateSignals([{ source: 'downday', ticker: 'RVL', side: 'long', entry: 56, stop: 53, target: 61, liquidity: { dollarVol: 9e6 } }],
+  const g = EL.gateSignals([{ source: CLEARED, ticker: 'RVL', side: 'long', entry: 56, stop: 53, target: 61, liquidity: { dollarVol: 9e6 } }],
     { governance: GOV_PROD, nowMs: NOW });
   assert.equal(g.annotated[0].eligibility.tradeEligible, true);
 });
