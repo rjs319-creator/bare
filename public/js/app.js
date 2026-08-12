@@ -4210,7 +4210,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // ── The four new same-session sections (public/js/lowfloat.js renders; the server scores) ──
   // Each is lazy: nothing fetches until its tab is opened, because each read runs the staged
   // pipeline (a full-universe bulk quote snapshot plus a bounded five-minute chart fan-out).
-  function lazySection(id, loader) {
+  function lazySection(id, loader, refreshMs) {
     let loaded = false;
     return function ensure() {
       const el = document.getElementById(`${id}-container`);
@@ -4219,17 +4219,24 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         loaded = true;
         const btn = document.getElementById(`${id}-refresh-btn`);
         if (btn) btn.addEventListener('click', () => loader(el));
+        // Silent auto-refresh: only while the tab is actually on screen (offsetParent is
+        // null when the section is hidden), so a background tab never burns a pipeline run.
+        if (refreshMs) setInterval(() => {
+          if (document.hidden || !el.offsetParent) return;
+          loader(el, { silent: true });
+        }, refreshMs);
       }
       loader(el);
     };
   }
+  const LOWFLOAT_AUTO_REFRESH_MS = 60 * 1000; // op=lowfloat CDN cache is 45 s, so each poll is fresh
   // Declared as hoisted FUNCTIONS, not consts. showTab's guard is
   // `typeof ensureX === 'function'`, and a `const` in its temporal dead zone makes that guard
   // THROW a ReferenceError instead of evaluating to 'undefined' — which would break tab
   // switching for any tab opened before this point in module evaluation.
   const _lowFloatLoaders = {
-    lowfloat: lazySection('lowfloat', loadLowFloat),
-    ignitionlive: lazySection('ignitionlive', loadIgnitionLive),
+    lowfloat: lazySection('lowfloat', loadLowFloat, LOWFLOAT_AUTO_REFRESH_MS),
+    ignitionlive: lazySection('ignitionlive', loadIgnitionLive, LOWFLOAT_AUTO_REFRESH_MS),
     breakoutradar: lazySection('breakoutradar', loadBreakoutRadar),
     movermiss: lazySection('movermiss', loadMoverAudit),
     intradayval: lazySection('intradayval', loadIntradayValidation),

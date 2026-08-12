@@ -274,6 +274,19 @@ test('the radar display is ungated: All is the default tab, thresholds annotate 
   assert.match(routesSrc, /all:\s*cards/, 'bucketRadar must keep the uncapped all bucket');
 });
 
+test('the ignition boards auto-refresh every minute, silently and only while visible', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app.js'), 'utf8');
+  assert.match(app, /LOWFLOAT_AUTO_REFRESH_MS = 60 \* 1000/, 'refresh cadence is a named 60 s constant');
+  assert.match(app, /lazySection\('lowfloat', loadLowFloat, LOWFLOAT_AUTO_REFRESH_MS\)/, 'lowfloat wired to auto-refresh');
+  assert.match(app, /lazySection\('ignitionlive', loadIgnitionLive, LOWFLOAT_AUTO_REFRESH_MS\)/, 'ignitionlive wired to auto-refresh');
+  assert.match(app, /document\.hidden \|\| !el\.offsetParent/, 'hidden tabs must not burn a pipeline run');
+  // Both loaders take the silent path: no spinner, and a failed poll never clobbers the board.
+  const lf = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lowfloat.js'), 'utf8');
+  assert.match(lf, /loadLowFloat\(container, \{ silent = false \} = \{\}\)/, 'loadLowFloat accepts silent');
+  const ig = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'ignition-live.js'), 'utf8');
+  assert.match(ig, /loadIgnitionLive\(container, \{ silent = false \} = \{\}\)/, 'loadIgnitionLive accepts silent');
+});
+
 test('the keyless bulk-quote fallback respects the provider symbol cap', () => {
   // REGRESSION: Yahoo's spark endpoint caps a request at 20 symbols and answers
   //   400 {"error":{"description":"Number of symbols needs to be less than or equal to 20"}}
