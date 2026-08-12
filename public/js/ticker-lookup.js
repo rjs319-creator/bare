@@ -31,6 +31,34 @@ const HZ_SIGN = {
   STRONG_SELL: { cls: 'sell', icon: '⛔', word: 'STRONG SELL' },
   UNAVAILABLE: { cls: 'na',   icon: '—',  word: 'UNAVAILABLE' },
 };
+
+// GOVERNANCE-AWARE ACTION VOCABULARY (alpha-research pass 3).
+//
+// Each horizon read is a registered strategy (lookup-intraday / lookup-swing /
+// lookup-longterm), all currently SHADOW with zero weight. A weight-0 strategy may
+// describe what it SEES ("bullish read") but must never issue an instruction ("BUY") —
+// this is the app's most-used surface, and it published a buy/sell imperative plus a
+// concrete entry/stop/target triple while no registry, contract or gate had ever seen it.
+//
+// Reads the SAME `tradeEligible` flag lib/strategy-gate produces, so a promotion restores
+// the imperative with no code edit and a wording change can never grant it. Fails CLOSED:
+// a payload without the field (older cached response) is treated as not eligible.
+const RESEARCH_WORD = {
+  STRONG_BUY:  'RESEARCH · strongly bullish read',
+  BUY:         'RESEARCH · bullish read',
+  SELL:        'RESEARCH · bearish read',
+  STRONG_SELL: 'RESEARCH · strongly bearish read',
+};
+function govSign(sign, read, action) {
+  if (read && read.tradeEligible === true) return sign;
+  const word = RESEARCH_WORD[action];
+  return word ? { cls: 'wait', icon: '🔬', word } : sign;
+}
+// The levels stay on the card — an ATR-derived stop is a genuine risk reference — but a
+// weight-0 read must not present them as a validated plan.
+const planNote = (read) => (read && read.tradeEligible === true)
+  ? null
+  : (read && read.planBasis) || 'risk reference (ATR-derived) — NOT a validated trade plan';
 const LT_SIGN = {
   bullish: { cls: 'buy',  icon: '🔼', word: 'BULLISH' },
   bearish: { cls: 'sell', icon: '🔻', word: 'BEARISH' },
@@ -227,7 +255,7 @@ function buildHorizonCards(data) {
 
   // Intraday
   {
-    const sign = HZ_SIGN[intraday.action] || HZ_SIGN.HOLD;
+    const sign = govSign(HZ_SIGN[intraday.action] || HZ_SIGN.HOLD, intraday, intraday.action);
     const lv = intraday.levels;
     cards.push({
       title: 'Intraday', period: 'Today · current session', icon: '⏱',
@@ -240,7 +268,7 @@ function buildHorizonCards(data) {
       invalidate: lv ? `Stop $${lv.stop}` : null,
       objective: lv ? `Target $${lv.target} (R/R ${lv.riskReward})` : null,
       calibrated: false, version: intraday.version || 'intraday-v1',
-      factors: `RSI ${intraday.rsi ?? '—'} · VWAP ${intraday.vwap != null ? '$' + intraday.vwap : '—'} · levels sized on <b>intraday</b> ATR`,
+      factors: `RSI ${intraday.rsi ?? '—'} · VWAP ${intraday.vwap != null ? '$' + intraday.vwap : '—'} · levels sized on <b>intraday</b> ATR${planNote(intraday) ? ' · <b>' + planNote(intraday) + '</b>' : ''}`,
     });
   }
   // Swing
@@ -249,7 +277,7 @@ function buildHorizonCards(data) {
     // prefer the orchestrator's WATCH/READY/TRIGGERED state when available.
     const rec = data.primary && data.primary.byPosition && data.primary.byPosition.new
       ? data.primary.byPosition.new.swing : null;
-    const sign = (rec && HZ_SIGN[rec.action]) || HZ_SIGN[swing.action] || HZ_SIGN.WAIT;
+    const sign = govSign((rec && HZ_SIGN[rec.action]) || HZ_SIGN[swing.action] || HZ_SIGN.WAIT, swing, (rec && rec.action) || swing.action);
     const p = swing.plan;
     cards.push({
       title: 'Swing', period: swing.horizon || '2–12 weeks', icon: '📐',
@@ -303,7 +331,9 @@ function swingFactorsHtml(sw) {
     sw.families ? `families → trend ${sw.families.trend}, RS ${sw.families.relativeStrength ?? 'n/a'}, vol ${sw.families.participation}` : null,
     sw.sectorAvailable === false ? 'sector benchmark: n/a' : null,
   ].filter(Boolean).map(esc).join(' · ');
-  return bits + '<div class="hz-fine">Swing levels sized on <b>daily</b> ATR. Objective is a risk reference, not a forecast.</div>';
+  const gov = planNote(sw);
+  return bits + '<div class="hz-fine">Swing levels sized on <b>daily</b> ATR. Objective is a risk reference, not a forecast.'
+    + (gov ? ' <b>' + esc(gov) + '</b>' : '') + '</div>';
 }
 function ltFactorsHtml(lt) {
   const f = lt.factors || {};
