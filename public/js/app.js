@@ -8529,7 +8529,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       // Distribution stats (#4) — median resists the fat outlier tail, trimmed drops
       // the extremes, the CI says whether the mean is distinguishable from zero.
       const distTip = s.median != null
-        ? `Mean ${up ? '+' : ''}${s.avg}% · median ${s.median > 0 ? '+' : ''}${s.median}% · 10%-trimmed ${s.trimmedAvg > 0 ? '+' : ''}${s.trimmedAvg}%${s.avgCI ? ` · 90% CI [${s.avgCI.lo}, ${s.avgCI.hi}]${s.avgCI.lo > 0 ? ' — above zero' : s.avgCI.hi < 0 ? ' — below zero' : ' — spans zero'}` : ''}`
+        // The CI's confidence LEVEL and its BASIS both come from the payload — the level
+        // was previously hardcoded to 90%, which would silently mislabel the
+        // date-clustered 95% interval the server now prefers. A pick-level interval is
+        // explicitly named as such: it treats correlated same-day picks as independent
+        // and is therefore too narrow.
+        ? `Mean ${up ? '+' : ''}${s.avg}% · median ${s.median > 0 ? '+' : ''}${s.median}% · 10%-trimmed ${s.trimmedAvg > 0 ? '+' : ''}${s.trimmedAvg}%${s.avgCI ? ` · ${s.avgCI.level || 95}% CI [${s.avgCI.lo}, ${s.avgCI.hi}]${s.avgCI.basis === 'date-clustered' ? ` (date-clustered${Number.isFinite(s.avgCI.effectiveN) ? `, ${s.avgCI.effectiveN} effective dates` : ''})` : ' (pick-level — same-day picks not independent, interval too narrow)'}${s.avgCI.lo > 0 ? ' — above zero' : s.avgCI.hi < 0 ? ' — below zero' : ' — spans zero'}` : ''}`
         : `Mean return ${lb} after the pick`;
       return `<div class="sb-h"><div class="sb-h-lb" title="${esc(SB_HZ_HELP)}">${lb}</div><div class="sb-h-ret ${up ? 'up' : 'down'}" title="${esc(distTip)}">${up ? '+' : ''}${s.avg}%</div><div class="sb-h-sub">${s.winRate}% win · n=${s.n}</div>${exLine}${netLine}${secLine}${realLine}</div>`;
     }).join('');
