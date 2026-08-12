@@ -83,6 +83,74 @@ export function emptySection(title, why) {
 const fmtPct = v => (v == null || !Number.isFinite(v) ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`);
 const fmtN = v => (v == null || !Number.isFinite(v) ? '—' : String(v));
 
+// ── story timestamps (the three clocks: event / publication / discovery) ────
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export function fmtWhen(iso) {
+  if (!iso) return null;
+  const dateOnly = DATE_ONLY_RE.test(String(iso));
+  const d = new Date(dateOnly ? iso + 'T00:00:00Z' : iso);
+  if (!Number.isFinite(d.getTime())) return null;
+  if (dateOnly) return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+/** Semantic timestamp: <time datetime> so assistive tech and tooling get the ISO value. */
+export function timeEl(iso, label) {
+  const text = label != null ? label : fmtWhen(iso);
+  if (!iso || text == null) return '';
+  return `<time datetime="${esc(String(iso))}">${esc(text)}</time>`;
+}
+
+// Concise, honest age badge: 3h · 2d old · Ongoing · Date unknown · Rediscovered ·
+// Material update. Reads from the card's server-computed freshness block.
+const REASON_BADGE = {
+  NEW_MATERIAL_UPDATE: ['Material update', '#22c55e'],
+  REDISCOVERED: ['Rediscovered', '#f97316'],
+  ONGOING_EVENT: ['Ongoing', '#94a3b8'],
+  SYNDICATED_COPY: ['Syndicated', '#94a3b8'],
+};
+export function ageBadge(f) {
+  if (!f) return '';
+  const age = f.eventAgeHours ?? f.publicationAgeHours;
+  let ageTxt, color;
+  if (age == null) { ageTxt = 'Date unknown'; color = '#f97316'; }
+  else if (age < 24) { ageTxt = `${Math.max(1, Math.round(age))}h`; color = '#22c55e'; }
+  else { ageTxt = `${Math.round(age / 24)}d old`; color = age <= 72 ? '#eab308' : '#f97316'; }
+  const chips = [`<span class="p2-age" style="color:${color}" role="note" aria-label="story age ${esc(ageTxt)}">${esc(ageTxt)}</span>`];
+  const rb = REASON_BADGE[f.reason];
+  if (rb) chips.push(`<span class="p2-age" style="color:${rb[1]}">${esc(rb[0])}</span>`);
+  return chips.join(' ');
+}
+
+/** The accessible timestamp row: Event … · Published … · Discovered … */
+export function timestampRow(f) {
+  if (!f) return '';
+  const parts = [];
+  if (f.eventOccurredAt) parts.push(`Event ${timeEl(f.eventOccurredAt)}`);
+  if (f.firstPublishedAt) parts.push(`Published ${timeEl(f.firstPublishedAt)}`);
+  if (f.discoveredAt) parts.push(`Discovered ${timeEl(f.discoveredAt)}`);
+  if (!parts.length) return '<div class="p2-times p2-dim" role="note">No event, publication, or discovery time is known for this story</div>';
+  return `<div class="p2-times" role="note">${parts.join(' · ')}</div>`;
+}
+
+// Lifecycle-reason chip — replaces the old blanket "new" implication with the
+// explicit reason a story reads as active.
+const FRESH_REASON_CHIP = {
+  NEW_PUBLICATION: ['🆕', 'New event', '#22c55e'],
+  NEW_MATERIAL_UPDATE: ['📌', 'Material update', '#22c55e'],
+  NEW_CORROBORATION: ['🤝', 'New corroborating source', '#84cc16'],
+  REDISCOVERED: ['🕰', 'Newly discovered by Market Pulse — older event', '#f97316'],
+  SYNDICATED_COPY: ['🔁', 'Syndicated copies arriving', '#94a3b8'],
+  ONGOING_EVENT: ['➿', 'Ongoing', '#94a3b8'],
+  UNKNOWN: ['❓', 'Date unknown', '#f97316'],
+};
+export function freshnessChip(reason) {
+  const c = FRESH_REASON_CHIP[reason];
+  if (!c) return '';
+  return `<span class="p2-freshreason" style="color:${c[2]}" role="note">${c[0]} ${esc(c[1])}</span>`;
+}
+
 // ── 1. MARKET NOW ───────────────────────────────────────────────────────────
 export function renderMarketNow(state, clocks) {
   if (!state) {
@@ -164,15 +232,18 @@ function contractHTML(c) {
 export function viewCard(d, novice) {
   if (!d) return '';
   const c = d.contract || {};
+  const f = d.freshness || null;
   const plain = c.notActionableReason || c.whatMustHappen || 'context for the tape';
   const dirIco = d.direction === 'BULLISH' ? '🟢▲' : d.direction === 'BEARISH' ? '🔴▼' : '◽';
   return `<div class="p2-card" data-state="${esc(d.tradeState || '')}">
-    <div class="p2-card-head">${tradePill(d.tradeState)} ${evidenceChip(d.evidence)} <span class="p2-dir">${dirIco}</span>
+    <div class="p2-card-head">${tradePill(d.tradeState)} ${evidenceChip(d.evidence)} ${ageBadge(f)} <span class="p2-dir">${dirIco}</span>
       <button class="p2-tkbtn pulse-tk" type="button">$${esc(d.ticker || '')}</button></div>
     <div class="p2-card-title">${esc(d.headline || '')}</div>
     <div class="p2-card-plain">🔰 ${esc(plain)}</div>
     ${d.thesisClass ? `<div class="p2-line p2-dim">Thesis class: ${esc(d.thesisClass)}</div>` : ''}
-    ${novice ? '' : `<details class="p2-pro"><summary>Expert detail</summary>${contractHTML(c)}
+    ${novice ? '' : `${timestampRow(f)}<details class="p2-pro"><summary>Expert detail</summary>${contractHTML(c)}
+      ${f ? `<div class="p2-c-row"><span>Freshness</span><b>${esc(f.reason || 'UNKNOWN')} · date confidence ${esc(f.dateConfidence || 'unknown')}</b></div>` : ''}
+      ${f && f.lastCorroboratedAt ? `<div class="p2-c-row"><span>Last corroborated</span><b>${timeEl(f.lastCorroboratedAt)}</b></div>` : ''}
       ${d.sameTimeRelVol != null ? `<div class="p2-c-row"><span>Same-time-of-day rel vol</span><b>${esc(d.sameTimeRelVol.toFixed(2))}×</b></div>` : ''}
       ${d.vsVWAPPct != null ? `<div class="p2-c-row"><span>vs VWAP</span><b>${fmtPct(d.vsVWAPPct)}</b></div>` : ''}
       ${d.chaseAtr != null ? `<div class="p2-c-row"><span>Extension (ATR)</span><b>${esc(String(d.chaseAtr))}</b></div>` : ''}
@@ -183,12 +254,44 @@ export function viewCard(d, novice) {
   </div>`;
 }
 
+// Deterministic card ordering — NEVER input order. Freshness-ranked cards sort by
+// the server's recency-aware rank score with timestamp tie-breaks; legacy cards
+// (no freshness block) fall back to trade-state order with a stable id tie-break.
+const LEGACY_STATE_ORDER = { PRICE_CONFIRMED: 0, ARMED: 1, WATCH: 2, INVESTIGATE: 3, CONTEXT_ONLY: 4, DATA_STALE: 5, CONTRADICTED: 6, INVALIDATED: 7, EXPIRED: 8 };
+const descIso = (a, b) => {
+  if (a === b) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  return a > b ? -1 : 1;
+};
+export function compareCards(a, b) {
+  const fa = (a && a.freshness) || null, fb = (b && b.freshness) || null;
+  if (fa && fb) {
+    const sa = fa.rankScore ?? -Infinity, sb = fb.rankScore ?? -Infinity;
+    if (sa !== sb) return sb - sa;
+    return descIso(fa.eventOccurredAt, fb.eventOccurredAt)
+      || descIso(fa.firstPublishedAt, fb.firstPublishedAt)
+      || descIso(fa.lastCorroboratedAt, fb.lastCorroboratedAt)
+      || String((a && a.eventId) || '').localeCompare(String((b && b.eventId) || ''));
+  }
+  return (LEGACY_STATE_ORDER[a.tradeState] ?? 9) - (LEGACY_STATE_ORDER[b.tradeState] ?? 9)
+    || String((a && a.eventId) || '').localeCompare(String((b && b.eventId) || ''));
+}
+
 export function renderView(name, list, novice, emptyWhy) {
   const items = (list || []).filter(Boolean);
   if (!items.length) return emptySection(name, emptyWhy);
-  const order = { PRICE_CONFIRMED: 0, ARMED: 1, WATCH: 2, INVESTIGATE: 3, CONTEXT_ONLY: 4, DATA_STALE: 5, CONTRADICTED: 6, INVALIDATED: 7, EXPIRED: 8 };
-  const sorted = [...items].sort((a, b) => (order[a.tradeState] ?? 9) - (order[b.tradeState] ?? 9));
-  return sorted.map(d => viewCard(d, novice)).join('');
+  const sorted = [...items].sort(compareCards);
+  // Current stories lead; older/undated items sit in a clearly separated,
+  // collapsed context group — never mixed into the main list.
+  const current = sorted.filter(d => !d.freshness || d.freshness.group !== 'context');
+  const context = sorted.filter(d => d.freshness && d.freshness.group === 'context');
+  const main = current.map(d => viewCard(d, novice)).join('')
+    || emptySection(name, 'nothing current right now — older or undated stories are in the context group below');
+  const ctx = context.length
+    ? `<details class="p2-context-group"><summary>🕰 Earlier / undated context (${context.length}) — not current ${esc(name)} stories</summary>${context.map(d => viewCard(d, novice)).join('')}</details>`
+    : '';
+  return main + ctx;
 }
 
 // ── 6-10. EVENT SECTIONS ────────────────────────────────────────────────────
@@ -204,22 +307,32 @@ export function eventCard(e, sourcesById, novice) {
   const claims = (e.claims || []).map(cl => {
     const links = (cl.sourceRefs || []).map(id => {
       const s = sourcesById && sourcesById[id];
-      return s ? `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" class="p2-src" title="${esc(s.title || s.url)}">${esc(s.domain || 'source')}${s.lineageType === 'syndicated-copy' ? ' (syndicated)' : ''}</a>` : '';
+      if (!s) return '';
+      const lineageTag = s.lineageType === 'syndicated-copy' ? ' (syndicated)'
+        : s.reference ? ` (reference — ${esc(String(s.reference))})` : '';
+      const pub = s.publishedAt ? ` ${timeEl(s.publishedAt)}` : ' <span class="p2-dim">(undated)</span>';
+      return `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" class="p2-src" title="${esc(s.title || s.url)}">${esc(s.domain || 'source')}${lineageTag}</a>${pub}`;
     }).filter(Boolean).join(' ');
     return `<div class="p2-claim"><span class="p2-claim-st">${evidenceChip(cl.status)}</span> ${esc(cl.text)} ${links || '<span class="p2-dim">no mapped source — treat as unverified</span>'}</div>`;
   }).join('');
   const life = e.narrativeLifecycle ? `<span class="p2-life">${esc(e.narrativeLifecycle)}</span>` : '';
   const reaction = e.reaction ? `<span class="p2-react">${esc(e.reaction.replace(/_/g, ' '))}</span>` : '';
+  const evtFresh = {
+    reason: e.freshnessReason, eventOccurredAt: e.eventOccurredAt || e.eventDate,
+    firstPublishedAt: e.firstPublishedAt, discoveredAt: e.firstSeenAt || e.firstSeen,
+  };
   return `<div class="p2-card p2-event">
-    <div class="p2-card-head">${evidenceChip(e.evidence)} ${life} ${reaction}
+    <div class="p2-card-head">${evidenceChip(e.evidence)} ${freshnessChip(e.freshnessReason)} ${life} ${reaction}
       ${(e.tickers || []).map(t => `<button class="p2-tkbtn pulse-tk" type="button">$${esc(t)}</button>`).join(' ')}</div>
     <div class="p2-card-title">${esc(e.headline)}</div>
     ${e.matrixCell ? `<div class="p2-line p2-dim">Reaction matrix: ${esc(e.matrixCell.replace(/_/g, ' '))}</div>` : ''}
-    ${novice ? '' : `<details class="p2-pro"><summary>Evidence & lifecycle</summary>
+    ${novice ? '' : `${timestampRow(evtFresh)}<details class="p2-pro"><summary>Evidence & lifecycle</summary>
       ${claims || '<div class="p2-dim">no structured claims</div>'}
       <div class="p2-c-row"><span>Event id</span><b>${esc(e.fingerprint || e.id)}</b></div>
       <div class="p2-c-row"><span>Family / direction</span><b>${esc(e.family || '?')} / ${esc(e.currentDirection || '?')}</b></div>
       <div class="p2-c-row"><span>First seen</span><b>${esc(e.firstSeenDate || '?')}${e.thesisVersion > 1 ? ` (thesis v${e.thesisVersion})` : ''}</b></div>
+      <div class="p2-c-row"><span>Date confidence</span><b>${esc(e.dateConfidence || 'unknown')}</b></div>
+      ${e.lastCorroboratedAt ? `<div class="p2-c-row"><span>Last corroborated</span><b>${timeEl(e.lastCorroboratedAt)}</b></div>` : ''}
       <div class="p2-c-row"><span>Observations / lineages</span><b>${esc(String(e.observationCount || 0))} / ${esc(String(e.independentLineages || 0))}</b></div>
     </details>`}
   </div>`;
@@ -267,11 +380,18 @@ export function renderTrackRecord(tr) {
 }
 
 // ── 13. DATA HEALTH ─────────────────────────────────────────────────────────
-export function renderHealthStrip(clocks, unavailable, coverage) {
+export function renderHealthStrip(clocks, unavailable, coverage, cache) {
   const un = (unavailable || []).map(u => `<div class="p2-unavail-row">⛔ <b>${esc(u.what)}</b>: ${esc(u.why)}</div>`).join('');
   const cov = coverage ? `<span class="p2-dim">symbols ${esc(String(coverage.intradayCount ?? '?'))}/${esc(String(coverage.symbolsRequested ?? '?'))} intraday${(coverage.failedSymbols || []).length ? `, failed: ${esc(coverage.failedSymbols.join(', '))}` : ''}</span>` : '';
+  // Narrative-snapshot age is the SNAPSHOT's age — never presented as story age.
+  const narr = clocks && clocks.narrativeAgeMinutes != null
+    ? `<span class="p2-dim">narrative updated ${esc(String(clocks.narrativeAgeMinutes))}m ago</span>` : '';
+  const next = clocks && clocks.nextNarrativeRefreshAt
+    ? `<span class="p2-dim">next update ${timeEl(clocks.nextNarrativeRefreshAt)}</span>` : '';
+  const cacheChip = cache && cache.status
+    ? `<span class="p2-dim" title="TTL ${esc(String(cache.ttlSeconds))}s">cache ${esc(cache.status)}</span>` : '';
   return `<div class="p2-health">
-    <span class="p2-dim">mode: ${esc((clocks && clocks.dataMode) || '?')} · model ${esc((clocks && clocks.modelVersion) || '?')}</span> ${cov}${un}
+    <span class="p2-dim">mode: ${esc((clocks && clocks.dataMode) || '?')} · model ${esc((clocks && clocks.modelVersion) || '?')}</span> ${narr} ${next} ${cacheChip} ${cov}${un}
   </div>`;
 }
 
@@ -288,7 +408,7 @@ export function renderShell({ payload, novice }) {
     <span class="p2-toggle-wrap">${modeBtn('p2-m-simple', '🔰 Simple', novice)}${modeBtn('p2-m-pro', '📊 Pro', !novice)}</span>
     <span class="p2-dim">${esc((p.narratives && p.narratives.disclaimer) || 'Evidence-graded market read — not investment advice; directional value unproven until prospectively measured.')}</span>
   </div>
-  ${renderHealthStrip(clocks, p.unavailable, p.marketState && p.marketState.coverage)}
+  ${renderHealthStrip(clocks, p.unavailable, p.marketState && p.marketState.coverage, p.cache)}
   ${renderMarketNow(p.marketState, clocks)}
   ${renderPlaybook(p.playbook)}
   <div class="p2-views">
