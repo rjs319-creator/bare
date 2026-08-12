@@ -2127,7 +2127,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const md = getModel(scope);
     // Rank purely by strength — NOT breakouts-first (breakout PF < 1 in this
     // project's research). A confirmed breakout is a badge, not a sort key.
-    if (scrModelRank && md) {
+    if (scrModelRank && md && md.oosAUC >= MODEL_RELIABLE) {
+      // A learned model may re-sort the list ONLY above its own out-of-sample
+      // reliability floor — the same bar the badge uses. Below it, the model is
+      // noise and must not silently reorder what the user sees.
       arr = arr.map(c => ({ ...c, _prob: modelProb(c) ?? -1 }));
       arr.sort((a, b) => b._prob - a._prob);
     } else {
@@ -2136,10 +2139,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         return (b.narrativeStrength || 0) - (a.narrativeStrength || 0);
       });
     }
-    // 2:1 reward-to-risk gate with graceful fallback (never blank the section).
+    // 2:1 reward-to-risk floor — abstains honestly instead of filling the section.
     const gated = rrGate(arr);
     const ranked = gated.items.slice(0, cap).map((c, i) => ({ ...c, rank: i + 1 }));
-    renderScreenerList(ranked, scrConts[scope], scope, gated.fallback);
+    renderScreenerList(ranked, scrConts[scope], scope, gated);
     const rb = document.getElementById('rankby-' + scope);
     if (rb) rb.innerHTML = `Ranked by: <b>${esc(weightsLabel(w))}</b>`;
   }
@@ -2321,7 +2324,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
   function updateHCLabel() {
     const lab = { large: 'L', small: 'S', micro: 'M' };
-    const parts = HC_SCOPES.map(s => `${lab[s]}: <b>${esc(getHCEdges(s).map(k => HC_SHORT[k] || k).join('·'))}</b>`);
+    const meta = loadHCMeta();
+    const parts = HC_SCOPES.map(s => (meta[s] && meta[s].noRobust)
+      ? `${lab[s]}: <b>none OOS-robust → static default</b>`
+      : `${lab[s]}: <b>${esc(getHCEdges(s).map(k => HC_SHORT[k] || k).join('·'))}</b>`);
     const el = document.getElementById('scr-hc-deftext');
     if (el) el.innerHTML = `🎯 ${hcWindow}-mo edges — ${parts.join('&nbsp; · &nbsp;')} · ${hcRefreshing ? '⏳ refreshing…' : hcAgeText()}`;
     const b = document.getElementById('scr-hc-toggle');
@@ -2331,10 +2337,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!efficacy || !efficacy.features || !HC_SCOPES.includes(scope)) return;
     // Only edges that held their alpha out-of-sample (walk-forward robust).
     const robust = efficacy.features.filter(f => f.robust).sort((a, b) => b.oosLift - a.oosLift);
-    let keys = robust.slice(0, 3).map(f => f.key).filter(k => HC_PREDICATES[k]);
-    if (!keys.length) keys = ['breakout']; // safe fallback when nothing survives OOS
+    const keys = robust.slice(0, 3).map(f => f.key).filter(k => HC_PREDICATES[k]);
+    // When NOTHING survives out-of-sample, record that honestly (empty list ⇒
+    // getHCEdges falls back to the labeled static default) instead of silently
+    // substituting 'breakout' and presenting it as a backtested edge.
     const map = loadHCMap(); map[scope] = keys;
-    const meta = loadHCMeta(); meta[scope] = { at: Date.now(), win: months || hcWindow };
+    const meta = loadHCMeta(); meta[scope] = { at: Date.now(), win: months || hcWindow, noRobust: keys.length === 0 };
     try { localStorage.setItem('hcEdgesByScope', JSON.stringify(map)); localStorage.setItem('hcEdgesMeta', JSON.stringify(meta)); } catch {}
     updateHCLabel();
     rankAndRender(scope);
@@ -2727,9 +2735,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     } finally { screenerRefreshBtn.disabled = false; }
   }
 
-  function renderScreenerList(results, container, scope, rrFallback) {
+  function renderScreenerList(results, container, scope, rrInfo) {
     if (!results.length) {
       const label = scope === 'large' ? 'large-cap' : scope === 'small' ? 'small-cap' : 'micro-cap';
+      if (rrInfo && rrInfo.abstained) {
+        container.innerHTML = `<div class="mom-status">${rrAbstainedBanner(rrInfo.belowFloor)}</div>`;
+        return;
+      }
       const msg = scrMomMin > 0
         ? `No ${label} names with a trailing 3-month return ≥ +${scrMomMin}% right now. Lower the Momentum filter or set it to "any" to see more setups.`
         : scrEmerg
@@ -2741,7 +2753,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       return;
     }
     container.innerHTML = '';
-    if (rrFallback) container.insertAdjacentHTML('beforeend', rrFallbackBanner(results.length));
     container.appendChild(buildSecBar(results));
     const grid = document.createElement('div');
     grid.className = 'scr-grid';
@@ -2945,17 +2956,21 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       </div>`;
   }
 
-  // 2:1 reward-to-risk gate with graceful fallback: if nothing clears 2:1, return
-  // the best-available by R:R (tagged) so a section never silently goes blank.
-  function rrGate(list, topN = 3) {
+  // 2:1 reward-to-risk floor with HONEST abstention: when nothing clears the bar,
+  // the section says so — with the rejection count — instead of relaxing to "the
+  // N best available". A below-floor setup is not made tradeable by being the
+  // least-bad one; empty is the economically correct output.
+  function rrGate(list) {
     const withRR = list.filter(c => c.levels && c.levels.rr != null);
     const pass = withRR.filter(c => c.levels.rr >= 2);
-    if (pass.length) return { items: pass, fallback: false };
-    const top = withRR.slice().sort((a, b) => b.levels.rr - a.levels.rr).slice(0, topN).map(c => ({ ...c, _belowRR: true }));
-    return { items: top, fallback: top.length > 0 };
+    return {
+      items: pass,
+      abstained: pass.length === 0 && withRR.length > 0,
+      belowFloor: withRR.length - pass.length,
+    };
   }
-  function rrFallbackBanner(n) {
-    return `<div class="rr-fallback">⚠ No setups currently clear 2:1 reward-to-risk — showing the ${n} best available. Trade with caution or wait for cleaner entries.</div>`;
+  function rrAbstainedBanner(n) {
+    return `<div class="rr-fallback">🚫 No qualifying opportunities — ${n} candidate${n === 1 ? '' : 's'} screened, none clears the 2:1 reward-to-risk floor. The bar is not lowered to fill this section.</div>`;
   }
 
   // Compact USD for average dollar volume: $420K / $2.1M / $18M / $1.2B.
@@ -3429,9 +3444,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const p1 = Math.round(((q.rs || 0) + (q.mom || 0)) / 2);                       // momentum / relative strength
     const p2 = Math.round(((q.trend || 0) + (q.base || 0) + (q.prox || 0)) / 3);   // trend + base + pivot proximity
     // Pillar 4 — accumulation + up/down volume (real edge) over dead volume-surge.
+    // Fallback is volAdj alone, else neutral 45 — never the zero-IC vol percentile
+    // (keep in sync with lib/apex.js pillarsOf).
     const p4 = (q.accum != null || q.ud != null)
       ? Math.round(((q.accum || 0) + (q.ud || 0) + (q.volAdj || 0)) / 3)
-      : Math.round(((q.vol || 0) + (q.volAdj || 0)) / 2);
+      : (q.volAdj != null ? Math.round(q.volAdj) : 45);
     // Pillar 3 — hard fundamentals lead; LLM narrative is a 40% overlay.
     const narr = c.narrativeStrength != null ? Math.round((c.narrativeStrength / 10) * 100) : null;
     const fund = c.fundamentals ? apexFundamentalScore(c.fundamentals) : null;
@@ -9289,7 +9306,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   function buildMomColumn(side, list) {
     const buy = side === 'buy';
-    // 2:1 reward-to-risk gate with graceful fallback (never blank the column).
+    // 2:1 reward-to-risk floor — an empty column is the honest state.
     const gated = rrGate(list);
 
     const col = document.createElement('div');
@@ -9305,10 +9322,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!gated.items.length) {
       const empty = document.createElement('div');
       empty.className = 'mom-col-empty';
-      empty.textContent = buy ? 'No strong buy signals right now.' : 'No strong sell signals right now.';
+      empty.textContent = gated.abstained
+        ? `No signals clear the 2:1 reward-to-risk floor (${gated.belowFloor} below the bar).`
+        : (buy ? 'No strong buy signals right now.' : 'No strong sell signals right now.');
       body.appendChild(empty);
     } else {
-      if (gated.fallback) body.insertAdjacentHTML('beforeend', rrFallbackBanner(gated.items.length));
       gated.items.forEach((c, idx) => body.appendChild(buildMomCard(c, side, idx)));
     }
     col.appendChild(body);

@@ -12,11 +12,13 @@ import { esc } from './format.js';
 import { fetchJSON, HEAVY_TIMEOUT_MS } from './fetch-json.js';
 
 // Executable states (from lib/omega-execution) → plain-language action.
+// Shadow vocabulary: OMEGA is weight-0 research, so entry states describe what the
+// SHADOW PLAN would do — never "buy" imperatives aimed at the reader.
 const STATE_LABEL = {
-  ELIGIBLE_NEXT_OPEN: '🟢 Eligible next open', BUY_ABOVE: '⬆️ Buy only above trigger',
-  BUY_ON_PULLBACK: '↩️ Buy only on pullback', WAIT_CONFIRMATION: '⏳ Wait for close confirmation',
-  GAP_TOO_LARGE_SKIP: '⛔ Opening gap too large — skip', NO_POSITIVE_UTILITY: '⛔ Past positive utility',
-  FILLED: '🟢 Eligible next open', NO_FILL: '👁 No trigger yet', AVOID: '🚫 Avoid',
+  ELIGIBLE_NEXT_OPEN: '🟢 Plan enters next open (shadow)', BUY_ABOVE: '⬆️ Plan enters above trigger (shadow)',
+  BUY_ON_PULLBACK: '↩️ Plan enters on pullback (shadow)', WAIT_CONFIRMATION: '⏳ Awaiting close confirmation',
+  GAP_TOO_LARGE_SKIP: '⛔ Opening gap too large — plan skips', NO_POSITIVE_UTILITY: '⛔ Past positive utility',
+  FILLED: '🟢 Plan enters next open (shadow)', NO_FILL: '👁 No trigger yet', AVOID: '🚫 Avoid',
 };
 // Shadow research tiers — NOT "Prime / positive edge / buy". These are ranked research candidates.
 const TIER_ORDER = [
@@ -132,7 +134,7 @@ function cardHtml(cd, opts = {}) {
       <div class="om-plan-row"><span>Entry zone</span><b>$${rk.entryZoneLow ?? '–'}–$${rk.entryZoneHigh ?? '–'}</b></div>
       <div class="om-plan-row"><span>Invalidation</span><b class="om-neg">$${rk.invalidation ?? '–'}${rk.riskPct != null ? ` (−${rk.riskPct}%)` : ''}</b></div>
       <div class="om-plan-row"><span>Targets</span><b class="om-pos">$${rk.target1 ?? '–'} → $${rk.target2 ?? '–'}${rk.rr != null ? ` · ${rk.rr}R` : ''}</b></div>
-      <div class="om-plan-row"><span>Suggested size</span><b>${sz.sizePctOfEquity != null ? sz.sizePctOfEquity + `% <span class="om-sizenote">(≤${sz.maxStandalonePct}% cap · educational)</span>` : '–'}</b></div>
+      <div class="om-plan-row"><span>Live size</span><b>0% <span class="om-sizenote">(shadow strategy — never sized; governance clearance required)</span></b></div>
     </div>
     ${e.reason || (cd.entry && cd.entry.reason) ? `<div class="om-why"><b>Entry:</b> ${esc(e.reason || cd.entry.reason)}</div>` : ''}
     ${(cd.reasons || []).length ? `<ul class="om-reasons">${cd.reasons.map(r => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}

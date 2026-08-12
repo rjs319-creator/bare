@@ -132,7 +132,7 @@ const freshGov2 = (strategies) => ({ savedAt: '2026-07-24T00:00:00.000Z', strate
 const NO_DATA_GATE = { dataGate: null };
 
 test('actionableByHorizon contains ONLY trade-eligible sources; research signals cannot enter or boost it', () => {
-  const gov = freshGov2([{ id: 'screener', status: 'production', weight: 1, version: 'screener-v1' }]);
+  const gov = freshGov2([{ id: 'screener', status: 'production', weight: 1, version: 'screener-v2' }]);
   const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'annotate', governance: gov, nowMs: NOW2, ...NO_DATA_GATE });
   const lane = Object.values(p.actionableByHorizon).flat();
   for (const x of lane) {
@@ -157,13 +157,16 @@ test('nothing cleared → the actionable lane is honestly EMPTY (except the pinn
 });
 
 // ── Confluence family admission (source-scan, matching the repo's registry-coverage style) ──
-test('Confluence display admission requires ≥2 independent families in BOTH strong and relaxed branches', () => {
+test('Confluence display admission requires ≥2 independent families and never relaxes the vote bar', () => {
   const src = require('node:fs').readFileSync(require.resolve('../lib/screener-routes.js'), 'utf8');
   assert.match(src, /CONFLUENCE_MIN_FAMILIES\s*=\s*2/, 'the ≥2-family constant must exist');
   assert.match(src, /bullishCount >= CONFLUENCE_DISPLAY_BULL && multiFamily\(p\)/,
     'strong admission must be vote-count AND multi-family');
-  assert.match(src, /bullishCount >= CONFLUENCE_MIN_BULL && multiFamily\(p\)/,
-    'the relaxed fallback must also require multi-family — an honest empty list beats single-family "confluence"');
+  // 2026-08 alpha-research delta: the ≥3/5 relaxed fallback was a threshold weakened
+  // to fill the tab — display admission now abstains honestly instead.
+  assert.ok(!src.includes('bullishCount >= CONFLUENCE_MIN_BULL && multiFamily(p)'),
+    'the relaxed display fallback must not return — abstention with rejectionReasonCounts replaces it');
+  assert.match(src, /rejectionReasonCounts/, 'abstention must report why nothing qualified');
 });
 
 test('confluence singleFamily flag: multiple bullish votes from one family are flagged, two families are not', () => {
@@ -175,7 +178,7 @@ test('confluence singleFamily flag: multiple bullish votes from one family are f
 });
 
 test('enforce mode: researchByHorizon carries the full ungated cross-section, RESEARCH-classed (visibility survives enforcement)', () => {
-  const gov = freshGov2([{ id: 'screener', status: 'production', weight: 1, version: 'screener-v1' }]);
+  const gov = freshGov2([{ id: 'screener', status: 'production', weight: 1, version: 'screener-v2' }]);
   const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'enforce', governance: gov, nowMs: NOW2, ...NO_DATA_GATE });
   assert.ok(p.researchByHorizon, 'enforce mode must serve the research cross-section');
   const rows = Object.values(p.researchByHorizon).flat();

@@ -16,7 +16,7 @@ const { SOURCES } = require('./fixtures/today-sources');
 const NOW = Date.parse('2026-07-24T12:00:00Z');
 const GOV = {
   savedAt: '2026-07-24T00:00:00.000Z', scoreboardGeneratedAt: '2026-07-23T22:00:00.000Z',
-  strategies: [{ id: 'screener', status: 'production', weight: 1, version: 'screener-v1' }],
+  strategies: [{ id: 'screener', status: 'production', weight: 1, version: 'screener-v2' }],
 };
 const OPTS = { governance: GOV, nowMs: NOW, dataGate: null };
 
@@ -41,7 +41,7 @@ test('a RESEARCH signal can never enter the portfolio — in either mode', () =>
 });
 
 test('an incomplete plan is never sizable, however strong the score', () => {
-  const src = EL.assessSource('screener', { gov: EL.indexGovernance(GOV, NOW), registryVersionOf: () => 'screener-v1' });
+  const src = EL.assessSource('screener', { gov: EL.indexGovernance(GOV, NOW), registryVersionOf: () => 'screener-v2' });
   const noTarget = EL.assessSignal({ source: 'screener', ticker: 'A', side: 'long', entry: 10, stop: 9, liquidity: { dollarVol: 9e7 } }, src, {});
   assert.equal(noTarget.signalClass, 'QUALIFIED_LEAD');
   assert.equal(noTarget.sizingWeight, 0);

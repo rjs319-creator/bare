@@ -165,7 +165,16 @@ function recordExperiment(entry) {
     // A rejected hypothesis is preserved as documented NEGATIVE EVIDENCE, never deleted.
     immutable: true,
   };
-  doc.experiments = [...(doc.experiments || []).filter(e => e.id !== row.id), row]
+  // TRULY append-only: a re-run under an existing id used to silently REPLACE the prior
+  // row while stamping immutable:true. Now the prior record is untouchable — the re-run
+  // gets a versioned id (`<id>.r2`, `.r3`, …) with a parentExperimentId link, so every
+  // attempt (including the superseded one) stays in the ledger.
+  const prior = (doc.experiments || []).filter(e => e.id === row.id || String(e.id).startsWith(`${row.id}.r`));
+  if (prior.some(e => e.id === row.id)) {
+    row.parentExperimentId = row.id;
+    row.id = `${row.id}.r${prior.length + 1}`;
+  }
+  doc.experiments = [...(doc.experiments || []), row]
     .sort((a, b) => String(a.id).localeCompare(String(b.id)));
   fs.writeFileSync(REGISTRY_PATH, JSON.stringify(doc, null, 2) + '\n');
   return { path: REGISTRY_PATH, total: doc.experiments.length };

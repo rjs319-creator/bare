@@ -37,6 +37,22 @@ const FORBIDDEN = [
     'Failure prob ',
   ]],
   ['lib/challenger-decision.js', ['failure probability ${']],
+  // 2026-08 alpha-research delta: research/shadow strategies may not address the reader
+  // with BUY imperatives or publish a suggested position size (RESEARCH/SHADOW/OBSERVATION
+  // vocabulary only; zero size until governance clears a weight).
+  ['public/js/omega-swing.js', [
+    'Buy only above trigger',
+    'Buy only on pullback',
+    'Suggested size',
+  ]],
+  ['public/js/opportunities.js', [
+    'per $1k risked',
+    'at 1% account risk',
+    'room to position before it breaks',
+  ]],
+  ['public/js/cern.js', [
+    'a model guess; this event type has not proven itself yet',
+  ]],
 ];
 
 for (const [file, phrases] of FORBIDDEN) {
@@ -57,4 +73,18 @@ test('the heuristic failure score is never presented as a probability in served 
 test('evidence badges derive from the maturity endpoint, not hard-coded per tab', () => {
   const src = R('public', 'js', 'evidence-badge.js');
   assert.match(src, /op=maturity/, 'badges must load grades from the maturity endpoint');
+});
+
+test('PSRL shadow entry states render research vocabulary, never raw BUY_ZONE', () => {
+  const src = R('public', 'js', 'psrl-lab.js');
+  assert.ok(src.includes('IN ENTRY ZONE (research)'), 'psrl-lab must map BUY_ZONE to research vocabulary');
+  assert.ok(src.includes('ON CONFIRMATION (research)'), 'psrl-lab must map BUY_ON_CONFIRMATION to research vocabulary');
+  assert.ok(src.includes('entryText(c.entry)') && src.includes('entryText(e.currentEntry)'),
+    'both entry-state cells must render through the research-label mapper');
+});
+
+test('CERN publishes a suggested size only for a validated event type', () => {
+  const src = R('public', 'js', 'cern.js');
+  assert.match(src, /o\.action === 'TRADE' && o\.size && canonical === 'validated'/,
+    'the size line must require an earned validated grade before showing a % of account');
 });

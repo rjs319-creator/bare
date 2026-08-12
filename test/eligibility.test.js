@@ -11,7 +11,7 @@ const NOW = Date.parse('2026-07-24T12:00:00Z');
 // underlying Scoreboard EVIDENCE time (scoreboardGeneratedAt) — both must be current.
 const freshGov = (strategies) => ({ savedAt: '2026-07-24T00:00:00.000Z', scoreboardGeneratedAt: '2026-07-23T22:00:00.000Z', strategies });
 const GOV_PROD = freshGov([
-  { id: 'screener', status: 'production', weight: 1, version: 'screener-v1' },
+  { id: 'screener', status: 'production', weight: 1, version: 'screener-v2' },
   { id: 'gapgo', status: 'production', weight: 1, version: 'gapgo-v1' },
   { id: 'downday', status: 'production', weight: 1, version: 'downday-v1' },
   { id: 'ghost', status: 'probation', weight: 0.25, version: 'ghost-v1' },
@@ -177,7 +177,7 @@ test('the annotate override still builds the portfolio + opportunity density fro
 });
 
 test('QUALIFIED_LEAD survives end to end as its own lane and never enters the book', () => {
-  const gov = freshGov([{ id: 'screener', status: 'production', weight: 1, version: 'screener-v1' }]);
+  const gov = freshGov([{ id: 'screener', status: 'production', weight: 1, version: 'screener-v2' }]);
   const p = buildToday(SOURCES, null, null, null, { governance: gov, nowMs: NOW, ...NO_DATA_GATE });
   const leads = Object.values(p.qualifiedLeadsByHorizon || {}).flat();
   const book = new Set(p.portfolio.selected.map(x => x.id));
@@ -194,7 +194,7 @@ test('QUALIFIED_LEAD survives end to end as its own lane and never enters the bo
 
 test('enforce: shadow sources can neither ORIGINATE a board row nor BOOST one via merged evidence', () => {
   const gov = freshGov([
-    { id: 'screener', status: 'production', weight: 1, version: 'screener-v1' },
+    { id: 'screener', status: 'production', weight: 1, version: 'screener-v2' },
     { id: 'gapgo', status: 'production', weight: 1, version: 'gapgo-v1' },
   ]);
   // nowMs pinned to the fixture epoch: freshGov pins savedAt, so an unpinned real
@@ -218,7 +218,7 @@ test('enforce: shadow sources can neither ORIGINATE a board row nor BOOST one vi
 });
 
 test('enforce: the research cross-section still records the FULL ungated candidate set (selection-bias guard)', () => {
-  const gov = freshGov([{ id: 'screener', status: 'production', weight: 1, version: 'screener-v1' }]);
+  const gov = freshGov([{ id: 'screener', status: 'production', weight: 1, version: 'screener-v2' }]);
   const p = buildToday(SOURCES, null, null, null, { eligibilityMode: 'enforce', governance: gov, nowMs: NOW, ...NO_DATA_GATE });
   assert.ok(p.research && Array.isArray(p.research.predictions));
   const researchTickers = new Set(p.research.predictions.map(r => r.ticker));
@@ -238,4 +238,18 @@ test('enforce + Day Trade: daytrade rows survive with identical scores (frozen b
     assert.ok(ref, `daytrade row ${row.id} must survive enforcement`);
     assert.equal(row.score, ref.score, 'daytrade composite score must be unchanged by enforcement');
   }
+});
+
+test('abstention is first-class: abstained flag + full rejection-reason histogram on the gate payload', () => {
+  // Arrange/Act — no governance doc ⇒ nothing non-pinned clears, so the board abstains.
+  const def = buildToday(SOURCES, null, null, null, NO_DATA_GATE);
+  const gg = def.governanceGate;
+
+  // Assert — the flag is explicit, and the histogram covers EVERY excluded row
+  // (excluded[] itself is truncated to 50, so counts are the only complete view).
+  assert.equal(typeof gg.abstained, 'boolean');
+  assert.equal(gg.abstained, gg.actionableCount === 0);
+  assert.ok(gg.rejectionReasonCounts && typeof gg.rejectionReasonCounts === 'object');
+  const totalCounted = Object.values(gg.rejectionReasonCounts).reduce((a, n) => a + n, 0);
+  assert.equal(totalCounted, gg.excludedCount, 'histogram must count all excluded rows, not the truncated sample');
 });

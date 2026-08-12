@@ -146,7 +146,7 @@ test('a reduce-only strategy cannot ORIGINATE a position through eligibility', (
   const EL = require('../lib/eligibility');
   const gov = {
     savedAt: '2026-08-04T00:00:00Z', scoreboardGeneratedAt: '2026-08-03T22:00:00Z',
-    strategies: [{ id: 'screener', status: 'reduce-only', weight: 0.25, version: 'screener-v1', newPositions: false, grandfathered: true, grandfatherExpiresAt: '2026-10-01T00:00:00Z' }],
+    strategies: [{ id: 'screener', status: 'reduce-only', weight: 0.25, version: 'screener-v2', newPositions: false, grandfathered: true, grandfatherExpiresAt: '2026-10-01T00:00:00Z' }],
   };
   const g = EL.gateSignals([{ source: 'screener', ticker: 'AAA', side: 'long', entry: 10, stop: 9, target: 12, liquidity: { dollarVol: 5e7 } }],
     { governance: gov, nowMs: NOW });

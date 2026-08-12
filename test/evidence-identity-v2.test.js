@@ -81,7 +81,7 @@ test('identityForStrategy derives the identity from the registry + contract (one
   const entry = STRATEGY_REGISTRY.find(e => e.id === 'screener');
   const id = EI.identityForStrategy(entry, { scope: 'large' });
   assert.equal(id.strategyId, 'screener');
-  assert.equal(id.scoringVersion, 'screener-v1');
+  assert.equal(id.scoringVersion, 'screener-v2');
   assert.equal(id.metric, '5d');
   assert.equal(id.scope, 'large');
   // fillVerified:false ⇒ the label/execution axes honestly say PROXY, so this record can

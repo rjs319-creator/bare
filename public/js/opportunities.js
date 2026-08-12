@@ -135,20 +135,19 @@ function proximity(c) {
   const px = c.price, entry = c.levels.entry;
   if (!(px > 0) || !(entry > 0)) return '';
   const pct = (entry / px - 1) * 100;
-  if (pct > 1) return `<div class="opp-prox prox-coiled">🟢 <b>${pct.toFixed(1)}% below the buy trigger</b> ($${esc(entry)}) — room to position before it breaks.</div>`;
-  if (pct >= -1) return `<div class="opp-prox prox-now">⚡ <b>Right at the trigger</b> ($${esc(entry)}) — breaking now; confirm on volume.</div>`;
-  return `<div class="opp-prox prox-ext">🟡 <b>${Math.abs(pct).toFixed(1)}% past the trigger</b> — already moving; wait for a pullback toward $${esc(entry)}.</div>`;
+  if (pct > 1) return `<div class="opp-prox prox-coiled">🟢 <b>${pct.toFixed(1)}% below the breakout trigger</b> ($${esc(entry)}) — setup still forming.</div>`;
+  if (pct >= -1) return `<div class="opp-prox prox-now">⚡ <b>Right at the trigger</b> ($${esc(entry)}) — breaking now; volume confirms or denies.</div>`;
+  return `<div class="opp-prox prox-ext">🟡 <b>${Math.abs(pct).toFixed(1)}% past the trigger</b> — already moving; extended vs the level.</div>`;
 }
 
-// Volatility-adjusted position size — the desk-grade "risk a fixed % of account"
-// rule: a tighter stop lets you hold MORE shares for the same dollar risk.
+// Risk geometry only — NO suggested position size. The screener behind these cards is
+// paper/research under governance (no cleared sizing weight), so publishing a "% position"
+// here would be an unsupported recommendation. Stop distance is a fact about the setup;
+// a size is a claim about edge, and that claim has not been earned.
 function sizing(lv) {
   if (!(lv.entry > 0) || !(lv.stop > 0) || lv.stop >= lv.entry) return '';
-  const perShare = lv.entry - lv.stop;
-  const rp = (perShare / lv.entry) * 100;
-  const weight = Math.min(25, Math.max(2, Math.round(100 / rp)));         // 1% account risk → this % position, capped
-  const shPer1k = Math.floor(1000 / perShare);
-  return `<div class="opp-size">🎯 ${L('sizing', 'Size')}: stop <b>${rp.toFixed(1)}%</b> away → at 1% account risk, ≈<b>${weight}%</b> position (≈${shPer1k} sh per $1k risked).</div>`;
+  const rp = ((lv.entry - lv.stop) / lv.entry) * 100;
+  return `<div class="opp-size">🎯 ${L('sizing', 'Risk')}: stop <b>${rp.toFixed(1)}%</b> below entry · <span class="opp-sizenote">not sized — research signal (no governance clearance)</span></div>`;
 }
 
 function levelsRow(lv) {

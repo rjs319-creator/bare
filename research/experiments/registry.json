@@ -664,6 +664,89 @@
         "bytes": 1993
       },
       "immutable": true
+    },
+    {
+      "recordedAt": "2026-08-12T01:55:28.656Z",
+      "id": "transparent-challenger-ablation-2026-08",
+      "hypothesis": "transparent-challenger-v1: fixed-sign equal-weight rank composite (residual momentum + tightness − extension − idio vol − cost) carries cost-net cross-sectional information; ablation arms isolate each family; the frozen inverse and a shuffled placebo validate the harness",
+      "family": "swing-ranking",
+      "frozenConfig": {
+        "STEP": 10,
+        "MAX_NAMES": 600,
+        "TOP_K": 10,
+        "H": 21,
+        "MIN_HISTORY": 280,
+        "MIN_ADV": 5000000,
+        "SEED": 20260811,
+        "residualBasis": "market (SPY) — labeled; sector-ETF basis is a separate variant"
+      },
+      "dataSnapshot": {
+        "dir": "/Users/ravishah/Documents/market-news-app/research/data/cache",
+        "names": 600,
+        "dates": 97
+      },
+      "codeVersion": "transparent-ablation-v1",
+      "testDates": [
+        "2022-07-21",
+        "2026-05-19"
+      ],
+      "variationsAttempted": 6,
+      "result": {
+        "full": {
+          "dates": 97,
+          "meanIC": 0.03665,
+          "tIC": 2.26,
+          "meanTopNetPct": -1.122,
+          "meanTopNetDoubledPct": -1.384
+        },
+        "residualMomentumOnly": {
+          "dates": 97,
+          "meanIC": 0.0232,
+          "tIC": 1.76,
+          "meanTopNetPct": 0.972,
+          "meanTopNetDoubledPct": 0.529
+        },
+        "tightnessExtension": {
+          "dates": 97,
+          "meanIC": 0.02018,
+          "tIC": 1.59,
+          "meanTopNetPct": -1.01,
+          "meanTopNetDoubledPct": -1.426
+        },
+        "lowVolOnly": {
+          "dates": 97,
+          "meanIC": 0.03433,
+          "tIC": 1.94,
+          "meanTopNetPct": -0.999,
+          "meanTopNetDoubledPct": -1.407
+        },
+        "frozenInverse": {
+          "dates": 97,
+          "meanIC": -0.0367,
+          "tIC": -2.26,
+          "meanTopNetPct": -0.998,
+          "meanTopNetDoubledPct": -1.76
+        },
+        "placebo": {
+          "dates": 97,
+          "meanIC": 0.0064,
+          "tIC": 1.08,
+          "meanTopNetPct": null,
+          "meanTopNetDoubledPct": null
+        }
+      },
+      "correctedSignificance": "BH within swing-ranking family at read time via hypothesis-registry familyTrials",
+      "costStress": {
+        "base": -1.122,
+        "doubled": -1.384
+      },
+      "decision": "shadow-only; registered zero-weight; prospective confirmation required regardless of this result",
+      "reason": "first identical-date ablation + harness validation (inverse mirror, placebo)",
+      "artifact": {
+        "sha256": "c0a4fa6b2ae5cb127fba41b0d90c97fa8ba8ba5a334eaeaa88a62443464dc6a1",
+        "file": "../../../../../../../Users/ravishah/Documents/market-news-app/research/data/transparent-challenger/transparent-challenger-ablation-2026-08.json"
+      },
+      "immutable": true
     }
   ]
 }

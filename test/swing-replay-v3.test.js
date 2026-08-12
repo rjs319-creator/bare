@@ -70,7 +70,7 @@ test('live and replay candidate IDs match on frozen fixtures (exact parity)', ()
   const now = new Date(DECISION + 'T23:59:00Z');
   const live = ENGINE.selectCandidates({ rows, scope: 'large', spyCandles: spySlice, macroRiskOff: false, now });
   const liveIds = live.candidates.slice(0, live.cap).map(c =>
-    candidateId({ strategyId: 'screener', scoringVersion: 'screener-v1', universeScope: 'large', ticker: c.ticker, decisionCutoff: DECISION }));
+    candidateId({ strategyId: 'screener', scoringVersion: 'screener-v2', universeScope: 'large', ticker: c.ticker, decisionCutoff: DECISION }));
 
   const rep = REPLAY.replayDate({ dataset: DATASET, spyCandles: SPY, decisionDate: DECISION, scope: 'large' });
   assert.strictEqual(rep.ok, true);
@@ -102,9 +102,9 @@ test('mutating future bars cannot alter historical features or candidates', () =
 });
 
 test('deterministic candidate IDs: same identity → same id; changed cutoff → different id', () => {
-  const idA = candidateId({ strategyId: 'screener', scoringVersion: 'screener-v1', universeScope: 'large', ticker: 'UPUP', decisionCutoff: DECISION });
-  const idB = candidateId({ strategyId: 'screener', scoringVersion: 'screener-v1', universeScope: 'large', ticker: 'UPUP', decisionCutoff: DECISION });
-  const idC = candidateId({ strategyId: 'screener', scoringVersion: 'screener-v1', universeScope: 'large', ticker: 'UPUP', decisionCutoff: DATES[281] });
+  const idA = candidateId({ strategyId: 'screener', scoringVersion: 'screener-v2', universeScope: 'large', ticker: 'UPUP', decisionCutoff: DECISION });
+  const idB = candidateId({ strategyId: 'screener', scoringVersion: 'screener-v2', universeScope: 'large', ticker: 'UPUP', decisionCutoff: DECISION });
+  const idC = candidateId({ strategyId: 'screener', scoringVersion: 'screener-v2', universeScope: 'large', ticker: 'UPUP', decisionCutoff: DATES[281] });
   assert.strictEqual(idA, idB);
   assert.notStrictEqual(idA, idC);
   assert.throws(() => candidateId({ strategyId: 'screener', ticker: 'X' }), /missing required identity field/);
