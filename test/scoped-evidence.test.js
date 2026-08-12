@@ -9,7 +9,10 @@ const assert = require('node:assert');
 const { expectancyFor, expectancyTilt, rankSignals, makeSignal } = require('../lib/decision');
 const EI = require('../lib/evidence-identity');
 
-const strong5d = { avgExcess: 6.2, winRate: 71, avg: 7.0, median: 5.5, n: 60 };
+// Carries the date-level block runtime produces: expectancyTilt acts only on that,
+// since pick counts cannot establish independence.
+const strong5d = { avgExcess: 6.2, winRate: 71, avg: 7.0, median: 5.5, n: 60,
+  dateNet: { n: 24, effectiveN: 21, avg: 1.4, se: 0.4, ci95: { lo: 0.6, hi: 2.2 } } };
 const scopedSummary = {
   evidenceKeyVersion: EI.EVIDENCE_KEY_VERSION,
   groups: [

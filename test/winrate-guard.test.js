@@ -54,8 +54,8 @@ test('normalizeWinRate warns rather than swallowing — the bug leaves a trace',
 test('THE REGRESSION: a fraction no longer inverts the tilt of a winning strategy', () => {
   // Before the guard: winRate 0.7 → wr = -49.3 → tilt 0.7 (the floor) on a record that
   // beats the market by 4% with a 70% win rate. The rank was quietly upside-down.
-  const good = { known: true, n: 400, avgExcess: 4, winRate: 70 };
-  const bugged = { known: true, n: 400, avgExcess: 4, winRate: 0.7 };
+  const good = { known: true, n: 400, avgExcess: 4, winRate: 70, dateN: 30, effectiveDates: 26, dateCiLo: 0.4, dateCiHi: 1.6, dateAvg: 1.0 };
+  const bugged = { known: true, n: 400, avgExcess: 4, winRate: 0.7, dateN: 30, effectiveDates: 26, dateCiLo: 0.4, dateCiHi: 1.6, dateAvg: 1.0 };
   const t1 = D.expectancyTilt(good);
   const t2 = quiet(() => D.expectancyTilt(bugged));
   assert.ok(t1.tilt > 1, `a market-beating record must tilt UP, got ${t1.tilt}`);
@@ -65,7 +65,7 @@ test('THE REGRESSION: a fraction no longer inverts the tilt of a winning strateg
 });
 
 test('a genuinely losing record still tilts DOWN (the guard does not whitewash)', () => {
-  const bad = { known: true, n: 400, avgExcess: -4, winRate: 30 };
+  const bad = { known: true, n: 400, avgExcess: -4, winRate: 30, dateN: 30, effectiveDates: 26, dateCiLo: -1.6, dateCiHi: -0.4, dateAvg: -1.0 };
   assert.ok(D.expectancyTilt(bad).tilt < 1, 'losing to the market must trim the rank');
 });
 
@@ -86,5 +86,5 @@ test('the live Scoreboard scale is what the contract expects (integer percent)',
   const emitted = Math.round((7 / 10) * 100);
   assert.equal(emitted, 70);
   assert.equal(D.normalizeWinRate(emitted), 70);
-  assert.ok(D.expectancyTilt({ known: true, n: 100, avgExcess: 2, winRate: emitted }).tilt > 1);
+  assert.ok(D.expectancyTilt({ known: true, n: 100, avgExcess: 2, winRate: emitted, dateN: 30, effectiveDates: 26, dateCiLo: 0.4, dateCiHi: 1.6, dateAvg: 1.0 }).tilt > 1);
 });

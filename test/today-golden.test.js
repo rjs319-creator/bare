@@ -18,6 +18,21 @@
 //      • defect #11: the canonical card's `lifecycleState` now reaches makeSignal's
 //        stateHint instead of being silently dropped (no state change in this fixture).
 //    The file must not be regenerated again outside an equally documented correction.
+//
+//    GOLDEN v3 (alpha-research pass 3, 2026-08-12) — the CURRENT golden only; the Day
+//    Trade BASELINE is untouched and all four DAY TRADE FROZEN guards below still pass
+//    byte-for-byte. One documented change:
+//      • expectancyTilt is now gated on DATE-LEVEL evidence. It previously shrank on
+//        PICK count and boosted on any positive point estimate, so `GapGo:STRONG`
+//        (n=24 picks, avgExcess +1.2, NO dateNet block) earned a 1.054 multiplier from
+//        a record whose independence was never established. Every group in this fixture
+//        is pre-dateNet, so all three tilts now neutralise to 1.0 and the gapgo row
+//        moves 70.8 -> 67.2, rank 2 -> 4 (coremo takes rank 3).
+//        This is the intended behaviour for a record with no date-level statistic:
+//        neutral, not a guess. Production is unaffected in the same way — 35 of 47
+//        groups carry dateNet and continue to tilt when their CI clears zero.
+//      Day Trade rows are byte-identical; only their RANK moves, which the baseline
+//      guard explicitly permits when other sources move around them.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

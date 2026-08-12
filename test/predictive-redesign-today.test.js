@@ -33,7 +33,12 @@ test('expectancyFor NEVER falls back to another horizon — missing exact eviden
   assert.equal(exp.buildingEvidence, true);
   assert.equal(exp.horizonKey, '1d', 'provenance reports the REQUESTED key, which is the only key ever read');
   // And the tilt is exactly neutral — never borrowed from the wrong horizon.
-  assert.deepEqual(D.expectancyTilt(exp), { tilt: 1, shrink: 0 });
+  // expectancyTilt now also reports WHY it did or did not tilt, so assert the numbers
+  // and the stated cause rather than the whole object shape.
+  const t = D.expectancyTilt(exp);
+  assert.equal(t.tilt, 1);
+  assert.equal(t.shrink, 0);
+  assert.match(t.reason, /no resolved record/);
 
   // The exact horizon, when present, is served normally.
   const swing = D.expectancyFor('daytrade', 'A', 'swing', summary);
