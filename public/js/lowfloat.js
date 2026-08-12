@@ -100,9 +100,12 @@ function coverageBlock(cov) {
 // ══════════════════════════════════════════════════════════════════════════════
 // LOW-FLOAT IGNITION RADAR
 // ══════════════════════════════════════════════════════════════════════════════
-export async function loadLowFloat(container) {
+// silent=true is the auto-refresh path: the current board stays on screen until the new
+// payload arrives, and a failed poll leaves it in place rather than replacing it with an
+// error box — the next poll retries.
+export async function loadLowFloat(container, { silent = false } = {}) {
   if (!container) return;
-  container.innerHTML = spinner('Scanning the full eligible universe for low-float ignition…');
+  if (!silent) container.innerHTML = spinner('Scanning the full eligible universe for low-float ignition…');
   try {
     const ok = [...STATE.lowfloat.spreadOk];
     const url = `/api/tracker?op=lowfloat${ok.length ? `&spreadok=${encodeURIComponent(ok.join(','))}` : ''}`;
@@ -110,7 +113,7 @@ export async function loadLowFloat(container) {
     STATE.lowfloat.data = data;
     renderLowFloat(container);
   } catch {
-    container.innerHTML = errorBox('Could not load the Low-Float Ignition Radar.');
+    if (!silent) container.innerHTML = errorBox('Could not load the Low-Float Ignition Radar.');
   }
 }
 

@@ -128,7 +128,7 @@ test('ignitionlive is registered at every UI touchpoint', () => {
   assert.match(APP, /ignitionlive: 'IGNITION Live/, 'SECTION_HELP');
   assert.match(APP, /ignitionlive: \{\n {6}what:/, 'HOWTO');
   assert.match(APP, /import \{ loadIgnitionLive \} from '\.\/ignition-live\.js'/, 'module import');
-  assert.match(APP, /ignitionlive: lazySection\('ignitionlive', loadIgnitionLive\)/, 'lazy loader');
+  assert.match(APP, /ignitionlive: lazySection\('ignitionlive', loadIgnitionLive, LOWFLOAT_AUTO_REFRESH_MS\)/, 'lazy loader with minute auto-refresh');
   assert.match(APP, /function ensureIgnitionLive\(\)/, 'hoisted function declaration (showTab TDZ rule)');
   assert.match(APP, /sub === 'ignitionlive' && typeof ensureIgnitionLive === 'function'/, 'showTab dispatch');
   assert.match(HTML, /<section class="screener-section" id="ignitionlive">/, 'index.html section');

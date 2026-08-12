@@ -36,15 +36,17 @@ function sortVal(v, key) {
   return Number.isFinite(x) ? x : -1e9;
 }
 
-export async function loadIgnitionLive(container) {
+// silent=true is the auto-refresh path: keep the current board until new data arrives, and
+// never replace it with an error box on a failed poll — the next poll retries.
+export async function loadIgnitionLive(container, { silent = false } = {}) {
   if (!container) return;
-  container.innerHTML = '<div class="mom-status"><div class="mom-spinner"></div><p>Loading the latest IGNITION snapshot…</p></div>';
+  if (!silent) container.innerHTML = '<div class="mom-status"><div class="mom-spinner"></div><p>Loading the latest IGNITION snapshot…</p></div>';
   try {
     const d = await fetchJSON('/api/tracker?op=ignitionlive', { timeoutMs: HEAVY_TIMEOUT_MS });
     STATE.data = d;
     render(container);
   } catch (e) {
-    container.innerHTML = `<div class="mom-status"><p>IGNITION unavailable: ${esc(String((e && e.message) || e))}</p></div>`;
+    if (!silent) container.innerHTML = `<div class="mom-status"><p>IGNITION unavailable: ${esc(String((e && e.message) || e))}</p></div>`;
   }
   const t = document.getElementById('ignitionlive-gen-time');
   if (t && STATE.data && STATE.data.snapshotGeneratedAt) t.textContent = `snapshot ${new Date(STATE.data.snapshotGeneratedAt).toLocaleTimeString()}`;
