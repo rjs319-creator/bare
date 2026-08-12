@@ -13,6 +13,12 @@ const { buildAtlasPortfolio } = require('../lib/atlasx-portfolio');
 // realistic-vol synthetic candles (object form — experts/coil require it)
 function mkC(n, base, driftFn, vol) {
   const out = []; let c = base; const d = new Date(Date.UTC(2023, 0, 2));
+  // NOTE (alpha-research pass 3): every bar here sets `adjClose: close`, so adjusted and
+  // raw prices are IDENTICAL in this fixture. That is fine for the engine behaviour these
+  // tests cover, but it means they are structurally blind to price-BASIS defects — the
+  // mixed adjusted-close / raw-OHLC bug in lib/atlasx-residual.toBars could not fail any
+  // test here. Basis correctness is covered separately, on fixtures where the two series
+  // deliberately diverge: test/atlasx-bar-basis.test.js.
   for (let i = 0; i < n; i++) {
     const noise = vol * Math.sin(i * 1.7) + vol * 0.6 * Math.cos(i * 0.9);
     c *= (1 + driftFn(i) + noise);
