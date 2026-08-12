@@ -63,8 +63,64 @@ test('SAFETY: optionsflow + putsell are registered SHADOW (not trade-eligible)',
 });
 
 test('the production backbone screeners remain trade-eligible', () => {
-  for (const id of ['screener', 'daytrade', 'ghost', 'downday', 'ignition', 'custom']) {
+  // ghost and downday were demoted 2026-08-11, and `custom` (the learned Apex ranking)
+  // on 2026-08-12 — see the next test. `screener` is now the ONLY non-Day-Trade
+  // strategy this app will put weight behind.
+  for (const id of ['screener', 'daytrade', 'ignition']) {
     assert.equal(gate.isTradeEligible(id), true, `${id} must stay trade-eligible`);
+  }
+});
+
+test('exactly one non-Day-Trade strategy carries live weight, and it is named', () => {
+  // Stated rather than left implicit: after three demotions the live non-Day-Trade
+  // surface is a single strategy. If a fourth is promoted or `screener` is demoted,
+  // this fails and forces the change to be acknowledged.
+  const { STRATEGY_REGISTRY } = require('../lib/strategy-registry');
+  const DT = /^(daytrade|gapgo|gapdown|ignition|lowfloat|intraday)/;
+  const live = STRATEGY_REGISTRY
+    .filter(e => e.kind === 'signal' && !DT.test(e.id) && gate.isTradeEligible(e.id))
+    .map(e => e.id);
+  assert.deepEqual(live, ['screener']);
+});
+
+test('2026-08-12 demotion: the learned Apex ranking (custom) is SHADOW', () => {
+  // Brief §2 named it for zeroing, and the repo record agrees on its own terms: no
+  // registered hypothesis, no cost-net Scoreboard record (section:null — its drift
+  // panel measures rank stability, not edge), and a 625-candidate weight search
+  // (lib/recalibrate.js: 5 offsets x 4 pillars) whose trials are never ledgered or
+  // deflated the way lib/promotion-gate deflates Day-Trade model trials.
+  assert.equal(gate.statusOf('custom'), 'shadow');
+  assert.equal(gate.isTradeEligible('custom'), false);
+  const { STRATEGY_REGISTRY } = require('../lib/strategy-registry');
+  const e = STRATEGY_REGISTRY.find(x => x.id === 'custom');
+  assert.match(e.note, /DEMOTED from production 2026-08-12/);
+  assert.match(e.criteria, /hypothesis-registry/, 'the way back must start with a written claim');
+});
+
+test('2026-08-11 demotion: ghost and downday are SHADOW — the ledger contradicted the status', () => {
+  // downday: A-downday-exact-contract-2026-08 ran at the FROZEN PRODUCTION contract
+  //   (lib/downday.classify, next-open, matched same-date/liquidity controls) and
+  //   returned lift -0.04%, CI95 [-0.16, +0.08], 254 dates, 0/4 positive blocks,
+  //   BH q 0.52 -> NOT PROMOTED. Identical at base/doubled/stressed costs: no signal,
+  //   not a cost-eaten one.
+  // ghost: hypothesis `quiet-accumulation-standalone` is no-edge against a 12-1
+  //   momentum baseline, and ghost x screener return correlation ~0.96 means it was
+  //   duplicating the Breakout sleeve rather than diversifying it.
+  for (const id of ['ghost', 'downday']) {
+    assert.equal(gate.statusOf(id), 'shadow', `${id} must be shadow`);
+    assert.equal(gate.isTradeEligible(id), false, `${id} must not originate or boost a live trade`);
+  }
+});
+
+test('a demoted strategy keeps a note and a written way back', () => {
+  // The registry's own convention: a governed entry states what it is and what would
+  // change its status. A demotion without criteria is a dead end, not a decision.
+  const { STRATEGY_REGISTRY } = require('../lib/strategy-registry');
+  for (const id of ['ghost', 'downday']) {
+    const e = STRATEGY_REGISTRY.find(x => x.id === id);
+    assert.match(e.note, /DEMOTED from production 2026-08-11/, `${id} must record the demotion`);
+    assert.ok(e.criteria && e.criteria.length > 80, `${id} must state what would earn promotion back`);
+    assert.match(e.criteria, /NEW prospective/, `${id} must require fresh evidence, not a re-read of the consumed sample`);
   }
 });
 

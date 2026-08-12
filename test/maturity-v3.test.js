@@ -23,7 +23,7 @@ const LOW_HIT_HIGH_PAYOFF = Object.freeze({
 });
 
 test('v3: low-hit/high-payoff with positive date-level utility CI qualifies when every other gate passes', () => {
-  const g = M.gradeTrack({ ...LOW_HIT_HIGH_PAYOFF }, { fillVerified: true });
+  const g = M.gradeTrack({ ...LOW_HIT_HIGH_PAYOFF }, { fillVerified: true, noHistoryRate: 0 });
   assert.equal(g.grade, 'validated');
   assert.ok(g.stats.beatLo < 50, 'the Wilson bound is descriptive and below 50 here — it is no longer a gate');
   assert.match(g.reason, /descriptive, not a gate/i);

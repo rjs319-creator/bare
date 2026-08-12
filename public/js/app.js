@@ -27,7 +27,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadTechCommand } from './tech-command.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { loadCern, eventName as cernEventName } from './cern.js';
-  import { mountVerdict } from './evidence-badge.js';
+  import { mountVerdict, loadGrades } from './evidence-badge.js';
   import { drawPatternChart } from './pattern-chart.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
 
@@ -2806,6 +2806,16 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = regimeBannerHTML(rg) + chip;
   }
 
+  // Whether the momentum strategy is registry-cleared to originate a live trade. Set
+  // from the op=momentum payload on every render; fails closed until proven otherwise.
+  let momTradeEligible = false;
+  // Action vocabulary for the momentum cards. A registry-shadow strategy may describe
+  // what it SEES ("strong up-momentum") but must never issue an instruction ("STRONG
+  // BUY") — wording is not a control, so this reads the same flag the gate does.
+  const momActionLabel = (buy) => (momTradeEligible
+    ? (buy ? '⚡ STRONG BUY' : '⚡ STRONG SELL')
+    : (buy ? '🔬 RESEARCH · strong up-momentum' : '🔬 RESEARCH · strong down-momentum'));
+
   function renderMomentumRegime() {
     const el = document.getElementById('momentum-regime');
     if (el) el.innerHTML = regimeBannerHTML(lastRegime);
@@ -3177,6 +3187,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const APEX_KEYS = ['p1', 'p2', 'p3', 'p4'];
 
   let apexLoaded = false, apexState = null, apexLast = null, apexDrift = null, apexModel = null;
+  // Registry/governance clearance for the Apex sleeve (`custom`). Apex was DEMOTED to
+  // shadow on 2026-08-12 (brief §2), and a weight-0 strategy must not publish concrete
+  // share counts, dollar allocations, or unsolicited alerts. Read from op=maturity's
+  // governance block via the shared grade table rather than assumed, so a future
+  // promotion restores sizing without another code edit — and so a wording change can
+  // never grant it. Fails CLOSED until the fetch proves otherwise.
+  let apexTradeEligible = false;
+  loadGrades().then(m => {
+    const g = m && m.custom && m.custom.governance;
+    const ok = !!(g && g.status === 'production' && Number(g.weight) > 0);
+    if (ok !== apexTradeEligible) { apexTradeEligible = ok; if (apexLast) renderApex(apexLast); }
+  }).catch(() => { /* fail closed: sizing stays hidden */ });
 
   // Active weights for a regime: a live Module 2 recalibration overrides the
   // static Module 1 preset when present.
@@ -3682,8 +3704,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const lv = c.levels || {}, entry = lv.entry || c.price, stop = lv.stop;
       const rps = (entry && stop && entry > stop) ? entry - stop : null;
       let shares = null, alloc = null;
-      if (rps) { shares = Math.floor(riskBudget / rps); alloc = shares * entry; if (alloc > pv * 0.2) { alloc = pv * 0.2; shares = Math.floor(alloc / entry); } }
-      return `<tr><td>${esc(c.ticker)} <span class="cx-tierbadge ${c._tier}" style="font-size:0.48rem;padding:1px 4px">${c._tier}</span></td><td>$${entry ? (+entry).toFixed(2) : '—'}</td><td>$${stop ? (+stop).toFixed(2) : '—'}</td><td>${shares != null ? shares.toLocaleString() : '—'}</td><td>${alloc != null ? '$' + Math.round(alloc).toLocaleString() : '—'}</td></tr>`;
+      // Share counts and dollar allocations are only computed for a sleeve that
+      // actually carries governance weight. Apex is weight-0 shadow, so the columns
+      // are omitted entirely rather than filled with numbers the app will not back.
+      if (rps && apexTradeEligible) { shares = Math.floor(riskBudget / rps); alloc = shares * entry; if (alloc > pv * 0.2) { alloc = pv * 0.2; shares = Math.floor(alloc / entry); } }
+      const sizeCells = apexTradeEligible
+        ? `<td>${shares != null ? shares.toLocaleString() : '—'}</td><td>${alloc != null ? '$' + Math.round(alloc).toLocaleString() : '—'}</td>`
+        : '';
+      return `<tr><td>${esc(c.ticker)} <span class="cx-tierbadge ${c._tier}" style="font-size:0.48rem;padding:1px 4px">${c._tier}</span></td><td>$${entry ? (+entry).toFixed(2) : '—'}</td><td>$${stop ? (+stop).toFixed(2) : '—'}</td>${sizeCells}</tr>`;
     }).join('');
 
     el.innerHTML = `
@@ -3692,8 +3720,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       </div>
       ${maxShare > 0.4 ? `<div class="cx-pf-warn">⚠ Concentrated — ${Math.round(maxShare * 100)}% of names in <b>${esc(secs[0][0])}</b>. Spread risk across sectors.</div>` : ''}
       <div class="cx-pf-secs">${secBars}</div>
-      <div class="cx-pf-sz-h">Equal-risk sizing · ${rk}% (<b>$${Math.round(riskBudget).toLocaleString()}</b>) risked per trade, capped 20%/name</div>
-      <table class="cx-preset-table cx-pf-table"><thead><tr><th>Name</th><th>Entry</th><th>Stop</th><th>Shares</th><th>Alloc</th></tr></thead><tbody>${rows}</tbody></table>`;
+      ${apexTradeEligible
+        ? `<div class="cx-pf-sz-h">Equal-risk sizing · ${rk}% (<b>$${Math.round(riskBudget).toLocaleString()}</b>) risked per trade, capped 20%/name</div>`
+        : `<div class="cx-pf-sz-h ev-state-note">🔬 RESEARCH — not sized. Adaptive Momentum carries ZERO governance weight, so this app will not tell you how many shares to buy or how much to allocate. Levels below are the model's own reference points, shown for scoring, not as a position plan.</div>`}
+      <table class="cx-preset-table cx-pf-table"><thead><tr><th>Name</th><th>Entry</th><th>Stop</th>${apexTradeEligible ? '<th>Shares</th><th>Alloc</th>' : ''}</tr></thead><tbody>${rows}</tbody></table>`;
 
     const pvI = el.querySelector('#cx-pf-pv'), rkI = el.querySelector('#cx-pf-rk');
     if (pvI) pvI.onchange = () => { localStorage.setItem('apexPortfolio', pvI.value); if (apexLast) renderApex(apexLast); };
@@ -3713,6 +3743,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     try { localStorage.setItem('apexSeen', JSON.stringify(apexTickers)); } catch {}
   }
   async function showApexNotification(ticker, score) {
+    // Same rule as the momentum flip alert: a weight-0 strategy does not get to
+    // interrupt the user with an unsolicited push. Suppressed before the card flash
+    // too — flashCards(..., 'STRONG_BUY') paints a buy-coloured pulse on the card,
+    // which is the same imperative in a different medium.
+    if (!apexTradeEligible) return;
     if (typeof flashCards === 'function') flashCards(ticker, 'STRONG_BUY');
     if (!notifyEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
     const title = `${ticker} · 🏆 New Apex`;
@@ -6275,7 +6310,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           <span title="Backtested posterior that this name's cool-off edge is positive, from its OWN history — NOT a calibrated live probability">edge posterior ${Math.round((r.conviction || 0) * 100)} /100 (backtested)</span>
           <span title="Times this name has set up before">${r.n || 0} priors</span>
           <details class="fade-adv"><summary>advanced ▸ short trade</summary>
-            <div class="fade-adv-body">Short ${esc(r.ticker)} @ ~${ref.entry ?? '—'}, market-neutral vs SPY, hold ~${sig.holdSessions} sessions. Suggested weight ${r.sizePct}%. Reference stop ${ref.stop ?? '—'} / target ${ref.target ?? '—'} (the validated trade is the timed hold — don't manage the stop tightly).</div>
+            <!-- Fade is registry-SHADOW and validated ONLY as an AVOID filter; its own
+                 registry entry says "never a live short book", and lib/eligibility.js
+                 fail-closes every short without an observed borrow feed (none exists,
+                 and after the 2026-08-11 demotions no borrow-requiring strategy is
+                 production at all). So the sized short plan is gone: no "Suggested
+                 weight N%", and no "the validated trade" — nothing here is validated. -->
+            <div class="fade-adv-body">RESEARCH — not sized, not a short recommendation. This is an <b>avoid</b> signal: the measured edge is short-side only, and no borrow/locate feed exists, so ${esc(r.ticker)} is flagged as a name to stay away from rather than one to short. Reference levels for context only: ~${ref.entry ?? '—'} / stop ${ref.stop ?? '—'} / target ${ref.target ?? '—'} over ~${sig.holdSessions} sessions.</div>
           </details>
         </div>
       </div>`;
@@ -8349,6 +8390,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   function renderMomentum(data) {
     let { strongBuys = [], strongSells = [], scannedCount, universeCount, excludedExtended = 0, generatedAt, degraded, universeNote } = data;
+    // Registry state for this strategy, from the payload (api/momentum.js). Momentum is
+    // registered `shadow`, so the action badge drops its buy/sell imperative and the
+    // push notification is suppressed entirely. Defaults to NOT eligible so an older
+    // cached payload without the field fails closed rather than shouting STRONG BUY.
+    momTradeEligible = data.tradeEligible === true;
     // Hide tiers disabled on the scoreboard (kept logged + scored server-side).
     if (isSignalDisabled('momentum', 'StrongBuy'))  strongBuys = [];
     if (isSignalDisabled('momentum', 'StrongSell')) strongSells = [];
@@ -8529,7 +8575,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       // Distribution stats (#4) — median resists the fat outlier tail, trimmed drops
       // the extremes, the CI says whether the mean is distinguishable from zero.
       const distTip = s.median != null
-        ? `Mean ${up ? '+' : ''}${s.avg}% · median ${s.median > 0 ? '+' : ''}${s.median}% · 10%-trimmed ${s.trimmedAvg > 0 ? '+' : ''}${s.trimmedAvg}%${s.avgCI ? ` · 90% CI [${s.avgCI.lo}, ${s.avgCI.hi}]${s.avgCI.lo > 0 ? ' — above zero' : s.avgCI.hi < 0 ? ' — below zero' : ' — spans zero'}` : ''}`
+        // The CI's confidence LEVEL and its BASIS both come from the payload — the level
+        // was previously hardcoded to 90%, which would silently mislabel the
+        // date-clustered 95% interval the server now prefers. A pick-level interval is
+        // explicitly named as such: it treats correlated same-day picks as independent
+        // and is therefore too narrow.
+        ? `Mean ${up ? '+' : ''}${s.avg}% · median ${s.median > 0 ? '+' : ''}${s.median}% · 10%-trimmed ${s.trimmedAvg > 0 ? '+' : ''}${s.trimmedAvg}%${s.avgCI ? ` · ${s.avgCI.level || 95}% CI [${s.avgCI.lo}, ${s.avgCI.hi}]${s.avgCI.basis === 'date-clustered' ? ` (date-clustered${Number.isFinite(s.avgCI.effectiveN) ? `, ${s.avgCI.effectiveN} effective dates` : ''})` : ' (pick-level — same-day picks not independent, interval too narrow)'}${s.avgCI.lo > 0 ? ' — above zero' : s.avgCI.hi < 0 ? ' — below zero' : ' — spans zero'}` : ''}`
         : `Mean return ${lb} after the pick`;
       return `<div class="sb-h"><div class="sb-h-lb" title="${esc(SB_HZ_HELP)}">${lb}</div><div class="sb-h-ret ${up ? 'up' : 'down'}" title="${esc(distTip)}">${up ? '+' : ''}${s.avg}%</div><div class="sb-h-sub">${s.winRate}% win · n=${s.n}</div>${exLine}${netLine}${secLine}${realLine}</div>`;
     }).join('');
@@ -9410,7 +9461,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
         <div class="alert-badges">
           <div class="alert-live-badge"><div class="alert-live-dot"></div>LIVE</div>
-          <div class="mom-action-badge ${side}">⚡ ${buy ? 'STRONG BUY' : 'STRONG SELL'}</div>
+          <div class="mom-action-badge ${side}${momTradeEligible ? '' : ' mom-research'}">${momActionLabel(buy)}</div>
           ${whyNowBadge(c)}
           ${c.social ? `<div class="alert-social-badge">👥 ${Number(c.social).toLocaleString()}</div>` : ''}
         </div>
@@ -9547,6 +9598,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // the tab is backgrounded.
   async function showFlipNotification(ticker, action) {
     if (!notifyEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
+    // A push notification is the highest-intent surface this app has: it interrupts the
+    // user, on their phone, with haptics, and it is read as an instruction. A strategy
+    // that is not registry-cleared to originate a live trade does not get to use it.
+    // Suppressed entirely rather than reworded — an unsolicited alert about a weight-0
+    // research signal has no honest form.
+    if (!momTradeEligible) return;
     const buy = action === 'STRONG_BUY';
     const title = `${ticker} · ${buy ? '⚡ STRONG BUY' : '⚡ STRONG SELL'}`;
     const opts = {
@@ -9613,7 +9670,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (!badge) return;
       if (isStrong) {
         const buy = action === 'STRONG_BUY';
-        badge.textContent = buy ? '⚡ STRONG BUY' : '⚡ STRONG SELL';
+        badge.textContent = momActionLabel(buy);
         badge.className = 'sig-badge ' + (buy ? 'buy' : 'sell');
       } else {
         badge.textContent = '';

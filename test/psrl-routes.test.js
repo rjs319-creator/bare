@@ -83,7 +83,13 @@ test('store keys are namespaced under psrl/v1/ and syntax check covers lib/psrl'
   const CFG = require('../lib/psrl/config');
   assert.ok(Object.values(CFG.STORE).every((v) => typeof v !== 'string' || v.startsWith('psrl/v1/')));
   assert.strictEqual(CFG.STORE.dayKey('2026-08-11'), 'psrl/v1/day/2026-08-11.json');
-  assert.match(PKG, /lib\/psrl\/\*\.js/, 'npm run check includes lib/psrl');
+  // Was: assert.match(PKG, /lib\/psrl\/\*\.js/). That pinned the per-directory glob
+  // form of `npm run check` — which validated only the FIRST file of each glob, because
+  // `node --check` ignores every argument after the first. lib/psrl is now covered by a
+  // recursive `find api lib ... | xargs -n1 node --check` sweep, so the intent (this
+  // directory is syntax-checked) holds more strongly than before, but the literal glob
+  // is gone. See test/check-script-coverage.test.js.
+  assert.match(PKG, /find api lib[^"]*xargs -0 -n1[^"]*node --check/, 'npm run check sweeps lib/ recursively');
 });
 
 test('routes degrade gracefully without a Blob store token', async () => {

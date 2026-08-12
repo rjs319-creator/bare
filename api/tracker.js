@@ -43,7 +43,7 @@ const { runAttention, runAttentionTick } = require('../lib/attention-routes');
 const { runOptionsFlow, runOptionsPerf, runOptionsAssess, runOptionsEpisodes } = require('../lib/optionsflow-routes');
 const { runPulse, runPulseRefine, runPulseGrade, runPulseEpisodes } = require('../lib/pulse-routes');
 const { runDualRead, runDualReadLog, runDualReadBook, runDualReadTune, runDualReadBackfill, runLtRecs } = require('../lib/dualread-routes');
-const { requireTrusted, requireMethod, stripForceParams, isTrusted } = require('../lib/auth');
+const { requireTrusted, requireMethod, stripForceParams, stripWriteParams, isTrusted } = require('../lib/auth');
 const { rateLimit, clientKey } = require('../lib/ratelimit');
 
 // Ops the DAILY CRON fans out to and the browser never fetches directly — safe to
@@ -147,6 +147,18 @@ const PRIVILEGED_OPS = new Set([
   // only this authenticated nightly tick may scan, score and persist the snapshot +
   // trend-episode ledger (shadow, weight-0).
   'psrltick',
+  // ── Writers that were never classified (alpha-research pass 3) ──────────────────
+  // Each mutates durable state or spends metered budget while sitting on an anonymous
+  // GET. None is reachable from public/js (verified by source scan), and each is
+  // already dispatched by cron with the CRON_SECRET bearer, so gating costs nothing.
+  //   universecurate — runs Fable over up to 150 names AND read-modify-writes the
+  //     curation doc's ever-growing `skip` list, which removes tickers from the
+  //     universe every scan draws from. Its siblings universebuild/universescan/
+  //     universecompile were all already privileged; this was an omission.
+  //   researchgrade  — warm-chain root that writes OutcomeBatches and burns a 40s
+  //     candle-fetch budget.
+  //   swinggrade     — calls STORE.recordResolved, writing resolved outcomes.
+  'universecurate', 'researchgrade', 'swinggrade',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
@@ -221,6 +233,13 @@ async function handleRequest(req, res) {
   if (INGEST_OPS.has(op) && !requireMethod(req, res, ['POST'])) return;
   if (PRIVILEGED_OPS.has(op)) { if (!requireTrusted(req, res)) return; }
   else if (SHARED_FORCE_OPS.has(op)) { stripForceParams(req); }
+  // Persistence lever (`?log=1`) is stripped for EVERY untrusted caller, whatever the
+  // op's force policy. Unlike `force`, which only costs a recompute, `log` writes a
+  // record of decision — and several targets (today's parity snapshot, the research
+  // decision snapshot, the hash-chained swing ledger) are WRITE-ONCE, so an anonymous
+  // first-caller would otherwise become the immutable record of the day. Cron keeps its
+  // lever: every internal self-fetch carries the CRON_SECRET bearer via internalHeaders().
+  else stripWriteParams(req);
   // Cost-abuse throttle on browser-triggerable heavy recomputes (cron exempt).
   if (EXPENSIVE_OPS.has(op) && !isTrusted(req)) {
     const rl = rateLimit(`${op}:${clientKey(req)}`, EXPENSIVE_LIMIT);

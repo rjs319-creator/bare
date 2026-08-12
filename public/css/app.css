@@ -1789,6 +1789,18 @@
     .ev-banner-bd + .ev-banner-bd { margin-top: 5px; }
     .ev-verdict { margin: 12px 0 16px; }
     .ev-verdict-src { font-size: 0.64rem; opacity: 0.75; cursor: help; }
+    /* Governance-state chip. Deliberately NOT rendered in the muted tokens the rest of
+       the honesty layer uses: a "this carries no capital" disclosure is the single most
+       consequential thing on the card and must not be the least legible text on it.
+       #f2c94c on #060b14 measures ~10.9:1; #cfe3ff on #7a2b2b ~7.4:1 — both well clear
+       of the 4.5:1 floor, unlike the --text-muted token (1.42:1) used elsewhere. */
+    .ev-state-chip {
+      display: inline-block; padding: 1px 7px; margin-right: 6px; border-radius: 999px;
+      font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+      vertical-align: middle; background: #23324a; color: #f2c94c; border: 1px solid #3d5170;
+    }
+    .ev-state-chip.ev-state-unsized { background: #7a2b2b; color: #cfe3ff; border-color: #a34141; }
+    .ev-state-note { color: #f0b8b8; font-weight: 600; }
     .ev-explain { font-size: 0.74rem; color: var(--text-dim); line-height: 1.62; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 15px; margin-bottom: 16px; }
     .ev-explain b { color: var(--text); }
     .ev-sec-head { font-size: 0.86rem; font-weight: 800; color: var(--text); margin: 20px 0 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }

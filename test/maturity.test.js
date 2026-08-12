@@ -21,7 +21,7 @@ const FULL_TRACK = Object.freeze({
 });
 
 test('gradeTrack: full gate stack + verified fills → validated', () => {
-  const g = M.gradeTrack({ ...FULL_TRACK }, { fillVerified: true });
+  const g = M.gradeTrack({ ...FULL_TRACK }, { fillVerified: true, noHistoryRate: 0 });
   assert.equal(g.grade, 'validated');
   assert.ok(g.stats.beatLo > 50);
   assert.equal(g.stats.basis, 'net');
@@ -96,7 +96,7 @@ test('gradeTrack: beats SPY but NOT its sector → promising, not validated (sec
 });
 
 test('gradeTrack: beats BOTH market and sector (all other gates met) → validated', () => {
-  const g = M.gradeTrack({ ...FULL_TRACK }, { fillVerified: true });
+  const g = M.gradeTrack({ ...FULL_TRACK }, { fillVerified: true, noHistoryRate: 0 });
   assert.equal(g.grade, 'validated');
   assert.match(g.reason, /its sector/);
   assert.match(g.reason, /verified executable fills/);
