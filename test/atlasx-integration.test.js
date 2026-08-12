@@ -64,14 +64,62 @@ test('integration: board has all 10 sections with an honest empty-actionable not
 });
 
 test('integration: with a calibration artifact a strong name can clear the hurdle', () => {
-  const { candidates, actionable } = buildBoardFixture({ withCalibration: true });
+  // WAS VACUOUS: this asserted `actionable.length >= 0`, true of every array, under a
+  // title promising the hurdle CAN be cleared. It proved nothing, and the trailing
+  // comment ("any actionable candidate must NOT be in the avoid lane") described a check
+  // that was never written. Both are now real assertions.
+  const withCal = buildBoardFixture({ withCalibration: true });
+  const noCal = buildBoardFixture({ withCalibration: false });
+
   // The leader should out-rank the laggard on residual score regardless.
-  const aaa = candidates.find(c => c.ticker === 'AAA');
-  const bbb = candidates.find(c => c.ticker === 'BBB');
+  const aaa = withCal.candidates.find(c => c.ticker === 'AAA');
+  const bbb = withCal.candidates.find(c => c.ticker === 'BBB');
   assert.ok(aaa.distribution.score > bbb.distribution.score, 'residual leader ranks above laggard');
-  // calibration present → conservative lower bound can clear the hurdle for the leader
-  assert.ok(actionable.length >= 0); // may be 0 depending on entryState, but must not throw
-  // any actionable candidate must NOT be in the avoid lane
+
+  // THE CLAIM IN THE TITLE, asserted as a contrast: the calibration artifact is what
+  // lets a name clear the utility hurdle. Without it, nothing clears.
+  assert.equal(noCal.actionable.length, 0, 'no calibration → nothing clears the hurdle');
+  assert.equal(withCal.actionable.length, 1, 'calibration → exactly the leader clears it');
+  assert.equal(withCal.actionable[0].ticker, 'AAA', 'and it is the residual leader, not the laggard');
+});
+
+test('integration: `actionable` (utility gate) and board section (entry availability) are DIFFERENT questions', () => {
+  // ATLAS-X deliberately answers several separate questions rather than one score, so a
+  // name can clear the UTILITY hurdles (expected value, net-utility floor, prosecutor,
+  // R:R, staleness, applicability, liquidity, regime) while the ENTRY engine still finds
+  // no valid trigger — `entry.action: 'NO_TRADE'`. sectionForCandidate keys off the entry
+  // action, so such a name is correctly displayed under Avoid.
+  //
+  // This is the distinction the dangling comment got wrong: an actionable candidate CAN
+  // legitimately sit in the avoid lane. Pinning it here so the two concepts are not
+  // "reconciled" by someone reading that comment later.
+  const { candidates, board } = buildBoardFixture({ withCalibration: true });
+  const aaa = candidates.find(c => c.ticker === 'AAA');
+  assert.equal(aaa.actionable, true, 'clears the utility gate');
+  assert.equal(aaa.entry.action, 'NO_TRADE', 'but has no valid entry trigger');
+  assert.ok(board.sections.avoid.some(x => x.ticker === 'AAA'),
+    'so the board files it under Avoid — driven by entry action, not the utility gate');
+  assert.equal(board.sections.enterNextSession.length, 0,
+    'and it never reaches the enter lane without an entry action');
+});
+
+test('KNOWN GAP: the shadow portfolio is built from `actionable`, so it can include a name the board shows as Avoid', () => {
+  // lib/atlasx-routes.js:251-252 does `candidates.filter(c => c.actionable)` and feeds
+  // that straight into buildAtlasPortfolio — the same thing this fixture does. A name
+  // with `entry.action: 'NO_TRADE'` therefore receives a portfolio weight while being
+  // displayed under "Avoid / Prosecutor Flags".
+  //
+  // Pinned as CURRENT BEHAVIOUR, not endorsed. ATLAS-X is weight-0 shadow so no capital
+  // moves, but the portfolio artifact is research evidence and this makes it describe a
+  // book that could not have been entered. Fixing it means deciding whether portfolio
+  // membership requires an enterable entry action — a product decision, not a test fix,
+  // so it is surfaced here rather than silently changed.
+  const { candidates, board } = buildBoardFixture({ withCalibration: true });
+  const inAvoid = new Set(board.sections.avoid.map(x => x.ticker));
+  const portfolioInputs = candidates.filter(c => c.actionable).map(c => c.ticker);
+  const contradictory = portfolioInputs.filter(t => inAvoid.has(t));
+  assert.deepEqual(contradictory, ['AAA'],
+    'if this list changes, the actionable-vs-entry contract moved — re-read the note above');
 });
 
 test('integration: every ENTER/WAIT candidate becomes a durable episode (no pick vanishes)', () => {
