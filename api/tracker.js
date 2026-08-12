@@ -162,6 +162,10 @@ const EXPENSIVE_OPS = new Set([
   // so normal page traffic coalesces, but an anonymous caller bypassing the cache with a
   // cache-buster could otherwise drive the provider fan-out at will.
   'lowfloat', 'intradaycontinuation', 'largemoveraudit',
+  // feed: the AI-readable projection runs BOTH the board and the radar pipelines. It is
+  // CDN-cached at 60s so bot traffic coalesces; the throttle stops a cache-busting caller
+  // from driving both provider fan-outs at will.
+  'feed',
   // ignitionreplay/ignitionleadtime: read-only, but each call lists + fetches a whole day of
   // per-scan Blob snapshots (up to ~200 documents) — cheap for the CDN window, expensive for
   // a cache-busting anonymous loop. op=ignitionlive reads ONE latest snapshot and stays
@@ -287,6 +291,11 @@ async function handleRequest(req, res) {
   if (req.query.op === 'swingsearchstatus') return require('../lib/swing-search-ledger').runSwingSearchStatus(req, res);
   if (req.query.op === 'swingmonitor') return require('../lib/swing-supervisor-routes').runSwingMonitor(req, res);
   if (req.query.op === 'swinggrade') return require('../lib/swing-supervisor-routes').runSwingGrade(req, res);
+  // ── PUBLIC AI-READABLE FEED (lib/feed-routes.js) ─────────────────────────────
+  // Plain-markdown (or ?format=json) read-only projection of the Day Trade board + the
+  // Low-Float Ignition Radar, built for external AI assistants to fetch. Same read-only
+  // authority as op=daytrade/op=lowfloat; in EXPENSIVE_OPS because it runs both pipelines.
+  if (req.query.op === 'feed') return require('../lib/feed-routes').runFeed(req, res);
   // ── LOW-FLOAT IGNITION / INTRADAY CONTINUATION (lib/lowfloat-routes.js) ──────
   // Public reads are read-only projections; the *tick / resolve / promote ops are in
   // PRIVILEGED_OPS above and are the only writers in this stack.
