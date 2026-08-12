@@ -153,6 +153,9 @@ test('portfolio: sector cap is enforced and excess names carry a reason', () => 
       ticker: `T${i}`, expert: `expert${i}`, sector: 'Technology',
       cluster: `c${i}`, rank: i + 1, score: 90 - i,
       liquidity: { dollarVol: 50_000_000 },
+      // The book admits only names with a real entry (see ENTERABLE_ENTRY_ACTIONS);
+      // this fixture is about the SECTOR CAP, so give them one.
+      entryAction: 'ENTER_NEXT_OPEN',
     });
   }
   const p = buildAtlasPortfolio(cands, { maxPerSector: 3 });
@@ -168,7 +171,7 @@ test('portfolio: maxPositions cap holds and there is no forced fill', () => {
     cands.push({
       ticker: `N${i}`, expert: `e${i % 6}`, sector: `S${i}`,
       cluster: `k${i}`, rank: i + 1, score: 80,
-      liquidity: { dollarVol: 20_000_000 },
+      liquidity: { dollarVol: 20_000_000 }, entryAction: 'ENTER_NEXT_OPEN',
     });
   }
   const p = buildAtlasPortfolio(cands, { maxPositions: 12 });
@@ -177,8 +180,8 @@ test('portfolio: maxPositions cap holds and there is no forced fill', () => {
 
 test('portfolio: a not-actionable candidate is excluded with its own reason', () => {
   const p = buildAtlasPortfolio([
-    { ticker: 'GOOD', expert: 'e1', sector: 'Energy', cluster: 'a', rank: 1, score: 90, liquidity: { dollarVol: 1e7 } },
-    { ticker: 'BAD', expert: 'e2', sector: 'Energy', cluster: 'b', rank: 2, score: 88, actionable: false, abstentionReason: 'stale-data', liquidity: { dollarVol: 1e7 } },
+    { ticker: 'GOOD', expert: 'e1', sector: 'Energy', cluster: 'a', rank: 1, score: 90, liquidity: { dollarVol: 1e7 }, entryAction: 'ENTER_NEXT_OPEN' },
+    { ticker: 'BAD', expert: 'e2', sector: 'Energy', cluster: 'b', rank: 2, score: 88, actionable: false, abstentionReason: 'stale-data', liquidity: { dollarVol: 1e7 }, entryAction: 'ENTER_NEXT_OPEN' },
   ]);
   assert.ok(p.positions.find((x) => x.ticker === 'GOOD'));
   assert.ok(!p.positions.find((x) => x.ticker === 'BAD'));
