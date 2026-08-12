@@ -145,11 +145,20 @@ test('regimeFit: longs stand down in risk-off, shorts favored', () => {
 });
 
 // ── expectancy from scoreboard (#4/#5) ──────────────────────────────────────
+// Fixtures carry the DATE-LEVEL block runtime actually produces. expectancyTilt reads
+// only that: pick counts cannot establish independence (same-day picks share the market
+// factor), so a record with no dateNet neutralises rather than tilting on pick counts.
 const SUMMARY = {
   groups: [
-    { section: 'Ghost', tier: 'GHOST', horizons: { '1m': { avgExcess: 4, winRate: 60, n: 40 } } },
-    { section: 'Ghost', tier: 'WATCH', horizons: { '1m': { avgExcess: -3, winRate: 40, n: 30 } } },
-    { section: 'New', tier: 'X', horizons: { '1m': { avgExcess: 8, winRate: 70, n: 2 } } },
+    // Winner: interval clear of zero over enough independent dates → boosts.
+    { section: 'Ghost', tier: 'GHOST', horizons: { '1m': { avgExcess: 4, winRate: 60, n: 40,
+      dateNet: { n: 20, effectiveN: 18, avg: 0.9, se: 0.3, ci95: { lo: 0.3, hi: 1.5 } } } } },
+    // Loser: interval entirely BELOW zero → ranked out (previously floored at 0.70).
+    { section: 'Ghost', tier: 'WATCH', horizons: { '1m': { avgExcess: -3, winRate: 40, n: 30,
+      dateNet: { n: 18, effectiveN: 16, avg: -0.8, se: 0.3, ci95: { lo: -1.4, hi: -0.2 } } } } },
+    // Tiny: a big point estimate on 2 dates → below the independent-date floor, neutral.
+    { section: 'New', tier: 'X', horizons: { '1m': { avgExcess: 8, winRate: 70, n: 2,
+      dateNet: { n: 2, effectiveN: 2, avg: 2.0, se: 1.8, ci95: { lo: -2.0, hi: 6.0 } } } } },
   ],
 };
 
