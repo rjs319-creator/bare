@@ -221,3 +221,20 @@ test('rows without an eligibility verdict record eligibility null — never back
   const snap = LB.buildDecisionSnapshot([{ ticker: 'X', horizon: 'swing', side: 'long' }], { decisionTs: '2026-08-11' });
   assert.equal(snap.predictions[0].eligibility, null);
 });
+
+test('decision-time features persist: raw signal numerics + the audited score decomposition', () => {
+  const LB = require('../lib/research/live-bridge');
+  const row = {
+    ticker: 'FEAT', horizon: 'swing', side: 'long', score: 61, rank: 2,
+    entry: 10, stop: 9, target: 13, rawConfidence: 72,
+    liquidity: { dollarVol: 25e6 }, ageBars: 3, state: 'CONFIRMED',
+    scoreDecomposition: { comparableConfidence: 70, costPenalty: 0.98, formula: 'score = …' },
+  };
+  const snap = LB.buildDecisionSnapshot([row], { decisionTs: '2026-08-11' });
+  const f = snap.predictions[0].features;
+  assert.equal(f.raw.entry, 10);
+  assert.equal(f.raw.dollarVol, 25e6);
+  assert.equal(f.raw.lifecycleState, 'CONFIRMED');
+  assert.equal(f.normalized.costPenalty, 0.98);
+  assert.ok(Object.isFrozen(f) && Object.isFrozen(f.raw), 'a decision record is immutable');
+});

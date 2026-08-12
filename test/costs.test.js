@@ -54,7 +54,7 @@ test('null / non-finite returns pass through as null', () => {
 });
 
 test('cost model is versioned', () => {
-  assert.strictEqual(COST_MODEL_VERSION, 'cost-v2');
+  assert.strictEqual(COST_MODEL_VERSION, 'cost-v3');
 });
 
 // ── short borrow (cost-v2) ──────────────────────────────────────────────────
@@ -125,4 +125,38 @@ test('borrow priors are ordered by liquidity, not arbitrary', () => {
   assert.ok(BORROW_APR_BPS.liquid < BORROW_APR_BPS.small);
   assert.ok(BORROW_APR_BPS.small < BORROW_APR_BPS.biotech);
   assert.ok(BORROW_APR_BPS.biotech < BORROW_APR_BPS.micro);
+});
+
+// ── participation impact (cost-v3) ──────────────────────────────────────────
+test('impact is charged only when BOTH dollarVol and an explicit notional are declared', () => {
+  const { costBreakdown } = require('../lib/costs');
+  // Arrange/Act — size-independent call (every pre-existing caller).
+  const plain = costBreakdown('small', { side: 'long' });
+  // Assert — cost-v2 behavior preserved exactly: no impact term.
+  assert.strictEqual(plain.impactPct, 0);
+  assert.match(plain.impactBasis, /no order size declared/);
+});
+
+test('sqrt participation impact: grows with order size, capped, zero below the floor', () => {
+  const { impactBps, IMPACT_CAP_BPS } = require('../lib/costs');
+  // Arrange — $10M/day name.
+  const adv = 10e6;
+  // Assert — tiny order below the 5bps-of-ADV floor is free of impact…
+  assert.strictEqual(impactBps(adv, 1000), 0);
+  // …a 1%-of-ADV order pays real impact…
+  const mid = impactBps(adv, 100e3);
+  assert.ok(mid > 0);
+  // …monotone in size…
+  assert.ok(impactBps(adv, 400e3) > mid);
+  // …and capped so an absurd size cannot explode the model.
+  assert.strictEqual(impactBps(adv, 100e9), IMPACT_CAP_BPS);
+});
+
+test('costBreakdown totalPct includes the impact term when a size is declared', () => {
+  const { costBreakdown } = require('../lib/costs');
+  const sized = costBreakdown('small', { side: 'long', dollarVol: 10e6, notionalUsd: 100e3 });
+  const plain = costBreakdown('small', { side: 'long' });
+  assert.ok(sized.impactPct > 0);
+  assert.ok(Math.abs(sized.totalPct - (plain.totalPct + sized.impactPct)) < 1e-9);
+  assert.match(sized.impactBasis, /MODELED/);
 });

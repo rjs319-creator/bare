@@ -79,6 +79,54 @@ fixtures and pins all pass.
    replaces a same-id row while stamping `immutable: true` — re-runs append as
    `<id>.rN` with a `parentExperimentId` link.
 
+## Second pass (same day) — accounting, costs, controls
+
+9. **cost-v3 participation impact** (`lib/costs.js`). Optional square-root market-impact
+   term (same shape as the intraday model) charged only when the caller declares BOTH the
+   name's ADV and an explicit order notional — the module never invents an order size, and
+   every pre-existing caller keeps size-independent cost-v2 behavior exactly. Episode
+   records now stamp `costModelVersion` from the module instead of a hard-coded literal.
+
+10. **Cost-aware shadow portfolio optimizer** (`lib/portfolio-optimizer.js`,
+    `optimizer-v1`). Solves for weights against one net objective (expected net −
+    uncertainty − participation impact at the position's actual notional − diagonal
+    idio-vol risk − turnover) under gross ≤ 100%, per-name and per-sector caps; stops
+    allocating the moment the best marginal utility is ≤ 0 (cash is a first-class
+    answer); ships same-objective equal-weight and rank-weight comparisons and a
+    machine-readable reason per omitted name. Pure, shadow-only, no live consumer.
+
+11. **Common-date mark-to-market lane** (`mtm-v1`, in `runScoreboard`). A pick younger
+    than the 1m horizon used to fall out of every statistic until it matured
+    (survivorship-in-time). It is now marked at the latest close under its section's own
+    entry basis, net of the full round-trip cost, and each group reports
+    `mtm: { openN, resolvedN, openAvgNet, resolvedAvgNet, combinedAvgNet }`. Dividends
+    and cash drag are not modeled — the basis string says so. Pending conditional
+    triggers stay pending (no fabricated fills).
+
+12. **entry-v2.2 basis migration.** The ~23 remaining lead-only/legacy sections now grade
+    from the NEXT session's open instead of the unexecutable signal-day close (the close
+    is what the signal was computed FROM). Lead-only sleeves remain PROXY-labeled and
+    fill-unverified; only the proxy's price basis changed. Day Trade stays pinned to
+    legacy, frozen. The Scoreboard recomputes from ledgers, so history re-grades under
+    the new basis — a deliberate, versioned change.
+
+13. **Feature persistence on decision records.** Each live Prediction now carries
+    `features.raw` (entry/stop/target/rawConfidence/dollarVol/ageBars/lifecycleState)
+    and `features.normalized` (the audited multiplicative score decomposition) — the
+    ledger is now trainable, not just gradeable.
+
+14. **JS PBO** (`lib/research/pbo.js`, CSCV) with calibration tests (noise ≈ 0.5,
+    dominant variant ≈ 0, anti-persistent ≈ high), plus the **one-bar-delayed-feature
+    control** — both wired into research/75. Second run of the study: PBO across the four
+    selectable arms = **0.63** (in-sample arm selection is mostly noise — corroborating
+    the negative top-book), delayed-vs-same-bar IC Δ ≈ −0.002 (the expected shape for a
+    slow momentum family, and proof the harness does not leak the decision bar). The
+    re-runs recorded append-only as `.r2`/`.r3` with parent links — the experiment-ledger
+    immutability fix exercised on real data.
+
+15. **Abstention rate is now a series**: the daily opportunity log row records
+    `abstained` + `actionableCount` from the governed board.
+
 ## Explicitly not done (verified gaps, in value order)
 
 - **Live PIT universe**: candidate generation still starts from curated current-day lists;

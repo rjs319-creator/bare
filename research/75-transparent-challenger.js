@@ -24,6 +24,7 @@ const path = require('node:path');
 const K = require('./lib/experiment-kit');
 const TC = require('../lib/transparent-challenger');
 const { screenTicker } = require('../lib/screener');
+const { pbo } = require('../lib/research/pbo');
 
 const STUDY_ID = 'transparent-challenger-ablation-2026-08';
 const STUDY_VERSION = 'transparent-ablation-v1';
@@ -111,6 +112,23 @@ async function main() {
       };
     }
     row.arms.placebo = { ic: K.rankIC(eligible.map(r => r.scores.full), placeboOutcomes), topNet: null, topNetDoubled: null };
+    // DELAYED-FEATURE CONTROL: the identical pipeline scored on features computed one
+    // bar EARLIER, graded against the SAME outcomes. A genuine same-bar signal must
+    // DEGRADE under a one-bar delay; holding steady or improving means the harness is
+    // rewarding slow/stale information (the control lib/orbit-controls.js:135 lists as
+    // unimplemented — implemented here for this family).
+    {
+      const eligibleSet = new Set(eligible.map(r => r.ticker));
+      const delayedCohort = cohort
+        .filter(c => eligibleSet.has(c.ticker))
+        .map(c => ({ ...c, candles: c.candles.slice(0, -1), benchCloses: c.benchCloses.slice(0, -1) }));
+      const delayedScored = TC.scoreCohort(delayedCohort, { asOf: D });
+      const delayedByTicker = new Map(delayedScored.cohort.filter(r => r.eligible).map(r => [r.ticker, r.scores.full]));
+      const dPaired = eligible.map((r, i) => ({ s: delayedByTicker.get(r.ticker), o: outcomes[i] })).filter(x => Number.isFinite(x.s));
+      if (dPaired.length >= 10) {
+        row.arms.delayedFull = { ic: K.rankIC(dPaired.map(x => x.s), dPaired.map(x => x.o.netExc)), topNet: null, topNetDoubled: null };
+      }
+    }
     perDate.push(row);
     if (perDate.length % 20 === 0) console.log(`  … ${perDate.length} dates scored`);
   }
@@ -135,6 +153,20 @@ async function main() {
   const inverseMirror = summary.full && summary.frozenInverse
     ? +(summary.full.meanIC + summary.frozenInverse.meanIC).toFixed(6) : null;
   const placeboClean = summary.placebo ? Math.abs(summary.placebo.meanIC) < 0.02 : null;
+  // Probability of backtest overfitting across the SELECTABLE arms (controls excluded —
+  // nobody would deploy the placebo or the inverse; including them would flatter PBO).
+  // frozenExisting is excluded because it is not computable in this study: the shipped
+  // quant composite requires the engine's cross-sectional percentile pass (research/72
+  // covers that comparison), so its column here is null, not zero.
+  const PBO_ARMS = ['full', 'residualMomentumOnly', 'tightnessExtension', 'lowVolOnly'];
+  const pboMatrix = perDate.map(r => PBO_ARMS.map(a => r.arms[a] && r.arms[a].ic)).filter(row => row.every(Number.isFinite));
+  const pboResult = pbo(pboMatrix);
+  // full-arm IC minus one-bar-delayed IC. INTERPRETATION: a large positive gap claims
+  // same-bar timing information; ≈0 is the expected shape for a slow (126→21 momentum)
+  // family — and also proof the harness is not leaking the decision bar, since giving
+  // the model the freshest bar buys nothing. A large NEGATIVE gap would be suspect.
+  const delayedDegrades = (summary.delayedFull && summary.full)
+    ? +(summary.full.meanIC - summary.delayedFull.meanIC).toFixed(5) : null;
 
   const result = {
     studyId: STUDY_ID, version: STUDY_VERSION, generatedAt: new Date().toISOString(),
@@ -143,6 +175,8 @@ async function main() {
     checks: {
       inverseMirror, // must be ≈ 0: full and its inverse are exact mirrors on rank IC
       placeboClean,  // |placebo IC| < 0.02 or the harness is suspect
+      pbo: pboResult,          // CSCV across the selectable arms (lib/research/pbo.js)
+      delayedDegrades,         // full-arm IC minus one-bar-delayed IC — should be > 0
     },
     honesty: 'survivorship-reduced cache; market-basis residualization; NO promotion may follow from this run',
   };
