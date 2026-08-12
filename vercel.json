@@ -11,5 +11,9 @@
   },
   "crons": [
     { "path": "/api/warm", "schedule": "0 22 * * *" }
+  ],
+  "rewrites": [
+    { "source": "/feed/daytrade.md", "destination": "/api/tracker?op=feed" },
+    { "source": "/feed/daytrade.json", "destination": "/api/tracker?op=feed&format=json" }
   ]
 }
