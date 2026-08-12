@@ -178,7 +178,12 @@ const PICK_TOOL = {
     properties: {
       picks: {
         type: 'array',
-        minItems: 10,
+        // minItems was 10, which made abstention STRUCTURALLY IMPOSSIBLE: the schema
+        // rejected an honest short list, so the model had to pad to satisfy the tool
+        // call even when the prompt asked it not to. A quota enforced in the schema
+        // outranks any instruction in the prompt. maxItems stays — a cap is a bar, a
+        // floor is a quota.
+        minItems: 0,
         maxItems: 10,
         items: {
           type: 'object',
@@ -345,8 +350,9 @@ Score each pick 1-10 on:
 optionsSignal: summarise any options activity from the OPTIONS FLOW SIGNALS section for this stock. "None detected" if none.
 
 MANDATORY RULES — NON-NEGOTIABLE:
-- You MUST return EXACTLY 10 picks. Not 3, not 5. Exactly 10. This is required.
-- If the top picks are obvious, fill remaining slots with the next-best opportunities from the news even if their rating is lower (5-6 range is acceptable for picks 8-10)
+- Return ONLY picks that clear the bar. Returning FEWER than 10 is correct, and returning ZERO is correct and expected on a quiet news day. There is no quota.
+- NEVER pad the list. Do not add a name to reach a count, and do not lower your standard for the last slots. A weak pick presented alongside strong ones is worse than an absent pick, because the user cannot tell them apart.
+- Only include a stock if a specific, current catalyst in the supplied feed justifies it. No catalyst in the feed means no pick — do not reason from prior knowledge.
 - Only pick US-listed stocks with a real ticker symbol
 - Max 3 picks in the same sector
 - Never pick a stock whose PRIMARY news is negative (earnings miss, downgrade, lawsuit)
@@ -366,6 +372,9 @@ ${newsSummary}`,
   });
 
   const toolUse = message.content.find(b => b.type === 'tool_use');
+  // A MISSING tool call is a failure (the model never answered). An EMPTY picks array
+  // is an answer — the honest one on a quiet day. Conflating the two is what forced the
+  // quota in the first place, so they are now distinguished explicitly.
   if (!toolUse?.input?.picks) {
     return res.status(500).json({ error: 'No picks returned from AI.' });
   }
@@ -382,11 +391,30 @@ ${newsSummary}`,
   const sectorPEMap = await fetchSectorPEs(); // live FMP sector P/Es (null → benchmark table)
   const { shortTerm, longTerm, watch } = classifyPicks(all, sectorPEMap);
 
+  // ABSTENTION CONTRACT (alpha-research brief §3). The economically correct output is
+  // permitted to be "no position". `abstained` is true only when the model returned a
+  // genuinely empty book — not when downstream classification happens to leave a track
+  // empty, which is a different (and normal) state.
+  const abstained = all.length === 0;
+  const rejectionReasonCounts = abstained
+    ? { noQualifyingCatalyst: 1 }
+    : {
+        // Rejections we can actually observe at this layer: names the model surfaced
+        // that did not clear a technical OR fundamental gate land in `watch` rather
+        // than an actionable track. Reported so an empty actionable list is legible as
+        // a measured outcome instead of a blank section.
+        belowActionableGate: watch.length,
+      };
+
   res.setHeader('Cache-Control', 's-maxage=14400');
   return res.json({
     shortTerm,
     longTerm,
     watch,
+    abstained,
+    actionableCount: shortTerm.length + longTerm.length,
+    screenedCount: all.length,
+    rejectionReasonCounts,
     fundamentalsEnabled: !!process.env.FINNHUB_API_KEY,
     sectorPESource: sectorPEMap ? 'fmp-live' : 'benchmark',
     generatedAt: new Date().toISOString(),
