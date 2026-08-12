@@ -151,3 +151,39 @@ test('the correction family includes non-winners, not just the winners', () => {
   assert.ok(r.fdr.tested > validated,
     `family (${r.fdr.tested}) must exceed the winners (${validated})`);
 });
+
+// ── the integration gap that unit tests could not see ────────────────────────────
+
+test('the PRODUCTION dateNet object supports pValueOf — the FDR family is not empty', () => {
+  // THE BUG THIS EXISTS FOR: lib/evidence-stats.summarizeDateSeries computes `se`, but
+  // lib/apex-routes.dateLevelNetExcess did not forward it into the stored `dateNet`.
+  // pValueOf needs avg AND se, so every strategy scored null, the BH family was empty,
+  // and prod reported `fdr.tested: 0` — a silent no-op. Every unit test above passed
+  // regardless, because their fixtures supplied `se` by hand.
+  //
+  // So this test builds dateNet the way RUNTIME does and asserts the contract holds
+  // end to end, rather than trusting a hand-written shape.
+  const A = require('../lib/apex-routes');
+  const ES = require('../lib/evidence-stats');
+
+  const rows = [];
+  for (let d = 0; d < 40; d++) {
+    const dt = `2025-${String(1 + (d % 12)).padStart(2, '0')}-${String(10 + Math.floor(d / 12)).padStart(2, '0')}`;
+    rows.push({ date: dt, ret: 1.2, excess: 1.0, netExc: 0.6 + (d % 3) * 0.2 });
+  }
+  const dn = A.dateLevelNetExcess(rows, { horizonBars: 21 });
+
+  assert.ok(dn, 'fixture must produce a date-level statistic');
+  assert.ok(Number.isFinite(dn.se) && dn.se > 0, 'dateNet must carry a finite positive se');
+  const p = ES.pValueOf(dn);
+  assert.ok(Number.isFinite(p), 'pValueOf must resolve on a runtime-shaped dateNet');
+
+  // And the end-to-end path: a strategy carrying this dateNet must enter the family.
+  const group = {
+    section: 'S0', tier: 'T', scope: 'large', picks: 40, noHistory: 0,
+    horizons: { '1m': { excessN: 40, avgExcess: 0.8, beatMktRate: 60, netExcessN: 40, avgNetExcess: 0.8, netBeatMktRate: 60, secExcN: 40, avgSecExcess: 0.4, beatSecRate: 58, dates: 40, dateNet: dn } },
+  };
+  const reg = [{ id: 's0', label: 'S0', kind: 'signal', section: 'S0', horizon: 'position', core: false, maturity: 'shadow', scoringVersion: 's0-v1' }];
+  const out = M.classifyStrategies({ groups: [group], generatedAt: '2026-08-12T00:00:00Z' }, reg);
+  assert.equal(out.fdr.tested, 1, 'a strategy with a real date-level record must be counted in the FDR family');
+});
