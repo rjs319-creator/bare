@@ -4110,6 +4110,23 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     }
   }
 
+  // The header line reports the NARRATIVE SNAPSHOT's age — never implied to be the
+  // age of each story (stories carry their own event/publication/discovery times).
+  function pulse2HeaderText(p) {
+    const bits = [];
+    if (p.clocks && p.clocks.narrativeAgeMinutes != null) bits.push(`narrative updated ${p.clocks.narrativeAgeMinutes}m ago`);
+    if (p.cache && p.cache.refreshRequested) {
+      bits.push(p.cache.status === 'REFRESHED' ? 'refreshed — narrative is current'
+        : 'still cached — the server regenerates on its own schedule');
+    }
+    if (p.clocks && p.clocks.nextNarrativeRefreshAt) {
+      const t = new Date(p.clocks.nextNarrativeRefreshAt);
+      if (Number.isFinite(t.getTime())) bits.push(`next update ${t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`);
+    }
+    if (p.clocks && p.clocks.marketDataFreshness) bits.push(`data ${p.clocks.marketDataFreshness}`);
+    return bits.length ? '· ' + bits.join(' · ') : '';
+  }
+
   function renderPulse2(p) {
     const el = document.getElementById('pulse-container');
     if (!el || !p) return;
@@ -4117,18 +4134,23 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = renderPulse2Shell({ payload: p, novice: pulse2Novice });
     wirePulse2(el);
     const gt = document.getElementById('pulse-gen-time');
-    if (gt && p.clocks && p.clocks.narrativeGeneratedAt) {
-      gt.textContent = `· stories ${p.clocks.narrativeAgeMinutes != null ? p.clocks.narrativeAgeMinutes + 'm old' : ''} · data ${p.clocks.marketDataFreshness || ''}`;
-    }
+    if (gt && p.clocks && p.clocks.narrativeGeneratedAt) gt.textContent = pulse2HeaderText(p);
+    // The dedicated Refresh button uses the server-supported refresh path
+    // (op=pulse2&refresh=1): CDN bypass + honest cache status. It never fakes a
+    // regeneration with a random cache-buster.
     const rb = document.getElementById('pulse-refresh-btn');
-    if (rb) rb.onclick = () => runPulse2UI();
+    if (rb) rb.onclick = () => runPulse2UI({ refresh: true });
   }
 
-  async function runPulse2UI() {
+  async function runPulse2UI(opts = {}) {
+    const refresh = opts.refresh === true;
     const el = document.getElementById('pulse-container');
+    const rb = document.getElementById('pulse-refresh-btn');
+    if (rb) { rb.disabled = true; rb.textContent = '⟳ Refreshing…'; }
     if (el) el.innerHTML = '<div class="mom-status"><div class="mom-spinner"></div><p>Loading the market intelligence read…</p></div>';
     let p = null;
-    try { p = await fetchJSON('/api/tracker?op=pulse2', { timeoutMs: HEAVY_TIMEOUT_MS }); } catch { p = null; }
+    try { p = await fetchJSON('/api/tracker?op=pulse2' + (refresh ? '&refresh=1' : ''), { timeoutMs: HEAVY_TIMEOUT_MS }); } catch { p = null; }
+    if (rb) { rb.disabled = false; rb.textContent = '⟳ Refresh'; }
     // Fall back to the legacy v1 feed when v2 is flagged off or has no data yet.
     const hasV2 = p && p.ok && (p.marketState || (p.narratives && (p.narratives.items || []).length));
     if (!hasV2) { runPulseUI(false); return; }

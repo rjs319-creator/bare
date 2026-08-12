@@ -20,7 +20,23 @@ cannot start an LLM call, hit a market-data provider, or write storage (test-loc
 
 ## Modules
 
-- `lib/pulse2-clocks.js` — separate narrative vs market-data freshness clocks.
+- `lib/pulse2-clocks.js` — separate narrative vs market-data freshness clocks, plus
+  `nextNarrativeRefreshAt` (the known regen schedule) and `cacheMeta` (honest
+  HIT/MISS/REFRESHED/STALE reporting for `op=pulse2&refresh=1`).
+- `lib/pulse2-freshness.js` — story-freshness core. Timestamp provenance per source
+  (`publishedAt/updatedAt/discoveredAt/dateConfidence`, extraction order JSON-LD →
+  article/OG meta + `<time>` → provider timestamp → URL date → unknown; discovery
+  time is NEVER publication time), canonical URLs (tracking params stripped),
+  wrong-year + evergreen reference screening, event timestamps
+  (`eventOccurredAt/firstPublishedAt/firstSeenAt/lastSeenAt/lastCorroboratedAt`),
+  freshness reasons (`NEW_PUBLICATION/NEW_MATERIAL_UPDATE/NEW_CORROBORATION/
+  REDISCOVERED/SYNDICATED_COPY/ONGOING_EVENT/UNKNOWN`), horizon age gates
+  (Day placement = decision relevance: event ≤24h OR publication ≤18h OR material
+  update — unverified-publication items surface with visible date confidence;
+  Swing ≤7d; Investor age-exposed only; Fresh-verified = the strict verification
+  bar, ≤6h KNOWN publication + ≤12h event — env-overridable via `PULSE2_<KEY>`),
+  and recency-aware ranking (exponential decay + age/duplicate/unknown penalties,
+  deterministic timestamp/id tie-breaks).
 - `lib/pulse2-provenance.js` — source index, stable source IDs, syndication lineage,
   claim statuses (`VERIFIED/SUPPORTED/SINGLE_SOURCE/CONFLICTED/UNVERIFIED/STALE`).
 - `lib/pulse2-direction.js` — direction-aware reaction states + catalyst reaction matrix.
