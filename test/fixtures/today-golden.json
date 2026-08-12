@@ -131,7 +131,7 @@
         "executionQuality": 1,
         "costTier": "liquid",
         "costPenalty": 0.991,
-        "scoringVersion": "screener-v1"
+        "scoringVersion": "screener-v2"
       },
       {
         "id": "biotech:swing:AGIO",
@@ -200,7 +200,7 @@
         "executionQuality": 0.764,
         "costTier": "small",
         "costPenalty": 0.976,
-        "scoringVersion": "screener-v1"
+        "scoringVersion": "screener-v2"
       },
       {
         "id": "downday:swing:RVL",
@@ -509,7 +509,7 @@
         "executionQuality": 1,
         "costTier": "liquid",
         "costPenalty": 0.991,
-        "scoringVersion": "screener-v1"
+        "scoringVersion": "screener-v2"
       },
       {
         "id": "biotech:swing:AGIO",
@@ -578,7 +578,7 @@
         "executionQuality": 0.764,
         "costTier": "small",
         "costPenalty": 0.976,
-        "scoringVersion": "screener-v1"
+        "scoringVersion": "screener-v2"
       },
       {
         "id": "downday:swing:RVL",
@@ -647,7 +647,7 @@
         "executionQuality": 0.4,
         "costTier": "micro",
         "costPenalty": 0.947,
-        "scoringVersion": "screener-v1"
+        "scoringVersion": "screener-v2"
       }
     ],
     "position": [

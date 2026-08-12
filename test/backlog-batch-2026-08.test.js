@@ -21,7 +21,10 @@ test('entryBasisForSection: conditional contracts opt into trigger-verified, day
   assert.strictEqual(entryBasisForSection('GapDown'), 'trigger-verified');
   assert.strictEqual(entryBasisForSection('daytrade'), null, 'FROZEN: daytrade must stay on the legacy basis');
   assert.strictEqual(entryBasisForSection('screener'), 'next-open', 'next-open sections unchanged');
-  assert.strictEqual(entryBasisForSection('ReadThrough'), null, 'lead-only contracts stay legacy');
+  // entry-v2.2: lead-only/legacy sections now grade their PROXY at the first
+  // executable print (next open) — a signal-day close was never a tradeable price.
+  assert.strictEqual(entryBasisForSection('ReadThrough'), 'next-open', 'lead-only proxies price at next open');
+  assert.strictEqual(entryBasisForSection('OMEGA'), 'next-open', 'legacy sections default to next-open');
 });
 
 // Bars: signal day d0, then 4 tradeable sessions. Trigger for longs = 105.

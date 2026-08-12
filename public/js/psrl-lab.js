@@ -15,6 +15,12 @@ const ENTRY_COLOR = {
   WAIT_FOR_PULLBACK: '#ffd60a', WATCH: '#8e8e93', DEFENSIVE_WATCH: '#ff9f0a',
   DEPRIORITIZE: '#8e8e93', AVOID: 'var(--red)', INSUFFICIENT_EVIDENCE: '#8e8e93',
 };
+// PSRL is a weight-0 shadow layer — entry states are research observations about the
+// shadow plan, never BUY instructions to the reader.
+const ENTRY_LABEL = {
+  BUY_ZONE: 'IN ENTRY ZONE (research)', BUY_ON_CONFIRMATION: 'ON CONFIRMATION (research)',
+};
+const entryText = (s) => ENTRY_LABEL[s] || String(s || '·').replaceAll('_', ' ');
 const QUADRANT_LABEL = {
   TRUE_LEADER: '⭐ True leader', DEFENSIVE_LEADER: '🛡 Defensive',
   MARKET_CARRIED_LAGGARD: '🌊 Market-carried', AVOID: '⛔ Avoid',
@@ -65,7 +71,7 @@ function boardTable(cards) {
       <td><b>${esc(c.ticker)}</b><div style="font-size:.72em;color:#8e8e93">${esc(c.sector || '·')}</div></td>
       <td>${num(c.price, 2)}</td>
       <td style="white-space:nowrap">${arrowCell(c.glyphs)}</td>
-      <td><span style="color:${ENTRY_COLOR[c.entry] || '#8e8e93'}">${esc((c.entry || '·').replaceAll('_', ' '))}</span>
+      <td><span style="color:${ENTRY_COLOR[c.entry] || '#8e8e93'}">${esc(entryText(c.entry))}</span>
         <div style="font-size:.7em;color:#8e8e93">${esc(QUADRANT_LABEL[c.quadrant] || c.quadrant || '')}</div></td>
       <td><b>${num(c.scores?.combined)}</b><div style="font-size:.7em;color:#8e8e93">T${num(c.scores?.persistentTrend)} · L${num(c.scores?.relativeLeadership)}</div></td>
       <td class="expert-only">${pct(c.ret21)} / ${pct(c.ret63)} / ${pct(c.ret126)}</td>
@@ -97,7 +103,7 @@ function ledgerPanel(led) {
     <tr><td><b>${esc(e.symbol)}</b></td><td>${esc(e.status || '·')}</td><td>${esc(e.startDate || '·')}</td>
     <td>${num(e.combined)}</td><td class="expert-only">${num(e.peakScore)}</td>
     <td class="expert-only">${pct(e.mfe)} / ${pct(e.mae)}</td>
-    <td>${esc((e.currentEntry || '·').replaceAll('_', ' '))}</td>
+    <td>${esc(entryText(e.currentEntry))}</td>
     <td style="font-size:.75em;color:#8e8e93">${esc(e.lastReason?.reason || e.terminalEvent || '·')}</td></tr>`;
   const closed = led.closed?.length ? `<div style="margin-top:10px;font-size:.78em;color:#8e8e93">Recently closed: ${led.closed.slice(0, 8).map((e) => `${esc(e.symbol)} (${esc(e.terminalEvent || '?')})`).join(' · ')}</div>` : '';
   return card('📒 Episode ledger', `retained names stay visible with the reason for every downgrade · ${led.counts?.active ?? 0} active / ${led.counts?.closed ?? 0} closed`,

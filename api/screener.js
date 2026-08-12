@@ -296,9 +296,9 @@ async function handleRequest(req, res) {
       const SCHEMA = require('../lib/swing-candidate-schema');
       await require('../lib/cfl/capture').captureDecisionSnapshot({
         sel, scope, decisionDate: freshness.decisionSession, macroRiskOff,
-        engineVersion: ENGINE.ENGINE_VERSION, scoringVersion: 'screener-v1',
+        engineVersion: ENGINE.ENGINE_VERSION, scoringVersion: 'screener-v2',
         candidateSetHash: SCHEMA.candidateSetHash(sel.candidates.slice(0, sel.cap).map(c => SCHEMA.candidateId({
-          strategyId: 'screener', scoringVersion: 'screener-v1', universeScope: scope,
+          strategyId: 'screener', scoringVersion: 'screener-v2', universeScope: scope,
           ticker: c.ticker, decisionCutoff: freshness.decisionSession,
         }))),
         dataCutoff: freshness.decisionSession,
@@ -432,11 +432,11 @@ async function handleRequest(req, res) {
       }
       const ghostHit = ghost ? { tier: ghost.tier, score: ghost.score, strongPillars: ghost.strongPillars || [] } : null;
       const r = composeWhyNow({ ticker: c.ticker, apex: apexHit, ghost: ghostHit, conviction: conviction || null, macro });
-      // `standout` = the strongest tier of confirmation (confirmed breakout OR
-      // top-quintile conviction). The card badge shows a green flag only for these;
-      // a plain "constructive" is the norm for a curated list, so it's suppressed to
-      // keep the badge informative (watch/caution always show).
-      const standout = !!(conviction && conviction.sleeveA) || (apexHit && apexHit.tier === 'apex');
+      // `standout` = a confirmed apex-tier breakout only. The conviction sleeve is a
+      // registered SHADOW strategy (strategy-registry `conviction`) with no earned
+      // clearance — its sleeveA flag keeps logging as a frozen shadow benchmark but
+      // may not light a user-facing badge until it clears governance.
+      const standout = !!(apexHit && apexHit.tier === 'apex');
       return { level: r.verdict.level, headline: r.verdict.headline, forCount: r.forCase.length, standout };
     };
 
@@ -535,7 +535,7 @@ async function handleRequest(req, res) {
         engineVersion: ENGINE.ENGINE_VERSION,
         candidateSetHash: require('../lib/swing-candidate-schema').candidateSetHash(
           candidates.slice(0, cap).map(c => require('../lib/swing-candidate-schema').candidateId({
-            strategyId: 'screener', scoringVersion: 'screener-v1', universeScope: scope,
+            strategyId: 'screener', scoringVersion: 'screener-v2', universeScope: scope,
             ticker: c.ticker, decisionCutoff: freshness.decisionSession || ghostDataCutoff || 'unknown',
           }))),
         selectedCount: Math.min(cap, candidates.length),

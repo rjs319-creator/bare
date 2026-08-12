@@ -188,3 +188,53 @@ test('an empty cross-section yields a terminal snapshot, not a crash', () => {
   assert.equal(snap.nPredictions, 0);
   assert.deepEqual(snap.invalid, []);
 });
+
+test('decision-time audit fields: eligibility projection, declared fill rule, data cutoff', () => {
+  // Arrange — a ranked row carrying the eligibility verdict classify() attaches.
+  const LB = require('../lib/research/live-bridge');
+  const { POLICIES } = require('../lib/execution-policy');
+  const row = {
+    ticker: 'TEST', horizon: 'swing', side: 'long', score: 55, rank: 1, actionable: true,
+    eligibility: {
+      signalClass: 'RESEARCH', sizingWeight: 0, reasonCodes: ['NOT_PRODUCTION'],
+      governance: { status: 'paper' }, tradeEligible: false, sizingEligible: false,
+    },
+  };
+
+  // Act
+  const snap = LB.buildDecisionSnapshot([row], { decisionTs: '2026-08-11' });
+  const p = snap.predictions[0];
+
+  // Assert — the record carries the verdict verbatim, the fill rule is the same
+  // constant grade.js grades with (policy drift = code-review diff), and the data
+  // cutoff equals the decision close.
+  assert.equal(p.eligibility.signalClass, 'RESEARCH');
+  assert.equal(p.eligibility.sizingWeight, 0);
+  assert.deepEqual(p.eligibility.reasonCodes, ['NOT_PRODUCTION']);
+  assert.equal(p.eligibility.governanceStatus, 'paper');
+  assert.equal(p.intendedFillRule, POLICIES.NEXT_OPEN);
+  assert.equal(p.dataCutoffTs, '2026-08-11');
+});
+
+test('rows without an eligibility verdict record eligibility null — never backfilled', () => {
+  const LB = require('../lib/research/live-bridge');
+  const snap = LB.buildDecisionSnapshot([{ ticker: 'X', horizon: 'swing', side: 'long' }], { decisionTs: '2026-08-11' });
+  assert.equal(snap.predictions[0].eligibility, null);
+});
+
+test('decision-time features persist: raw signal numerics + the audited score decomposition', () => {
+  const LB = require('../lib/research/live-bridge');
+  const row = {
+    ticker: 'FEAT', horizon: 'swing', side: 'long', score: 61, rank: 2,
+    entry: 10, stop: 9, target: 13, rawConfidence: 72,
+    liquidity: { dollarVol: 25e6 }, ageBars: 3, state: 'CONFIRMED',
+    scoreDecomposition: { comparableConfidence: 70, costPenalty: 0.98, formula: 'score = …' },
+  };
+  const snap = LB.buildDecisionSnapshot([row], { decisionTs: '2026-08-11' });
+  const f = snap.predictions[0].features;
+  assert.equal(f.raw.entry, 10);
+  assert.equal(f.raw.dollarVol, 25e6);
+  assert.equal(f.raw.lifecycleState, 'CONFIRMED');
+  assert.equal(f.normalized.costPenalty, 0.98);
+  assert.ok(Object.isFrozen(f) && Object.isFrozen(f.raw), 'a decision record is immutable');
+});

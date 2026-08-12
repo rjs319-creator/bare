@@ -205,12 +205,13 @@ function card(o, typeInfo, muted = false) {
     ? `<div class="ev-rr ${rr.ratio < 1 ? 'warn' : ''}">${rr.ratio < 1 ? '⚠ ' : ''}Reward vs risk <b>${rr.ratio.toFixed(1)} : 1</b>${rr.ratio < 1 ? ' — you would risk more than you stand to make' : ''}</div>`
     : '';
 
-  // Sizing is shown (it is the engine's actual output) but never without the
-  // evidence standing behind it — a ¼-Kelly number off an untested posterior is
-  // a guess, and the card has to say so.
-  const sizeLine = o.action === 'TRADE' && o.size
-    ? `<div class="ev-line"><span class="ev-k">Suggested size</span><span class="ev-v"><b>${(o.size * 100).toFixed(1)}% of your account</b> <span class="ev-dim">— ${canonical === 'validated' ? 'backed by this type\'s resolved record' : 'a model guess; this event type has not proven itself yet'}</span></span></div>`
-    : `<div class="ev-line"><span class="ev-k">Suggested size</span><span class="ev-v"><b>None</b> <span class="ev-dim">— tracked on paper only</span></span></div>`;
+  // Sizing may be DISPLAYED only when this event type's own resolved record has
+  // earned a validated grade — an unproven type never shows a % of account, no
+  // matter what the engine's ¼-Kelly math says. The engine's number still exists
+  // server-side for research grading; the card refuses to publish it.
+  const sizeLine = o.action === 'TRADE' && o.size && canonical === 'validated'
+    ? `<div class="ev-line"><span class="ev-k">Suggested size</span><span class="ev-v"><b>${(o.size * 100).toFixed(1)}% of your account</b> <span class="ev-dim">— backed by this type's resolved record</span></span></div>`
+    : `<div class="ev-line"><span class="ev-k">Suggested size</span><span class="ev-v"><b>None</b> <span class="ev-dim">— ${canonical === 'validated' ? 'tracked on paper only' : 'research: this event type has not earned a sizing weight'}</span></span></div>`;
 
   const record = scored(typeInfo)
     ? `${typeInfo.n20} past ${eventName(o.type)} event${typeInfo.n20 === 1 ? '' : 's'} have run their course → averaged <b>${pct(typeInfo.finalExcess, 1)}</b> vs the S&P, beating it ${typeInfo.beatMktRate}% of the time`
