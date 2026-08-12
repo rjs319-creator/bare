@@ -47,11 +47,13 @@ function buildBoardFixture({ withCalibration }) {
   const priceBundle = { map: price, bench: { SPY: spy, XLK: spy, XLE: spy } };
   const episodeResult = buildAtlasEpisodes({ prevEpisodes: [], candidates, priceBundle, ctx });
   const actionable = candidates.filter(c => c.actionable);
-  const portfolio = buildAtlasPortfolio(actionable.map(c => ({ ticker: c.ticker, expert: c.expert, strategyFamily: c.expert, sector: c.sector, score: c.distribution.score, dollarVol: c.dollarVol })), {});
+  // Mirrors lib/atlasx-routes.rankRow — including entryAction, without which every
+  // row fails closed and the fixture would not exercise the book at all.
+  const portfolio = buildAtlasPortfolio(actionable.map(c => ({ ticker: c.ticker, expert: c.expert, strategyFamily: c.expert, sector: c.sector, score: c.distribution.score, dollarVol: c.dollarVol, entryAction: c.entry ? c.entry.action : null })), {});
   const health = modelHealth({ nEpisodes: 0 });
   const promotion = promotionView({ resolvedEpisodes: 0, independentDates: 0 });
   const board = assembleBoard({ candidates, episodeResult, portfolio, capture: null, health, promotion, coverage: universe.coverage, universe, ctx, ledger: null });
-  return { candidates, episodeResult, board, actionable };
+  return { candidates, episodeResult, board, actionable, portfolio };
 }
 
 test('integration: board has all 10 sections with an honest empty-actionable note', () => {
@@ -103,23 +105,27 @@ test('integration: `actionable` (utility gate) and board section (entry availabi
     'and it never reaches the enter lane without an entry action');
 });
 
-test('KNOWN GAP: the shadow portfolio is built from `actionable`, so it can include a name the board shows as Avoid', () => {
-  // lib/atlasx-routes.js:251-252 does `candidates.filter(c => c.actionable)` and feeds
-  // that straight into buildAtlasPortfolio — the same thing this fixture does. A name
-  // with `entry.action: 'NO_TRADE'` therefore receives a portfolio weight while being
-  // displayed under "Avoid / Prosecutor Flags".
-  //
-  // Pinned as CURRENT BEHAVIOUR, not endorsed. ATLAS-X is weight-0 shadow so no capital
-  // moves, but the portfolio artifact is research evidence and this makes it describe a
-  // book that could not have been entered. Fixing it means deciding whether portfolio
-  // membership requires an enterable entry action — a product decision, not a test fix,
-  // so it is surfaced here rather than silently changed.
-  const { candidates, board } = buildBoardFixture({ withCalibration: true });
+test('the shadow book never holds a name the board files under Avoid', () => {
+  // This was a KNOWN GAP when the vacuous assertion was replaced: the route filtered
+  // only on `actionable` (the utility gate), so a candidate with no valid entry
+  // (`entry.action: 'NO_TRADE'`) received a portfolio weight while being displayed under
+  // "Avoid / Prosecutor Flags" — the book described positions that could not have been
+  // entered. buildAtlasPortfolio now fails closed on entry availability too.
+  const { candidates, board, portfolio } = buildBoardFixture({ withCalibration: true });
   const inAvoid = new Set(board.sections.avoid.map(x => x.ticker));
-  const portfolioInputs = candidates.filter(c => c.actionable).map(c => c.ticker);
-  const contradictory = portfolioInputs.filter(t => inAvoid.has(t));
-  assert.deepEqual(contradictory, ['AAA'],
-    'if this list changes, the actionable-vs-entry contract moved — re-read the note above');
+  const held = portfolio.positions.map(p => p.ticker);
+  assert.deepEqual(held.filter(t => inAvoid.has(t)), [],
+    'no held position may also be in the avoid lane');
+
+  // AAA is the live case: it clears the utility gate but has no entry, so it is
+  // excluded from the book WITH A REASON rather than silently dropped.
+  const aaa = candidates.find(c => c.ticker === 'AAA');
+  assert.equal(aaa.actionable, true);
+  assert.equal(aaa.entry.action, 'NO_TRADE');
+  assert.ok(!held.includes('AAA'), 'an unenterable name must not be held');
+  const ex = portfolio.excluded.find(e => e.ticker === 'AAA');
+  assert.ok(ex, 'and it must appear in the excluded panel — every omission is explained');
+  assert.equal(ex.reason, 'no-entry-trigger');
 });
 
 test('integration: every ENTER/WAIT candidate becomes a durable episode (no pick vanishes)', () => {
