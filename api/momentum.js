@@ -246,6 +246,16 @@ module.exports = async function handler(req, res) {
     universeSources: { discovery: universe.filter(u => u.origin === 'discovery').length, screener: universe.filter(u => u.origin === 'screener').length },
     excludedExtended,
     contract: { scoringVersion: 'momentum-v2', horizon: 'intraday', note: 'Same-session technical read; daily swing levels are display context. Scores are heuristic ranks, not probabilities.' },
+    // REGISTRY STATE ON THE PAYLOAD (alpha-research pass 3). This endpoint published
+    // fields literally named `strongBuys`/`strongSells`, which the client rendered as a
+    // "⚡ STRONG BUY" action badge AND pushed as a desktop/phone notification with
+    // haptics — for a strategy the registry marks `shadow`, and whose own entry records
+    // that its momentum-v1 evidence "does not transfer" to the v2 contract. Nothing in
+    // that path consulted the registry, so the highest-intent surface in the app issued
+    // a buy imperative on the weakest evidence. The client now gates its vocabulary and
+    // its notifications on this field.
+    maturity: require('../lib/strategy-gate').statusOf('momentum'),
+    tradeEligible: require('../lib/strategy-gate').isTradeEligible('momentum'),
     generatedAt: new Date().toISOString(),
   });
 };

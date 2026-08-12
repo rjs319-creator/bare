@@ -2806,6 +2806,16 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = regimeBannerHTML(rg) + chip;
   }
 
+  // Whether the momentum strategy is registry-cleared to originate a live trade. Set
+  // from the op=momentum payload on every render; fails closed until proven otherwise.
+  let momTradeEligible = false;
+  // Action vocabulary for the momentum cards. A registry-shadow strategy may describe
+  // what it SEES ("strong up-momentum") but must never issue an instruction ("STRONG
+  // BUY") — wording is not a control, so this reads the same flag the gate does.
+  const momActionLabel = (buy) => (momTradeEligible
+    ? (buy ? '⚡ STRONG BUY' : '⚡ STRONG SELL')
+    : (buy ? '🔬 RESEARCH · strong up-momentum' : '🔬 RESEARCH · strong down-momentum'));
+
   function renderMomentumRegime() {
     const el = document.getElementById('momentum-regime');
     if (el) el.innerHTML = regimeBannerHTML(lastRegime);
@@ -6275,7 +6285,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           <span title="Backtested posterior that this name's cool-off edge is positive, from its OWN history — NOT a calibrated live probability">edge posterior ${Math.round((r.conviction || 0) * 100)} /100 (backtested)</span>
           <span title="Times this name has set up before">${r.n || 0} priors</span>
           <details class="fade-adv"><summary>advanced ▸ short trade</summary>
-            <div class="fade-adv-body">Short ${esc(r.ticker)} @ ~${ref.entry ?? '—'}, market-neutral vs SPY, hold ~${sig.holdSessions} sessions. Suggested weight ${r.sizePct}%. Reference stop ${ref.stop ?? '—'} / target ${ref.target ?? '—'} (the validated trade is the timed hold — don't manage the stop tightly).</div>
+            <!-- Fade is registry-SHADOW and validated ONLY as an AVOID filter; its own
+                 registry entry says "never a live short book", and lib/eligibility.js
+                 fail-closes every short without an observed borrow feed (none exists,
+                 and after the 2026-08-11 demotions no borrow-requiring strategy is
+                 production at all). So the sized short plan is gone: no "Suggested
+                 weight N%", and no "the validated trade" — nothing here is validated. -->
+            <div class="fade-adv-body">RESEARCH — not sized, not a short recommendation. This is an <b>avoid</b> signal: the measured edge is short-side only, and no borrow/locate feed exists, so ${esc(r.ticker)} is flagged as a name to stay away from rather than one to short. Reference levels for context only: ~${ref.entry ?? '—'} / stop ${ref.stop ?? '—'} / target ${ref.target ?? '—'} over ~${sig.holdSessions} sessions.</div>
           </details>
         </div>
       </div>`;
@@ -8349,6 +8365,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   function renderMomentum(data) {
     let { strongBuys = [], strongSells = [], scannedCount, universeCount, excludedExtended = 0, generatedAt, degraded, universeNote } = data;
+    // Registry state for this strategy, from the payload (api/momentum.js). Momentum is
+    // registered `shadow`, so the action badge drops its buy/sell imperative and the
+    // push notification is suppressed entirely. Defaults to NOT eligible so an older
+    // cached payload without the field fails closed rather than shouting STRONG BUY.
+    momTradeEligible = data.tradeEligible === true;
     // Hide tiers disabled on the scoreboard (kept logged + scored server-side).
     if (isSignalDisabled('momentum', 'StrongBuy'))  strongBuys = [];
     if (isSignalDisabled('momentum', 'StrongSell')) strongSells = [];
@@ -9415,7 +9436,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
         <div class="alert-badges">
           <div class="alert-live-badge"><div class="alert-live-dot"></div>LIVE</div>
-          <div class="mom-action-badge ${side}">⚡ ${buy ? 'STRONG BUY' : 'STRONG SELL'}</div>
+          <div class="mom-action-badge ${side}${momTradeEligible ? '' : ' mom-research'}">${momActionLabel(buy)}</div>
           ${whyNowBadge(c)}
           ${c.social ? `<div class="alert-social-badge">👥 ${Number(c.social).toLocaleString()}</div>` : ''}
         </div>
@@ -9552,6 +9573,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // the tab is backgrounded.
   async function showFlipNotification(ticker, action) {
     if (!notifyEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
+    // A push notification is the highest-intent surface this app has: it interrupts the
+    // user, on their phone, with haptics, and it is read as an instruction. A strategy
+    // that is not registry-cleared to originate a live trade does not get to use it.
+    // Suppressed entirely rather than reworded — an unsolicited alert about a weight-0
+    // research signal has no honest form.
+    if (!momTradeEligible) return;
     const buy = action === 'STRONG_BUY';
     const title = `${ticker} · ${buy ? '⚡ STRONG BUY' : '⚡ STRONG SELL'}`;
     const opts = {
@@ -9618,7 +9645,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (!badge) return;
       if (isStrong) {
         const buy = action === 'STRONG_BUY';
-        badge.textContent = buy ? '⚡ STRONG BUY' : '⚡ STRONG SELL';
+        badge.textContent = momActionLabel(buy);
         badge.className = 'sig-badge ' + (buy ? 'buy' : 'sell');
       } else {
         badge.textContent = '';

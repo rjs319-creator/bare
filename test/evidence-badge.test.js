@@ -56,17 +56,22 @@ test('verdictFor: a Validated strategy still carries a sizing caution', () => {
   const { verdictFor } = loadBadge();
 
   // Act
-  const v = verdictFor({ id: 'x', grade: 'validated', stats: { excessN: 40, avgExcess: 2.1, beatMktRate: 62 } });
+  // Governance must CLEAR it for sizing advice to apply at all — a strategy with no
+  // governance record is treated as unsized (fail closed), same as everywhere else.
+  const v = verdictFor({ id: 'x', grade: 'validated', stats: { excessN: 40, avgExcess: 2.1, beatMktRate: 62 },
+    governance: { id: 'x', status: 'production', weight: 1 } });
 
   // Assert
   assert.equal(v.face.icon, '✅');
+  assert.equal(v.sizable, true);
   assert.match(v.advice, /size positions so a loss is survivable/i);
 });
 
 test('verdictFor: Informational strategies are never framed as trade signals', () => {
   // Arrange / Act
   const { verdictFor } = loadBadge();
-  const v = verdictFor({ id: 'news', grade: 'informational', reason: 'Summarized headlines — context.' });
+  const v = verdictFor({ id: 'news', grade: 'informational', reason: 'Summarized headlines — context.',
+    governance: { id: 'news', status: 'production', weight: 1 } });
 
   // Assert
   assert.match(v.advice, /not to pick a trade/i);
