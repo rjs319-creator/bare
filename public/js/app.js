@@ -27,7 +27,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadTechCommand } from './tech-command.js';
   import { loadLeaderboard } from './leaderboard.js';
   import { loadCern, eventName as cernEventName } from './cern.js';
-  import { mountVerdict } from './evidence-badge.js';
+  import { mountVerdict, loadGrades } from './evidence-badge.js';
   import { drawPatternChart } from './pattern-chart.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
 
@@ -3187,6 +3187,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const APEX_KEYS = ['p1', 'p2', 'p3', 'p4'];
 
   let apexLoaded = false, apexState = null, apexLast = null, apexDrift = null, apexModel = null;
+  // Registry/governance clearance for the Apex sleeve (`custom`). Apex was DEMOTED to
+  // shadow on 2026-08-12 (brief §2), and a weight-0 strategy must not publish concrete
+  // share counts, dollar allocations, or unsolicited alerts. Read from op=maturity's
+  // governance block via the shared grade table rather than assumed, so a future
+  // promotion restores sizing without another code edit — and so a wording change can
+  // never grant it. Fails CLOSED until the fetch proves otherwise.
+  let apexTradeEligible = false;
+  loadGrades().then(m => {
+    const g = m && m.custom && m.custom.governance;
+    const ok = !!(g && g.status === 'production' && Number(g.weight) > 0);
+    if (ok !== apexTradeEligible) { apexTradeEligible = ok; if (apexLast) renderApex(apexLast); }
+  }).catch(() => { /* fail closed: sizing stays hidden */ });
 
   // Active weights for a regime: a live Module 2 recalibration overrides the
   // static Module 1 preset when present.
@@ -3692,8 +3704,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const lv = c.levels || {}, entry = lv.entry || c.price, stop = lv.stop;
       const rps = (entry && stop && entry > stop) ? entry - stop : null;
       let shares = null, alloc = null;
-      if (rps) { shares = Math.floor(riskBudget / rps); alloc = shares * entry; if (alloc > pv * 0.2) { alloc = pv * 0.2; shares = Math.floor(alloc / entry); } }
-      return `<tr><td>${esc(c.ticker)} <span class="cx-tierbadge ${c._tier}" style="font-size:0.48rem;padding:1px 4px">${c._tier}</span></td><td>$${entry ? (+entry).toFixed(2) : '—'}</td><td>$${stop ? (+stop).toFixed(2) : '—'}</td><td>${shares != null ? shares.toLocaleString() : '—'}</td><td>${alloc != null ? '$' + Math.round(alloc).toLocaleString() : '—'}</td></tr>`;
+      // Share counts and dollar allocations are only computed for a sleeve that
+      // actually carries governance weight. Apex is weight-0 shadow, so the columns
+      // are omitted entirely rather than filled with numbers the app will not back.
+      if (rps && apexTradeEligible) { shares = Math.floor(riskBudget / rps); alloc = shares * entry; if (alloc > pv * 0.2) { alloc = pv * 0.2; shares = Math.floor(alloc / entry); } }
+      const sizeCells = apexTradeEligible
+        ? `<td>${shares != null ? shares.toLocaleString() : '—'}</td><td>${alloc != null ? '$' + Math.round(alloc).toLocaleString() : '—'}</td>`
+        : '';
+      return `<tr><td>${esc(c.ticker)} <span class="cx-tierbadge ${c._tier}" style="font-size:0.48rem;padding:1px 4px">${c._tier}</span></td><td>$${entry ? (+entry).toFixed(2) : '—'}</td><td>$${stop ? (+stop).toFixed(2) : '—'}</td>${sizeCells}</tr>`;
     }).join('');
 
     el.innerHTML = `
@@ -3702,8 +3720,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       </div>
       ${maxShare > 0.4 ? `<div class="cx-pf-warn">⚠ Concentrated — ${Math.round(maxShare * 100)}% of names in <b>${esc(secs[0][0])}</b>. Spread risk across sectors.</div>` : ''}
       <div class="cx-pf-secs">${secBars}</div>
-      <div class="cx-pf-sz-h">Equal-risk sizing · ${rk}% (<b>$${Math.round(riskBudget).toLocaleString()}</b>) risked per trade, capped 20%/name</div>
-      <table class="cx-preset-table cx-pf-table"><thead><tr><th>Name</th><th>Entry</th><th>Stop</th><th>Shares</th><th>Alloc</th></tr></thead><tbody>${rows}</tbody></table>`;
+      ${apexTradeEligible
+        ? `<div class="cx-pf-sz-h">Equal-risk sizing · ${rk}% (<b>$${Math.round(riskBudget).toLocaleString()}</b>) risked per trade, capped 20%/name</div>`
+        : `<div class="cx-pf-sz-h ev-state-note">🔬 RESEARCH — not sized. Adaptive Momentum carries ZERO governance weight, so this app will not tell you how many shares to buy or how much to allocate. Levels below are the model's own reference points, shown for scoring, not as a position plan.</div>`}
+      <table class="cx-preset-table cx-pf-table"><thead><tr><th>Name</th><th>Entry</th><th>Stop</th>${apexTradeEligible ? '<th>Shares</th><th>Alloc</th>' : ''}</tr></thead><tbody>${rows}</tbody></table>`;
 
     const pvI = el.querySelector('#cx-pf-pv'), rkI = el.querySelector('#cx-pf-rk');
     if (pvI) pvI.onchange = () => { localStorage.setItem('apexPortfolio', pvI.value); if (apexLast) renderApex(apexLast); };
@@ -3723,6 +3743,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     try { localStorage.setItem('apexSeen', JSON.stringify(apexTickers)); } catch {}
   }
   async function showApexNotification(ticker, score) {
+    // Same rule as the momentum flip alert: a weight-0 strategy does not get to
+    // interrupt the user with an unsolicited push. Suppressed before the card flash
+    // too — flashCards(..., 'STRONG_BUY') paints a buy-coloured pulse on the card,
+    // which is the same imperative in a different medium.
+    if (!apexTradeEligible) return;
     if (typeof flashCards === 'function') flashCards(ticker, 'STRONG_BUY');
     if (!notifyEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
     const title = `${ticker} · 🏆 New Apex`;

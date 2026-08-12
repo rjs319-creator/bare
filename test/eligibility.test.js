@@ -9,25 +9,34 @@ const { SOURCES } = require('../test/fixtures/today-sources');
 const NOW = Date.parse('2026-07-24T12:00:00Z');
 // Freshness is TWO proofs since gov-v2.1: the governance WRITE time (savedAt) and the
 // underlying Scoreboard EVIDENCE time (scoreboardGeneratedAt) — both must be current.
-// A still-production, non-Day-Trade registry id to stand in for the "cleared source"
-// cases below. DERIVED rather than hardcoded: `ghost` and `downday` previously played
-// these roles and were demoted to shadow on 2026-08-11, which broke three tests that
-// were not actually about either strategy. Deriving keeps them meaningful across future
-// status flips instead of pinning whichever strategy happens to be live today.
+// A "cleared source" for the gate tests below. These tests are about ELIGIBILITY
+// MECHANICS (governance freshness, version match, sizing weight, the borrow gate), not
+// about any particular strategy — so the cleared status is INJECTED rather than borrowed
+// from whichever strategy happens to be live.
+//
+// History: these cases originally hardcoded `ghost`/`downday`, which broke when both
+// were demoted on 2026-08-11. Deriving a live production id fixed that until `custom`
+// was demoted on 2026-08-12, leaving `screener` as the only non-Day-Trade production
+// strategy — at which point the derivation had nothing left to find. Injection removes
+// the coupling entirely: the gate can be tested even if every strategy is shadow, which
+// is the direction this registry keeps moving.
 const { STRATEGY_REGISTRY } = require('../lib/strategy-registry');
-const DT_ID = /^(daytrade|gapgo|gapdown|ignition|lowfloat|intraday)/;
-const CLEARED_ENTRY = STRATEGY_REGISTRY.find(e =>
-  e.maturity === 'production' && e.kind === 'signal' && e.id !== 'screener' && !DT_ID.test(e.id)) || {};
-const CLEARED = CLEARED_ENTRY.id;
+const CLEARED = 'coremo';   // a real registered id, overridden to production below
+const CLEARED_ENTRY = STRATEGY_REGISTRY.find(e => e.id === CLEARED);
 // The governance doc's version must MATCH the registry's scoringVersion or eligibility
-// fails closed with VERSION_MISMATCH — a scoring change resets earned evidence. Derived
-// for the same reason the id is.
+// fails closed with VERSION_MISMATCH — a scoring change resets earned evidence.
 const CLEARED_VERSION = CLEARED_ENTRY.scoringVersion;
+// Real registry with exactly ONE status overridden, so every other strategy's true
+// status (coil/biotech shadow, screener production) still gates authentically.
+const REG_CLEARED = STRATEGY_REGISTRY.map(e => (e.id === CLEARED ? { ...e, maturity: 'production' } : e));
 
-test('fixture sanity: a non-Day-Trade production strategy exists to stand in for cleared sources', () => {
-  // If this ever fails, every "cleared source" case below is vacuous rather than wrong —
-  // so it must fail loudly rather than silently testing nothing.
-  assert.ok(CLEARED, 'no non-Day-Trade production strategy remains in the registry');
+test('fixture sanity: the injected cleared source is a real registered strategy', () => {
+  // Guards against the id silently ceasing to exist, which would make every "cleared
+  // source" case below fail closed and therefore pass for the wrong reason.
+  assert.ok(CLEARED_ENTRY, `${CLEARED} must exist in the registry`);
+  assert.ok(CLEARED_VERSION, `${CLEARED} must carry a scoringVersion`);
+  // And it must be shadow in the REAL registry — proving the override is doing the work.
+  assert.equal(CLEARED_ENTRY.maturity, 'shadow');
 });
 
 const freshGov = (strategies) => ({ savedAt: '2026-07-24T00:00:00.000Z', scoreboardGeneratedAt: '2026-07-23T22:00:00.000Z', strategies });
@@ -105,7 +114,7 @@ test('production static + fresh cleared governance ⇒ trade-eligible with gover
     { source: 'coil', ticker: 'EEE', side: 'long', entry: 1, stop: 0.9, target: 1.3, liquidity: { dollarVol: 5e7 } },
     { source: 'biotech', ticker: 'AGIO', side: 'long' },
     { source: 'ghost', ticker: 'GGG', side: 'long', entry: 1, stop: 0.9, target: 1.3, liquidity: { dollarVol: 5e7 } },
-  ], { governance: GOV_PROD, nowMs: NOW });
+  ], { registry: REG_CLEARED, governance: GOV_PROD, nowMs: NOW });
   assert.equal(g.perSource.screener.tradeEligible, true);
   assert.equal(g.perSource.screener.sizingWeight, 1);
   assert.equal(g.perSource[CLEARED].tradeEligible, true);    // probation = cleared, reduced
@@ -159,7 +168,7 @@ test('after the 2026-08-11 demotion, no borrow-requiring strategy is production'
 
 test('LONGS from the same cleared source are unaffected by the borrow gate', () => {
   const g = EL.gateSignals([{ source: CLEARED, ticker: 'RVL', side: 'long', entry: 56, stop: 53, target: 61, liquidity: { dollarVol: 9e6 } }],
-    { governance: GOV_PROD, nowMs: NOW });
+    { registry: REG_CLEARED, governance: GOV_PROD, nowMs: NOW });
   assert.equal(g.annotated[0].eligibility.tradeEligible, true);
 });
 

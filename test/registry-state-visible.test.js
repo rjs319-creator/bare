@@ -141,3 +141,33 @@ test('the Fade tab no longer publishes a position size or claims validation', ()
   assert.match(APP, /RESEARCH — not sized, not a short recommendation/);
   assert.match(APP, /no borrow\/locate feed exists/);
 });
+
+// ── apex: a weight-0 sleeve must not publish share counts or dollar allocations ───
+
+test('the Apex portfolio panel reads governance clearance rather than assuming it', () => {
+  // Gated on the registry, not hardcoded — a future promotion restores sizing without
+  // a code edit, and a wording change can never grant it.
+  assert.match(APP, /let apexTradeEligible = false;/, 'must fail closed before the fetch resolves');
+  assert.match(APP, /g\.status === 'production' && Number\(g\.weight\) > 0/);
+  assert.match(APP, /import \{ mountVerdict, loadGrades \} from '\.\/evidence-badge\.js';/);
+});
+
+test('share counts and dollar allocations are not computed for an unsized sleeve', () => {
+  assert.match(APP, /if \(rps && apexTradeEligible\) \{ shares = Math\.floor/,
+    'sizing arithmetic must be gated, not merely hidden');
+  assert.match(APP, /const sizeCells = apexTradeEligible/);
+  // The columns themselves disappear, so there are no empty Shares/Alloc headers
+  // implying a number the app declined to give.
+  assert.match(APP, /\$\{apexTradeEligible \? '<th>Shares<\/th><th>Alloc<\/th>' : ''\}/);
+});
+
+test('the unsized Apex panel says why, in the repo\'s existing refusal vocabulary', () => {
+  assert.match(APP, /RESEARCH — not sized\. Adaptive Momentum carries ZERO governance weight/);
+});
+
+test('the Apex tier alert is suppressed, including its buy-coloured card flash', () => {
+  const fn = APP.slice(APP.indexOf('async function showApexNotification'), APP.indexOf('async function showApexNotification') + 700);
+  assert.match(fn, /if \(!apexTradeEligible\) return;/);
+  assert.ok(fn.indexOf('if (!apexTradeEligible) return;') < fn.indexOf("flashCards(ticker, 'STRONG_BUY')"),
+    'the guard must precede the flash — a buy-coloured pulse is the same imperative in another medium');
+});
