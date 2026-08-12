@@ -83,7 +83,9 @@ function render(container) {
     <th>Ext</th><th>RVOL</th><th>VolAcc</th><th>$VolAcc</th><th>Float</th><th>Turns</th>
     <th>Cat</th><th>Attn</th><th>Dilution</th><th>Setup</th><th>Trigger</th><th>No-chase ></th></tr>`;
 
-  const rows = views.slice(0, 40).map(v => {
+  // Every view in the snapshot renders — blocked/stale names carry capped scores and sort
+  // to the tail, but a threshold never removes a row from the board.
+  const rows = views.map(v => {
     const attn = v.attention || {};
     const attnTxt = Number.isFinite(attn.rankNow)
       ? (Number.isFinite(attn.rank20mAgo) ? `#${attn.rank20mAgo}→#${attn.rankNow}` : `#${attn.rankNow}`) + (attn.surge ? ' 🚀' : '')

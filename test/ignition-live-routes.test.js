@@ -149,3 +149,10 @@ test('the frontend module renders only — default sort is opportunity, no scori
   assert.match(MOD, /op=ignitionlive/, 'reads the snapshot op');
   assert.match(MOD, /op=ignitionreplay/, 'timeline uses the replay op');
 });
+
+test('the board is ungated — every snapshot view renders, no client-side row cap', () => {
+  const MOD = read('public/js/ignition-live.js');
+  assert.match(MOD, /const rows = views\.map\(/, 'the row builder must map ALL views');
+  assert.ok(!/views\.slice\(\s*0\s*,\s*\d+\s*\)/.test(MOD),
+    'a top-N slice over views would hide blocked/stale candidates — thresholds annotate, never hide');
+});
