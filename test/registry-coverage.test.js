@@ -128,7 +128,7 @@ test('Validated still requires beating the SECTOR, not just the market', () => {
   // sector must NOT be able to reach Validated on the back of this registration.
   // Cost-net channel present (validated is unreachable on a gross-only record).
   const full = { excessN: 173, avgExcess: 1.51, beatMktRate: 62, netExcessN: 173, avgNetExcess: 1.31, netBeatMktRate: 62, dates: 100, dateNet: { n: 100, avg: 0.9, sd: 1.5, ci95: { lo: 0.4, hi: 1.4 }, effectiveN: 60, positiveBlocks: 4, blockStability: { blocks: 4, positive: 4, means: [0.8, 1.0, 0.7, 1.1], usable: true } } };
-  const beatsBoth = gradeTrack({ ...full, secExcN: 160, avgSecExcess: 0.99, beatSecRate: 48 }, { fillVerified: true });
+  const beatsBoth = gradeTrack({ ...full, secExcN: 160, avgSecExcess: 0.99, beatSecRate: 48 }, { fillVerified: true, noHistoryRate: 0 });
   const sectorBeta = gradeTrack({ ...full, secExcN: 160, avgSecExcess: -0.4, beatSecRate: 48 }, { fillVerified: true });
 
   assert.equal(beatsBoth.grade, 'validated');
