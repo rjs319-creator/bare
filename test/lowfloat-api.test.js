@@ -260,6 +260,20 @@ test('the frontend module exports the four section loaders', () => {
   }
 });
 
+test('the radar display is ungated: All is the default tab, thresholds annotate rather than hide', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lowfloat.js'), 'utf8');
+  // Every scanned candidate renders on first paint; score buckets remain as OPT-IN tabs.
+  assert.match(src, /lowfloat:\s*\{\s*tab:\s*'all'/, 'default lowfloat tab must be all');
+  assert.match(src, /\['all', 'All'\]/, 'the All tab must exist');
+  // Rows still surface the threshold verdicts as annotations.
+  for (const field of ['blockingReasons', 'warnings', 'reasonCodes']) {
+    assert.ok(src.includes(field), `card must annotate ${field}`);
+  }
+  // The server keeps shipping the full record set the All tab depends on.
+  const routesSrc = fs.readFileSync(path.join(__dirname, '..', 'lib', 'lowfloat-routes.js'), 'utf8');
+  assert.match(routesSrc, /all:\s*cards/, 'bucketRadar must keep the uncapped all bucket');
+});
+
 test('the keyless bulk-quote fallback respects the provider symbol cap', () => {
   // REGRESSION: Yahoo's spark endpoint caps a request at 20 symbols and answers
   //   400 {"error":{"description":"Number of symbols needs to be less than or equal to 20"}}

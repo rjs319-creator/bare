@@ -13,7 +13,10 @@ import { esc } from './format.js';
 import { fetchJSON, HEAVY_TIMEOUT_MS } from './fetch-json.js';
 
 const STATE = {
-  lowfloat: { tab: 'potentialMovers', data: null, spreadOk: new Set() },
+  // Default tab is 'all': every scanned candidate renders with its scores and blocking
+  // reasons as annotations. Thresholds still decide the OTHER buckets (and actionability),
+  // but they no longer decide whether a row exists on first paint.
+  lowfloat: { tab: 'all', data: null, spreadOk: new Set() },
   breakout: { data: null, filter: 'all' },
   audit: { data: null, book: null },
   validation: { data: null, tab: 'templates' },
@@ -112,11 +115,11 @@ export async function loadLowFloat(container) {
 }
 
 const LF_TABS = [
+  ['all', 'All'],
   ['potentialMovers', 'Potential Movers'],
   ['readyWatching', 'Ready / Watching'],
   ['tooExtended', 'Too Extended'],
   ['avoid', 'Avoid'],
-  ['all', 'All'],
 ];
 
 function renderLowFloat(container) {
