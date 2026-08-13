@@ -6198,7 +6198,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       combined avg/trade <b style="${col(d.mtm.combinedAvgNet)}">${pct(d.mtm.combinedAvgNet)}</b>
       · open marked ${d.mtm.openMarked}/${d.mtm.openN} at avg <b style="${col(d.mtm.openAvgNet)}">${pct(d.mtm.openAvgNet)}</b>
       · resolved avg net <b style="${col(t.meanReturnNet)}">${pct(t.meanReturnNet)}</b>
-      <span style="color:#8a93a6">(one ${t.costPct != null ? t.costPct.toFixed(2) + '%' : ''} round trip per trade${d.mtm.openUnmarked ? `; ${d.mtm.openUnmarked} open names unmarked — counted, not dropped` : ''})</span></div>` : '')`;
+      <span style="color:#8a93a6">(one ${t.costPct != null ? t.costPct.toFixed(2) + '%' : ''} round trip per trade${d.mtm.openUnmarked ? `; ${d.mtm.openUnmarked} open names unmarked — counted, not dropped` : ''})</span></div>` : '');
     const STAT = { open: '<span style="color:#8a93a6">○ open</span>', partial: '<span style="color:#f0a832">◐ partial</span>', closed: '<span style="color:#10d98a">● closed</span>' };
     const rows = d.quarters.slice().reverse().map(q => `<tr>
       <td><b>${esc(q.quarter)}</b><div style="font-size:0.6rem;color:#8a93a6">${esc(q.logDate || '')}</div></td>

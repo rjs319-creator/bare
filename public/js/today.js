@@ -678,13 +678,22 @@ export async function loadCommandCenter(container) {
     fetchJSON('/api/tracker?op=challenger', { timeoutMs: OPTIONAL_TIMEOUT_MS }).catch(() => null), // shadow — optional
   ]); } catch { p = null; }
 
+  // A render throw must NEVER strand the spinner (2026-08-13 lesson: any uncaught
+  // exception here left "Reading today's market…" up forever). Failures degrade to an
+  // honest error card with a retry hint instead.
+  const renderSafely = (payload) => {
+    try { renderCommandCenter(container, payload); }
+    catch (e) {
+      container.innerHTML = `<div class="dt-note" style="border-left-color:var(--red,#ef4444)"><b>Today view failed to render.</b> ${esc(String((e && e.message) || e))} — try ⟳ Refresh; if it persists the payload/renderer shapes have diverged.</div>`;
+    }
+  };
   if (p && p.ok) {
     applyGrades(mat);
     applyChallenger(chal);
     try { localStorage.setItem(TODAY_CACHE_KEY, JSON.stringify({ p, mat, chal, at: Date.now() })); } catch { /* quota → skip caching */ }
-    renderCommandCenter(container, p);          // replace stale with fresh
+    renderSafely(p);                            // replace stale with fresh
   } else if (!painted) {
-    renderCommandCenter(container, p);          // nothing cached → show the empty/error state
+    renderSafely(p);                            // nothing cached → show the empty/error state
   } else {
     markUpdating(container, false);             // fresh fetch failed but stale is shown → keep it, drop the hint
   }
