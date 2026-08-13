@@ -16,22 +16,20 @@ const STAGE_VAL = { Setup: 100, Early: 82, Breakout: 60 };            // earlier
 const STAGE_LABEL = { Setup: '🎯 Coiled setup', Early: '🌱 Early base', Breakout: '🚀 Breaking out' };
 const GHOST_LABEL = { GHOST: 'heavy accumulation', STALKING: 'quiet accumulation', WATCH: 'early interest' };
 
-// Build a per-(section|tier) reliability map from the live scoreboard, and a
-// confidence-aware weight: the app literally uses its own realized results to tilt
-// the ranking. Small samples → neutral (we don't over-trust a handful of picks).
+// Build a per-(section|tier|scope) reliability map from the live scoreboard.
+// Scoreboard groups are keyed section:tier:SCOPE — collapsing to section|tier let a
+// micro-scope record overwrite (last-wins) the large-cap one and tilt the wrong cards
+// (RT-07). The key now carries scope; the map is DISPLAY-ONLY (track-record line on
+// the card) and no longer tilts the rank (RT-01).
+export const relKey = (section, tier, scope) => `${section}|${tier}|${scope || ''}`;
 export function buildReliability(groups) {
   const map = {};
   (groups || []).forEach(g => {
     const h = g.horizons || {};
     const best = h['1m'] || h['1w'] || h['3m'] || null;
-    map[`${g.section}|${g.tier}`] = best ? { avg: best.avg, winRate: best.winRate, n: best.n } : { n: 0 };
+    map[relKey(g.section, g.tier, g.scope)] = best ? { avg: best.avg, winRate: best.winRate, n: best.n } : { n: 0 };
   });
   return map;
-}
-function relWeight(rec) {
-  if (!rec || (rec.n || 0) < 8) return 1;                       // not enough data → neutral
-  const a = rec.avg || 0, w = (rec.winRate || 50) - 50;
-  return 1 + Math.max(-0.15, Math.min(0.2, a * 0.02 + w * 0.004));  // beating → boost, losing → trim
 }
 
 // Model health from the apex model's ALREADY-RESOLVED picks (op=drift). This is the
@@ -45,15 +43,22 @@ export function modelHealth(drift) {
   return { factor, n: live.n, live: live.winRate, base, degrading: ratio < 0.7, beating: ratio > 1.1, state: drift.status || (ratio < 0.7 ? 'degrading' : 'ok') };
 }
 
+// GOVERNANCE (graduation-league RT-01): this rank was weighted 0.26 by Ghost's tier,
+// 0.16 by the conviction sleeve, tilted by a per-Ghost-tier reliability weight and
+// scaled by the Apex drift healthFactor. Ghost, conviction and Apex are all registry
+// SHADOW strategies with zero cleared weight (conviction's registry entry says
+// outright that no user-facing rank may consume it), so every one of those terms was
+// a zero-weight strategy reordering a user-facing buy list. The rank below is
+// invariant to shadow-strategy inputs: quant + stage + narrative + non-strategy
+// signals only. Ghost/conviction remain visible as labeled annotations; their terms
+// return only via a registry promotion, never a client edit.
 export function rankOpportunities(results, reliability = {}, healthFactor = 1, leadSet = new Set(), themeMom = {}) {
   return (results || [])
-    .filter(c => c.levels && c.ghost && c.status && c.levels.entry > 0)
+    .filter(c => c.levels && c.status && c.levels.entry > 0)
     .map(c => {
-      const g = GHOST_VAL[c.ghost.tier] ?? 40;
       const stage = STAGE_VAL[c.status] ?? 60;
       const q = c.quant?.score ?? 0;
       const narr = Math.min((c.narrativeStrength ?? 0) * 10, 100);
-      const conv = c.conviction?.score ?? 70;                  // the LEARNED conviction (recalibrated from resolved picks)
       const theme = canonTheme(c.theme, c.narrative, c.sector);
       const inLeadingTheme = leadSet.has(theme);
       // A name early in a HOT theme that hasn't run itself yet = the laggard play.
@@ -61,14 +66,10 @@ export function rankOpportunities(results, reliability = {}, healthFactor = 1, l
       const themeBoost = inLeadingTheme ? (laggard ? 12 : 7) : 0;     // theme tailwind
       const sm = smartMoney(c);                                        // growth accel + insider + catalyst
       const ss = setupSignals(c);                                      // O'Neil/Minervini pre-breakout signals
-      const base = 0.28 * q + 0.26 * g + 0.18 * stage + 0.12 * narr + 0.16 * conv + themeBoost + sm.boost + ss.boost;
-      const rec = reliability[`Ghost|${c.ghost.tier}`];
-      // relWeight is a per-Ghost-tier track-record tilt (it CAN reorder names). healthFactor is a
-      // single global scalar applied identically to every candidate — it is order-preserving by
-      // construction (it scales the whole list's conviction, it does not rerank). Honest,
-      // algorithm-SPECIFIC, evidence-gated reranking lives server-side in the Swing Supervisor
-      // (lib/swing-router.js), not here.
-      const opp = Math.round(base * relWeight(rec) * healthFactor);
+      // Weights renormalized from the pre-RT-01 non-shadow terms (0.28q/0.18stage/0.12narr).
+      const base = 0.48 * q + 0.31 * stage + 0.21 * narr + themeBoost + sm.boost + ss.boost;
+      const rec = c.ghost ? reliability[relKey('Ghost', c.ghost.tier, c.scope)] : null;   // display-only track record, scope-matched
+      const opp = Math.round(base);
       // Relative strength vs its OWN theme — leader or catch-up laggard.
       const tMom = themeMom[theme], myMom = c.factors?.mom63;
       let rsTheme = null;
@@ -120,7 +121,7 @@ export function conviction(opp) {
 }
 
 function thesis(c) {
-  const acc = GHOST_LABEL[c.ghost.tier] || 'building interest';
+  const acc = GHOST_LABEL[c.ghost?.tier] || 'building interest';
   const stage = c.status === 'Setup' ? 'a tight base, coiled to break'
     : c.status === 'Early' ? 'an early base — more room before it moves'
     : 'breaking out right now';
@@ -162,9 +163,9 @@ function levelsRow(lv) {
 function expertDetail(c) {
   const f = c.factors || {};
   const moms = [f.mom21 != null ? `1m ${f.mom21 > 0 ? '+' : ''}${f.mom21}%` : null, f.mom63 != null ? `3m ${f.mom63 > 0 ? '+' : ''}${f.mom63}%` : null, f.mom126 != null ? `6m ${f.mom126 > 0 ? '+' : ''}${f.mom126}%` : null].filter(Boolean).join(' · ');
-  const strong = c.ghost.strongPillars != null ? `${c.ghost.strongPillars}/6 ${L('accumulation', 'accumulation pillars')} strong` : '';
+  const strong = c.ghost?.strongPillars != null ? `${c.ghost.strongPillars}/6 ${L('accumulation', 'accumulation pillars')} strong` : '';
   return `<div class="opp-expert expert-only">`
-    + `<div>${L('score', 'Quant')} ${c.quant?.score ?? '—'}/100 · ${L('accumulation', 'GAI')} ${c.ghost.score ?? '—'}/100 · ${strong}</div>`
+    + `<div>${L('score', 'Quant')} ${c.quant?.score ?? '—'}/100 · ${L('accumulation', 'GAI')} ${c.ghost?.score ?? '—'}/100 · ${strong}</div>`
     + (moms ? `<div class="dt-dim">${L('momentum', 'Momentum')}: ${moms}</div>` : '')
     + (c.narrative ? `<div class="dt-dim">${esc(c.narrative)}</div>` : '') + `</div>`;
 }
@@ -208,8 +209,10 @@ function oppTrack(c) {
 
 export function oppCardInner(c) {
   return `<div class="opp-badges">${whyNowBadge(c)}<span class="opp-badge">${STAGE_LABEL[c.status] || c.status}</span>`
-    + `<span class="opp-badge ghost-${(c.ghost.tier || '').toLowerCase()}">${L('ghost', c.ghost.tier)}</span>`
-    + (c.conviction?.sleeveA ? `<span class="opp-badge opp-sleevea expert-only" title="Top-quintile by the results-trained conviction model">🏅 ${L('conviction', 'top-quintile')}</span>` : '')
+    // Ghost is a labeled shadow-strategy ANNOTATION (it neither gates admission nor
+    // weighs the rank — RT-01). The conviction sleeveA badge is gone entirely: the
+    // registry forbids any user-facing badge consuming the frozen shadow benchmark.
+    + (c.ghost ? `<span class="opp-badge ghost-${(c.ghost.tier || '').toLowerCase()}" title="Ghost accumulation read — registry shadow (zero weight): shown as context, does not affect this ranking">${L('ghost', c.ghost.tier)}</span>` : '')
     + (c.inLeadingTheme ? `<span class="opp-badge opp-theme-lead" title="In a leading theme">🔥 ${esc(c.canonTheme)}</span>` : `<span class="dt-dim">${esc(c.canonTheme || c.sector || '')}</span>`)
     + `</div>`
     + `<div class="opp-thesis">${thesis(c)}</div>`
@@ -254,7 +257,7 @@ export function collectAiSignals(c) {
 
 export async function loadOpportunities(container, scope = 'large', limit = 6) {
   if (!container) return;
-  container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Finding the best setups to buy before they run…</p></div>`;
+  container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Ranking research candidates — quiet accumulation + early bases…</p></div>`;
   let d, sb, drift, rt, an, sw, ca, ts;
   const j = op => fetchJSON('/api/tracker?op=' + op).catch(() => null);
   try {
@@ -275,23 +278,22 @@ export async function loadOpportunities(container, scope = 'large', limit = 6) {
   const ranked = rankOpportunities(d.results, reliability, health.factor, leadSet, themeMom);
   const top = ranked.slice(0, limit);
 
-  // Model-health line — the loop OPERATING now: the app grades its own resolved picks and dials
-  // the WHOLE list's conviction up or down. This is a uniform, order-preserving scalar (it does
-  // not rerank the names — per-name order comes from each Ghost-tier's own track record, and
-  // algorithm-specific reranking lives in the 📋 Swing Supervisor).
+  // Model-health line — DIAGNOSTIC ONLY. The Apex drift read comes from a registry-
+  // shadow model, so it no longer scales or reorders this list (RT-01); it is shown
+  // as context the same way the regime banner is.
   let trackLine, trackCol;
   if (health.state === 'building') {
     const logged = (sb && sb.totalPicks) || 0;
-    trackLine = `📊 The list-level conviction self-tunes from results — ${logged} picks logged, ${health.n} resolved so far. As more mature the dial moves further.`;
+    trackLine = `📊 Track-record context: ${logged} picks logged, ${health.n} resolved so far. Shown for context — it does not change this ranking.`;
     trackCol = 'var(--cyan)';
   } else if (health.degrading) {
-    trackLine = `⚠️ <b>The model is grading its own recent picks as weak</b> — its last ${health.n} resolved won just <b>${health.live}%</b> vs a ${health.base}% baseline. The whole list's conviction is dialed <b>down uniformly</b> (this lowers how hard to act on all of them; it does not reorder them) — size down and lean on the ${L('regime', 'regime')}.`;
+    trackLine = `⚠️ <b>Recent resolved picks from the shadow drift monitor look weak</b> — last ${health.n} resolved won <b>${health.live}%</b> vs a ${health.base}% reference. Context only (it does not change this ranking) — be more selective and lean on the ${L('regime', 'regime')}.`;
     trackCol = 'var(--red)';
   } else if (health.beating) {
-    trackLine = `✅ <b>The model's recent picks are working</b> — its last ${health.n} resolved beat baseline (${health.live}% vs ${health.base}%). The whole list's conviction is dialed up uniformly. Still confirm and use a ${L('stop', 'stop')}.`;
+    trackLine = `✅ Recent resolved picks from the shadow drift monitor are beating their reference (${health.live}% vs ${health.base}% over ${health.n}). Context only — still confirm and use a ${L('stop', 'stop')}.`;
     trackCol = 'var(--green)';
   } else {
-    trackLine = `📊 The model's recent picks are tracking baseline (${health.live}% over ${health.n} resolved). The list-level conviction dial sits neutral.`;
+    trackLine = `📊 Recent resolved picks are tracking their reference (${health.live}% over ${health.n} resolved). Context only — it does not change this ranking.`;
     trackCol = 'var(--cyan)';
   }
 

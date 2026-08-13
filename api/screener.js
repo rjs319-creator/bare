@@ -432,11 +432,13 @@ async function handleRequest(req, res) {
       }
       const ghostHit = ghost ? { tier: ghost.tier, score: ghost.score, strongPillars: ghost.strongPillars || [] } : null;
       const r = composeWhyNow({ ticker: c.ticker, apex: apexHit, ghost: ghostHit, conviction: conviction || null, macro });
-      // `standout` = a confirmed apex-tier breakout only. The conviction sleeve is a
-      // registered SHADOW strategy (strategy-registry `conviction`) with no earned
-      // clearance — its sleeveA flag keeps logging as a frozen shadow benchmark but
-      // may not light a user-facing badge until it clears governance.
-      const standout = !!(apexHit && apexHit.tier === 'apex');
+      // `standout` = a confirmed apex-tier breakout only — AND only while the Apex
+      // strategy (`custom`) itself holds registry clearance. Apex was demoted to a
+      // zero-weight frozen shadow benchmark (2026-08-12): a shadow model may not
+      // light a user-facing badge any more than the conviction sleeve may. The badge
+      // returns via a registry re-promotion, never a code edit here.
+      const apexBadgeEligible = (() => { try { return require('../lib/strategy-gate').isTradeEligible('custom'); } catch { return false; } })();
+      const standout = !!(apexBadgeEligible && apexHit && apexHit.tier === 'apex');
       return { level: r.verdict.level, headline: r.verdict.headline, forCount: r.forCase.length, standout };
     };
 

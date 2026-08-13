@@ -135,7 +135,7 @@ function tournamentPanel(d) {
   return card('Model tournament', 'champion vs challengers — promotion is governed, never automatic',
     `<table style="border-collapse:collapse;font-size:13px;width:100%">
       <tr class="dt-dim"><th style="text-align:left">Model</th><th style="text-align:left">Role</th><th style="text-align:left">Status</th></tr>
-      <tr><td style="padding:3px 8px 3px 0">Breakout screener (screener-v1)</td><td>Production champion</td><td>governed by op=maturity (policy cohort Early:large)</td></tr>
+      <tr><td style="padding:3px 8px 3px 0">Breakout screener (screener-v2)</td><td>Registry production (ceiling-capped)</td><td>governed by op=maturity (policy cohort Early:large)</td></tr>
       <tr><td style="padding:3px 8px 3px 0">Forecastability gate (cfl-v1)</td><td>Shadow challenger</td><td>accruing evidence — no calibrator support yet, cannot gate anything</td></tr>
     </table>
     <div class="dt-dim" style="font-size:12px;margin-top:6px">Promotion contract: PIT lineage → recall improves on untouched data → precision/utility holds → survives realistic + doubled costs → calibration acceptable → not concentrated in a few trades → multi-regime → alpha-prosecutor battery (label shuffle, future-feature leak, placebo, drop-best-year, best-trade excision) does not invalidate → thresholds pre-declared. ${d && d.state && d.state.lastTick ? 'Last tick ' + esc(d.state.lastTick.at || '') : ''}</div>`);

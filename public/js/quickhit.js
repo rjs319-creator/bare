@@ -233,7 +233,7 @@ function qhCard(c, rank) {
 export async function loadQuickHit(container, bindNav) {
   if (!container) return;
   if (moversTimer) { clearInterval(moversTimer); moversTimer = null; }   // drop any prior tab's timer
-  container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning large, small &amp; micro caps for today's best plays…</p></div>`;
+  container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning large, small &amp; micro caps for today's top research candidates…</p></div>`;
   const j = op => fetchJSON('/api/tracker?op=' + op).catch(() => null);
   const scr = scope => fetchJSON('/api/screener?scope=' + scope).catch(() => null);
   let large, small, micro, sb, drift, rt, an, sw, ca, ts, of, pr;
@@ -256,14 +256,16 @@ export async function loadQuickHit(container, bindNav) {
   ];
 
   // Cross-confirm with the 5 AI screeners: a name independently flagged by an AI angle
-  // gets a badge + a small conviction bump (two unrelated methods agreeing = stronger).
+  // gets a BADGE only. The AI screeners are registry-shadow strategies, so their
+  // agreement may annotate a card but not move the rank (same RT-01 rule as
+  // Ghost/conviction/drift — measured redundancy also says agreement doesn't pay).
   const aiMap = new Map();
   collectAiSignals({ rt, an, sw, ca, ts }).forEach(s => {
     const set = aiMap.get(s.ticker) || new Set(); set.add(s.src); aiMap.set(s.ticker, set);
   });
   pool.forEach(p => {
     const srcs = aiMap.get(p.ticker.toUpperCase());
-    if (srcs && srcs.size) { p.aiSrcs = [...srcs]; p.opp += 3; }
+    if (srcs && srcs.size) p.aiSrcs = [...srcs];
   });
 
   // Mover leaderboards: union of every surfaced name → real day/5-session/month
@@ -316,7 +318,7 @@ export async function loadQuickHit(container, bindNav) {
   // Rendered into a placeholder so the 30s live refresh can repaint just this block.
   html += `<div id="qh-movers"></div>`;
 
-  html += `<div class="dt-dim opp-foot">Ranked purely by conviction — accumulation, setup stage, momentum &amp; the model's results-trained score — then tilted by how its own recent picks are resolving and boosted when an AI screener independently agrees. A cap tier only takes a Top-${TOP_N} slot when its best name is genuinely solid (no forced quotas); the 🏆 row above always shows each tier's best regardless. Research, not advice — confirm on a chart and use a stop.</div>`;
+  html += `<div class="dt-dim opp-foot">Ranked by setup quality — momentum quant, setup stage &amp; narrative, boosted when an AI screener independently agrees. Shadow-strategy reads (Ghost accumulation, conviction model, drift monitor) are shown as context and do <b>not</b> move this ranking (registry: zero weight). A cap tier only takes a Top-${TOP_N} slot when its best name is genuinely solid (no forced quotas); the 🏆 row above always shows each tier's best regardless. Research, not advice — confirm on a chart and use a stop.</div>`;
 
   container.innerHTML = html;
   // Scope-aware references: remember which cap to show before ⭐ Opportunities opens.

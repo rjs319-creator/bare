@@ -59,8 +59,18 @@ test('PRICE_TREND_ENGINES excludes ghost (volume-accum is its own domain)', () =
 // quant-redesign-3 guard: this list claimed to "match lib/decision.js SOURCE_FAMILY" but
 // had drifted (listed a non-existent 'breakout' id, omitted gapgo/daytrade/coil). Pin
 // the alignment both ways so it cannot drift silently again.
-test('PRICE_TREND_ENGINES matches SOURCE_FAMILY priceTrend ids exactly', () => {
+test('PRICE_TREND_ENGINES is a subset of SOURCE_FAMILY priceTrend ids (family map may be wider)', () => {
+  // PR-02 (graduation-league) extended SOURCE_FAMILY to cover EVERY canonical id so
+  // no strategy gets silent full-independence credit — including research verticals
+  // (omega, atlasx, rlt, orbit, …) that trend-core does not consolidate. The
+  // invariant that matters both ways: every consolidated engine must be mapped
+  // priceTrend, and the original engine set must still be present.
   const { SOURCE_FAMILY } = require('../lib/decision');
-  const familyIds = Object.keys(SOURCE_FAMILY).filter(k => SOURCE_FAMILY[k] === 'priceTrend').sort();
-  assert.deepEqual([...PRICE_TREND_ENGINES].sort(), familyIds);
+  const familyIds = new Set(Object.keys(SOURCE_FAMILY).filter(k => SOURCE_FAMILY[k] === 'priceTrend'));
+  for (const id of PRICE_TREND_ENGINES) {
+    assert.ok(familyIds.has(id), `${id} consolidated by trend-core but not mapped priceTrend`);
+  }
+  for (const id of ['screener', 'momentum', 'apex', 'ignition', 'trendrider', 'coremo', 'gapgo', 'daytrade', 'coil', 'confluence']) {
+    assert.ok(familyIds.has(id), `core engine ${id} missing from the priceTrend family`);
+  }
 });

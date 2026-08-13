@@ -5,25 +5,31 @@ const { composeWhyNow, verdictOf, dedupedForCount } = require('../lib/whynow');
 
 const riskOn = { regime: 'risk-on', macroRisk: 20 };
 
-test('Apex + Conviction (same screener cross-section) collapse to ONE for-vote', () => {
+test('Apex + Conviction (both registry-shadow) contribute CONTEXT, never for-votes', () => {
+  // RT-02 (graduation-league): apex was demoted to a zero-weight frozen benchmark and
+  // conviction's registry entry forbids user-facing consumption — neither may add
+  // verdict weight until a registry re-promotion.
   const r = composeWhyNow({
     ticker: 'NVDA', macro: riskOn,
     apex: { tier: 'loaded', score: 63, pillars: {} },
     conviction: { sleeveA: true, pctile: 85 },
   });
-  // Two raw FOR rows render, but the verdict counts one correlated family.
-  assert.equal(r.forCase.length, 2);
-  assert.equal(r.verdict.level, 'watch', 'correlated screeners are one signal, not "multiple aligned"');
-  assert.match(r.verdict.summary, /same underlying cross-section|count as one/i);
+  assert.equal(r.forCase.length, 0, 'shadow strategies may not sit in the for-column');
+  assert.notEqual(r.verdict.level, 'constructive');
+  const ctx = r.signals.filter(x => x.side === 'context' && /^(Apex:|Conviction:)/.test(x.key));
+  assert.equal(ctx.length, 2, 'both reads stay visible as labeled context');
+  assert.ok(ctx.every(x => /shadow/i.test(x.note || '')), 'context rows must say WHY they carry no weight');
 });
 
-test('genuinely distinct families still reach constructive', () => {
-  const r = composeWhyNow({
-    ticker: 'NVDA', macro: riskOn,
-    ghost: { tier: 'STALKING', score: 71, strongPillars: ['RM'] },
-    apex: { tier: 'loaded', score: 63, pillars: {} },
-  });
-  assert.equal(r.verdict.level, 'constructive');
+test('genuinely distinct families still reach constructive (verdict layer)', () => {
+  // The family-collapse logic is unchanged — exercised at the verdict layer with two
+  // for-votes from distinct families (the raw-source path now requires registry
+  // clearance, which shadow fixtures cannot supply).
+  const v = verdictOf([
+    { side: 'for', key: 'Ghost:STALKING' },
+    { side: 'for', key: 'ReadThrough:Fresh' },
+  ]);
+  assert.equal(v.level, 'constructive');
 });
 
 test('the word "independent" never appears in a multi-signal verdict', () => {

@@ -126,7 +126,7 @@ test('surfaces the model version, sample count and calibration quality (§9 summ
 
 test('mode distinguishes measured redundancy from the asserted prior', () => {
   const measured = OE.buildEnsembleView({ today: today(), health });
-  assert.ok(/production/.test(measured.summary.mode));
+  assert.ok(/measured-redundancy/.test(measured.summary.mode), 'the measured mode may not carry production language (graduation-league lead 8)');
   const prior = OE.buildEnsembleView({ today: today({ redundancy: { method: 'prior' } }), health });
   assert.ok(/fallback/.test(prior.summary.mode));
 });
