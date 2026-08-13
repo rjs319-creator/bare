@@ -76,11 +76,25 @@ and currently gets 1 (the curve proxy, derived from ETF prices). It reports
 | valuation | derivable from existing index data + FRED yields | free |
 | **earningsRevisions** | **not free** — needs an estimates vendor | see §4 |
 
-**Note:** `lib/pulse2-regime-stack.js` already accepts `macroInputs` in exactly this shape
-and is passed `null` today. Wiring FRED is ~a day of work and would move the strategic
-layer from `UNAVAILABLE` to a real state on four legs.
+**STATUS: BUILT — needs only the key.** `lib/fred.js` + `lib/pulse2-macro.js` are wired
+into `pulse2statetick`. Growth, inflation, and net liquidity come up as soon as
+`FRED_API_KEY` is set in Vercel prod; valuation additionally needs an index earnings yield
+(see below). With no key the strategic layer stays `UNAVAILABLE` with that reason, and
+`op=pulse2` exposes per-leg provenance under `macroDiagnostics`.
 
-**This is the best cost/benefit item on the list.**
+Two implementation notes worth knowing:
+
+- **Liquidity is a NET.** `WALCL − RRP − TGA`. The balance sheet alone is the wrong read —
+  reserves drained into reverse repo or the Treasury's account are not in the system. If
+  any of the three series is missing the leg is **refused rather than partially computed**,
+  because dropping a drain flips the sign.
+- **This is a LIVE read only.** FRED serves the latest vintage, so values for past dates
+  are not what was known then. Everything is stamped `backtestSafe: false`; feeding it to
+  the research harness requires ALFRED vintage endpoints.
+
+**Remaining for the valuation leg:** an index earnings yield (S&P 500 forward or trailing).
+Currently passed `null`, so that leg reports unavailable rather than substituting a
+constant. Three of four legs is already above the strategic layer's two-leg floor.
 
 ---
 
