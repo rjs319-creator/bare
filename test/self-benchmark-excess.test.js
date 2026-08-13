@@ -111,3 +111,15 @@ test('ExpGap still logs a short-framed SPY row — the reason the guard exists',
   assert.match(src, /ticker: 'SPY'/);
   assert.match(src, /short: true/);
 });
+
+// ── observability ──────────────────────────────────────────────────────────
+// A bare count tells you a section grades something against itself but not WHAT,
+// which is the one fact needed to act on it. The live scoreboard surfaced
+// selfBenchmarked=1 on Attention/Sticky and momentum/HIST_StrongSell with no way
+// to name the pick, so the count is sampled like noHistoryTickers.
+test('self-benchmarked picks are sampled by ticker, not just counted', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'apex-routes.js'), 'utf8');
+  assert.match(src, /selfBenchmarkedTickers: \[\]/);                       // initialised on the group
+  assert.match(src, /selfBenchmarkedTickers\.length < SELF_BENCH_SAMPLE/); // bounded
+  assert.match(src, /selfBenchmarkedTickers: g\.selfBenchmarkedTickers/);  // surfaced in the response
+});
