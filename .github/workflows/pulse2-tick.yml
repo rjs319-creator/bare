@@ -4,8 +4,20 @@
 # cadence lives here, mirroring daytrade-scan.yml:
 #   • market-state tick  — every 5 minutes through the US session window (deterministic,
 #     NO LLM, keyless Yahoo bars; cheap and safe at this cadence).
-#   • narrative collect (+refine) — once an hour during regular hours (one bounded
+#   • narrative collect (+refine) — roughly once an hour during regular hours (one bounded
 #     Haiku web-search call + one bounded Fable call; hourly respects LLM cost).
+#
+# CADENCE REALITY (measured 2026-08-10 → 2026-08-13, 32 successful runs): GitHub does NOT
+# honor the */5 request. Observed median gap between firings is 60 min (min 41, max 72) —
+# about 9 runs per RTH day, not ~108. That is platform throttling, not a broken workflow.
+#
+# The narrative gate below USED to be `MIN < 10` ("first firing of each hour"). That is
+# only equivalent to "hourly" if firings actually land every 5 minutes. Under throttling
+# they land at arbitrary minutes, so the gate opened just 1 time in 32 (3%) and the
+# narrative layer was effectively STARVED intraday — 24h+ ages were the steady state.
+#
+# It now gates on the NARRATIVE'S OWN AGE, which is correct at ANY firing cadence: it
+# cannot starve when firings are sparse, and cannot over-spend if GitHub ever un-throttles.
 # The page's clocks report the ACTUAL cadence — if this workflow is disabled, Pulse v2
 # honestly shows stale/market-closed states rather than claiming intraday updates.
 name: pulse2-tick
@@ -38,11 +50,31 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           if [ -z "$CRON_SECRET" ]; then echo "::warning::CRON_SECRET not set; skipping"; exit 0; fi
-          # Self-gate to the first firing of each hour so the LLM collect runs hourly,
-          # not every 5 minutes (cost control; manual dispatch always runs it).
-          MIN=$(date -u +%M)
-          if [ "${{ github.event_name }}" != "workflow_dispatch" ] && [ "$MIN" -ge 10 ]; then
-            echo "not the top-of-hour slot (minute $MIN); skipping collect"; exit 0
+          # Self-gate on the NARRATIVE'S OWN AGE so the LLM collect runs ~hourly at any
+          # firing cadence (cost control; manual dispatch always runs it). op=pulse2 is a
+          # public, read-only route — no secret, and it cannot itself start an LLM call.
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            # `if .clocks` distinguishes the two null cases that must NOT behave alike:
+            #   • payload parsed, but no narrative exists yet  → 999999 ⇒ collect (bootstrap)
+            #   • payload unreachable/unparseable              → empty  ⇒ bounded fallback
+            AGE=$(curl -s --max-time 30 "$APP_URL/api/tracker?op=pulse2" \
+              | jq -r 'if .clocks then (.clocks.narrativeAgeMinutes // 999999) else empty end' 2>/dev/null || true)
+            case "$AGE" in ''|*[!0-9]*) AGE='' ;; esac   # keep only a clean integer
+            if [ -n "$AGE" ]; then
+              if [ "$AGE" -lt 50 ]; then
+                echo "narrative is ${AGE}m old (<50m); skipping collect"; exit 0
+              fi
+              echo "narrative is ${AGE}m old (>=50m); running collect"
+            else
+              # Age unreadable → fall back to the old minute gate. This is a BOUNDED
+              # fallback on purpose: failing fully open would let a broken read turn an
+              # un-throttled */5 schedule into ~108 LLM calls a day.
+              MIN=$(date -u +%M)
+              if [ "$MIN" -ge 10 ]; then
+                echo "narrative age unreadable and minute $MIN is outside the fallback window; skipping collect"; exit 0
+              fi
+              echo "::warning::narrative age unreadable; using the minute-based fallback gate"
+            fi
           fi
           code=$(curl -s -o /tmp/collect.json -w '%{http_code}' --max-time 180 \
             -H "Authorization: Bearer $CRON_SECRET" \
