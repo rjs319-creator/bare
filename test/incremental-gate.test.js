@@ -114,3 +114,39 @@ test('gradeStrategy passes each entry own criteria into the gate', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'maturity.js'), 'utf8');
   assert.match(src, /declaresIncrementalGate\(entry\.criteria\)/);
 });
+
+// ── payload parity ─────────────────────────────────────────────────────────
+// gradeStrategy has TWO paths. A strategy with resolved Scoreboard rows goes
+// through gradeTrack (gated above); one with none short-circuits to an
+// "accruing" experimental verdict that hand-builds its stats and never calls
+// gradeTrack. Nine of the ten declarers are on that second path, so the live
+// payload advertised the declared bar for exactly one of them.
+//
+// That is not a safety hole — the accruing branch hard-codes `experimental`, so
+// nothing can reach Validated through it. It is the SAME invisibility F-12 was
+// about: a declared requirement that the payload does not mention.
+const TRACKED = { groups: [{ section: 'S', tier: 'T', picks: 10, noHistory: 0 }] };
+const UNTRACKED = { groups: [] };
+const DECLARER = { id: 'x', label: 'X', section: 'S', horizon: 'swing', criteria: 'must show incremental lift over the control' };
+const PLAIN = { id: 'y', label: 'Y', section: 'S', horizon: 'swing', criteria: 'cost-net CI clear of zero' };
+
+test('an accruing declarer still advertises its declared incremental bar', () => {
+  const g = M.gradeStrategy(DECLARER, UNTRACKED);
+  assert.equal(g.grade, 'experimental');
+  assert.equal(g.stats.incremental.declared, true);
+  assert.equal(g.stats.incremental.measured, false);
+  assert.equal(g.stats.incremental.cleared, false);
+});
+
+test('an accruing NON-declarer advertises nothing', () => {
+  const g = M.gradeStrategy(PLAIN, UNTRACKED);
+  assert.equal(g.stats.incremental, null);
+});
+
+test('both grading paths emit the identical contract shape', () => {
+  // The payload shape must not depend on whether a strategy happened to have a
+  // resolved record — that is what made the gap invisible in the first place.
+  const untracked = M.gradeStrategy(DECLARER, UNTRACKED).stats.incremental;
+  const tracked = M.gradeTrack({ ...VALIDATES }, { ...PASSING, incremental: { declared: true } }).stats.incremental;
+  assert.deepEqual(Object.keys(untracked).sort(), Object.keys(tracked).sort());
+});
