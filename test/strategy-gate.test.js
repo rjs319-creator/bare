@@ -110,8 +110,12 @@ test('2026-08-11 demotion: ghost and downday are SHADOW — the ledger contradic
   // ghost: hypothesis `quiet-accumulation-standalone` is no-edge against a 12-1
   //   momentum baseline, and ghost x screener return correlation ~0.96 means it was
   //   duplicating the Breakout sleeve rather than diversifying it.
+  assert.equal(gate.statusOf('downday'), 'shadow', 'downday must be shadow');
+  // ghost was subsequently RETIRED (2026-08-13, owner decision, weekly disposition
+  // cycle 1): duplicate of the screener — measured independence credit 0.248,
+  // corr ~0.96, and its historical insider evidence carries a filing-date look-ahead.
+  assert.equal(gate.statusOf('ghost'), 'rejected', 'ghost must be retired (rejected)');
   for (const id of ['ghost', 'downday']) {
-    assert.equal(gate.statusOf(id), 'shadow', `${id} must be shadow`);
     assert.equal(gate.isTradeEligible(id), false, `${id} must not originate or boost a live trade`);
   }
 });
@@ -120,12 +124,16 @@ test('a demoted strategy keeps a note and a written way back', () => {
   // The registry's own convention: a governed entry states what it is and what would
   // change its status. A demotion without criteria is a dead end, not a decision.
   const { STRATEGY_REGISTRY } = require('../lib/strategy-registry');
-  for (const id of ['ghost', 'downday']) {
-    const e = STRATEGY_REGISTRY.find(x => x.id === id);
-    assert.match(e.note, /DEMOTED from production 2026-08-11/, `${id} must record the demotion`);
-    assert.ok(e.criteria && e.criteria.length > 80, `${id} must state what would earn promotion back`);
-    assert.match(e.criteria, /NEW prospective/, `${id} must require fresh evidence, not a re-read of the consumed sample`);
-  }
+  const dd = STRATEGY_REGISTRY.find(x => x.id === 'downday');
+  assert.match(dd.note, /DEMOTED from production 2026-08-11/, 'downday must record the demotion');
+  assert.ok(dd.criteria && dd.criteria.length > 80, 'downday must state what would earn promotion back');
+  assert.match(dd.criteria, /NEW prospective/, 'downday must require fresh evidence');
+  // ghost's status moved on (RETIRED 2026-08-13) but the same convention holds:
+  // the entry records the decision, its date, and the written way back.
+  const gh = STRATEGY_REGISTRY.find(x => x.id === 'ghost');
+  assert.match(gh.note, /RETIRED .*2026-08-13/, 'ghost must record the retirement decision and date');
+  assert.ok(gh.criteria && gh.criteria.length > 80, 'ghost must keep a written way back');
+  assert.match(gh.criteria, /NEW prospective/, 'un-retiring requires fresh evidence, not a re-read');
 });
 
 test('2026-08 reconciliation: gapgo/coil/biotech are SHADOW — evidence and registration now agree', () => {

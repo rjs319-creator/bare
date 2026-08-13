@@ -50,7 +50,7 @@ statistic (QM-4 fix deployed before any earliest-test date arrived).
 | events (CERN) | promising, but noHistory 18.6% and its cost tier just moved liquid→small (F-05) — record will re-earn on corrected friction | **retain-shadow**, watch; lineage task: recover/annotate the delisted third |
 | fade | grade promising, but the **date-level** net excess is negative (−1.3%/date, CI [−3.99, +1.24]) | **retain-shadow (avoid-only)**, watch — if the date-level CI clears below zero the demotion route fires on its own |
 | gapdown | promising on n=17 / 9 dates — far too thin to mean anything | **retain-shadow**; the census retire-duplicate (merge into gapgo) recommendation stands for review |
-| ghost | measured independence credit fell to 0.248 vs screener | **retire-duplicate recommendation STRENGTHENED** — decision requested from the owner |
+| ghost | measured independence credit fell to 0.248 vs screener | **RETIRED (executed 2026-08-13, owner decision)**: registry → rejected, standalone nightly tick removed, WHY NOW credit → context; historical ledger and tab preserved as record |
 | attention, readthrough | noHistory 14–17% | **retain-shadow** with a data-lineage task before any grade is trusted |
 | everything else | experimental/informational, accruing | **retain-shadow** per census |
 
@@ -66,6 +66,6 @@ ignition → shadow; apex/conviction consumption stripped from client surfaces.
    logged the week's transitions to the hash-chained ledger.
 3. Re-read `events`/`fade` grades on the corrected cost tiers and the
    date-clustered lane.
-4. Ghost retire-duplicate decision from the owner.
+4. ~~Ghost retire-duplicate decision from the owner~~ — DONE: retired 2026-08-13; verify the first post-retirement ledger chain run skips ghostlog cleanly.
 5. Progress on open findings ledger items (prosecutor wiring, research/data
    versioning).
