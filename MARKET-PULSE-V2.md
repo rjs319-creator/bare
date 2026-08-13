@@ -11,8 +11,8 @@ intact and is the automatic fallback.
 
 | Speed | What | Op | Cadence (actual) |
 |---|---|---|---|
-| A. Live market state | Deterministic snapshot: SPY/QQQ/IWM/DIA/RSP, VIX, 11 SPDR sectors, breadth (RLT aggregate), macro, market mode, playbook inputs. **No LLM.** | `pulse2statetick` | every 5 min RTH via GitHub Actions + nightly warm chain |
-| B. Event & narrative intelligence | One bounded Haiku web-search call → claim-level provenance (real-URL validation, syndication lineage) → event fingerprint fold → reaction/matrix/views/alerts. Fable adds crowding/contrarian (judgment only). | `pulse2collect`, `pulse2refine` | hourly RTH via GitHub Actions + nightly warm chain |
+| A. Live market state | Deterministic snapshot: SPY/QQQ/IWM/DIA/RSP, VIX, 11 SPDR sectors, breadth (RLT aggregate), macro, market mode, playbook inputs. **No LLM.** | `pulse2statetick` | **~hourly RTH** via GitHub Actions (requested every 5 min; GitHub throttles — see Scheduling reality) + nightly warm chain |
+| B. Event & narrative intelligence | One bounded Haiku web-search call → claim-level provenance (real-URL validation, syndication lineage) → event fingerprint fold → reaction/matrix/views/alerts. Fable adds crowding/contrarian (judgment only). | `pulse2collect`, `pulse2refine` | **nightly warm chain in practice** — the intraday gate almost never opens (see Scheduling reality) |
 | C. Evaluation | Per-horizon (1/3/5/10/21/63 trading sessions) appendable outcomes, SPY- and sector-relative, cluster-aware uncertainty, setup-vs-setup+Pulse comparison. | `pulse2grade` | nightly warm chain |
 
 Public reads (`pulse2`, `pulse2health`, `pulse2evidence`) are strictly read-only: they
@@ -96,10 +96,42 @@ and only a trusted caller regenerates.
 
 Vercel Hobby allows one daily cron (22:00 UTC warm). The `pulse2` root chain in
 `lib/warm-chains.js` guarantees a daily floor. Intraday cadence comes from
-`.github/workflows/pulse2-tick.yml`: market-state every 5 min 13:00–21:59 UTC weekdays,
-narrative collect+refine on the top-of-hour firing. If that workflow is disabled the
-page does NOT pretend otherwise — the two clocks and `op=pulse2health` report actual
-ages and states (`STALE_NARRATIVE`, `MARKET_CLOSED`, `UNAVAILABLE`, …).
+`.github/workflows/pulse2-tick.yml`, which **requests** `*/5 13-21 * * 1-5` (every 5
+minutes, 13:00–21:59 UTC weekdays) and gates narrative collect+refine to the first firing
+of each hour (`MIN < 10`).
+
+**GitHub does not honor that request, and the gap is large enough to change what this
+page is.** Scheduled workflows are best-effort and heavily throttled on a busy runner
+pool. Measured over 2026-08-10 → 2026-08-13 (32 successful runs, `gh run list`):
+
+| | requested | actually observed |
+|---|---|---|
+| market-state firings per RTH day | ~108 | **9** |
+| median gap between firings | 5 min | **60 min** (min 41, max 72) |
+| firings landing in the `MIN < 10` collect window | ~9/day | **1 of 32 (3%)** |
+
+Two consequences, both real rather than cosmetic:
+
+1. **Market state is an hourly read, not a 5-minute one.** Anything downstream that
+   assumes near-real-time state (intraday regime layer, VWAP participation, opening-range
+   reads) is working from data up to ~an hour old. The clocks report the true age, so the
+   page is honest about it — but the *design* intent of a 5-minute loop is not being met.
+2. **The narrative layer is effectively starved intraday.** Because throttled firings land
+   at arbitrary minutes, the `MIN < 10` gate opens ~3% of the time. In practice
+   `pulse2collect`/`pulse2refine` run on the nightly warm chain, not hourly — narrative
+   ages of 24h+ are the normal state, not an incident.
+
+The workflow is `active`; nothing is disabled. This is platform scheduling behavior, and
+it is recorded here so the cadence column above is not read as a guarantee.
+
+**If a true intraday cadence is required**, GitHub Actions `schedule` is the wrong
+transport — an external pinger (the `~/market-news-pinger` launchd fallback pattern) or a
+paid Vercel cron tier would be needed. Widening the collect gate (e.g. `MIN < 40`) would
+fix the *narrative* starvation on its own without changing transport.
+
+If the workflow is disabled the page still does NOT pretend otherwise — the two clocks and
+`op=pulse2health` report actual ages and states (`STALE_NARRATIVE`, `MARKET_CLOSED`,
+`UNAVAILABLE`, …).
 
 ## Rollback
 
