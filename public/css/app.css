@@ -1528,9 +1528,17 @@
     body.tabs .tabbable.tab-active { display: block; animation: fadeUp 0.25s ease; }
     body.tabs .section-divider { display: none; }
 
-    /* ── MOMENTUM ALERTS ── */
-    --orange: #ff6b35;
-    --orange-dim: #1a0c06;
+    /* ── MOMENTUM ALERTS ──
+       These two were STRAY DECLARATIONS at the top level (outside any rule). CSS has no
+       such thing: on hitting a declaration where a qualified rule is expected, the parser
+       error-recovers by consuming forward to the next `{` — so it swallowed the comment
+       and the `.mobile-top-tabs` selector below, then DISCARDED that whole rule as
+       malformed. Net effect: `display:none` never reached the stylesheet, and the mobile
+       tab strip rendered at every width as a duplicated, unstyled nav row (its `.mtt-item`
+       styles live in the ≤640px block, so the links had no styling at all).
+       Wrapping them in `:root` makes them real custom properties AND lets the rule below
+       parse. Verified in-browser: 0 rules matched `.mobile-top-tabs` before this. */
+    :root { --orange: #ff6b35; --orange-dim: #1a0c06; }
 
     /* ── MOBILE TOP TAB STRIP (visible on first load) ── */
     .mobile-top-tabs { display: none; }
