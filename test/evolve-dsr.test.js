@@ -49,10 +49,17 @@ test('gridDeflatedSharpe: pure noise yields no surviving cell and reports the tr
   assert.strictEqual(g.verdict, 'no cell survives multiple-testing');
 });
 
-test('gridDeflatedSharpe: undersized cells are excluded from the trial count', () => {
+test('gridDeflatedSharpe: an undersized cell is not SCORED, but it still counts as a trial', () => {
+  // WAS: assert.strictEqual(g.trials, 0) — this PINNED the defect. Counting only cells
+  // that clear minCellN made the trial count shrink with thin data, which WEAKENS the
+  // deflation: less evidence produced a lower bar. A cell you searched is a hypothesis
+  // you formed and could have selected, whether or not it ended up with enough sample.
   const events = [];
   for (let i = 0; i < 10; i++) events.push({ specialists: ['A'], regimeLabel: 'risk-on', horizon: 'fast', spyRelReturn: 0.02 });
   const g = DSR.gridDeflatedSharpe(events, { minCellN: 20 });
-  assert.strictEqual(g.trials, 0, 'a 10-label cell is not a real trial');
-  assert.ok(g.cells[0].tooSmall, 'flagged too small');
+  assert.ok(g.cells[0].tooSmall, 'still flagged too small');
+  assert.strictEqual(g.cells[0].dsr, null, 'and still not scored');
+  assert.strictEqual(g.cells[0].pass, false, 'an unscored cell can never pass');
+  assert.ok(g.trials >= 1, 'but the search that produced it is counted');
+  assert.strictEqual(g.cellsQualifying, 0, 'qualifying count remains honest and separate');
 });
