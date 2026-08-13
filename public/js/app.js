@@ -2620,7 +2620,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         : `<div class="bt-reco" style="background:var(--amber-dim);border-color:#f0a83233"><b style="color:var(--amber)">No edge held up out-of-sample in this window.</b> 🎯 falls back to the safest default (Breakout). A weak/choppy tape can wipe out edges — re-check after conditions improve.</div>`;
       effHtml = `<div class="bt-eff">
         <div class="bt-eff-head">📐 Signal Edge — walk-forward (alpha vs SPY)</div>
-        <div class="bt-eff-sub">Edges are derived on older data (<b>in-sample</b>) and validated on more recent unseen data (<b>out-of-sample</b>, since ${eff.splitDate || '—'}). Baseline alpha: IS ${sgn(eff.baseline.is)} → OOS ${sgn(eff.baseline.oos)}. Only edges positive in BOTH are trustworthy.</div>
+        <div class="bt-eff-sub">Edges are derived on older data (<b>in-sample</b>) and validated on more recent unseen data (<b>out-of-sample</b>, since ${eff.splitDate || '—'}). Baseline alpha: IS ${sgn(eff.baseline.is)} → OOS ${sgn(eff.baseline.oos)}. Only edges positive in BOTH are trustworthy.${eff.embargo && eff.embargo.applied ? ` <b>Embargo:</b> ${eff.embargo.droppedTrades.toLocaleString()} trades spanning the boundary are dropped (through ${esc(eff.embargo.until || '—')}) so no in-sample position is still open over an out-of-sample entry — earlier figures measured a leaking boundary and are not comparable.` : ''}</div>
         <div class="bt-row bt-head bt-wf-row"><span>Signal</span><span>IS lift</span><span>OOS lift</span><span>OOS win</span><span>Robust</span></div>
         ${rows}${reco}</div>`;
     }

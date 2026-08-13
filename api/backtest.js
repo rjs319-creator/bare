@@ -67,6 +67,40 @@ const STEP = 5;          // sample every 5 trading days
 const STOP_ATR = 1.5;    // stop = entry − 1.5·ATR
 const TGT_ATR = 3.0;     // target = entry + 3·ATR  (1:2 reward:risk)
 const MAX_HOLD = 20;     // time-stop after 20 trading days
+const IS_FRACTION = 0.6; // share of DISTINCT SIGNAL DATES (not trades) that train
+const MIN_OOS_ROBUST = 30; // a feature is only called robust on this many post-embargo OOS trades
+
+// ── IS/OOS separation (alpha-research pass 3) ────────────────────────────────────
+// The split was `sorted.slice(0, Math.floor(n * 0.6))` on a trade array sorted by signal
+// date. Two independent leaks:
+//
+//   (1) THE CUT LANDED MID-DATE. Many tickers signal on the same session, so a count-based
+//       index splits ONE date across the boundary — the same day, the same market shock,
+//       partly training and partly "out of sample". `sort((a,b) => a.date < b.date ? -1 : 1)`
+//       never returns 0, so which side a same-date trade fell on was arbitrary.
+//
+//   (2) NO EMBARGO AGAINST THE LABEL. Every label runs up to MAX_HOLD=20 sessions forward
+//       from its signal. The last in-sample trades were therefore still open — and their
+//       outcomes still being determined — over the first out-of-sample entries. The two
+//       cohorts shared price action, so "out-of-sample" alpha was partly the same alpha.
+//
+// Now: cut on a DATE boundary, then drop everything up to the latest in-sample EXIT date.
+// Using the realized exit rather than a flat MAX_HOLD gap keeps the embargo exact — trades
+// that hit a stop or target early do not purge more of the sample than they need to.
+function splitWithEmbargo(trades) {
+  const sorted = [...trades].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const dates = [...new Set(sorted.map(t => t.date))].sort();
+  if (dates.length < 2) return { IS: [], OOS: [], splitDate: null, embargoUntil: null, embargoedN: 0 };
+
+  const splitDate = dates[Math.floor(dates.length * IS_FRACTION)];
+  const IS = sorted.filter(t => t.date < splitDate);
+  // The last moment any in-sample label is still resolving. Trades on the split date itself
+  // are not in IS, so the boundary date seeds the gap even when IS is empty.
+  const embargoUntil = IS.reduce((m, t) => (t.exitDate && t.exitDate > m ? t.exitDate : m), splitDate);
+  const OOS = sorted.filter(t => t.date > embargoUntil);
+  const embargoedN = sorted.length - IS.length - OOS.length;
+  return { IS, OOS, splitDate, embargoUntil, embargoedN };
+}
 const TIERS = ['Breakout', 'Setup', 'Early'];
 // v2: entries fill at the NEXT session's open (+ entry-side slippage) instead of the
 // signal-day close — the signal is only known after that close. Reported numbers moved with
@@ -321,7 +355,9 @@ async function backtestMode(req, res) {
         let regime = 'unknown';
         if (sE && sE.sma200 != null) regime = sE.close > sE.sma200 ? 'on' : 'off';
 
-        trades.push({ tier: e.status, date: c[i].date, r, excess, won, hold, regime, feat: e.feat });
+        // exitDate is carried so the IS/OOS embargo can be computed from the ACTUAL label
+        // span rather than an assumed worst case — see splitWithEmbargo.
+        trades.push({ tier: e.status, date: c[i].date, exitDate, r, excess, won, hold, regime, feat: e.feat });
       }
       if (any) names++;
     });
@@ -335,20 +371,27 @@ async function backtestMode(req, res) {
     };
 
     // ── Walk-forward edge validation (alpha lift, in-sample → out-of-sample) ──
-    const sorted = [...trades].sort((a, b) => a.date < b.date ? -1 : 1);
-    const cut = Math.floor(sorted.length * 0.6);
-    const IS = sorted.slice(0, cut), OOS = sorted.slice(cut);
+    const { IS, OOS, splitDate, embargoUntil, embargoedN } = splitWithEmbargo(trades);
     const baseIS = mean(IS.map(x => x.excess)), baseOOS = mean(OOS.map(x => x.excess));
     const efficacy = {
       metric: 'alpha',
       baseline: { is: +(baseIS * 100).toFixed(2), oos: +(baseOOS * 100).toFixed(2), n: trades.length, isN: IS.length, oosN: OOS.length },
-      splitDate: OOS.length ? OOS[0].date : null,
+      splitDate,
+      // Stated on the response because these numbers are NOT comparable with any figure
+      // produced before the embargo existed — the OOS cohort is a different cohort.
+      embargo: {
+        applied: true,
+        until: embargoUntil,
+        droppedTrades: embargoedN,
+        basis: 'date-boundary split, then every trade whose signal date falls on or before the latest in-sample EXIT date is dropped',
+        note: `Each trade's label runs up to ${MAX_HOLD} sessions past its signal, so a purely chronological cut leaves in-sample outcomes overlapping out-of-sample entries. The gap removes that overlap. Figures from before this change measured a leaking boundary and are not comparable.`,
+      },
       features: FEATURES.map(([key, label, fn]) => {
         const isS = IS.filter(fn), oosS = OOS.filter(fn);
         const isLift = +((mean(isS.map(x => x.excess)) - baseIS) * 100).toFixed(2);
         const oosLift = +((mean(oosS.map(x => x.excess)) - baseOOS) * 100).toFixed(2);
         const oosWin = oosS.length ? Math.round((oosS.filter(x => x.won).length / oosS.length) * 100) : 0;
-        return { key, label, isN: isS.length, oosN: oosS.length, isLift, oosLift, oosWin, robust: isLift > 0 && oosLift > 0 && oosS.length >= 30 };
+        return { key, label, isN: isS.length, oosN: oosS.length, isLift, oosLift, oosWin, robust: isLift > 0 && oosLift > 0 && oosS.length >= MIN_OOS_ROBUST };
       }).filter(f => f.isN >= 30).sort((a, b) => b.oosLift - a.oosLift),
     };
 
@@ -523,3 +566,7 @@ module.exports.BACKTEST_VERSION = BACKTEST_VERSION;
 module.exports.LIVE_PARITY_STAMP = LIVE_PARITY_STAMP;
 module.exports.STOP_ATR = STOP_ATR;
 module.exports.TGT_ATR = TGT_ATR;
+module.exports.splitWithEmbargo = splitWithEmbargo;
+module.exports.MAX_HOLD = MAX_HOLD;
+module.exports.IS_FRACTION = IS_FRACTION;
+module.exports.MIN_OOS_ROBUST = MIN_OOS_ROBUST;
