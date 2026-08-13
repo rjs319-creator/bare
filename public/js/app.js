@@ -8602,6 +8602,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const thin = sbRegime !== 'all' && (!hl || hl.n < SB_THIN_N)
       ? `<span class="sb-thin" title="Small sample for this regime in the current data window — interpret with caution; the live window is mostly risk-on so the risk-off bucket fills slowly.">⚠ thin sample</span>` : '';
     const wl = hl ? `<div class="sb-wl"><span>Avg win <b class="win">+${hl.avgWin}%</b></span><span>Avg loss <b class="loss">${hl.avgLoss}%</b></span></div>` : '';
+    // MARK-TO-MARKET strip (mtm-v1, graduation-league EA-5): the API computed this
+    // lane on every group but the UI never rendered it — users saw resolved-only
+    // cells, which silently exclude exactly the positions still at risk.
+    const mtm = (g.mtm && (g.mtm.openN || g.mtm.resolvedN))
+      ? `<div class="sb-wl" title="${esc(g.mtm.basis || 'open positions marked at the latest close, net of costs')}"><span>📌 MTM (open+resolved, net): <b class="${(g.mtm.combinedAvgNet ?? 0) >= 0 ? 'win' : 'loss'}">${g.mtm.combinedAvgNet == null ? '—' : (g.mtm.combinedAvgNet > 0 ? '+' : '') + g.mtm.combinedAvgNet + '%'}</b></span><span class="dt-dim">open ${g.mtm.openN}${g.mtm.openAvgNet != null ? ` @ ${g.mtm.openAvgNet > 0 ? '+' : ''}${g.mtm.openAvgNet}%` : ''} · resolved ${g.mtm.resolvedN}</span></div>`
+      : '';
     // Big-winner reach: how often the signal's best run-up (MFE) crossed +10% / +20%
     // before the horizon, regardless of where it closed. Surfaces the models that
     // catch large moves vs. those that only grind out a small average.
@@ -8654,6 +8660,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <div class="sb-count">${regCount} pick${regCount === 1 ? '' : 's'} logged${sbRegime === 'all' ? '' : ` in ${sbRegime === 'risk-on' ? 'risk-on' : 'risk-off'}`} ${thin}${sbModelChip(g.section)}</div>
         <div class="sb-horizons">${hz}</div>
         ${wl}
+        ${mtm}
         ${exWin}
         ${bw}
         ${strat}

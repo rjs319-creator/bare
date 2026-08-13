@@ -197,3 +197,64 @@ test('aggregatePerformance: open positions are marked and costs are charged', ()
   assert.equal(perf.totals.resolved, 1);
   assert.ok(Math.abs(perf.totals.meanReturn - 0.10) < 1e-9);
 });
+
+// ── QM-1: rankquality verdicts run on the date-clustered IC lane ──
+function mulberry(seed) { let a = seed >>> 0; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function rqFixture({ dates = 40, perDate = 15, skill = 0, seedS = 42, seedO = 5555 }) {
+  const rs = mulberry(seedS), ro = mulberry(seedO);
+  const items = [];
+  for (let d = 0; d < dates; d++) {
+    const day = new Date(Date.UTC(2026, 0, 1 + d)).toISOString().slice(0, 10);
+    for (let i = 0; i < perDate; i++) {
+      const s = rs() * 100;
+      // market trend d*2 pollutes the POOLED battery; `skill` injects a real
+      // within-date score→outcome association.
+      items.push({ score: s, outcome: d * 2 + skill * (s / 100) + (ro() - 0.5), date: day });
+    }
+  }
+  return items;
+}
+
+test('rankquality: zero skill + market trend reads noise on the clustered lane', () => {
+  const RQ = require('../lib/rankquality');
+  const r = RQ.analyzeRankQuality(rqFixture({ skill: 0 }), { minN: 20 });
+  assert.equal(r.icClustered.significant, false, `null fixture must not be significant (t ${r.icClustered.t})`);
+  assert.equal(r.verdict, 'noise');
+  assert.match(r.verdictBasis, /date-clustered/);
+  assert.equal(r.ic.basis, 'pooled-iid-descriptive');
+});
+
+test('rankquality: a real within-date association survives the market trend', () => {
+  const RQ = require('../lib/rankquality');
+  const r = RQ.analyzeRankQuality(rqFixture({ skill: 3 }), { minN: 20 });
+  assert.equal(r.icClustered.significant, true, 'real per-date skill must be detected');
+  assert.ok(r.icClustered.ic > 0.05);
+});
+
+// ── QM-2: challenger-eval's embargo is applied, not just declared ──
+test('purgedWalkForward: rows inside the embargo window are excluded from test blocks', () => {
+  const CE = require('../lib/challenger-eval');
+  // 40 daily prediction dates, one row each.
+  const preds = [];
+  for (let d = 0; d < 40; d++) {
+    const day = new Date(Date.UTC(2026, 0, 1 + d)).toISOString().slice(0, 10);
+    preds.push({ predDate: day, residualScore: (d * 37) % 11, outcome: ((d * 13) % 7) - 3, horizon: 'swing' });
+  }
+  const withEmbargo = CE.purgedWalkForward(preds, { folds: 3, embargoDays: 5 });
+  const noEmbargo = CE.purgedWalkForward(preds, { folds: 3, embargoDays: 0 });
+  const nWith = withEmbargo.blocks.reduce((s, b) => s + b.n, 0);
+  const nWithout = noEmbargo.blocks.reduce((s, b) => s + b.n, 0);
+  assert.ok(nWith < nWithout, `embargo must drop boundary rows (with ${nWith} vs without ${nWithout})`);
+});
+
+// ── QM-3: the promotion CI is date-clustered, not an IID resample ──
+test('challenger netExpectancy CI carries a clustered basis on a real date series', () => {
+  const CE = require('../lib/challenger-eval');
+  const preds = [];
+  for (let d = 0; d < 30; d++) {
+    const day = new Date(Date.UTC(2026, 0, 1 + d)).toISOString().slice(0, 10);
+    for (let i = 0; i < 3; i++) preds.push({ predDate: day, residualScore: i, outcome: 0.5 + ((d + i) % 5) * 0.1, won: true, horizon: 'swing', challengerTier: 'A' });
+  }
+  const ev = CE.evaluate(preds, {});
+  assert.match(ev.netExpectancy.ci.basis || '', /date-clustered/, 'promotion criterion must read a dependence-aware interval');
+});

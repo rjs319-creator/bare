@@ -121,14 +121,33 @@ pass. Severity: P0 (governance breach) > P1 (evidence-integrity break) > P2 > P3
 - F-6 sitewide 4-hour footer — FIXED.
 - QM lead-B "production (measured redundancy)" mode string — FIXED.
 
+## Repaired in the follow-up batch (same pass, second commit)
+
+- QM-1 — rankquality now runs a DATE-CLUSTERED IC lane (per-date Spearman, HAC
+  mean via evidence-stats); verdicts read the clustered significance and the
+  pooled battery is labeled `pooled-iid-descriptive`. The scoreboard feed
+  (rqItems) carries dates.
+- QM-2 — challenger-eval's walk-forward embargo is APPLIED (boundary +
+  embargoDays rows excluded) and the trainedShadow ridge fit is label-end
+  purged per row horizon.
+- QM-3 — the promotion criterion's netExpectancy CI is date-clustered
+  (HAC + moving-block, widest wins); the IID bootstrap survives only as a
+  labeled thin-series fallback.
+- QM-4 — drift-eval verdicts run on date-clustered HAC statistics
+  (signedClustered / longShortClustered); the IID stats are retained as
+  labeled descriptives. Preregistered "t ≥ 2 via drift-eval" gates now get the
+  statistic they assumed.
+- F-11 (artifact half) — promotion artifacts REQUIRE a `negativeControls`
+  block: absent, non-boolean, failed, or empty batteries all fail closed
+  (NEGATIVE_CONTROLS_FAILED). Wiring `prosecuteClaim` into the maturity review
+  remains open.
+- EA-5 — the Scoreboard UI renders the mtm-v1 lane (open+resolved cost-net
+  average per group).
+
 ## OPEN (documented, prioritized, not repaired this pass)
 
-- QM-1 pooled rankquality battery (display-only; label added is the interim
-  mitigation) — repair: per-date HAC IC.
-- QM-2/QM-3 challenger-eval unapplied embargo + IID bootstrap CI feeding its
-  promotion criterion.
-- QM-4 drift-eval IID t-stats cited by preregistered earnings-lane gates — MUST
-  be repaired before any earliest-test date arrives.
+- F-11 (second half): wire lib/cfl/prosecutor.prosecuteClaim into the
+  maturity/governance review for strategies at promising or better.
 - QM-6 legacy backtest unpurged overlapping split (quarantined).
 - QM-7 ghost-backtest purge gap < label span (frozen weights contain it).
 - F-04 silent SPY fallback inside sector-labeled headline stat.

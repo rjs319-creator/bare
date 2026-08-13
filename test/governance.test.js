@@ -35,6 +35,7 @@ const FULL_ARTIFACT = Object.freeze({
   calibration: { required: false, passed: true, note: 'ranking objective' },
   tailRisk: { es95: -4.1, maxDrawdown: -9.2 },
   prospectiveEvidence: { passed: true, episodes: 63, sessions: 63 },
+  negativeControls: { passed: true, controls: [{ name: 'shuffled-labels', passed: true }, { name: 'placebo-dates', passed: true }] },
   limitations: 'single regime cycle', evidenceHash: 'sha256:e', expiresAt: '2026-12-31T00:00:00Z',
   dataQualityBlockers: [],
 });

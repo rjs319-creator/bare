@@ -22,6 +22,11 @@ const OK = Object.freeze({
   calibration: { required: false, passed: true },
   tailRisk: { es95: -4.1 },
   prospectiveEvidence: { passed: true, episodes: 63 },
+  negativeControls: { passed: true, controls: [
+    { name: 'shuffled-labels', passed: true },
+    { name: 'placebo-dates', passed: true },
+    { name: 'frozen-inverse', passed: true },
+  ] },
   limitations: 'single regime cycle', evidenceHash: 'sha256:e', expiresAt: '2026-12-31T00:00:00Z',
   dataQualityBlockers: [],
 });
@@ -57,6 +62,11 @@ test('ADVERSARIAL: probabilities displayed without a calibration PASS block prom
 test('ADVERSARIAL: missing prospective validation blocks promotion (retrospective evidence alone cannot promote)', () => {
   assert.ok(codes({ ...OK, prospectiveEvidence: { passed: false } }).includes('NO_PROSPECTIVE_EVIDENCE'));
   assert.ok(codes({ ...OK, prospectiveEvidence: { passed: true, episodes: 4 } }).includes('PROSPECTIVE_TOO_THIN'));
+  // Negative controls (graduation-league F-11): absent, failed, or empty ⇒ fail closed.
+  assert.ok(codes({ ...OK, negativeControls: undefined }).includes('MISSING_FIELD'));
+  assert.ok(codes({ ...OK, negativeControls: { passed: false, controls: [{ name: 'shuffled-labels', passed: false }] } }).includes('NEGATIVE_CONTROLS_FAILED'));
+  assert.ok(codes({ ...OK, negativeControls: { passed: true, controls: [] } }).includes('NEGATIVE_CONTROLS_FAILED'));
+  assert.ok(codes({ ...OK, negativeControls: { passed: true, controls: [{ name: 'shuffled-labels', passed: 'yes' }] } }).includes('NEGATIVE_CONTROLS_FAILED'));
 });
 
 test('ADVERSARIAL: thin samples — raw, EFFECTIVE and block-stability floors are all enforced', () => {
