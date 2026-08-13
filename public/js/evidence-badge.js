@@ -27,7 +27,11 @@ export const gradeFace = g => GRADE[g] || GRADE.experimental;
 // Tab id → maturity strategy id. Most match by name; only the exceptions are listed,
 // so a new tab whose id matches its strategy id needs no entry here.
 const TAB_STRATEGY = {
-  picks: 'momentum',
+  // `picks` is NOT listed: the Picks tab shows its OWN evidence (id 'picks', registered
+  // 2026-08-13). It was mapped to 'momentum', which dressed an LLM news pick list in the
+  // Momentum engine's resolved record — two systems sharing no code, universe or
+  // contract. Same defect already fixed for aligned->screener and patternradar->coil.
+
   rltlab: 'rlt',
   // Dual Confirmed shows ONLY its own evidence (id 'aligned', registered 2026-08). It
   // was previously mapped to 'screener', which dressed the tab in the production
