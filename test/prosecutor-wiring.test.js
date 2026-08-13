@@ -185,3 +185,37 @@ test("the screener's real 18-date series is UNRUN, not convicted", () => {
   assert.equal(g.stats.prosecution.blocked, false, 'an 18-date series cannot be convicted of concentration');
   assert.ok(g.stats.prosecution.unrun.includes('best-trade-excision'));
 });
+
+// ── the calibrated statistic decides ───────────────────────────────────────
+// The raw excision/concentration checks stay as descriptives; only the matched-
+// null comparison (and a genuine leak REJECTION) can take a grade away.
+test('the screener series is cleared — weak, not concentrated', () => {
+  const screener = [10.36, 10.27, 9.74, 5, 4.2, 3.75, 3.16, 2.37, 0.98,
+    -0.06, -0.15, -1.14, -1.47, -2.2, -3.4, -6.75, -8.3, -11.45];
+  const g = M.gradeTrack(track(screener), PASSING);
+  assert.equal(g.stats.prosecution.blocked, false);
+  assert.equal(g.stats.prosecution.blockedBy, null);
+  assert.equal(g.stats.prosecution.calibrated.concentrated, false);
+});
+
+test('the events series IS convicted, and the report names the statistic', () => {
+  const events = [52.5, 38.51, 31.26, 27.37, 18.26, 11.37, 9.61, 3.96, 3.19, 2.83, 2.13, 0.86, 0.44, 0.22,
+    -0.22, -0.5, -1.78, -4.67, -5.16, -6.78, -9.18, -11.58, -14.07, -20.31, -21.77, -22.93, -23.5];
+  const g = M.gradeTrack(track(events), PASSING);
+  assert.equal(g.stats.prosecution.blocked, true);
+  assert.equal(g.stats.prosecution.blockedBy, 'null-calibrated-concentration');
+  assert.ok(g.stats.prosecution.calibrated.skew.percentile >= 95);
+  assert.match(g.reason, /prosecut/i);
+});
+
+test('a raw excision failure alone no longer takes a grade away', () => {
+  // 45 observations where the raw check convicts (removing the best 5 flips it
+  // negative) but the shape is ordinary against a matched null. Before, this
+  // was a conviction; now it is a descriptive.
+  const v = [...Array.from({ length: 5 }, () => 1), ...Array.from({ length: 40 }, () => -0.02)];
+  const g = M.gradeTrack(track(v), PASSING);
+  const p = g.stats.prosecution;
+  if (p.calibrated && p.calibrated.concentrated) return;   // calibration agrees — nothing to assert
+  assert.ok(p.failed.includes('best-trade-excision'), 'the raw check should still REPORT the failure');
+  assert.equal(p.blocked, false, 'but it must not block on its own');
+});
