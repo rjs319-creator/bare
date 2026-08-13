@@ -42,20 +42,22 @@ test('quiet name: no signals → honest "nothing here" verdict, empty cases', ()
   assert.doesNotMatch(r.verdict.summary, /Nothing to act on/i);
 });
 
-test('ghost + apex both fire in risk-on → constructive, two FOR signals with a real track record', () => {
+test('ghost + apex both fire in risk-on → context only (retired + shadow add no verdict weight)', () => {
   const r = composeWhyNow({
     ticker: 'NVDA', macro: riskOn,
     ghost: { tier: 'STALKING', score: 71, strongPillars: ['RM', 'SF'] },
     apex: { tier: 'loaded', score: 63, pillars: {} },
     trackByKey: { 'Ghost:STALKING': { picks: 40, horizons: { '5d': { excessN: 22, winRate: 55, avgExcess: 1.2, beatMktRate: 57 } } } },
   });
-  // Ghost keeps its track-backed FOR row; Apex (registry-shadow since 2026-08-12,
-  // RT-02) is context — one for-vote is a 'watch', not 'constructive'.
-  assert.equal(r.verdict.level, 'watch');
-  assert.equal(r.forCase.length, 1);
-  const ghostSig = r.forCase.find(s => s.key === 'Ghost:STALKING');
-  assert.ok(ghostSig.track && ghostSig.track.pending === false);
+  // Ghost is RETIRED (2026-08-13) and Apex is shadow (2026-08-12): both render as
+  // labeled context, neither adds a for-vote, and no verdict escalation happens.
+  assert.equal(r.forCase.length, 0);
+  assert.notEqual(r.verdict.level, 'constructive');
+  const ghostSig = r.signals.find(s => s.key === 'Ghost:STALKING');
+  assert.equal(ghostSig.side, 'context');
+  assert.ok(ghostSig.track && ghostSig.track.pending === false, 'history stays visible');
   assert.equal(ghostSig.track.beatBenchRate, 57);
+  assert.match(ghostSig.note, /[Rr]etired/);
   // Apex is honest twice over: no fabricated win rate, and a shadow note explaining
   // why it adds no verdict weight.
   const apexSig = r.signals.find(s => s.key === 'Apex:loaded');
@@ -92,9 +94,23 @@ test('fresh read-through is a FOR; already-moved read-through is an AGAINST', ()
 });
 
 test('single FOR signal → watch (not constructive)', () => {
-  const r = composeWhyNow({ ticker: 'BBB', macro: riskOn, ghost: { tier: 'STALKING', score: 66, strongPillars: [] } });
-  assert.equal(r.verdict.level, 'watch');
-  assert.equal(r.forCase.length, 1);
+  // Ghost is retired (context-only), so the single-FOR case uses the verdict layer
+  // directly — the invariant under test is one for-vote ⇒ watch, never constructive.
+  const v = verdictOf([{ side: 'for', key: 'ReadThrough:Fresh' }]);
+  assert.equal(v.level, 'watch');
+});
+
+test('retired ghost renders as context with its track record, never a for-vote', () => {
+  const r = composeWhyNow({
+    ticker: 'BBB', macro: riskOn,
+    ghost: { tier: 'STALKING', score: 66, strongPillars: [] },
+    trackByKey: { 'Ghost:STALKING': { picks: 40, horizons: { '5d': { excessN: 22, winRate: 55, avgExcess: 1.2, beatMktRate: 57 } } } },
+  });
+  assert.equal(r.forCase.length, 0, 'a retired strategy may not add verdict weight');
+  const g = r.signals.find(s => s.key === 'Ghost:STALKING');
+  assert.equal(g.side, 'context');
+  assert.match(g.note, /[Rr]etired/);
+  assert.ok(g.track, 'the historical track record stays visible on the context row');
 });
 
 test('insider cluster buying is a context flag, never counted as a FOR', () => {
