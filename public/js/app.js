@@ -83,7 +83,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     quickhit: 'The Top 5 plays across large, small AND micro caps — one fast shortlist with links to where each lives.',
     swingsup: 'Every published swing pick, tracked from its original thesis until a documented end. A pick never disappears without an explanation — it is re-evaluated each session (still valid, weakening, displaced, target hit, invalidated, no-fill or expired) even after it drops off its own screener. Accountability, not a claim of edge.',
     premove: 'SHADOW pre-move transition inventory: stocks that look primed for an upside move BEFORE it starts, held apart from (1) a valid executable trigger arriving and (2) whether positive expectancy remains after entry. States: PRIMED → ARMED → TRIGGERED → ACCEPTED, or WEAKENING / INVALIDATED / EXPIRED / COMPLETED. Weight-zero — it never changes any live rank; probabilities appear only after a validated calibration artifact exists.',
-    opportunities: 'The best setups across all the screeners, gathered in one ranked list.',
+    opportunities: 'Research candidates from across the screeners, gathered in one ranked list (not trade advice).',
     aligned: 'Stocks that are a BUY on both horizons at once — the short-term signal AND the ~1-year trend both point up. The strongest agreement of the dual read.',
     putsell: 'Options Moves — AI-screened options-strategy setups from full-market price action. First strategy: cash-secured put selling (quality uptrends pulled back to support, with a suggested strike below support). More strategies coming.',
     screener: 'Stocks breaking out of chart patterns (classic breakout setups).',
@@ -202,7 +202,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     omega: {
       what: `A shortlist of liquid stocks with <b>early-to-middle-stage momentum</b> that's likely to keep rising over the next <b>5–10 trading days</b>. It looks for sustainable continuation — strong relative strength, real multi-day volume, a smooth trend, a fresh catalyst, and a good entry — <b>not</b> stocks that already went vertical.`,
       read: `Cards are grouped into <b>💠 Prime</b> (best), <b>🟢 Qualified</b>, and <b>👁 Watch</b> (wait for a trigger). Each shows a <b>Stage</b> (Early/Confirmed/Continuation), an <b>entry recommendation</b> (Buy now / on breakout / on pullback), expected 5- and 10-day <b>sector- & market-relative</b> return, the odds of a ≥3% and ≥5% move, and an <b>invalidation</b> price. Names are ranked by expected utility (reward vs downside), not win rate.`,
-      act: `Prefer <b>Prime</b> with a "Buy now" entry. Enter in the shown entry zone, place your stop at the <b>invalidation</b>, aim for the target zones, and use the <b>suggested size</b> (sized so a stop-out costs ~1% of your account). Hold ~1–2 weeks.`,
+      act: `Treat it as <b>research, not a trade instruction</b> — OMEGA is registry-shadow with zero live weight, and its own research verdict is no-edge vs plain momentum. Read Prime/Qualified/Watch as the model's opinion, confirm anything on a chart, and check the OMEGA section of the Scoreboard before trusting it. No position size is suggested.`,
       catch: `Uses <b>end-of-day data</b> — entry levels are next-session positioning, not live triggers. The probabilities are a <b>baseline</b> until the walk-forward confirms them, and the app's own research found no durable edge on this data beyond avoiding weak markets — so check the <b>OMEGA section on the Scoreboard</b> to see if it's actually working. Zero Prime picks on a given day is normal.`,
     },
     atlas: {
@@ -214,13 +214,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     ignition: {
       what: `One list that ranks every momentum candidate by how fast it's <b>speeding up</b> — price AND volume accelerating — not by how much it's already moved. A stock up 10% and accelerating ranks <b>above</b> one up 60% and slowing down.`,
       read: `Higher <b>Ignition Score</b> = stronger acceleration + a fresh catalyst + a clean trend. The <b>Stage</b> tells you where the move is: 👁 Watch (early) → 🔥 Ignition → 🚀 Pressure → ⚠️ Extended (already run — be careful). Sort and filter with the dropdowns.`,
-      act: `An <b>early-momentum watchlist</b>. Prefer Watch/Ignition (room left to run) over Extended; check the catalyst is real and fresh, confirm on a chart, and size so a stop-out costs ~1% of your account.`,
+      act: `An <b>early-momentum research watchlist</b> (registry: shadow, zero live weight). Prefer Watch/Ignition (room left to run) over Extended; check the catalyst is real and fresh and confirm on a chart. No position size is suggested.`,
       catch: `This uses <b>end-of-day daily data</b> — it can't see intraday ticks, predict an LULD halt, or measure sub-minute moves (those need a live feed the app doesn't have). And chasing momentum isn't proven forward edge — check the 🔥 Momentum Ignition section on the <b>Scoreboard</b> to see if it's actually working.`,
     },
     custom: {
       what: `Stocks that just broke OUT to new highs, scored 0–100 by a four-part model (trend, momentum, volume, fundamentals) that re-weights itself for the current market mood.`,
       read: `Higher score and higher tier (<b>Apex &gt; Loaded &gt; Watch</b>) mean more of the four parts agree. The strip up top shows the market "regime" the model is using right now.`,
-      act: `Treat it as a watchlist. Confirm the breakout on a chart, then buy near the shown <b>entry</b> with the shown <b>stop</b>; size so a stop-out costs only ~1% of your account.`,
+      act: `Treat it as a <b>research watchlist only</b> — Apex was demoted to a zero-weight frozen benchmark (its historical weight search was never trial-ledgered). The entry/stop shown are reference levels, not instructions, and no position size is suggested.`,
       catch: `Breakouts get chopped up in sideways or falling markets, so the model steps back in risk-off. The app's own tests rate this edge as <b>weak</b> — research, not advice.`,
     },
     ghost: {
@@ -238,7 +238,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     opportunities: {
       what: `The app's <b>combined shortlist</b> — the strongest names it sees right now, pulled from across all the screeners into one ranked list.`,
       read: `Sorted best-first. Each card shows why it made the list and its levels. Names that appear here <i>and</i> on other tabs are the highest-conviction.`,
-      act: `The easiest place to start. Work from the <b>top</b> down, confirm on a chart, size small, and prefer names backed by more than one signal.`,
+      act: `A research shortlist, not a buy list. Work from the <b>top</b> down and confirm on a chart; the ranking uses only cleared inputs (shadow-strategy reads are shown as context and don't move it).`,
       catch: `A shortlist is only as good as its inputs — check the 🏆 Scoreboard to see which signals have actually been working before trusting them.`,
     },
     screener: {
@@ -292,7 +292,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     biotech: {
       what: `The <b>Biotech Swing Engine</b> finds biotech runners and sorts them into opportunity lanes — post-catalyst continuation, pre-event run-up, catalyst-base breakout, buyable pullback, financing relief — while pulling <b>binary gambles, dilution traps, illiquid promotions and already-consumed moves</b> out of the actionable set.`,
       read: `Use the view pills. The 0–100 is a <b>Research Priority</b> (attention ordering), <b>not</b> a probability. Each card shows an <b>action ceiling</b> (the highest action allowed after the severe-loss & dilution gates), a plan (entry/stop/targets/R:R), the verified catalyst + source link, and the capital-structure state. Benchmarked vs XBI.`,
-      act: `Trade only the <b>Actionable Now</b> lane, and only when the trigger is met. Pre-event names carry a mandatory <b>exit-before</b> date. Anything in <b>Binary Risk</b> or <b>Dilution / Avoid</b> is research, not a buy.`,
+      act: `Biotech is a <b>lead-only</b> shadow system: even its ⚡ Trigger-Met lane is a research lead, not a trade instruction. Pre-event names carry a mandatory <b>exit-before</b> date; anything in <b>Binary Risk</b> or <b>Dilution / Avoid</b> is a warning, not a candidate.`,
       catch: `A single trial result can gap a biotech 50% overnight. The engine withholds probabilities until a frozen model passes prospective validation — treat everything here as a research lead, size tiny, and never hold an unresolved binary you can't afford to lose.`,
     },
     secondwave: {
@@ -2333,16 +2333,22 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const b = document.getElementById('scr-hc-toggle');
     if (b) b.title = 'Filter each list to its own highest-edge combo from the backtest';
   }
-  function storeHCEdges(efficacy, months, scope) {
+  function storeHCEdges(efficacy, months, scope, src) {
     if (!efficacy || !efficacy.features || !HC_SCOPES.includes(scope)) return;
+    // EA-9: /api/backtest stamps itself promotionBlocked with historicalLiveParity
+    // false (survivorship-unsafe curated universe, exit-leg costs, level-assumed
+    // fills). A self-declared non-promotable backtest may not reorder the LIVE
+    // screener — until the parity stamp clears, its edges are recorded as empty and
+    // the labeled static default ranks instead.
+    const parityOk = !!(src && src.historicalLiveParity === true && src.promotionBlocked !== true);
     // Only edges that held their alpha out-of-sample (walk-forward robust).
-    const robust = efficacy.features.filter(f => f.robust).sort((a, b) => b.oosLift - a.oosLift);
+    const robust = parityOk ? efficacy.features.filter(f => f.robust).sort((a, b) => b.oosLift - a.oosLift) : [];
     const keys = robust.slice(0, 3).map(f => f.key).filter(k => HC_PREDICATES[k]);
     // When NOTHING survives out-of-sample, record that honestly (empty list ⇒
     // getHCEdges falls back to the labeled static default) instead of silently
     // substituting 'breakout' and presenting it as a backtested edge.
     const map = loadHCMap(); map[scope] = keys;
-    const meta = loadHCMeta(); meta[scope] = { at: Date.now(), win: months || hcWindow, noRobust: keys.length === 0 };
+    const meta = loadHCMeta(); meta[scope] = { at: Date.now(), win: months || hcWindow, noRobust: keys.length === 0, parityBlocked: !parityOk };
     try { localStorage.setItem('hcEdgesByScope', JSON.stringify(map)); localStorage.setItem('hcEdgesMeta', JSON.stringify(meta)); } catch {}
     updateHCLabel();
     rankAndRender(scope);
@@ -2352,7 +2358,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     hcRefreshing = true; updateHCLabel();
     // Run all three scope backtests concurrently; each list updates as it lands.
     await Promise.all(HC_SCOPES.map(async sc => {
-      try { const d = await fetchJSON('/api/backtest?scope=' + sc + '&months=' + hcWindow); if (d && d.efficacy) storeHCEdges(d.efficacy, d.months, d.scope || sc); if (d && d.model) storeModel(d.model, d.scope || sc); } catch {}
+      try { const d = await fetchJSON('/api/backtest?scope=' + sc + '&months=' + hcWindow); if (d && d.efficacy) storeHCEdges(d.efficacy, d.months, d.scope || sc, d); if (d && d.model) storeModel(d.model, d.scope || sc); } catch {}
     }));
     hcRefreshing = false; updateHCLabel();
   }
@@ -2637,7 +2643,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     }
 
     el.innerHTML = `<div class="bt-note">Replayed the live screen over the last ${d.months} months across ${d.names} names — ${d.instances.toLocaleString()} signals. Each is traded with an <b>ATR stop (${d.exits.stopATR}×) / target (${d.exits.targetATR}×)</b> and a ${d.exits.maxHold}-day time-stop; returns are measured <b>vs SPY (alpha)</b>, equal-weight, no costs.</div><div class="bt-grid">${cards}</div>${regHtml}${effHtml}${modelHtml}<div id="bt-portfolio"></div><div class="chart-disclaimer">⚠ Historical replay on a curated (survivorship-biased) universe — past performance does not guarantee future results, and this is not financial advice.</div>`;
-    storeHCEdges(d.efficacy, d.months, d.scope || 'large');
+    storeHCEdges(d.efficacy, d.months, d.scope || 'large', d);
     storeModel(d.model, d.scope || 'large');
     runPortfolio();
   }
@@ -3900,12 +3906,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   };
   const TRUST = {
     screener: { level: 'confirm', one: `Breakouts have no standalone edge in 5y tests — the ${L('regime', 'regime')} + ${L('tape', 'tape')} gates do the real work. Use it to find candidates, not as a buy signal.` },
-    custom: { level: 'building', one: `The conviction ranker has real, out-of-sample selection power (top names beat SPY more often) but narrowly misses the confident-edge bar (${L('wilsonLB', 'confidence floor')} ~48%); the regime gate is the proven lever.` },
+    custom: { level: 'noedge', one: `Demoted to a zero-weight frozen benchmark (2026-08): its historical weight search was never trial-ledgered, so past performance claims don't count as evidence. The ${L('regime', 'regime')} gate is the proven lever — see the Maturity tab for the live grade.` },
     daytrade: { level: 'confirm', one: `A ${L('regime', 'regime')}-gated movers watchlist, not a win-rate edge. Large-cap ${L('momentum', 'momentum')} doesn't beat SPY; small-cap explosive is positive-expectancy but wins <50% (a few big runners carry it).` },
-    confluence: { level: 'confirm', one: `~48% win rate in 5y tests — no strategy or ${L('confluence', 'confluence')} combination confidently beats the market. A multi-strategy confirmation overlay.` },
-    ghost: { level: 'building', one: `An early-${L('accumulation', 'accumulation')} watchlist. The price core is mostly weak ${L('momentum', 'momentum')} (~0.08 IC); insider/fundamentals add little. Live record still accruing.` },
-    trendrider: { level: 'building', one: `The "stand down when red" timing held across 5 independent selloffs in research — the project's strongest finding — but Trend Rider itself is shadow / weight-0 with no promotion artifact. Green = riding ${L('beta', 'beta')}, not stock-picking skill: it tells you WHEN, not WHAT.` },
-    fade: { level: 'building', one: `A choppy/neutral-tape ${L('meanrev', 'mean-reversion')} fade. The selected high-conviction basket showed ~+0.9%/mo net out-of-sample (${L('beta', 'beta')}-neutral, after costs) — the most promising result, but the live ${L('backtest', 'track record')} is still building.` },
+    confluence: { level: 'confirm', one: `No strategy or ${L('confluence', 'confluence')} combination has confidently beaten the market in this app's tests (and measured redundancy says agreement doesn't pay). A confirmation overlay — see the Scoreboard for the live record.` },
+    ghost: { level: 'noedge', one: `An early-${L('accumulation', 'accumulation')} watchlist, demoted to shadow (2026-08): its forecasts are ~0.96-correlated with the Breakout screener's, so it adds no independent evidence, and its historical insider pillar had a look-ahead now being re-run. Context, not a signal.` },
+    trendrider: { level: 'building', one: `The "stand down when red" timing held across multiple independent selloffs in research — the project's strongest finding — but Trend Rider itself is shadow / weight-0 with no promotion artifact. Green = riding ${L('beta', 'beta')}, not stock-picking skill: it tells you WHEN, not WHAT.` },
+    fade: { level: 'building', one: `A choppy/neutral-tape ${L('meanrev', 'mean-reversion')} read. Governance approves it only as an AVOID filter (shadow, zero weight, no borrow feed for real shorts); the live ${L('backtest', 'track record')} is still building — see the Scoreboard's Fade section.` },
     forecast: { level: 'building', one: `AI ${L('forecast', 'falsifiable forecasts')} on the market, ${L('tape', 'tape')}/${L('regime', 'regime')}-aware and auto-graded against real prices — no self-scoring. Short-term prediction is hard; expect the live accuracy to sit near a coin flip. Educational, not a signal.` },
     crowd: { level: 'confirm', one: `A ${L('predmarket', 'prediction-market')} sentiment radar (Kalshi + Polymarket) — flags unusual volume and sharp odds swings on macro/equity contracts. It shows what the crowd is suddenly repricing (often confirming news), not a tradeable edge. The volume baseline sharpens over the first few days.` },
     sharp: { level: 'confirm', one: `Flags ${L('sharpmoney', 'informed-activity hallmarks')} — size + conviction lining up on a ${L('predmarket', 'prediction-market')} outcome. A lead to investigate, NOT proof of insider info: it surfaces statistical fingerprints, and most hits are coincidence or hedging. Speculative and educational.` },
@@ -4941,7 +4947,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     : /AVOID|BINARY|NON-EXEC|LATE|FINANCING/.test(c) ? '#ef4444' : 'var(--text-dim)';
   // The 8 sub-views — client-side partitions of the single board (no silent disappearance).
   const BIO_VIEWS = [
-    { key: 'actionable', label: '✅ Actionable Now', f: it => it.actionability === 'actionable' },
+    { key: 'actionable', label: '⚡ Trigger Met (research lead)', f: it => it.actionability === 'actionable' },
     { key: 'waiting', label: '⏳ Waiting for Entry', f: it => it.actionability === 'waiting' },
     { key: 'postcat', label: '🚀 Post-Catalyst', f: it => ['POST_CATALYST', 'POST_EVENT_PULLBACK', 'CATALYST_BASE', 'FINANCING_RELIEF'].includes(it.archetype) },
     { key: 'preevent', label: '📅 Pre-Event Run-Ups', f: it => it.archetype === 'PRE_EVENT' },
@@ -6033,7 +6039,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       : `Cross-sleeve correlation: <b>accruing</b> (${cs.pairedDates || 0} paired days; needs ≥8). This is the number that proves — or kills — the overlay.`;
 
     el.innerHTML = `
-      <div class="bt-note">A <b>paper</b> two-sleeve book. <b>Sleeve A</b> = regime-gated <b>conviction longs</b> (the validated momentum+BONUS ranker; ~0.08 out-of-sample IC, best in risk-on). <b>Sleeve B</b> = <b>CERN forced-flow</b> reversion (orthogonal, but unproven until its κ-posteriors ship). They harvest different names — the win is at the <b>portfolio</b> level if their returns are uncorrelated.</div>
+      <div class="bt-note">A <b>paper</b> two-sleeve book (both sleeves registry-shadow, zero weight). <b>Sleeve A</b> = regime-gated <b>conviction longs</b> (a frozen shadow benchmark — logged for measurement, not validated). <b>Sleeve B</b> = <b>CERN forced-flow</b> reversion (unproven until its κ-posteriors ship). They harvest different names — the win, if any, would be at the <b>portfolio</b> level.</div>
       <div class="bt-eff" style="background:${canLong ? '#16241a' : '#241616'};border-color:${canLong ? '#2e6b3e' : '#6b2e2e'}">
         <div class="bt-eff-sub">Regime: <b>${esc(regime)}</b> — long gate is <b>${canLong ? 'OPEN ✓' : 'CLOSED ✗ (risk-off: no new longs)'}</b>.</div>
       </div>
@@ -6099,16 +6105,16 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const kill = d.killSwitch ? `<div style="margin-top:6px;color:var(--red,#ef4444)"><b>⛔ Kill-switch:</b> live expectancy is negative — revert to passive small/mid exposure until it recovers.</div>` : '';
     el.innerHTML = `<div class="cx-strip" style="border-left:3px solid ${col}">
       <b style="color:${col}">● ${esc(d.status)}</b> — live win rate <b>${pct(d.winRate)}</b>${wil}, profit factor <b>${d.profitFactor == null ? '—' : d.profitFactor.toFixed(2)}</b>, mean return/trade <b>${pct(d.meanReturn)}</b>
-      · resolved <b>${d.resolved}</b> / open ${d.open}
-      <span style="color:#8a93a6">· baseline win ${pct(d.baseline && d.baseline.winRate)} / PF ${d.baseline ? d.baseline.pf : '—'} (research)</span>
+      · resolved <b>${d.resolved}</b> / open ${d.open}${d.noHistory ? ` · <span style="color:var(--amber,#f59e0b)" title="Delisted/unfetchable names counted, not dropped — survivorship inside the record is disclosed">no-history ${d.noHistory}</span>` : ''}
+      <span style="color:#8a93a6">· no validated baseline — health judged on the live record only (the former research reference was retracted)</span>
       ${d.recommendation ? `<div style="margin-top:4px">${esc(d.recommendation)}</div>` : ''}${kill}</div>`;
   }
   function renderCoreBook(cont, c) {
     if (!cont) return;
     if (!c || c.ok === false) { cont.innerHTML = `<div class="mom-status"><p>Core Momentum isn't available yet. It needs the Blob store + the daily cron to seed the feature cache (a few runs). See PICK-TRACKING.md.</p></div>`; return; }
     const intro = `<div class="cx-strip" style="margin-bottom:10px">
-      <b>What this is.</b> The survivorship-safe small/mid <b>sector-neutral 12-1 momentum</b> sleeve validated in research: cap $800M–5B, top realized-vol tercile excluded, Healthcare excluded; equal-weight the top quintile with a rank buffer; rebalanced quarterly.
-      <span style="color:#8a93a6">Forward IR realistically ~0.8–1.2 (in-sample was higher — discounted for filter selection). A concentrated sleeve, not a replacement for broad exposure.</span></div>`;
+      <b>What this is.</b> A small/mid <b>sector-neutral 12-1 momentum</b> sleeve (registry: shadow, zero weight): cap $800M–5B, top realized-vol tercile excluded, Healthcare excluded; equal-weight the top quintile with a rank buffer; rebalanced quarterly. <b>Note:</b> the survivorship-free re-test found ~zero momentum rank-IC on this universe, so this book is a measurement, not a validated edge.
+      <span style="color:#8a93a6">No forward return is promised — the earlier research figures behind this sleeve were retracted by the survivorship-free re-test. Judge it on the live record below.</span></div>`;
     if (c.building || !c.book || !c.book.length) {
       const cov = c.coveragePct != null ? c.coveragePct : (c.universeCovered ? '' : 0);
       cont.innerHTML = intro + `<div class="mom-status"><div class="mom-spinner"></div><p>Building the universe feature cache${c.universeCovered ? ` — ${c.universeCovered} names cached so far` : ''}. The daily cron fills it over a few runs; the book appears once enough names are covered.${c.note ? '<br><span style="color:#8a93a6">' + esc(c.note) + '</span>' : ''}</p></div>`;
@@ -6174,8 +6180,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const pct = x => x == null ? '—' : (x >= 0 ? '+' : '') + (x * 100).toFixed(1) + '%';
     const col = x => x == null ? '' : `color:${x >= 0 ? 'var(--green,#10d98a)' : 'var(--red,#ef4444)'}`;
     const intro = `<div class="cx-strip" style="margin-bottom:10px">
-      <b>What this is.</b> The realized track record of the <b>Core Momentum</b> sleeve — each quarterly cohort logged at rebalance, scored on its forward outcomes (+target / −stop / ~63-session time exit) vs <b>IWM</b> (Russell 2000, the small-cap benchmark).
-      <span style="color:#8a93a6">Open positions are counted but not marked-to-market — only resolved trades enter the returns (matches the drift methodology). Realistic forward IR ~0.8–1.2; confirm over ~8 live quarters.</span></div>`;
+      <b>What this is.</b> The track record of the <b>Core Momentum</b> sleeve (registry: shadow, zero weight) — each quarterly cohort logged at rebalance, scored on its forward outcomes (+target / −stop / ~63-session time exit) vs <b>IWM</b> (Russell 2000, the small-cap benchmark).
+      <span style="color:#8a93a6">The headline table shows resolved trades; the MTM row below marks open positions at the latest close and nets one small-cap round-trip cost per trade, so open risk and friction are in the record. Entries are logged reference prices, not verified fills (basis disclosed by the API). No forward return is promised.</span></div>`;
     if (d.empty || !d.quarters || !d.quarters.length) {
       cont.innerHTML = intro + `<div class="mom-status"><p>${esc(d.note || 'No cohorts logged yet — the track record begins at the first quarterly rebalance.')}</p></div>`;
       return;
@@ -6187,7 +6193,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       <div><div style="color:#8a93a6;font-size:0.62rem">EXCESS vs IWM</div><b style="${col(c.excess)};font-size:1.1rem">${pct(c.excess)}</b></div>
       <div><div style="color:#8a93a6;font-size:0.62rem">WIN RATE</div><b>${t.winRate == null ? '—' : (t.winRate * 100).toFixed(0) + '%'}</b></div>
       <div><div style="color:#8a93a6;font-size:0.62rem">RESOLVED / OPEN</div><b>${t.resolved} / ${t.open}</b></div>
-      <div><div style="color:#8a93a6;font-size:0.62rem">REALIZED QTRS</div><b>${c.realizedQuarters || 0}</b></div></div>`;
+      <div><div style="color:#8a93a6;font-size:0.62rem">REALIZED QTRS</div><b>${c.realizedQuarters || 0}</b></div></div>`
+      + (d.mtm ? `<div class="cx-strip" style="margin-bottom:10px;font-size:0.74rem"><b>Mark-to-market (all positions, cost-net):</b>
+      combined avg/trade <b style="${col(d.mtm.combinedAvgNet)}">${pct(d.mtm.combinedAvgNet)}</b>
+      · open marked ${d.mtm.openMarked}/${d.mtm.openN} at avg <b style="${col(d.mtm.openAvgNet)}">${pct(d.mtm.openAvgNet)}</b>
+      · resolved avg net <b style="${col(t.meanReturnNet)}">${pct(t.meanReturnNet)}</b>
+      <span style="color:#8a93a6">(one ${t.costPct != null ? t.costPct.toFixed(2) + '%' : ''} round trip per trade${d.mtm.openUnmarked ? `; ${d.mtm.openUnmarked} open names unmarked — counted, not dropped` : ''})</span></div>` : '')`;
     const STAT = { open: '<span style="color:#8a93a6">○ open</span>', partial: '<span style="color:#f0a832">◐ partial</span>', closed: '<span style="color:#10d98a">● closed</span>' };
     const rows = d.quarters.slice().reverse().map(q => `<tr>
       <td><b>${esc(q.quarter)}</b><div style="font-size:0.6rem;color:#8a93a6">${esc(q.logDate || '')}</div></td>
@@ -6333,7 +6344,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       </div>`;
 
     const meta = document.getElementById('fade-meta');
-    if (meta) meta.textContent = gated ? '· risk-off — engine standing down' : `· ${picks.length} overheated names · ${sig.actionable} actionable`;
+    if (meta) meta.textContent = gated ? '· risk-off — engine standing down' : `· ${picks.length} overheated names · ${sig.actionable} flagged (research)`;
     const gt = document.getElementById('fade-gen-time');
     if (gt && sig.generatedAt) gt.textContent = new Date(sig.generatedAt).toLocaleTimeString();
   }
@@ -7410,10 +7421,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Gap &amp; Go unavailable.</p></div>`; return; }
     document.getElementById('gg-gen-time') && (document.getElementById('gg-gen-time').textContent = t.generatedAt ? new Date(t.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
 
-    // Evidence + honest caveat panel (validated lead — forward-track before sizing).
+    // Evidence + honest caveat panel. Registry: gapgo is an UNPROVEN PROSPECTIVE
+    // CHALLENGER (shadow, zero weight) — the header must say so, not "validated".
     const cfg = t.config || {};
     const evidence = `<div class="rot-panel" style="border-color:#22d3ee55;background:#22d3ee0d">
-      <div class="rot-head" style="color:#22d3ee">🚀 ${esc(cfg.name || 'Unscheduled Gap-and-Go')} — validated event edge</div>
+      <div class="rot-head" style="color:#22d3ee">🚀 ${esc(cfg.name || 'Unscheduled Gap-and-Go')} — shadow research (unproven prospective challenger)</div>
       <div class="rot-sub">
         <ul style="margin:6px 0 6px 18px;padding:0">${(cfg.rules || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
         <b style="color:#22c55e">✓ Evidence.</b> ${esc(cfg.evidence || '')}<br>
@@ -7443,7 +7455,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">prev close</span></span>
         </div>
         <div class="dt-card-sub"><b style="color:#22d3ee">▲ gap +${r.gapPct}%</b> <span class="dt-dim">· ${L('rvol', 'RVOL')} ${r.relVol}×${r.excessPct != null ? ' · vs SPY ' + (r.excessPct >= 0 ? '+' : '') + r.excessPct + '%' : ''}</span>${ggCauseBadge(r.cause)}</div>
-        ${r.continuationScore != null ? `<div class="dt-card-sub">🎯 <b title="Take/skip meta-label: gap size + RVOL + regime. Top-third beat bottom in 6/6 years OOS. Ranks a right-skewed edge — it does not raise the ~50% hit rate.">Continuation ${r.continuationScore}</b>/100 ${r.take ? '<span class="dt-tier-a" style="background:#22c55e33;color:#22c55e">✅ TAKE</span>' : '<span class="dt-dim">· watch</span>'}${r.suggestedRiskPct ? ` &nbsp;·&nbsp; 💰 <b title="0.25× fractional Kelly by tier, scaled by score, zeroed in risk-off. Position = this% × equity ÷ (trigger − stop).">risk ${r.suggestedRiskPct}%</b> <span class="dt-dim">of capital</span>` : (r.suggestedRiskPct === 0 ? ' <span class="dt-dim">· risk-off: size 0</span>' : '')}</div>` : ''}
+        ${r.continuationScore != null ? `<div class="dt-card-sub">🎯 <b title="Take/skip meta-label: gap size + RVOL + regime. Top-third beat bottom in 6/6 years OOS. Ranks a right-skewed edge — it does not raise the ~50% hit rate.">Continuation ${r.continuationScore}</b>/100 ${r.take ? '<span class="dt-tier-a" style="background:#22d3ee33;color:#22d3ee" title="Meta-label rank: top-third of the take/skip classifier. Research label from a registry-shadow strategy — not a trade instruction.">▲ top-third</span>' : '<span class="dt-dim">· watch</span>'}${r.suggestedRiskPct ? ` &nbsp;·&nbsp; 💰 <b title="0.25× fractional Kelly by tier, scaled by score, zeroed in risk-off. Position = this% × equity ÷ (trigger − stop).">risk ${r.suggestedRiskPct}%</b> <span class="dt-dim">of capital</span>` : (r.suggestedRiskPct === 0 ? ' <span class="dt-dim">· risk-off: size 0</span>' : '')}</div>` : ''}
         <div class="dt-card-plan">📈 <b>Opening-range breakout</b> — break above <b>$${r.plan.trigger}</b> &nbsp;·&nbsp; 🛑 ${L('stop', 'Stop')} <b>$${r.plan.stop}</b> <span class="dt-dim">(−${r.plan.riskPct}%, 2.5×ATR)</span> &nbsp;·&nbsp; 🏁 ${L('target', 'Target')} <b>$${r.plan.target}</b> <span class="dt-dim">${L('rr', 'R:R')} 1:${r.plan.rr}</span></div>
         <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
         <div class="chart-panel" data-chart-panel style="display:none"></div>
@@ -7616,7 +7628,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const panel = (title, sub, rows, cardFn, empty) => `<div class="rot-panel"><div class="rot-head">${title}</div><div class="rot-sub">${sub}</div>${(rows || []).map(cardFn).join('') || `<div class="bt-ic-row"><span style="color:var(--text-dim)">${empty}</span></div>`}</div>`;
 
     const bounces = panel('🔄 Oversold Bounce <span class="dt-dim">(long — reversion)</span>',
-      'Capitulation → turn. Validated red-day edge; earlier (WATCH/EMERGING) turns bounce more. Small edge, ~52–56% win — size accordingly and honor the stop.',
+      'Capitulation → turn. Research read (registry: shadow) — the exact-contract matched-control test did NOT promote this; only the sharp V-reversal shape showed promise historically, and its supporting report is being re-generated. Honor the stop.',
       t.bounces, longCard, 'No clean oversold-bounce setups right now.');
 
     // 🎁 Forced-Selling Reversion (CERN long reversions) — a different, event-driven long.

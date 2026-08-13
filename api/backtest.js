@@ -16,7 +16,7 @@ const { fetchDailyHistory, evalSetupAt, smaAt, rsHighArray } = require('../lib/s
 const { calcRSI, calcATR } = require('../lib/signal');
 const { LARGE, SMALL_CAPS, MICRO_CAPS } = require('../lib/universe');
 const { runGhostBacktest } = require('../lib/ghost-backtest');
-const { planFill, POLICIES, EXECUTION_POLICY_VERSION } = require('../lib/execution-policy');
+const { planFill, POLICIES, EXECUTION_POLICY_VERSION, perSideSlippagePct } = require('../lib/execution-policy');
 const { averageRanks } = require('../lib/rankquality');
 const SM = require('../lib/security-master');
 
@@ -117,6 +117,12 @@ function simAtrTrade(c, closes, highs, lows, atr, i, tier) {
     if (highs[j] >= target) { r = (target - entry) / entry; exitDate = c[j].date; won = true; break; }
   }
   if (r == null) { const j = Math.min(fi + MAX_HOLD - 1, last); r = (closes[j] - entry) / entry; exitDate = c[j].date; hold = j - fi + 1; won = r > 0; }
+  // EXIT-LEG friction (graduation-league EA-6): planFill charged only the entry side
+  // ("the exit leg is charged at resolution, never here") — but nothing ever charged
+  // it, so every trade, barrier or timeout, exited friction-free. One per-side
+  // spread+slippage haircut at exit closes the half-round-trip gap.
+  r -= perSideSlippagePct(tier);
+  won = r > 0;
   return { fillDate: c[fi].date, entry, stop, target, r, exitDate, hold, won };
 }
 
@@ -145,10 +151,16 @@ function simulatePortfolio(accepted, axis, closeMaps, maxPos) {
   for (let k = 1; k < axis.length; k++) {
     const D = axis[k], P = axis[k - 1];
     const held = accepted.filter(p => p.entryDate <= D && p.exitDate >= D);   // include the FILL day
+    // EA-7: the acceptance gate is strict (exitDate > entryDate) while this holding
+    // filter is inclusive, so on turnover days an exiting and an entering position are
+    // both held — at fixed 1/maxPos weights that was Σweights > 1 (uncosted intraday
+    // leverage, the audit's "~119% average investment"). Weights renormalize by the
+    // ACTUAL held count whenever it exceeds maxPos, capping daily exposure at 1.
+    const w = 1 / Math.max(maxPos, held.length || 1);
     let ret = 0;
-    held.forEach(p => { const cm = closeMaps[p.name]; if (cm) ret += (1 / maxPos) * positionDailyReturn(p, D, P, cm); });
+    held.forEach(p => { const cm = closeMaps[p.name]; if (cm) ret += w * positionDailyReturn(p, D, P, cm); });
     eq *= (1 + ret); peak = Math.max(peak, eq); mdd = Math.min(mdd, (eq - peak) / peak);
-    curve.push({ date: D, v: +eq.toFixed(4) }); dr.push(ret); exposSum += held.length / maxPos;
+    curve.push({ date: D, v: +eq.toFixed(4) }); dr.push(ret); exposSum += held.length * w;
   }
   // Reconciliation: for positions whose whole span sits inside the axis, the compounded per-day path
   // must equal the trade-level realized r. Positions open past the window end are excluded (they are

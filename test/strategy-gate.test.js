@@ -66,9 +66,13 @@ test('the production backbone screeners remain trade-eligible', () => {
   // ghost and downday were demoted 2026-08-11, and `custom` (the learned Apex ranking)
   // on 2026-08-12 — see the next test. `screener` is now the ONLY non-Day-Trade
   // strategy this app will put weight behind.
-  for (const id of ['screener', 'daytrade', 'ignition']) {
+  for (const id of ['screener', 'daytrade']) {
     assert.equal(gate.isTradeEligible(id), true, `${id} must stay trade-eligible`);
   }
+  // ignition was demoted to shadow (graduation-league RT-09/F3/F-13): it held
+  // production maturity with future-tense criteria and no promotion artifact —
+  // the exact state this test's own comment said should not exist.
+  assert.equal(gate.isTradeEligible('ignition'), false, 'ignition is shadow until its criteria are actually met');
 });
 
 test('exactly one non-Day-Trade strategy carries live weight, and it is named', () => {

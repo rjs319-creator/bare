@@ -49,15 +49,19 @@ test('ghost + apex both fire in risk-on → constructive, two FOR signals with a
     apex: { tier: 'loaded', score: 63, pillars: {} },
     trackByKey: { 'Ghost:STALKING': { picks: 40, horizons: { '5d': { excessN: 22, winRate: 55, avgExcess: 1.2, beatMktRate: 57 } } } },
   });
-  assert.equal(r.verdict.level, 'constructive');
-  assert.equal(r.forCase.length, 2);
+  // Ghost keeps its track-backed FOR row; Apex (registry-shadow since 2026-08-12,
+  // RT-02) is context — one for-vote is a 'watch', not 'constructive'.
+  assert.equal(r.verdict.level, 'watch');
+  assert.equal(r.forCase.length, 1);
   const ghostSig = r.forCase.find(s => s.key === 'Ghost:STALKING');
   assert.ok(ghostSig.track && ghostSig.track.pending === false);
   assert.equal(ghostSig.track.beatBenchRate, 57);
-  // Apex is honest: no fabricated win rate, carries the drift-tracking note.
-  const apexSig = r.forCase.find(s => s.key === 'Apex:loaded');
+  // Apex is honest twice over: no fabricated win rate, and a shadow note explaining
+  // why it adds no verdict weight.
+  const apexSig = r.signals.find(s => s.key === 'Apex:loaded');
+  assert.equal(apexSig.side, 'context');
   assert.equal(apexSig.track, null);
-  assert.match(apexSig.note, /drift/);
+  assert.match(apexSig.note, /shadow/i);
 });
 
 test('risk-off VETOES even when bullish signals fire → caution, not constructive', () => {
