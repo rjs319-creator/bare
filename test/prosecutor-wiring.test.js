@@ -138,3 +138,50 @@ test('a record too small to judge is UNRUN, never blocked', () => {
   assert.equal(g.stats.prosecution.blocked, false, 'a 3-date record cannot be convicted of concentration');
   assert.ok(g.stats.prosecution.unrun.includes('concentration'));
 });
+
+// ── excision calibration ───────────────────────────────────────────────────
+// Investigating the screener's excision "failure" showed the check was measuring
+// SAMPLE SIZE, not concentration. removeCounts are absolute [5,10,20], written
+// for trade counts in the hundreds. On an 18-date series they strip 28% and 56%
+// of the sample and then demand the remaining bottom 44% average positive.
+//
+// Simulated against the screener's OWN mean and dispersion, a genuinely positive
+// strategy survived 0.51% of the time at n=18 (and 0.01% at n=30, where k=20
+// kicks in and removes 67% — the absolute thresholds create a discontinuity).
+// The screener itself sits at the 49.6th percentile of its own null: exactly
+// average concentration, top1Share 0.208, slightly NEGATIVE skew. It is weak,
+// not fragile, and the date-level CI gate already says so.
+//
+// Same floor as MIN_CONCENTRATION_N, expressed as a fraction: a removal that
+// takes more than MAX_EXCISION_FRACTION of the sample cannot distinguish
+// concentration from dispersion, so it declines to run.
+test('excision refuses a removal that would strip most of the sample', () => {
+  const eighteen = Array.from({ length: 18 }, (_, i) => ({ net: i - 8 }));
+  const e = P.excisionCheck(eighteen);         // k=5 is 28% of 18
+  assert.equal(e.ok, false);
+  assert.match(e.reason, /sample|insufficient/i);
+});
+
+test('excision runs once the removal is a small enough slice', () => {
+  const twentyFive = Array.from({ length: 25 }, (_, i) => ({ net: i - 12 }));
+  const e = P.excisionCheck(twentyFive);       // k=5 is exactly 20%
+  assert.equal(e.ok, true);
+  assert.ok(e.rows.length >= 1);
+  for (const r of e.rows) assert.ok(r.removed / 25 <= 0.20, `k=${r.removed} exceeds the fraction cap`);
+});
+
+test('excision still convicts a real one-sided edge on an adequate sample', () => {
+  const trades = [...Array.from({ length: 5 }, () => ({ net: 1 })), ...Array.from({ length: 40 }, () => ({ net: -0.02 }))];
+  const e = P.excisionCheck(trades);           // k=5 is 11% of 45 — applies
+  assert.equal(e.ok, true);
+  assert.equal(e.survives, false);
+});
+
+test("the screener's real 18-date series is UNRUN, not convicted", () => {
+  // The actual production series that prompted this. It must not be blocked.
+  const screener = [10.36, 10.27, 9.74, 5, 4.2, 3.75, 3.16, 2.37, 0.98,
+    -0.06, -0.15, -1.14, -1.47, -2.2, -3.4, -6.75, -8.3, -11.45];
+  const g = M.gradeTrack(track(screener), PASSING);
+  assert.equal(g.stats.prosecution.blocked, false, 'an 18-date series cannot be convicted of concentration');
+  assert.ok(g.stats.prosecution.unrun.includes('best-trade-excision'));
+});
