@@ -105,3 +105,36 @@ test('dateLevelNetExcess forwards the per-date values the prosecutor needs', () 
   assert.deepEqual(out.values, [1.5, -0.5], 'one equal-weight portfolio value per decision date');
   assert.equal(out.values.length, out.n, 'exactly one value per counted date');
 });
+
+// ── small-sample honesty ───────────────────────────────────────────────────
+// Found by verifying this feature on production. 16 of 17 prosecuted records
+// came back `blocked: true`, but several were decided on 2-5 decision dates:
+//
+//   anomaly n=2, emergingleader n=3, crossasset n=4, peerlab n=4
+//
+// With 2 dates, "one date carries >=50% of positive P&L" is true by ARITHMETIC,
+// not by concentration. excisionCheck already refuses to run below 10 trades;
+// concentrationCheck had NO floor, so it fired spuriously on tiny records and
+// `blocked: true` read as "adversarially rejected" when it meant "too few dates
+// to say". A verdict that is really a sample-size artifact is the exact defect
+// class this whole pass has been closing.
+const P = require('../lib/cfl/prosecutor');
+
+test('concentration refuses to judge a handful of observations', () => {
+  const tiny = P.concentrationCheck([{ net: 5 }, { net: 0.01 }, { net: 0.01 }]);
+  assert.equal(tiny.ok, false);
+  assert.match(tiny.reason, /insufficient/i);
+});
+
+test('concentration still convicts a real monster-trade edge', () => {
+  const real = P.concentrationCheck([{ net: 5 }, ...Array.from({ length: 30 }, () => ({ net: 0.01 }))]);
+  assert.equal(real.ok, true);
+  assert.ok(real.top1Share > 0.5);
+});
+
+test('a record too small to judge is UNRUN, never blocked', () => {
+  const t = track([1.0, 4.0, 0.2]);           // 3 dates: arithmetically "concentrated"
+  const g = M.gradeTrack(t, PASSING);
+  assert.equal(g.stats.prosecution.blocked, false, 'a 3-date record cannot be convicted of concentration');
+  assert.ok(g.stats.prosecution.unrun.includes('concentration'));
+});
