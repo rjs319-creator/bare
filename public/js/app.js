@@ -1,4 +1,5 @@
   import { esc, fmtMoney, timeAgo } from './format.js';
+  import { loadBudget, saveBudget, budgetIsSet, sizeAlertDecision, sizeOptionContracts, RISK_BUDGET_NOTE } from './risk-budget.js';
   import { DEFAULT_PREFS as DT_ALERT_DEFAULTS, shouldNotify, recordNotified } from './notify-prefs.js';
   import { fetchJSON, HEAVY_TIMEOUT_MS } from './fetch-json.js';
   import { startLivePrices as startScreenerLive, stopLivePrices as stopScreenerLive, LIVE_SCREENERS } from './live-price.js';
@@ -1590,6 +1591,26 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       </div></details>`;
   }
 
+  // Contract count from the shared risk budget, checked against THIS contract's capacity.
+  // With no budget set, the server's own "size not evaluated" wording stands — an
+  // unevaluated size is never rendered as though it fit.
+  function of2SizeText(card, serverSize) {
+    const sel = (card.contracts || [])[0];
+    const b = loadBudget();
+    if (budgetIsSet(b) && sel) {
+      const px = sel.lastPrice != null ? sel.lastPrice : (sel.bid != null && sel.ask != null ? (sel.bid + sel.ask) / 2 : null);
+      const { size, fit } = sizeOptionContracts({ budget: b, contractPrice: px, openInterest: sel.openInterest, sessionVolume: sel.volume });
+      if (!size.available) return ` · <span style="color:var(--amber,#f0a832)" title="${esc(size.reason)}">size unevaluated</span>`;
+      const fitTxt = fit.available
+        ? `${fit.pctOfOpenInterest ?? '?'}% of OI${fit.constrained ? ' <b style="color:var(--red)">— capacity-constrained</b>' : ''}`
+        : esc(fit.reason);
+      return ` · <b>${size.contracts}</b> contracts ($${size.dollarRisk} premium at risk) = ${fitTxt}`;
+    }
+    if (serverSize && serverSize.available === false) return ` · <span title="${esc(serverSize.reason)}">size not evaluated</span>`;
+    if (serverSize && serverSize.available) return ` · ${serverSize.requestedContracts} contracts = ${serverSize.pctOfOpenInterest ?? '?'}% of OI`;
+    return '';
+  }
+
   // Contract-level executable liquidity for the contract a plan would actually name.
   function of2ExecutionHTML(c) {
     const l = c.contractLiquidity;
@@ -1603,7 +1624,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     return `<div style="font-size:0.75rem;margin-bottom:5px;line-height:1.6">
       ⚙ <b>Executable liquidity</b> on ${esc(String(ct.side || ''))} $${esc(String(ct.strike ?? '—'))} ${esc(ct.expiry || '')}: <b style="color:${col}">${esc(l.state)}</b>
       ${q ? ` · quote ${q.bid}/${q.ask} (${q.spreadPctOfMid}% of mid)` : ' · no two-sided quote'}
-      ${sz && sz.available === false ? ` · <span title="${esc(sz.reason)}">size not evaluated</span>` : sz && sz.available ? ` · ${sz.requestedContracts} contracts = ${sz.pctOfOpenInterest ?? '?'}% of OI` : ''}
+      ${of2SizeText(c, sz)}
       ${l.blocking && l.blocking.length ? `<div style="color:var(--red)">⛔ ${l.blocking.map(esc).join(' · ')}</div>` : ''}
       ${l.unavailableReason ? `<div style="color:var(--amber,#f0a832)">${esc(l.unavailableReason)}</div>` : ''}
       ${rule ? `<div class="dt-dim">Limit rule: work ${rule.suggestedLimit}, never pay above ${rule.neverPayAbove}. ${esc(rule.rule)}</div>` : ''}
@@ -8360,7 +8381,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const on = xaView === k;
       return `<button data-xav="${k}" class="dt-btn xa-pv" style="border-radius:0;border:none;${on ? 'background:#8a6dff;color:#0a0a1a' : 'background:transparent;color:var(--text-dim)'}">${lbl}${k !== 'scoreboard' ? ` (${count(k)})` : ''}</button>`;
     }).join('');
-    c.innerHTML = `<div class="xa-nav">${navBtns}</div><div id="xa-body"></div>`;
+    c.innerHTML = xaBudgetBar() + `<div class="xa-nav">${navBtns}</div><div id="xa-body"></div>`;
+    wireBudgetBar(c);
     c.querySelectorAll('.xa-pv').forEach(b => b.addEventListener('click', () => { xaView = b.dataset.xav; try { localStorage.setItem('xaView', xaView); } catch {} renderXalerts(xalertsData); }));
 
     const body = c.querySelector('#xa-body');
@@ -8416,6 +8438,41 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       ? ` <span class="xa-chip" title="Provider quote ${esc(p.quoteAsOf || '')} · ${esc(p.marketSession || '')} session · ${esc(p.source || '')}">✓ timestamped</span>`
       : ` <span class="xa-chip" style="color:var(--amber,#f0a832);border-color:currentColor" title="${esc(p.reason || '')}">⚠ unverified alert price</span>`;
     return `<span class="xa-fine">$${esc(String(p.price))} → $${dec.priceNow != null ? esc(String(dec.priceNow)) : '—'}${pv}${prov}</span>`;
+  }
+
+  // ── Risk budget: per-browser, never transmitted ────────────────────────────
+  let xaBudget = loadBudget();
+  function xaBudgetBar() {
+    const set = budgetIsSet(xaBudget);
+    return `<div class="xa-budget dt-note" style="margin-bottom:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <b>💰 Risk budget</b>
+      <label>account $<input id="xa-eq" type="number" min="0" step="1000" value="${xaBudget.equityUsd ?? ''}" placeholder="e.g. 50000" style="width:110px"></label>
+      <label>risk/trade <input id="xa-rp" type="number" min="0" max="100" step="0.1" value="${xaBudget.riskPctPerTrade ?? ''}" placeholder="e.g. 0.5" style="width:70px">%</label>
+      <span class="xa-fine">${set
+    ? `→ $${(xaBudget.equityUsd * xaBudget.riskPctPerTrade / 100).toFixed(0)} at risk per trade. ${esc(RISK_BUDGET_NOTE)}`
+    : 'Not set — share size and capacity stay <b>unevaluated</b> rather than assuming a size.'}</span>
+      <span class="xa-fine" style="opacity:.7">Stored in this browser only; never sent to the server.</span>
+    </div>`;
+  }
+  function wireBudgetBar(root) {
+    const eq = root.querySelector('#xa-eq'), rp = root.querySelector('#xa-rp');
+    if (!eq || !rp) return;
+    const apply = () => {
+      xaBudget = saveBudget({ equityUsd: parseFloat(eq.value), riskPctPerTrade: parseFloat(rp.value) });
+      renderXalerts(xalertsData);
+    };
+    eq.addEventListener('change', apply);
+    rp.addEventListener('change', apply);
+  }
+  // Sizing row for one decision — refuses rather than guessing when inputs are missing.
+  function xaSizingRow(dec) {
+    if (!budgetIsSet(xaBudget)) return '';
+    const { size, capacity } = sizeAlertDecision(dec, xaBudget);
+    if (!size.available) return `<div class="xa-fine">📏 Size: <span style="color:var(--amber,#f0a832)">unevaluated</span> — ${esc(size.reason)}</div>`;
+    const capTxt = capacity.available
+      ? `${capacity.pctOfAdv}% of ADV${capacity.constrained ? ' <b style="color:var(--red)">— capacity-constrained</b>' : capacity.comfortable ? '' : ' (moderate)'}`
+      : `capacity ${esc(capacity.reason)}`;
+    return `<div class="xa-fine">📏 <b>${size.shares}</b> shares · $${size.dollarRisk} at risk · $${size.perShareRisk}/share stop · ~$${size.notionalUsd} notional · ${capTxt}</div>`;
   }
 
   // Freshness / execution / regime / dissent — each states WHY when unavailable.
@@ -8493,7 +8550,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
            <div class="cx-price" title="${esc(rp.note)}">${esc(pri.t)}</div>`
         : `<div class="cx-price">${esc(dec.tier || '')}</div>`}</div></div>
       ${chipRow}${move ? `<div style="margin-top:5px">${move}</div>` : ''}${levelsHtml}
-      <div style="margin-top:6px">${xaEvidenceRows(dec)}</div>
+      <div style="margin-top:6px">${xaEvidenceRows(dec)}${xaSizingRow(dec)}</div>
       ${xaBreakdown(dec.components, dec.weights)}
       <div class="xa-fine" style="opacity:.75;margin-top:4px">Research priority is an attention ordering, not a probability. Component sum ${dec.score}/100 is the auditable evidence tally behind it — also not a probability.</div>
       ${reasons ? `<div style="margin-top:6px">${reasons}</div>` : ''}${sem}`;
