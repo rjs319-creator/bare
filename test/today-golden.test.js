@@ -33,6 +33,18 @@
 //        groups carry dateNet and continue to tilt when their CI clears zero.
 //      Day Trade rows are byte-identical; only their RANK moves, which the baseline
 //      guard explicitly permits when other sources move around them.
+//
+//    GOLDEN v4 (alpha-research pass 3, 2026-08-13) — CURRENT golden only; the Day Trade
+//    BASELINE is untouched and all four DAY TRADE FROZEN guards still pass. One change:
+//      • RVOL no longer manufactures an evidence family. fromBiotech appended a second
+//        family ('volumeAccum') whenever relVol >= 1.5, which raised evidenceUnits ->
+//        evidenceMultiplier on the live composite — on a factor this repo MEASURED at
+//        rank-IC ~= -0.004 and weights zero everywhere else, and with no evidenceOrigins
+//        entry so the redundancy model could not discount it. A single catalyst lead was
+//        counted as two independent evidence families.
+//        biotech:swing:AGIO evidenceMult 1.09 -> 1, score 68.2 -> 60.8, rank 2 -> 4;
+//        gapgo and coremo shift rank as a consequence. No row vanished, no cost,
+//        confidence or execution value changed.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

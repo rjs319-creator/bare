@@ -102,7 +102,10 @@ test('strategyIdFor: tabs that share a strategy map onto it; the rest pass throu
   // mapping it onto production momentum put a "Proven" banner on a shadow book.
   const { strategyIdFor } = loadBadge();
   assert.equal(strategyIdFor('coremo'), 'coremo');
-  assert.equal(strategyIdFor('picks'), 'momentum');
+  // Picks shows its OWN evidence (id 'picks', registered 2026-08-13). This previously
+  // asserted picks->momentum, PINNING the defect: an LLM news pick list wearing the
+  // Momentum engine's resolved record, two systems sharing no code, universe or contract.
+  assert.equal(strategyIdFor('picks'), 'picks');
   assert.equal(strategyIdFor('rltlab'), 'rlt');
   assert.equal(strategyIdFor('atlas'), 'atlasx');
   assert.equal(strategyIdFor('options'), 'optionsflow');
