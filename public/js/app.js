@@ -140,7 +140,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     leaderboard: 'A leaderboard ranking the app’s own algorithms by track record.',
     scoreboard: 'The honest report card: how every signal type has actually performed vs the market.',
     evidence: 'How much to trust each strategy — a Validated/Promising/Experimental grade earned from its own track record, and which unproven ones live in the Research Lab.',
-    baselines: 'Does each strategy actually beat a DUMB baseline? Compares every strategy vs SPY, its sector, a random/equal-weight pick, and simple momentum / 52-week-high / relative-volume rank screens.',
+    baselines: 'Does each strategy actually beat a DUMB baseline? Two baselines are enforced per strategy — SPY and its sector. The naive screens (random/equal-weight, momentum, 52-week-high, relative-volume) are shown alongside for context on a different benchmark and horizon; they are not applied as gates.',
     coreperf: 'Quarterly performance of the Core Momentum model vs the market.',
     xalerts: 'Ranked trade alerts scraped from social accounts, graded on forward returns.',
   };
@@ -9318,14 +9318,23 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       return `<div class="bl-row bl-na"><span class="bl-name">${esc(b.name)}</span><span class="bl-edge td-dim">not computed</span><span class="bl-note td-dim">${esc(b.note || 'unavailable')}</span></div>`;
     }
     if (b.kind === 'benchmark' || b.kind === 'null') {
-      const bar = b.kind === 'null' ? '0% excess bar' : 'benchmark';
-      return `<div class="bl-row"><span class="bl-name">${esc(b.name)}</span><span class="bl-edge td-dim">${bar}</span><span class="bl-note td-dim">${esc(b.note || '')}</span></div>`;
+      // A null arm's zero is an identity, not a measurement, and its sampling spread is
+      // not computed — labelling it "0% excess bar" invited reading any positive number
+      // as clearing it. Say what it is.
+      const bar = b.kind === 'null' ? 'zero by construction · spread not measured' : 'benchmark';
+      return `<div class="bl-row"><span class="bl-name">${esc(b.name)}</span><span class="bl-edge td-dim">${bar}</span><span class="bl-note td-dim">${esc(b.note || '')}${b.applied === false ? ' <b>Not applied as a gate.</b>' : ''}</span></div>`;
     }
     // factor baseline
     const ic = b.rankIC != null ? b.rankIC.toFixed(3) : '—';
     const top = b.topQuintileExcess != null ? `${b.topQuintileExcess > 0 ? '+' : ''}${b.topQuintileExcess}%` : '—';
     const cls = b.predictive ? 'bl-pos' : 'bl-dead';
-    return `<div class="bl-row"><span class="bl-name">${esc(b.name)}</span><span class="bl-edge ${cls}">IC ${ic} · top-20% ${top}</span><span class="bl-note td-dim">${b.predictive ? 'a real bar to beat' : 'no edge — ranking by this doesn’t predict returns'}</span></div>`;
+    // "a real bar to beat" was a cross-space claim: this number is cross-sectional excess
+    // vs the cohort over 63 sessions gross, while the strategy rows below are excess vs
+    // SPY at their own horizon, net. It is a reference, not a threshold for them.
+    const meaning = b.predictive
+      ? 'ranking by this does predict returns — a reference in the factor cross-section, not applied as a gate'
+      : 'no edge — ranking by this doesn’t predict returns';
+    return `<div class="bl-row"><span class="bl-name">${esc(b.name)}</span><span class="bl-edge ${cls}" title="${esc(b.basis || '')}">IC ${ic} · top-20% ${top}</span><span class="bl-note td-dim">${meaning}</span></div>`;
   }
 
   function stratVsBaseRow(s) {
@@ -9344,16 +9353,24 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!d || !d.ok) { host.innerHTML = `<div class="dt-note" style="border-left-color:var(--red)">Couldn't assemble baselines.</div>`; return; }
     const gt = document.getElementById('baselines-gen-time');
     if (gt) gt.textContent = d.researchAsOf ? `factors @ ${new Date(d.researchAsOf).toLocaleDateString()}` : 'factor scan not run yet';
-    const intro = `<div class="mat-intro">The honest promotion test: a strategy earns nothing unless it beats a <b>dumb baseline</b>. Below are the baselines (what each naive screen actually earns) and then every strategy vs the two it's graded on — SPY and its sector. A strategy only <b>clears the bar</b> (✅) when it beats <b>both</b>.</div>`;
+    const intro = `<div class="mat-intro">The honest promotion test: a strategy earns nothing unless it beats a <b>dumb baseline</b>. Two of those baselines are <b>enforced</b> — SPY and the sector ETF — and a strategy only <b>clears the bar</b> (✅) when it beats both. The naive screens below are shown for <b>context</b>: they are measured on a different benchmark, horizon and cost basis, so their numbers are <b>not</b> thresholds these strategy numbers can be read against.</div>`;
     const verdict = `<div class="dt-note" style="border-left-color:${d.summary && d.summary.beatSpyAndSector ? 'var(--green,#22c55e)' : 'var(--amber,#f59e0b)'}">⚖️ ${esc(d.verdict)}</div>`;
     let html = intro + verdict;
-    html += `<div class="sb-secgroup"><div class="sb-secgroup-h">The baselines — the bar to beat</div><div class="bl-list">${(d.baselines || []).map(baselineRow).join('')}</div></div>`;
+    // The two metric spaces stated up front — this block and the strategy block below are
+    // NOT in the same units, and the old "the bar to beat" heading implied they were.
+    if (d.comparability && d.comparability.comparable === false) {
+      html += `<div class="dt-note" style="border-left-color:var(--amber,#f59e0b)">📐 <b>Different rulers.</b> Naive screens: ${esc(d.comparability.factorBasis)}. Strategies: ${esc(d.comparability.strategyBasis)}.</div>`;
+    }
+    if (d.coverage && (d.coverage.unappliedBaselines || []).length) {
+      html += `<div class="dt-note">🔎 <b>Enforced per strategy:</b> ${(d.coverage.appliedBaselines || []).join(', ')}. <b>Shown but not enforced:</b> ${(d.coverage.unappliedBaselines || []).join(', ')} — listing them is not evidence any strategy cleared them.</div>`;
+    }
+    html += `<div class="sb-secgroup"><div class="sb-secgroup-h">The naive screens — context, not gates</div><div class="bl-list">${(d.baselines || []).map(baselineRow).join('')}</div></div>`;
     if (!d.summary || !d.summary.researchAvailable) {
       html += `<div class="dt-note">The factor bars (momentum / 52-week / rel-volume) need the research cross-section. It's heavy (~50s) and rate-limited — click <b>Recompute factor scan</b> to build it, then Refresh.</div>`;
     }
     html += `<div class="bl-actions"><button class="refresh-btn" id="bl-recompute" ${baselinesComputing ? 'disabled' : ''} style="color:#38bdf8;border-color:#38bdf855">${baselinesComputing ? '⏳ Computing (~50s)…' : '🧪 Recompute factor scan'}</button></div>`;
     if (d.strategies && d.strategies.length) {
-      html += `<div class="sb-secgroup"><div class="sb-secgroup-h">Every strategy vs its benchmarks</div><div class="bl-slist">${d.strategies.map(stratVsBaseRow).join('')}</div></div>`;
+      html += `<div class="sb-secgroup"><div class="sb-secgroup-h">Every strategy vs the two ENFORCED benchmarks</div><div class="bl-slist">${d.strategies.map(stratVsBaseRow).join('')}</div></div>`;
     }
     host.innerHTML = html;
     const rc = document.getElementById('bl-recompute');
