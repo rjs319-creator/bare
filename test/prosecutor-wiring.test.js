@@ -39,7 +39,7 @@ const HEALTHY = Array.from({ length: 30 }, (_, i) => 0.6 + (i % 5) * 0.25);
 // One enormous date carrying everything, the rest bleeding — concentration, not edge.
 const CONCENTRATED = [...Array.from({ length: 29 }, () => -0.15), 40];
 
-const dn = (values) => ({
+const dn0 = (values) => ({
   n: 30, avg: 1.2, sd: 2.0, ci95: { lo: 0.4, hi: 2.0 }, effectiveN: 22,
   positiveBlocks: 4, blockStability: { blocks: 4, positive: 4, means: [1.1, 1.3, 1.0, 1.4], usable: true },
   values,
@@ -48,7 +48,7 @@ const track = (values) => ({
   excessN: 60, avgExcess: 2.6, beatMktRate: 38,
   netExcessN: 60, avgNetExcess: 2.4, netBeatMktRate: 36,
   secExcN: 60, avgSecExcess: 1.8, beatSecRate: 40,
-  dates: 30, dateNet: dn(values),
+  dates: 30, dateNet: dn0(values),
 });
 const PASSING = { fillVerified: true, noHistoryRate: 0 };
 
@@ -218,4 +218,64 @@ test('a raw excision failure alone no longer takes a grade away', () => {
   if (p.calibrated && p.calibrated.concentrated) return;   // calibration agrees — nothing to assert
   assert.ok(p.failed.includes('best-trade-excision'), 'the raw check should still REPORT the failure');
   assert.equal(p.blocked, false, 'but it must not block on its own');
+});
+
+// ── applicability: concentration presumes an edge ──────────────────────────
+// `attention` was the most extreme shape in the book — skew +1.99 at the 100th
+// percentile, not one of 2000 matched null draws more right-tailed. But its mean
+// is -0.011 WITH the outlier and -1.83 without it: it loses on 10 of 14 dates
+// with a median of -2.24%. It is not an edge concentrated in one date, it is a
+// losing record dragged to breakeven by one.
+//
+// Concentration asks HOW AN EDGE IS EARNED. Asked of a series with no positive
+// mean it answers a question nobody needs — expectancy already failed.
+const ATTENTION = [-4.48, -2.17, -0.4, -2.31, 0.92, -6.31, -0.14, -2.35, 8.04, -3.89, -8.29, 23.62, -5.54, 3.13];
+const EVENTS_S = [52.5, 38.51, 31.26, 27.37, 18.26, 11.37, 9.61, 3.96, 3.19, 2.83, 2.13, 0.86, 0.44, 0.22,
+  -0.22, -0.5, -1.78, -4.67, -5.16, -6.78, -9.18, -11.58, -14.07, -20.31, -21.77, -22.93, -23.5];
+
+test('a non-positive-mean record is not prosecuted for concentration', () => {
+  const g = M.gradeTrack(track(ATTENTION), PASSING);
+  const p = g.stats.prosecution;
+  assert.equal(p.blocked, false, 'no edge to concentrate — expectancy already failed');
+  const c = p.checks.find(x => x.check === 'null-calibrated-concentration');
+  assert.equal(c.ok, null, 'not applicable, not passed');
+  assert.equal(c.detail.applicable, false);
+  assert.match(String(c.detail.notApplicable), /mean|edge/i);
+});
+
+test('the shape is still MEASURED and reported, just not charged', () => {
+  const g = M.gradeTrack(track(ATTENTION), PASSING);
+  const cal = g.stats.prosecution.calibrated;
+  assert.equal(cal.ran, true, 'the statistic is still computed — silence would lose the finding');
+  assert.ok(cal.skew.percentile >= 95, 'and it still records how extreme the shape was');
+});
+
+test('a positive-mean record is still prosecuted normally', () => {
+  const g = M.gradeTrack(track(EVENTS_S), PASSING);
+  assert.equal(g.stats.prosecution.blocked, true);
+  assert.equal(g.stats.prosecution.blockedBy, 'null-calibrated-concentration');
+});
+
+// ── locating the outlier ───────────────────────────────────────────────────
+// #352 forwarded dateNet.values without the matching dates, so a finding like
+// attention's could only be given a POSITION (12 of 14), never a date. A
+// concentration verdict you cannot trace to a session is not actionable.
+test('dateLevelNetExcess forwards dates aligned with values', () => {
+  const rows = [
+    { date: '2026-08-03', netExc: 1.0 }, { date: '2026-08-03', netExc: 2.0 },
+    { date: '2026-08-04', netExc: -0.5 }, { date: '2026-08-05', netExc: 9.0 },
+  ];
+  const out = dateLevelNetExcess(rows);
+  assert.deepEqual(out.dates, ['2026-08-03', '2026-08-04', '2026-08-05']);
+  assert.equal(out.dates.length, out.values.length, 'one date per value, same order');
+  assert.equal(out.dates[out.values.indexOf(Math.max(...out.values))], '2026-08-05');
+});
+
+test('the prosecution names the date carrying the tail', () => {
+  const dn = { ...dn0(ATTENTION), dates: ATTENTION.map((_, i) => `2026-07-${String(i + 1).padStart(2, '0')}`) };
+  const g = M.gradeTrack({ ...track(ATTENTION), dateNet: dn }, PASSING);
+  const peak = g.stats.prosecution.peak;
+  assert.ok(peak, 'peak must be reported when dates are available');
+  assert.equal(peak.value, 23.62);
+  assert.equal(peak.date, '2026-07-12', 'the 12th of 14 — the outlier');
 });
