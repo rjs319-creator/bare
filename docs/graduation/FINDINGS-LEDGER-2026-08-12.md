@@ -24,7 +24,7 @@ pass. Severity: P0 (governance breach) > P1 (evidence-integrity break) > P2 > P3
    (promotionBlocked on every response). Residuals confirmed: exit-leg friction
    never charged (EA-6, FIXED), turnover-day >100% exposure mechanism (EA-7/QM-5,
    FIXED via weight renormalization), unpurged overlapping IS/OOS split (QM-6,
-   OPEN — quarantined), curated default universe honestly stamped (EA-8).
+   **CLOSED 2026-08-13, PR #346** — `splitWithEmbargo`), curated default universe honestly stamped (EA-8).
    Sharpest residual: History-Check edges re-ordered the live screener (EA-9,
    FIXED).
 5. **Core Performance resolved-only** — CONFIRMED (stablecore never got the
@@ -144,24 +144,65 @@ pass. Severity: P0 (governance breach) > P1 (evidence-integrity break) > P2 > P3
 - EA-5 — the Scoreboard UI renders the mtm-v1 lane (open+resolved cost-net
   average per group).
 
+## CLOSED 2026-08-13 (follow-up pass — all merged, deployed, prod-verified)
+
+- **QM-6** legacy backtest unpurged overlapping split — **PR #346**. The split was
+  by trade INDEX (so one date straddled the boundary, with an inconsistent
+  comparator that never returned 0) and carried no embargo against a 20-session
+  label. Now 60% of distinct signal DATES, then every trade whose signal falls on
+  or before the latest in-sample EXIT date is dropped. Every figure this endpoint
+  produced before measured a leaking boundary and must be re-derived.
+- **F-14** ExpGap graded SPY-vs-SPY — **PRs #347, #349**. The grader
+  direction-adjusts the PICK leg but not the BENCHMARK leg, so a short row on the
+  benchmark published `exc = -2 x spyRet`: beta that moves and carries a sign.
+  Fixed generically (`isSelfBenchmarked` / `excessOrNull`), counted and sampled
+  per group — which then surfaced two sections nobody had flagged.
+- **F-12** incremental-over-baseline gates declared but unenforced — **PRs #350,
+  #351**. Ten registry entries declared an incremental bar in prose that nothing
+  read. Now gate 6, fails closed on declared-but-unmeasured.
+  RESIDUAL: no measured-artifact channel is wired, so declarers sit at Promising
+  until one is; the random baseline's sampling DISPERSION is still unmeasured.
+- **F-11** prosecutor battery unwired — **PRs #352, #353, #355, #356, #357,
+  #359**. `prosecuteClaim` had zero production callers. Now gate 7 on the
+  date-level series. The raw thresholds convicted 16 of 17 records on SAMPLE SIZE
+  (a genuinely positive strategy survived excision 0.51% of the time at n=18), so
+  the deciding statistic is now `lib/cfl/null-calibration.js` — a seeded,
+  deterministic, matched-null comparison, safe at small n by construction.
+  Convictions 7 -> 5 -> 2 -> 1.
+- **F-04** silent SPY fallback in a sector-labelled stat — **PR #361**. A count
+  (`benchFallback`) does not un-blend a mean. Sector-labelled rows with no sector
+  return now go null and drop out. Latent: benchFallback is 0 across 79 groups.
+- **F-10** (deriveStatus half) inconclusive conflated with no-edge — **PR #354**.
+  `inconclusive` matched no branch and fell through to a no-edge verdict whose own
+  basis read "0 not-confirmed records, 0 passes". no-edge now requires an
+  affirmative failure.
+  RESIDUAL: the registry-citation half is still open (no entry named in this
+  ledger; a scan of all 43 entries found no contradiction), and re-deriving the 24
+  existing `no-edge` labels is blocked on F-09.
+
+### Found during the pass, not previously on this ledger
+
+- **CERN stamped the detector's clock, not a market session** — **PR #359**.
+  `dateMs: nowMs` + a daily-including-weekends tick put **10 of the events
+  section's 27 decision dates (37%) on non-trading days** — 8 Sundays and 2
+  Saturdays, including the peak (+52.50 on **Sunday** 2026-07-12, the single datum
+  behind the only surviving prosecutor conviction) and +27.37 on Saturday July 4th.
+  Fixed forward (`sessionDate`); legacy rows flagged `sessionAligned:false` and
+  counted as `sessionUnaligned` rather than restated.
+  ACTION: re-read the events verdict once session-aligned dates accrue.
+- **CI conservatism guarded** — **PR #360**. Not a defect: a coverage study on the
+  fattest-tailed live series (n=27, skew +0.94) found Student-t 94.7%, bootstrap
+  92.7%, widest-of 94.9%. `bootstrapCI` is tighter because it UNDER-COVERS;
+  adopting it would loosen a promotion gate. Pinned by test.
+
 ## OPEN (documented, prioritized, not repaired this pass)
 
-- F-11 (second half): wire lib/cfl/prosecutor.prosecuteClaim into the
-  maturity/governance review for strategies at promising or better.
-- QM-6 legacy backtest unpurged overlapping split (quarantined).
 - QM-7 ghost-backtest purge gap < label span (frozen weights contain it).
-- F-04 silent SPY fallback inside sector-labeled headline stat.
 - F-09 evidence artifacts overwritten in place; research/data unversioned.
-- F-10 registry citation of an audit-rejected record; deriveStatus conflates
-  inconclusive with no-edge.
-- F-11 prosecutor battery unwired; promotion artifact lacks a negative-control
-  block.
-- F-12 incremental-over-baseline gates declared but unenforced; equal-weight/
-  random baselines asserted not measured.
-- F-14 ExpGap graded SPY-vs-SPY.
+- F-10 (remaining half) registry citation of an audit-rejected record — no entry
+  named here; a scan of all 43 found no status/citation contradiction.
 - F-15 assorted contract drift (downday 3d vs 5d; fillPolicy strings; twin
   holdout ledgers).
-- EA-5 mtm lane computed but unrendered in Scoreboard UI.
 - EA-11/12/13/14 legacy forwardReturn surfaces; dividends unused; core benchmark
   window mismatch; op=exits/op=longshort unstamped.
 - F-5 lineage cohort-gate coverage gap (gateCohort only in swing-screener-engine).
