@@ -10,7 +10,7 @@ import { fetchJSON } from './fetch-json.js';
 // Stock-screener sub-tabs whose cards should get the badge (have data-live).
 export const FLOW_BADGE_TABS = new Set(['screener', 'custom', 'ghost', 'trendrider', 'fade', 'confluence', 'daytrade']);
 
-let lookup = null;       // ticker -> { premium, bullishPct, net }
+let lookup = null;       // ticker -> { premium, callPremiumSharePct, premiumSkew }
 let loading = null;      // in-flight promise (dedupes concurrent callers)
 let navFn = null;        // optional: jump to the Options tab on click
 
@@ -29,8 +29,8 @@ function ensureLookup() {
         r.premium += s.premium;
       });
       Object.values(m).forEach(r => {
-        r.bullishPct = r.premium ? Math.round(100 * r.call / r.premium) : 50;
-        r.net = r.bullishPct >= 60 ? 'bullish' : r.bullishPct <= 40 ? 'bearish' : 'mixed';
+        r.callPremiumSharePct = r.premium ? Math.round(100 * r.call / r.premium) : 50;
+        r.premiumSkew = r.callPremiumSharePct >= 60 ? 'call-dominant' : r.callPremiumSharePct <= 40 ? 'put-dominant' : 'balanced';
       });
       lookup = m;
       return m;
@@ -42,13 +42,15 @@ function ensureLookup() {
 function applyBadge(el, r) {
   if (!el || el.dataset.flowDecorated) return;
   el.dataset.flowDecorated = '1';
-  const col = r.net === 'bullish' ? 'var(--green)' : r.net === 'bearish' ? 'var(--red)' : 'var(--text-dim)';
-  const arrow = r.net === 'bullish' ? '▲' : r.net === 'bearish' ? '▼' : '•';
+  // The badge marks PRESENCE of unusual options activity and its call/put premium split.
+  // It carries no direction: delayed chains cannot distinguish an opening bet from a
+  // hedge, a roll, a spread leg, or a covered-call write, so no green-up / red-down.
   const b = document.createElement('span');
   b.className = 'flow-badge cx-tierbadge';
-  b.style.cssText = `margin-left:6px;cursor:pointer;color:${col};border-color:currentColor`;
-  b.title = `Unusual options flow today: ${usd(r.premium)} premium · ${r.bullishPct}% calls (net ${r.net}). Tap to open the Options tab.`;
-  b.innerHTML = `💰 ${arrow} flow`;
+  b.style.cssText = 'margin-left:6px;cursor:pointer;color:var(--text-dim);border-color:currentColor';
+  b.title = `Unusual options activity today: ${usd(r.premium)} estimated premium · ${r.callPremiumSharePct}% of it in calls (${r.premiumSkew}). `
+    + 'That split is a composition statistic, NOT a directional read. Tap to open the Options tab.';
+  b.innerHTML = '💰 flow';
   b.addEventListener('click', e => { e.stopPropagation(); if (navFn) navFn(); });
   el.insertAdjacentElement('afterend', b);
 }

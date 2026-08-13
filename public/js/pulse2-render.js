@@ -396,6 +396,101 @@ export function renderHealthStrip(clocks, unavailable, coverage, cache) {
 }
 
 // ── shell ───────────────────────────────────────────────────────────────────
+// ── Three-layer regime stack ────────────────────────────────────────────────
+// Rendered as THREE separate rows. There is deliberately no combined regime badge:
+// compressing the horizons hides exactly the conflict an expert needs to see.
+const P2_LAYER_META = {
+  intraday: ['⚡', 'Intraday', 'trend/chop, breadth, VWAP participation, realized-volatility expansion'],
+  tactical: ['📅', 'Tactical (1–4 weeks)', 'breadth thrust, leadership, credit, rates, dollar, volatility curve'],
+  strategic: ['🏛', 'Strategic (1–6 months)', 'growth, inflation, liquidity, earnings revisions, valuation'],
+};
+const P2_STATE_COLOR = {
+  TRENDING_UP: '#22c55e', TRENDING_DOWN: '#ef4444', CHOPPY: '#94a3b8', VOLATILITY_EXPANSION: '#f0a832',
+  BROADENING: '#22c55e', NARROWING: '#f0a832', RISK_SEEKING: '#22c55e', RISK_AVERSE: '#ef4444',
+  EXPANSION: '#22c55e', RECOVERY: '#3b82f6', SLOWDOWN: '#f0a832', CONTRACTION: '#ef4444',
+  MIXED: '#94a3b8', UNAVAILABLE: '#64748b',
+};
+
+function persistenceLabel(l) {
+  if (!l.persistence || !l.persistence.sinceISO) return '';
+  const n = l.persistence.observations || 1;
+  return ` · held ${n} observation${n === 1 ? '' : 's'}`;
+}
+
+export function regimeLayerRow(l) {
+  const [icon, title, inputs] = P2_LAYER_META[l.name] || ['•', l.name, ''];
+  const col = P2_STATE_COLOR[l.state] || '#94a3b8';
+  if (!l.available) {
+    return `<div class="p2-regime-layer">
+      <div class="p2-regime-head"><b>${icon} ${esc(title)}</b>
+        <span class="p2-regime-state" style="color:#64748b;border-color:#64748b">UNAVAILABLE</span></div>
+      <div class="p2-dim">${esc(l.unavailableReason || 'no inputs')}</div>
+      <div class="p2-dim">Inputs it would need: ${esc(inputs)}.</div>
+    </div>`;
+  }
+  const obsList = arr => arr.map(o => `<li>${esc(o.text)}${o.value != null ? ` <span class="p2-dim">(${esc(String(o.value))})</span>` : ''}</li>`).join('');
+  return `<div class="p2-regime-layer">
+    <div class="p2-regime-head"><b>${icon} ${esc(title)}</b>
+      <span class="p2-regime-state" style="color:${col};border-color:${col}">${esc(l.state.replace(/_/g, ' '))}</span>
+      ${l.contested ? '<span class="p2-regime-contested" title="This layer carries observations that argue AGAINST its own state. They are kept, not netted out.">⚖ contested</span>' : ''}
+      <span class="p2-dim" style="margin-left:auto">coverage ${Math.round((l.coverage && l.coverage.fraction || 0) * 100)}%</span></div>
+    <div class="p2-dim">${l.previousState && l.previousState !== l.state ? `was ${esc(l.previousState.replace(/_/g, ' '))} · changed ${esc(fmtWhen(l.transitionAt))}` : 'no change since the previous read'}${esc(persistenceLabel(l))}</div>
+    ${l.supporting.length ? `<div class="p2-regime-obs"><b>Supporting</b><ul>${obsList(l.supporting)}</ul></div>` : ''}
+    ${l.contradicting.length ? `<div class="p2-regime-obs p2-regime-against"><b>Contradicting</b><ul>${obsList(l.contradicting)}</ul></div>` : ''}
+    ${(l.whatWouldFlipIt || []).length ? `<div class="p2-dim">Would flip it: ${l.whatWouldFlipIt.map(esc).join('; ')}.</div>` : ''}
+  </div>`;
+}
+
+export function renderRegimeStack(stack) {
+  if (!stack) {
+    return emptySection('🧭 Regime stack', 'no market-state tick has persisted a regime stack yet — it is written by the scheduled state tick.');
+  }
+  const layers = (stack.layerOrder || ['intraday', 'tactical', 'strategic']).map(k => stack.layers[k]).filter(Boolean);
+  return `<div class="p2-regime">
+    <div class="p2-sec-head">🧭 Regime stack <span class="p2-dim">— three horizons, reported separately</span></div>
+    <div class="p2-dim" style="margin-bottom:6px">${esc(stack.compositeNote || '')}</div>
+    ${(stack.horizonConflicts || []).length ? `<div class="p2-conflict">⚠ <b>Horizon conflict:</b> ${stack.horizonConflicts.map(esc).join(' ')}</div>` : ''}
+    ${layers.map(regimeLayerRow).join('')}
+  </div>`;
+}
+
+// ── Cross-asset confirmation matrix ─────────────────────────────────────────
+const P2_VERDICT_STYLE = {
+  CONFIRMS: ['✓', '#22c55e'], CONTRADICTS: ['✗', '#ef4444'],
+  NEUTRAL: ['–', '#94a3b8'], UNAVAILABLE: ['?', '#64748b'],
+};
+
+export function renderCrossAsset(m) {
+  if (!m) return emptySection('🔗 Cross-asset confirmation', 'no cross-asset matrix has persisted yet — it is written by the scheduled state tick.');
+  if (!m.available) {
+    return emptySection('🔗 Cross-asset confirmation', 'not one leg could be measured — this is a DEGRADED data state. It does NOT mean the cross-asset legs are quiet or in agreement.');
+  }
+  const rows = Object.values(m.rows || {});
+  const row = r => {
+    const [mark, col] = P2_VERDICT_STYLE[r.verdict] || P2_VERDICT_STYLE.UNAVAILABLE;
+    const val = r.changePct != null ? `${r.changePct >= 0 ? '+' : ''}${r.changePct}%`
+      : r.level != null ? String(r.level)
+        : r.slope != null ? `slope ${r.slope}` : '—';
+    return `<tr title="${esc(r.proxyNote || r.reason || '')}">
+      <td>${esc(r.underlying)}</td>
+      <td class="p2-dim">${r.proxy ? esc(r.proxy) : '—'}</td>
+      <td style="text-align:right">${esc(val)}</td>
+      <td style="color:${col};text-align:center" title="${esc(r.reason || r.verdict)}">${mark}</td>
+    </tr>`;
+  };
+  return `<div class="p2-crossasset">
+    <div class="p2-sec-head">🔗 Cross-asset confirmation <span class="p2-dim">— vs SPY ${m.equityChangePct != null ? (m.equityChangePct >= 0 ? '+' : '') + m.equityChangePct + '%' : ''}</span></div>
+    <div class="p2-dim">${esc(m.summary.confirmationRatioNote)}</div>
+    ${m.summary.contradicting ? `<div class="p2-conflict">⚠ <b>Contradicting:</b> ${m.summary.contradictingLegs.map(esc).join(' · ')}</div>` : ''}
+    <div class="p2-ca-scroll"><table class="p2-ca-table">
+      <thead><tr><th>Leg</th><th>Proxy</th><th style="text-align:right">Change</th><th>vs equities</th></tr></thead>
+      <tbody>${rows.map(row).join('')}</tbody>
+    </table></div>
+    <div class="p2-dim">${esc(m.proxyDisclosure)}</div>
+    ${m.coverage.unavailable.length ? `<details><summary class="p2-dim">${m.coverage.unavailable.length} leg(s) could not be measured</summary><ul class="p2-dim">${m.coverage.unavailable.map(u => `<li>${esc(u.underlying)}: ${esc(u.reason)}</li>`).join('')}</ul></details>` : ''}
+  </div>`;
+}
+
 export function renderShell({ payload, novice }) {
   const p = payload || {};
   const clocks = p.clocks || null;
@@ -410,6 +505,8 @@ export function renderShell({ payload, novice }) {
   </div>
   ${renderHealthStrip(clocks, p.unavailable, p.marketState && p.marketState.coverage, p.cache)}
   ${renderMarketNow(p.marketState, clocks)}
+  ${renderRegimeStack(p.regimeStack)}
+  ${renderCrossAsset(p.crossAsset)}
   ${renderPlaybook(p.playbook)}
   <div class="p2-views">
     <div class="p2-sec-head">🎯 Horizon views</div>

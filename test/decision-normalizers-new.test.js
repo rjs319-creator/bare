@@ -70,11 +70,24 @@ test('fromDownDay: empty / malformed input never throws', () => {
 const optionsflow = {
   ok: true,
   byTicker: [
-    { ticker: 'MU', isIndex: false, underlying: 853.2, score: -45, grade: 'Bearish', net: 'bearish', bullishPct: 25, totalPremium: 567070305, contracts: 21 },
-    { ticker: 'BULL', isIndex: false, underlying: 40, score: 80, grade: 'Very Bullish', net: 'bullish', bullishPct: 90, totalPremium: 2e7, contracts: 9 },
-    { ticker: 'SPY', isIndex: true, underlying: 600, score: 70, grade: 'Very Bullish', net: 'bullish', bullishPct: 85, totalPremium: 9e8, contracts: 40 },
+    // `directionState` is the HONEST provisional read from lib/options-classify — the only
+    // thing allowed to set a side. `premiumSkew`/`callPremiumSharePct` are composition
+    // statistics and must NOT, on their own, produce a long or a short.
+    { ticker: 'MU', isIndex: false, underlying: 853.2, score: -45, grade: 'Put-weighted', premiumSkew: 'put-dominant', callPremiumSharePct: 25, directionState: 'PROVISIONAL_BEARISH', directionLabel: 'Provisional bearish', totalPremium: 567070305, contracts: 21 },
+    { ticker: 'BULL', isIndex: false, underlying: 40, score: 80, grade: 'Heavily call-weighted', premiumSkew: 'call-dominant', callPremiumSharePct: 90, directionState: 'PROVISIONAL_BULLISH', directionLabel: 'Provisional bullish', totalPremium: 2e7, contracts: 9 },
+    { ticker: 'SPY', isIndex: true, underlying: 600, score: 70, grade: 'Heavily call-weighted', premiumSkew: 'call-dominant', callPremiumSharePct: 85, directionState: 'PROVISIONAL_BULLISH', directionLabel: 'Provisional bullish', totalPremium: 9e8, contracts: 40 },
   ],
 };
+
+// QUARANTINE LOCK: call/put dominance alone can never manufacture a trade side.
+test('QUARANTINE: call-dominant premium with UNKNOWN direction produces NO signal', () => {
+  const unknownDir = { ok: true, byTicker: [
+    { ticker: 'ZZZ', isIndex: false, underlying: 50, score: 90, grade: 'Heavily call-weighted', premiumSkew: 'call-dominant', callPremiumSharePct: 95, directionState: 'UNKNOWN', totalPremium: 5e7, contracts: 12 },
+    { ticker: 'YYY', isIndex: false, underlying: 50, score: -90, grade: 'Heavily put-weighted', premiumSkew: 'put-dominant', callPremiumSharePct: 5, directionState: 'MIXED', totalPremium: 5e7, contracts: 12 },
+  ] };
+  assert.deepStrictEqual(N.mapOptionsFlowRows(unknownDir), [],
+    'premium composition alone must never become a long or a short');
+});
 
 // ── SAFETY CONTRACT: options flow is a SHADOW overlay ───────────────────────
 // The live board normalizer must emit NOTHING while `optionsflow` maturity is 'shadow'
