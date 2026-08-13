@@ -161,24 +161,41 @@ test('resolveAt reports favorable excursion (MFE) along the path', () => {
   assert.ok(Math.abs(b.mfe - 0.01) < 1e-9);
 });
 
-test('flowGrade scores bull/bear with OTM-sweep weighting', () => {
-  // all OTM call sweeps → strongly bullish
-  const bull = of.flowGrade([
+test('flowGrade measures PREMIUM COMPOSITION, never direction, with OTM-sweep weighting', () => {
+  // all OTM call sweeps → heavily call-weighted (a composition fact, not a bullish call)
+  const callSide = of.flowGrade([
     { side: 'call', premium: 2e6, kind: 'sweep', moneyness: 'OTM' },
     { side: 'call', premium: 1e6, kind: 'sweep', moneyness: 'OTM' },
   ]);
-  assert.equal(bull.score, 100);
-  assert.equal(bull.label, 'Very Bullish');
-  // all puts → bearish (negative)
-  const bear = of.flowGrade([{ side: 'put', premium: 3e6, kind: 'block', moneyness: 'ITM' }]);
-  assert.ok(bear.score < 0);
-  assert.equal(bear.label, 'Very Bearish');
-  // balanced → neutral
+  assert.equal(callSide.score, 100);
+  assert.equal(callSide.label, 'Heavily call-weighted');
+  // all puts → the negative end of the same composition axis
+  const putSide = of.flowGrade([{ side: 'put', premium: 3e6, kind: 'block', moneyness: 'ITM' }]);
+  assert.ok(putSide.score < 0);
+  assert.equal(putSide.label, 'Heavily put-weighted');
+  // even split → balanced
   assert.equal(of.flowGrade([
     { side: 'call', premium: 1e6, kind: 'large', moneyness: 'ATM' },
     { side: 'put', premium: 1e6, kind: 'large', moneyness: 'ATM' },
-  ]).label, 'Neutral');
+  ]).label, 'Balanced');
   assert.equal(of.flowGrade([]).score, 0);
+});
+
+test('QUARANTINE: no flowGrade label anywhere says bullish or bearish', () => {
+  for (const [, label] of of.GRADE_BANDS) {
+    assert.doesNotMatch(label, /bull|bear/i, `grade label "${label}" reintroduces a directional claim`);
+  }
+  const g = of.flowGrade([{ side: 'call', premium: 1e6, kind: 'sweep', moneyness: 'OTM' }]);
+  assert.equal(g.isDirectional, false);
+  assert.match(g.note, /NOT a directional read/i);
+});
+
+test('QUARANTINE: the ledger sign convention is documented as non-directional', () => {
+  // The historical prospective log was recorded under call=+/put=− and must stay gradeable,
+  // but the module must say plainly that this is a ledger sign, not a market view.
+  assert.equal(of.ledgerSignOf('call'), 'bullish');
+  assert.equal(of.ledgerSignOf('put'), 'bearish');
+  assert.match(of.LEDGER_SIGN_NOTE, /NOT a directional claim/i);
 });
 
 test('rollupByTicker attaches a grade per ticker', () => {
@@ -187,7 +204,8 @@ test('rollupByTicker attaches a grade per ticker', () => {
     { ticker: 'MU', side: 'call', premium: 1e6, kind: 'sweep', moneyness: 'OTM', underlying: 100 },
   ]);
   assert.ok(r[0].score > 50);
-  assert.equal(r[0].grade, 'Very Bullish');
+  assert.equal(r[0].grade, 'Heavily call-weighted');
+  assert.equal(r[0].gradeIsDirectional, false);
   assert.equal(r[0].contracts, 2);
 });
 
@@ -203,23 +221,29 @@ test('rollupByTicker aggregates net call/put premium per ticker', () => {
   const nvda = r.find(x => x.ticker === 'NVDA');
   assert.equal(nvda.contracts, 3);
   assert.equal(nvda.totalPremium, 4_500_000);
-  assert.equal(nvda.bullishPct, 89);                   // 4M call / 4.5M total
-  assert.equal(nvda.net, 'bullish');
+  assert.equal(nvda.callPremiumSharePct, 89);          // 4M call / 4.5M total
+  assert.equal(nvda.premiumSkew, 'call-dominant');
+  // The misleading names are GONE — a renderer cannot resurrect call=up by reading them.
+  assert.equal(nvda.bullishPct, undefined);
+  assert.equal(nvda.net, undefined);
   assert.equal(nvda.topContract.premium, 3_000_000);
   assert.equal(r.find(x => x.ticker === 'SPY').isIndex, true);
   assert.equal(nvda.isIndex, false);
 });
 
-test('flowSummary gives the market-wide bull/bear premium split', () => {
+test('flowSummary reports the market-wide call/put PREMIUM SPLIT, not a market lean', () => {
   const s = of.flowSummary([
     { ticker: 'A', side: 'call', premium: 6_000_000 },
     { ticker: 'B', side: 'put', premium: 4_000_000 },
   ]);
   assert.equal(s.totalPremium, 10_000_000);
-  assert.equal(s.bullishPct, 60);
-  assert.equal(s.lean, 'bullish');
+  assert.equal(s.callPremiumSharePct, 60);
+  assert.equal(s.premiumSkew, 'call-dominant');
+  assert.equal(s.gradeIsDirectional, false);
   assert.equal(s.tickerCount, 2);
-  assert.equal(of.flowSummary([]).lean, 'neutral');
+  assert.equal(s.bullishPct, undefined);
+  assert.equal(s.lean, undefined);
+  assert.equal(of.flowSummary([]).premiumSkew, 'balanced');
 });
 
 test('summarize computes win rate + avg return + big-mover rates', () => {

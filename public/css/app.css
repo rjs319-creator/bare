@@ -3430,6 +3430,25 @@
 #pulse .p2-play-row { display:flex; flex-wrap:wrap; gap:6px; align-items:baseline; padding:3px 0; border-top:1px solid #111827; }
 #pulse .p2-play-lbl { flex:0 0 150px; font-size:0.68rem; color:#9ca3af; text-transform:uppercase; letter-spacing:0.04em; }
 #pulse .p2-play-txt { flex:1 1 260px; font-size:0.8rem; color:#e5e7eb; }
+/* ── Regime stack: three horizons, visually separate (never one combined badge) ── */
+#pulse .p2-regime, #pulse .p2-crossasset { margin:12px 0; }
+#pulse .p2-regime-layer { background:#0d1220; border:1px solid #1f2937; border-radius:8px; padding:8px 10px; margin:6px 0; }
+#pulse .p2-regime-head { display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:0.84rem; color:#f3f4f6; margin-bottom:3px; }
+#pulse .p2-regime-state { font-size:0.66rem; border:1px solid; border-radius:10px; padding:1px 8px; font-weight:700; letter-spacing:0.03em; }
+#pulse .p2-regime-contested { font-size:0.66rem; color:#f0a832; border:1px solid #f0a832; border-radius:10px; padding:1px 7px; }
+#pulse .p2-regime-obs { margin-top:5px; font-size:0.76rem; color:#d1d5db; }
+#pulse .p2-regime-obs b { font-size:0.68rem; text-transform:uppercase; letter-spacing:0.04em; color:#22c55e; }
+#pulse .p2-regime-against b { color:#f0a832; }
+#pulse .p2-regime-obs ul { margin:2px 0 0; padding-left:18px; }
+#pulse .p2-regime-obs li { margin:1px 0; }
+#pulse .p2-conflict { background:#2a1f0d; border:1px solid #f0a83244; border-radius:6px; padding:6px 9px; margin:6px 0; font-size:0.78rem; color:#fbbf24; }
+/* Cross-asset table scrolls inside its own container — the page never scrolls sideways. */
+#pulse .p2-ca-scroll { overflow-x:auto; margin:6px 0; }
+#pulse .p2-ca-table { width:100%; min-width:420px; border-collapse:collapse; font-size:0.76rem; }
+#pulse .p2-ca-table th { text-align:left; font-size:0.66rem; text-transform:uppercase; letter-spacing:0.04em; color:#9ca3af; border-bottom:1px solid #1f2937; padding:3px 6px; font-weight:600; }
+#pulse .p2-ca-table td { padding:3px 6px; border-bottom:1px solid #111827; color:#e5e7eb; }
+#pulse .p2-ca-table tr:hover td { background:#111827; }
+
 #pulse .p2-views { margin:8px 0; }
 #pulse .p2-vtabs { display:flex; gap:4px; margin:6px 0; }
 #pulse .p2-sec { margin:12px 0; }

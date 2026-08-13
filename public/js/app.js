@@ -1127,29 +1127,34 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // Client-side aggregation (mirrors lib/optionsflow rollupByTicker/flowSummary so
   // the rollup respects the active filters).
   const OF_INDEX = new Set(['SPY', 'QQQ', 'IWM', 'DIA', 'VIX', 'VXX', 'UVXY', 'TLT', 'HYG', 'GLD', 'SLV', 'XLF', 'XLE', 'XLK', 'SMH']);
-  const OF_GRADE_BANDS = [[60, 'Very Bullish'], [25, 'Bullish'], [8, 'Slightly Bullish'], [-7, 'Neutral'], [-24, 'Slightly Bearish'], [-59, 'Bearish'], [-100, 'Very Bearish']];
-  // Bull/bear grade for a set of contracts (mirrors lib/optionsflow flowGrade):
-  // -100..+100 sentiment score, weighting aggressive OTM directional bets more.
+  // QUARANTINED LEGACY SURFACE: this tab is raw delayed-chain DIAGNOSTICS. Calls are not
+  // bullish and puts are not bearish — the labels below describe how the unusual premium
+  // SPLIT between calls and puts and say nothing about direction. The investor decision
+  // surface is the Options v2 radar above.
+  const OF_GRADE_BANDS = [[60, 'Heavily call-weighted'], [25, 'Call-weighted'], [8, 'Slightly call-weighted'], [-7, 'Balanced'], [-24, 'Slightly put-weighted'], [-59, 'Put-weighted'], [-100, 'Heavily put-weighted']];
+  const OF_COMPOSITION_NOTE = 'Premium composition only — how the unusual premium split between calls and puts. NOT a directional read: puts can be hedges or overwrites, calls can be written rather than bought.';
+  // Premium-composition score for a set of contracts (mirrors lib/optionsflow flowGrade):
+  // -100..+100 call-vs-put dollar split, weighting aggressive OTM prints more.
   function ofGrade(contracts) {
-    let bull = 0, bear = 0, tot = 0;
+    let callW = 0, putW = 0, tot = 0;
     (contracts || []).forEach(c => {
       const w = (c.premium || 0) * (1 + (c.kind === 'sweep' ? 0.25 : 0) + (c.moneyness === 'OTM' ? 0.15 : 0));
-      if (c.side === 'call') bull += w; else bear += w; tot += w;
+      if (c.side === 'call') callW += w; else putW += w; tot += w;
     });
-    const score = tot > 0 ? Math.round(((bull - bear) / tot) * 100) : 0;
-    let label = 'Neutral'; for (const [thr, lbl] of OF_GRADE_BANDS) { if (score >= thr) { label = lbl; break; } }
+    const score = tot > 0 ? Math.round(((callW - putW) / tot) * 100) : 0;
+    let label = 'Balanced'; for (const [thr, lbl] of OF_GRADE_BANDS) { if (score >= thr) { label = lbl; break; } }
     return { score, label };
   }
-  function ofGradeColor(score) { return score >= 8 ? 'var(--green)' : score <= -8 ? 'var(--red)' : 'var(--text-dim)'; }
+  // Composition is charted on a neutral axis — no green=good / red=bad direction coding.
+  function ofGradeColor() { return 'var(--text-dim)'; }
   function ofGradeBadge(score, label) {
-    const emoji = score >= 8 ? '🟢' : score <= -8 ? '🔴' : '⚪';
-    return `<span class="cx-tierbadge" style="color:${ofGradeColor(score)};border-color:currentColor;font-weight:600">${emoji} ${label} ${score > 0 ? '+' : ''}${score}</span>`;
+    return `<span class="cx-tierbadge" style="color:var(--text-dim);border-color:currentColor;font-weight:600" title="${OF_COMPOSITION_NOTE}">⚖ ${label} ${score > 0 ? '+' : ''}${score}</span>`;
   }
   function ofSummary(sigs) {
     let call = 0, put = 0; sigs.forEach(s => { if (s.side === 'call') call += s.premium; else put += s.premium; });
     const total = call + put;
     const g = ofGrade(sigs);
-    return { totalPremium: total, callPremium: call, putPremium: put, bullishPct: total ? Math.round(100 * call / total) : 50, score: g.score, grade: g.label, tickerCount: new Set(sigs.map(s => s.ticker)).size };
+    return { totalPremium: total, callPremium: call, putPremium: put, callPremiumSharePct: total ? Math.round(100 * call / total) : 50, score: g.score, grade: g.label, tickerCount: new Set(sigs.map(s => s.ticker)).size };
   }
   function ofRollup(sigs) {
     const m = new Map();
@@ -1167,8 +1172,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     });
     const out = [...m.values()].map(r => {
       r.totalPremium = r.callPremium + r.putPremium;
-      r.bullishPct = r.totalPremium ? Math.round(100 * r.callPremium / r.totalPremium) : 50;
-      r.net = r.bullishPct >= 60 ? 'bullish' : r.bullishPct <= 40 ? 'bearish' : 'mixed';
+      r.callPremiumSharePct = r.totalPremium ? Math.round(100 * r.callPremium / r.totalPremium) : 50;
+      r.premiumSkew = r.callPremiumSharePct >= 60 ? 'call-dominant' : r.callPremiumSharePct <= 40 ? 'put-dominant' : 'balanced';
       const g = ofGrade(r.contracts); r.score = g.score; r.grade = g.label;
       r.contracts.sort((a, b) => b.premium - a.premium);
       r.topContract = r.contracts[0] || null;
@@ -1229,7 +1234,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
   function exportOptionsCsv() {
     const items = ofSortContracts(ofFilteredItems());
-    const cols = ['ticker', 'side', 'type', 'strike', 'expiry', 'dte', 'volume', 'openInterest', 'volOi', 'bid', 'ask', 'lastPrice', 'aggressor', 'premium', 'iv', 'underlying', 'undChgPct', 'moneyness', 'kind', 'sentiment', 'score'];
+    // `sentiment` is deliberately absent: it is the internal ledger sign convention, not a
+    // directional read, and exporting it would re-publish the call=up / put=down equation.
+    const cols = ['ticker', 'side', 'type', 'strike', 'expiry', 'dte', 'volume', 'openInterest', 'volOi', 'bid', 'ask', 'lastPrice', 'aggressor', 'premium', 'iv', 'underlying', 'undChgPct', 'moneyness', 'kind', 'score'];
     const cell = v => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
     const csv = [cols.join(','), ...items.map(s => cols.map(c => cell(s[c])).join(','))].join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -1238,20 +1245,24 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  // One-sentence plain-English read of the whole tape, for Simple mode.
+  // Plain-English read of the whole tape, for Simple mode. This is a COMPOSITION
+  // statement, not a direction: the legacy tab cannot tell an opening bet from a hedge,
+  // a roll, or a covered-call write, so it never says "bets on up".
   function ofPlainSummary(sm) {
-    const bull = sm.bullishPct >= 58, bear = sm.bullishPct <= 42;
-    const lean = bull ? 'leaning bullish' : bear ? 'leaning bearish' : 'mixed / two-sided';
-    const col = bull ? 'var(--green)' : bear ? 'var(--red)' : 'var(--text-dim)';
-    return `<div class="cx-narrative" style="margin-bottom:10px">💡 <b>Bottom line:</b> today's big options bets are <b style="color:${col}">${lean}</b> — ${sm.bullishPct}% of the unusual premium is in <b>calls</b> (bets on up) vs ${100 - sm.bullishPct}% in <b>puts</b> (bets on down), across ${sm.tickerCount} stock${sm.tickerCount === 1 ? '' : 's'}. Each card below is one stock: <span style="color:var(--green)">green</span> = call-heavy, <span style="color:var(--red)">red</span> = put-heavy.</div>`;
+    const share = sm.callPremiumSharePct;
+    const skew = share >= 58 ? 'call-weighted' : share <= 42 ? 'put-weighted' : 'roughly balanced';
+    return `<div class="cx-narrative" style="margin-bottom:10px">💡 <b>What this shows:</b> today's unusual options premium is <b>${skew}</b> — ${share}% in <b>calls</b>, ${100 - share}% in <b>puts</b>, across ${sm.tickerCount} stock${sm.tickerCount === 1 ? '' : 's'}. `
+      + `<b>This is not a direction.</b> Delayed chains cannot tell an opening bet from a hedge, a roll, a spread leg, or a covered-call write, so a put-heavy name is not a bearish call and a call-heavy name is not a bullish one. `
+      + `For a direction-aware read with false-positive hypotheses and price confirmation, use the <b>Options Activity Radar</b> above.</div>`;
   }
   function ofSummaryBar(sm) {
+    const share = sm.callPremiumSharePct;
     return `<div class="rot-panel">${ofNovice ? ofPlainSummary(sm) : ''}<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px">`
       + `<div class="rot-head" style="margin:0">💰 ${ofUsd(sm.totalPremium)} unusual options premium <span class="dt-dim" style="font-weight:400">· ${sm.tickerCount} tickers</span></div>`
-      + `<div>Market grade: ${ofGradeBadge(sm.score, sm.grade)}</div></div>`
-      + `<div style="display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:8px">`
-      + `<div style="width:${sm.bullishPct}%;background:var(--green)"></div><div style="width:${100 - sm.bullishPct}%;background:var(--red)"></div></div>`
-      + `<div class="dt-dim" style="font-size:0.72rem;display:flex;justify-content:space-between;margin-top:3px"><span>▲ calls ${ofUsd(sm.callPremium)}</span><span>puts ${ofUsd(sm.putPremium)} ▼</span></div></div>`;
+      + `<div title="${OF_COMPOSITION_NOTE}">Premium composition: ${ofGradeBadge(sm.score, sm.grade)}</div></div>`
+      + `<div style="display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:8px" title="${OF_COMPOSITION_NOTE}">`
+      + `<div style="width:${share}%;background:#6b7fd7"></div><div style="width:${100 - share}%;background:#b08bd7"></div></div>`
+      + `<div class="dt-dim" style="font-size:0.72rem;display:flex;justify-content:space-between;margin-top:3px"><span>calls ${ofUsd(sm.callPremium)}</span><span>puts ${ofUsd(sm.putPremium)}</span></div></div>`;
   }
 
   // ── Confluence cross-reference ───────────────────────────────────────────────
@@ -1364,11 +1375,15 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       ? `· ${(of2.events || []).length} event(s) across ${of2.universe && of2.universe.scanned != null ? of2.universe.scanned : '?'} scanned names · session ${of2.session || '?'}`
       : `· ${data.count} unusual signals across ${data.universe} liquid names`;
     const vtab = (id, lbl, on) => `<button id="${id}" class="dt-btn" style="border-radius:0;border:none;${on ? 'background:#06c4d4;color:#001' : 'background:transparent'}">${lbl}</button>`;
+    // QUARANTINE BANNER: the v1 views below are raw delayed-chain diagnostics. The
+    // investor decision surface is the v2 Options Activity Radar.
     const shadowBanner =
       `<div class="dt-note" style="margin-bottom:12px;border-left:3px solid var(--amber,#f0a832);padding:8px 10px;background:rgba(240,168,50,0.07)">`
-      + `<b>🔬 Research / shadow overlay · delayed data.</b> This is derived from <b>delayed</b>, free option-chain data (no live tick tape, no trade-level OPRA). `
-      + `We <b>cannot</b> tell whether a trade opened or closed, was bought or sold, or was a hedge — so every directional read here is <b>provisional</b> `
-      + `(<i>provisional bullish/bearish, mixed, or direction-unknown</i>), never proof and never "smart money". `
+      + `<b>🧪 Raw delayed-chain diagnostics${of2 ? ' — not the decision surface' : ''}.</b> `
+      + (of2 ? `The investor decision surface is the <b>Options Activity Radar</b> (the first tabs above). These views are the transparent measurements underneath it. ` : '')
+      + `Everything here comes from <b>delayed</b>, free option-chain data (no live tick tape, no trade-level OPRA). `
+      + `We <b>cannot</b> tell whether a trade opened or closed, was bought or sold, or was a hedge, roll, spread leg, or covered-call write. `
+      + `<b>Calls are not bullish and puts are not bearish here</b> — the call/put premium split is a <i>composition</i> statistic only, and any direction shown is the separate <b>provisional</b> read (which is usually <i>direction-unknown</i>). `
       + `It <b>cannot by itself create or boost a Today's Pick</b> — it only confirms, contradicts, or flags risk on an independent price setup.</div>`;
     // ── Primary nav: v2 Intelligence-Engine views first (when the radar exists),
     // then the legacy/compat views. One handler for both groups. ──
@@ -1452,7 +1467,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + `<li><b>🧠 AI read</b> explains the activity in plain language — it does not invent levels, catalysts, or a probability, and it cannot promote this overlay to a live signal.</li></ul>`
       + `<b>Important:</b> this is a <b>research/shadow</b> overlay on <b>delayed</b> data — a provisional confirmation layer, not advice and not a standalone signal. The Track Record below shows whether the activity actually preceded moves.</div></details>`
       + `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">`
-      + `<select id="of-sent" style="${OF_SEL}"><option value="">All sentiment</option><option value="bullish">▲ Bullish</option><option value="bearish">▼ Bearish</option></select>`
+      // Filters by CONTRACT TYPE, not by a claimed direction. `sentiment` is the internal
+      // ledger sign (call=+/put=−); the labels say what it actually selects.
+      + `<select id="of-sent" style="${OF_SEL}" title="Filter by contract type. A call print is not an up-bet and a put print is not a down-bet on delayed chain data."><option value="">Calls &amp; puts</option><option value="bullish">Calls only</option><option value="bearish">Puts only</option></select>`
       + `<select id="of-type" style="${OF_SEL}"><option value="">All activity types</option><option value="sweep">⚡ High-turnover</option><option value="block">🧱 Large notional</option><option value="large">💰 Premium activity</option></select>`
       + `<input id="of-ticker" placeholder="Filter ticker (e.g. NVDA)" style="${OF_SEL};width:170px">`
       + `<select id="of-prem" style="${OF_SEL}"><option value="0">Any premium</option><option value="100000">≥ $100k</option><option value="250000">≥ $250k</option><option value="1000000">≥ $1M (est. notional)</option></select>`
@@ -1540,6 +1557,83 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     return `<span class="dt-dim" style="font-size:0.72rem">${label} <b style="color:${col}">${v != null ? v : '—'}</b></span>`;
   }
 
+  // ── Evidence strength replaces the numeric directional "confidence" ─────────
+  // A number out of 100 next to a direction reads as a probability no matter how it is
+  // labelled. This renders an ORDINAL band plus the coverage it was derived from.
+  const OF2_STRENGTH_STYLE = { NONE: ['#8a8a8a', '○ no directional evidence'], WEAK: ['#8a8a8a', '◔ weak evidence'], MODERATE: ['#06c4d4', '◑ moderate evidence'], STRONG: ['#10d98a', '◕ strong evidence'] };
+  function of2StrengthChip(s) {
+    if (!s || !s.band) return '';
+    const [col, lbl] = OF2_STRENGTH_STYLE[s.band] || ['#8a8a8a', s.band];
+    const cov = s.componentCoverage != null ? ` · component coverage ${Math.round(s.componentCoverage * 100)}%` : ' · component coverage unknown';
+    const why = (s.reasons || []).join('; ');
+    return ` <span class="dt-dim" style="color:${col}" title="${esc(why)}. Evidence strength is an ORDINAL band, not a probability and not a confidence percentage.">(${esc(lbl)}${esc(cov)})</span>`;
+  }
+
+  // The false-positive ledger. Actively SUPPORTED benign explanations lead; unresolved
+  // ones are shown next, because "unresolved" is not "clear".
+  function of2HypothesesHTML(c) {
+    const h = c.falsePositiveHypotheses;
+    if (!h) {
+      return c.evidenceLayersNote
+        ? `<div class="dt-dim" style="font-size:0.74rem;margin-bottom:4px">🧾 ${esc(c.evidenceLayersNote)}</div>`
+        : `<div class="dt-dim" style="font-size:0.74rem;margin-bottom:4px">🧾 No false-positive hypothesis ledger for this event.</div>`;
+    }
+    const sup = h.hypotheses.filter(x => x.verdict === 'SUPPORTED');
+    const open = h.hypotheses.filter(x => x.verdict === 'UNRESOLVED' || x.verdict === 'NOT_TESTABLE');
+    const chip = (x, col) => `<span class="xa-chip" style="color:${col};border-color:currentColor" title="${esc(x.statement)} — ${esc((x.evidence || []).join('; '))}${x.verdict === 'NOT_TESTABLE' ? ` · would require: ${esc(x.requires)}` : ''}">${esc(x.id)}</span>`;
+    return `<details style="margin-bottom:6px"><summary style="font-size:0.76rem;cursor:pointer;color:${sup.length ? 'var(--amber,#f0a832)' : 'var(--text-dim)'}">🧾 Benign explanations: ${sup.length} supported · ${h.counts.refuted} ruled out · ${open.length} still open</summary>
+      <div style="font-size:0.74rem;margin-top:5px;line-height:1.6">
+        <div style="margin-bottom:4px">${esc(h.caveat)}</div>
+        ${sup.length ? `<div><b style="color:var(--amber,#f0a832)">Supported by the data:</b> ${sup.map(x => chip(x, 'var(--amber,#f0a832)')).join(' ')}</div>` : ''}
+        ${open.length ? `<div><b>Could not be ruled out:</b> ${open.map(x => chip(x, 'var(--text-dim)')).join(' ')}</div>` : ''}
+        ${h.counts.refuted ? `<div class="dt-dim">Actively ruled out: ${h.hypotheses.filter(x => x.verdict === 'REFUTED').map(x => esc(x.id)).join(', ')}</div>` : ''}
+      </div></details>`;
+  }
+
+  // Contract-level executable liquidity for the contract a plan would actually name.
+  function of2ExecutionHTML(c) {
+    const l = c.contractLiquidity;
+    if (!l) return '';
+    const col = l.state === 'OK' ? 'var(--green)' : l.state === 'DEGRADED' ? 'var(--amber,#f0a832)' : l.state === 'BLOCKED' ? 'var(--red)' : 'var(--amber,#f0a832)';
+    const ct = l.contract || {};
+    const q = l.checks && l.checks.quote && l.checks.quote.available ? l.checks.quote : null;
+    const sz = l.checks && l.checks.size;
+    const rule = l.limitRule && l.limitRule.rule ? l.limitRule : null;
+    const conc = c.strikeConcentrationFullChain;
+    return `<div style="font-size:0.75rem;margin-bottom:5px;line-height:1.6">
+      ⚙ <b>Executable liquidity</b> on ${esc(String(ct.side || ''))} $${esc(String(ct.strike ?? '—'))} ${esc(ct.expiry || '')}: <b style="color:${col}">${esc(l.state)}</b>
+      ${q ? ` · quote ${q.bid}/${q.ask} (${q.spreadPctOfMid}% of mid)` : ' · no two-sided quote'}
+      ${sz && sz.available === false ? ` · <span title="${esc(sz.reason)}">size not evaluated</span>` : sz && sz.available ? ` · ${sz.requestedContracts} contracts = ${sz.pctOfOpenInterest ?? '?'}% of OI` : ''}
+      ${l.blocking && l.blocking.length ? `<div style="color:var(--red)">⛔ ${l.blocking.map(esc).join(' · ')}</div>` : ''}
+      ${l.unavailableReason ? `<div style="color:var(--amber,#f0a832)">${esc(l.unavailableReason)}</div>` : ''}
+      ${rule ? `<div class="dt-dim">Limit rule: work ${rule.suggestedLimit}, never pay above ${rule.neverPayAbove}. ${esc(rule.rule)}</div>` : ''}
+      ${conc ? (conc.available
+    ? `<div class="dt-dim">Strike concentration (full chain): top strike ${Math.round(conc.top1Share * 100)}% of volume across ${conc.distinctStrikes} strikes${conc.concentrated ? ' — concentrated' : ''}</div>`
+    : `<div class="dt-dim" title="${esc(conc.reason)}">Strike concentration: not computed (see why)</div>`) : ''}
+    </div>`;
+  }
+
+  // Volatility context. Every sub-block that could not be computed says so.
+  function of2VolatilityHTML(c) {
+    const v = c.volatilityContext;
+    if (!v) return '';
+    const parts = [];
+    if (v.expectedMove && v.expectedMove.available) {
+      parts.push(`expected move ±${v.expectedMove.expectedMovePct}%${v.expectedMove.expectedMoveAbs != null ? ` (±$${v.expectedMove.expectedMoveAbs})` : ''} over ${v.expectedMove.days}d`);
+    }
+    if (v.ivRank && v.ivRank.available) parts.push(`IV rank ${v.ivRank.ivRank} · ${v.ivRank.ivPercentile}th pctile of ${v.ivRank.sessions} sessions`);
+    if (v.strikeMap && v.strikeMap.available && v.strikeMap.farOTMHeavy) parts.push(`${Math.round(v.strikeMap.shares.farOTM * 100)}% of volume in far-OTM strikes`);
+    const crush = v.crushStress && v.crushStress.available && v.crushStress.warning ? v.crushStress.warning : null;
+    const missing = (v.coverage && v.coverage.missing) || [];
+    const g = c.greeksCapability;
+    return `<div style="font-size:0.75rem;margin-bottom:5px;line-height:1.6">
+      📈 <b>Volatility context</b>${parts.length ? ` — ${parts.map(esc).join(' · ')}` : ''}
+      ${crush ? `<div style="color:var(--amber,#f0a832)">⚠ ${esc(crush)}</div>` : ''}
+      ${missing.length ? `<div class="dt-dim" title="${esc(missing.map(m => m.block + ': ' + m.reason).join(' | '))}">Unavailable: ${missing.map(m => esc(m.block)).join(', ')} (hover for why)</div>` : ''}
+      ${g && !g.available ? `<div class="dt-dim" title="${esc(g.disclosure)}">Greeks / dealer positioning: not supplied by this data source — not estimated.</div>` : ''}
+    </div>`;
+  }
+
   function of2EventCard(c) {
     const [aCol, aLbl] = OF2_ACT_STYLE[c.anomaly.activityStatus] || OF2_ACT_STYLE.NORMAL;
     const [tCol, tLbl] = OF2_TRADE_STYLE[c.gate.tradeStatus] || ['#555', c.gate.tradeStatus];
@@ -1593,10 +1687,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <span class="dt-dim" style="font-size:0.72rem">${callN}C / ${putN}P${dteMix ? ` · ${esc(dteMix)} DTE` : ''}</span>
       </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px">
-        <span style="font-size:0.78rem">${OF2_INTERP_LBL[interp.state] || '❔ direction unknown'}${interp.confidence ? ` <span class="dt-dim">(confidence ${interp.confidence}/100${interp.confidenceCap ? `, capped ${interp.confidenceCap} on delayed data` : ''})</span>` : ''}</span>
+        <span style="font-size:0.78rem">${OF2_INTERP_LBL[interp.state] || '❔ direction unknown'}${of2StrengthChip(c.evidenceStrength)}</span>
         ${oiLbl ? `<span class="dt-dim" style="font-size:0.75rem">${oiLbl}</span>` : ''}
         ${c.earningsInDays != null && c.earningsInDays >= 0 ? `<span style="color:var(--amber,#f0a832);font-size:0.75rem">⚠ ER in ${c.earningsInDays}d</span>` : ''}
       </div>
+      ${of2HypothesesHTML(c)}
+      ${of2ExecutionHTML(c)}
+      ${of2VolatilityHTML(c)}
       ${setup ? `<div style="font-size:0.78rem;margin-bottom:4px"><b>Underlying setup (${esc(setup.direction || '')}):</b> trigger ${setup.trigger ?? '—'} · invalidation ${setup.invalidation ?? '—'} · target ${setup.target ?? '—'} · R:R ${setup.rr ?? '—'}${plan ? ` · time stop ${plan.timeStopSessions} sessions` : ''}</div>` : ''}
       ${chgLine ? `<div class="dt-dim" style="font-size:0.74rem">Since prev scan: ${esc(chgLine)}</div>` : ''}
       ${warn.length ? `<div style="color:var(--amber,#f0a832);font-size:0.74rem">⚠ ${warn.map(esc).join(' · ')}</div>` : ''}
@@ -1844,15 +1941,17 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       ? `<div class="cx-narrative" style="margin-top:6px;color:#a78bfa">🔊 <b>Unusual for this name:</b> its option volume is ${esc(bl.baselineNote || 'well above its own recent norm')} — a spike vs its own history, not just a big absolute number.</div>`
       : '';
     const aggrMark = s => s.aggressor === 'ask' ? ' <span style="color:var(--green)">⬆@ask</span>' : s.aggressor === 'bid' ? ' <span style="color:var(--red)">⬇@bid</span>' : '';
-    const contractRow = s => `<div class="dt-dim" style="font-size:0.74rem;padding:2px 0">${esc(s.type)} $${esc(String(s.strike))} ${esc(s.expiry || '')} (${s.dte}d) · ${ofUsd(s.premium)} · ${OF_KIND[s.kind] || esc(s.kind)} · ${s.sentiment === 'bullish' ? '▲' : '▼'}${aggrMark(s)}${s.lastTradeTs ? ` · ${ofTime(s.lastTradeTs)}` : ''}</div>`;
+    // Contract rows show the CONTRACT TYPE (C/P), never a ▲/▼ direction arrow — a put
+    // print is not a down-bet and a call print is not an up-bet on delayed chain data.
+    const contractRow = s => `<div class="dt-dim" style="font-size:0.74rem;padding:2px 0">${esc(s.type)} $${esc(String(s.strike))} ${esc(s.expiry || '')} (${s.dte}d) · ${ofUsd(s.premium)} · ${OF_KIND[s.kind] || esc(s.kind)}${aggrMark(s)}${s.lastTradeTs ? ` · ${ofTime(s.lastTradeTs)}` : ''}</div>`;
     const expand = `<button class="of-expand dt-btn" data-n="${r.contracts.length}" style="margin-top:8px;font-size:0.74rem;padding:3px 8px">▸ show ${r.contracts.length} contract${r.contracts.length > 1 ? 's' : ''}</button>`
       + `<div style="display:none;margin-top:6px;border-top:1px solid #222;padding-top:6px">${r.contracts.map(contractRow).join('')}</div>`;
     return `<div class="cx-card" style="border-left:3px solid ${gcol}">`
       + `<div class="cx-top"><div><div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(r.ticker)}">$${esc(r.ticker)}</span>`
       + ofGradeBadge(r.score, r.grade) + erChip + blChip + (tc ? ofAggrChip(tc) : '') + `</div>`
       + `<div class="cx-company">${r.contracts.length} unusual contract${r.contracts.length > 1 ? 's' : ''}${r.sweep ? ` · ${r.sweep}⚡` : ''}${r.block ? ` · ${r.block}🧱` : ''}${r.underlying ? ` · spot $${r.underlying}${r.undChgPct != null ? ` (${ofChg(r.undChgPct)})` : ''}` : ''}</div></div>`
-      + `<div class="cx-score-col"><div class="cx-score" style="color:#06c4d4;font-size:1.05rem">${ofUsd(r.totalPremium)}</div><div class="cx-price">${r.bullishPct}% calls</div></div></div>`
-      + `<div style="display:flex;height:7px;border-radius:4px;overflow:hidden;margin-top:8px"><div style="width:${r.bullishPct}%;background:var(--green)"></div><div style="width:${100 - r.bullishPct}%;background:var(--red)"></div></div>`
+      + `<div class="cx-score-col"><div class="cx-score" style="color:#06c4d4;font-size:1.05rem">${ofUsd(r.totalPremium)}</div><div class="cx-price" title="${OF_COMPOSITION_NOTE}">${r.callPremiumSharePct}% calls</div></div></div>`
+      + `<div style="display:flex;height:7px;border-radius:4px;overflow:hidden;margin-top:8px" title="${OF_COMPOSITION_NOTE}"><div style="width:${r.callPremiumSharePct}%;background:#6b7fd7"></div><div style="width:${100 - r.callPremiumSharePct}%;background:#b08bd7"></div></div>`
       + ofConfluenceHTML(r.ticker) + blNote + body + expand + `</div>`;
   }
 
@@ -1908,8 +2007,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     return `<div class="of-warn">⚠ <b>Earnings in ${s.earningsInDays}d</b> — before this option expires. That makes it an <b>event bet</b>: the option can lose value even if the stock moves your way, because volatility gets crushed after the report. Beginners: be very careful here.</div>`;
   }
   function flowAction(s) {
-    // Accepts a signal (honest directionState) OR a legacy sentiment string.
-    const ds = typeof s === 'object' && s ? s.directionState : (s === 'bearish' ? 'PROVISIONAL_BEARISH' : 'PROVISIONAL_BULLISH');
+    // Only the honest `directionState` may set a direction. A row without one falls back
+    // to DIRECTION_UNKNOWN — it must NEVER be inferred from the call/put ledger sign.
+    const ds = (typeof s === 'object' && s && s.directionState) ? s.directionState : 'DIRECTION_UNKNOWN';
     if (ds === 'DIRECTION_UNKNOWN' || ds === 'MIXED' || (typeof s === 'object' && s && s.suspectedMultiLeg)) {
       return `<div class="of-action">💡 <b>What you could do:</b> the direction here is <b>${ds === 'MIXED' ? 'mixed' : 'unknown'}</b>, so this activity isn't a reason to act on its own. Use it only to sanity-check a view you already hold from price/news, and confirm with the Track Record below.</div>`;
     }
@@ -1920,8 +2020,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     return `<div class="of-action">💡 <b>What you could do:</b> this is a <b>${view}</b> lean on delayed data, not a signal to buy the same option — ${simpler}. Confirm with the Track Record below and your own chart.</div>`;
   }
   function optionsFlowCard(s) {
-    const bull = s.sentiment === 'bullish', col = bull ? 'var(--green)' : 'var(--red)';
-    // Header (always): ticker · bull/bear · kind · premium.
+    // Contract TYPE, not direction. A call print is not an up-bet and a put print is not
+    // a down-bet on delayed chains, so the badge names the instrument and the colour is
+    // an instrument colour, not a green-good / red-bad direction cue.
+    const isCall = s.side === 'call' || s.type === 'C';
+    const col = isCall ? '#6b7fd7' : '#b08bd7';
+    // Header (always): ticker · contract type · kind · premium.
     // Pro meta: add breakeven + the implied move required (concrete, no fluff).
     const beMeta = (s.breakeven != null) ? ` · BE $${esc(String(s.breakeven))}${s.moveToBePct != null ? ` (${s.moveToBePct > 0 ? '+' : ''}${s.moveToBePct}%)` : ''}` : '';
     const lastMeta = s.lastTradeTs ? ` · last ${ofTime(s.lastTradeTs)}` : '';
@@ -1936,7 +2040,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     return `<div class="cx-card" style="border-left:3px solid ${col}">`
       + `<div class="cx-top"><div>`
       + `<div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(s.ticker)}">$${esc(s.ticker)}</span>`
-      + `<span class="cx-tierbadge" style="color:${col};border-color:currentColor">${bull ? '▲ Bullish' : '▼ Bearish'}</span>`
+      + `<span class="cx-tierbadge" style="color:${col};border-color:currentColor" title="Contract type only — not a directional read. Delayed chains cannot tell an opening bet from a hedge, roll, spread leg, or covered-call write.">${isCall ? 'CALL' : 'PUT'}</span>`
       + `<span class="cx-tierbadge" style="color:var(--text-dim);border-color:#444">${OF_KIND[s.kind] || esc(s.kind)}</span>${ofAggrChip(s)}</div>`
       + techMeta
       + `</div><div class="cx-score-col"><div class="cx-score" style="color:#06c4d4;font-size:1.05rem">${ofUsd(s.premium)}</div>`
@@ -8290,16 +8394,65 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     return `<div class="xa-bd"><div class="xa-bd-track">${segs}</div><div class="xa-bd-legend">${legend}</div></div>`;
   }
 
+  // ── P0 display helpers ──────────────────────────────────────────────────────
+  const XA_PRIORITY = { P1: { c: '#8a6dff', t: 'Look first' }, P2: { c: '#06c4d4', t: 'Watch' }, P3: { c: 'var(--text-dim)', t: 'Background' }, P4: { c: 'var(--text-dim)', t: 'Archive' } };
+  const XA_FRESH = { FRESH: 'var(--green)', AGING: '#06c4d4', STALE: 'var(--amber,#f0a832)', EXPIRED: 'var(--red)', UNKNOWN: 'var(--red)' };
+  const XA_EXEC = { OK: 'var(--green)', DEGRADED: 'var(--amber,#f0a832)', BLOCKED: 'var(--red)', UNKNOWN: 'var(--amber,#f0a832)' };
+  const XA_ALIGN = { TAILWIND: 'var(--green)', NEUTRAL: 'var(--text-dim)', HEADWIND: 'var(--amber,#f0a832)', UNKNOWN: 'var(--text-dim)' };
+
+  // The alert-price line. A legacy or unavailable capture says so — it is never blank and
+  // never silently backfilled with a current price.
+  function xaAlertPriceLine(dec) {
+    const p = dec.priceAtAlert, m = dec.moveSinceAlert;
+    if (!p) return '';
+    if (p.state !== 'CAPTURED' && p.price == null) {
+      return `<span class="xa-fine" style="color:var(--amber,#f0a832)" title="${esc(p.reason || '')}">⚠ alert price unavailable — move-since-alert cannot be shown</span>`;
+    }
+    const verified = p.state === 'CAPTURED';
+    const pv = m && m.available
+      ? ` <b style="color:${m.consumedPct >= 0 ? 'var(--green)' : 'var(--red)'}">${m.consumedPct >= 0 ? '+' : ''}${m.consumedPct}%</b> consumed since alert`
+      : '';
+    const prov = verified
+      ? ` <span class="xa-chip" title="Provider quote ${esc(p.quoteAsOf || '')} · ${esc(p.marketSession || '')} session · ${esc(p.source || '')}">✓ timestamped</span>`
+      : ` <span class="xa-chip" style="color:var(--amber,#f0a832);border-color:currentColor" title="${esc(p.reason || '')}">⚠ unverified alert price</span>`;
+    return `<span class="xa-fine">$${esc(String(p.price))} → $${dec.priceNow != null ? esc(String(dec.priceNow)) : '—'}${pv}${prov}</span>`;
+  }
+
+  // Freshness / execution / regime / dissent — each states WHY when unavailable.
+  function xaEvidenceRows(dec) {
+    const rows = [];
+    const f = dec.freshness;
+    if (f) {
+      rows.push(`<div class="xa-fine">🕒 <b style="color:${XA_FRESH[f.state] || 'var(--text-dim)'}">${esc(f.state)}</b> · ${esc(f.ageLabel)}`
+        + (f.hoursToExpiry != null ? ` · expires in ${f.hoursToExpiry > 48 ? Math.round(f.hoursToExpiry / 24) + 'd' : Math.round(f.hoursToExpiry) + 'h'}` : '')
+        + (f.reasons && f.reasons.length ? ` — ${esc(f.reasons[0])}` : '') + `</div>`);
+    } else rows.push('<div class="xa-fine">🕒 freshness unavailable — this record predates the freshness contract.</div>');
+    const x = dec.execution;
+    if (x) {
+      const missing = (x.missingRequired || []).length ? ` — missing ${esc(x.missingRequired.join(', '))}` : '';
+      rows.push(`<div class="xa-fine">⚙ Execution <b style="color:${XA_EXEC[x.state] || 'var(--text-dim)'}">${esc(x.state)}</b> · evidence coverage ${Math.round((x.coverage || 0) * 100)}%${missing}`
+        + (x.unavailableReason ? ` <span title="${esc(x.unavailableReason)}">ⓘ</span>` : '') + `</div>`);
+    } else rows.push('<div class="xa-fine">⚙ Execution evidence unavailable.</div>');
+    const r = dec.regimeFit;
+    if (r) {
+      rows.push(`<div class="xa-fine">🌡 Regime for this ${esc(dec.side || 'side')}: <b style="color:${XA_ALIGN[r.alignment] || 'var(--text-dim)'}">${esc(r.alignment)}</b>`
+        + (r.reasons && r.reasons.length ? ` — ${esc(r.reasons[0])}` : '') + `</div>`);
+    } else rows.push('<div class="xa-fine">🌡 Regime fit unavailable.</div>');
+    return rows.join('');
+  }
+
   function buildDecisionCard(dec) {
     const card = document.createElement('div'); card.className = 'cx-card';
     const sideColor = dec.side === 'long' ? 'var(--green)' : dec.side === 'short' ? 'var(--red)' : 'var(--text-dim)';
     const act = XA_ACTION[dec.action] || { t: dec.action, c: 'var(--text-dim)' };
-    const scoreCol = dec.score >= 65 ? 'var(--green)' : dec.score >= 45 ? '#06c4d4' : 'var(--text-dim)';
+    const rp = dec.researchPriority || null;
+    const pri = rp ? (XA_PRIORITY[rp.band] || { c: 'var(--text-dim)', t: rp.label || '' }) : null;
     const stCol = XA_STATE[dec.accountState] || 'var(--text-dim)';
     const rec = dec.accountRecord || {};
 
     // Chips: catalyst status, coordination, chase, horizon, distinct clusters.
     const chips = [];
+    if (dec.setupState) chips.push(`<span class="xa-chip" title="Independent chart-setup state — deterministic, never social or LLM">📐 setup ${esc(dec.setupState.toLowerCase().replace(/_/g, ' '))}</span>`);
     const cs = XA_CATSTATUS[dec.catalystStatus]; if (cs) chips.push(`<span class="xa-chip" style="color:${cs.c};border-color:currentColor">${cs.t}</span>`);
     (dec.catalysts || []).slice(0, 2).forEach(t => chips.push(`<span class="xa-chip">${XA_CAT[t] || esc(t)}</span>`));
     if (dec.coordinated) chips.push('<span class="xa-chip" style="color:var(--amber,#f0a832);border-color:currentColor">⚠ coordinated</span>');
@@ -8307,9 +8460,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (dec.intendedHorizon) chips.push(`<span class="xa-chip">📆 ${esc(dec.intendedHorizon)}${dec.horizonAssumed ? '?' : ''}</span>`);
     const chipRow = chips.length ? `<div class="xa-chips">${chips.join('')}</div>` : '';
 
-    // Move since first alert.
-    const move = (dec.priceAtAlert != null && dec.priceNow != null)
-      ? `<span class="xa-fine">$${esc(String(dec.priceAtAlert))} → $${esc(String(dec.priceNow))} <b style="color:${(dec.moveSinceAlertPct || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${(dec.moveSinceAlertPct || 0) >= 0 ? '+' : ''}${dec.moveSinceAlertPct}%</b> since alert</span>` : '';
+    // Move since the IMMUTABLE alert price (or an explicit statement that it is missing).
+    const move = xaAlertPriceLine(dec);
 
     // Deterministic levels (chart math only).
     const lv = [];
@@ -8336,10 +8488,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <div class="cx-company">${srcLine}</div>
         <div class="cx-company">${acctLine}</div>
       </div>
-      <div class="cx-score-col"><div class="cx-score" style="color:${scoreCol};font-size:1.35rem">${dec.score}</div>
-        <div class="cx-price">/100 · ${esc(dec.tier || '')}</div></div></div>
+      <div class="cx-score-col">${pri
+        ? `<div class="cx-score" style="color:${pri.c};font-size:1.15rem" title="${esc(rp.note)}">${esc(rp.band)}</div>
+           <div class="cx-price" title="${esc(rp.note)}">${esc(pri.t)}</div>`
+        : `<div class="cx-price">${esc(dec.tier || '')}</div>`}</div></div>
       ${chipRow}${move ? `<div style="margin-top:5px">${move}</div>` : ''}${levelsHtml}
+      <div style="margin-top:6px">${xaEvidenceRows(dec)}</div>
       ${xaBreakdown(dec.components, dec.weights)}
+      <div class="xa-fine" style="opacity:.75;margin-top:4px">Research priority is an attention ordering, not a probability. Component sum ${dec.score}/100 is the auditable evidence tally behind it — also not a probability.</div>
       ${reasons ? `<div style="margin-top:6px">${reasons}</div>` : ''}${sem}`;
     return card;
   }

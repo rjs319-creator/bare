@@ -4,7 +4,10 @@ const assert = require('node:assert/strict');
 const sc = require('../lib/alerts-score');
 
 const goodSetup = { direction: 'long', valid: true, quality: 0.8, spot: 100, atr: 2, rsi: 55, sma20: 98, support: 95, resistance: 105, trigger: 106, invalidation: 94, target: 118, rr: 2.0 };
-const ep = (o = {}) => ({ id: 'e1', ticker: 'AAA', side: 'long', status: 'WAITING', catalysts: ['breakout'], ...o });
+// Freshness is now evaluated on EVERY decision build, so an episode fixture must carry the
+// timestamps a real episode carries. `NOW`/`FRESH_AT` keep these cases inside the swing TTL.
+const FRESH_AT = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
+const ep = (o = {}) => ({ id: 'e1', ticker: 'AAA', side: 'long', status: 'WAITING', catalysts: ['breakout'], firstSeen: FRESH_AT, lastSeen: FRESH_AT, ...o });
 
 test('absolute score is comparable across batches (identical inputs → identical score)', () => {
   const ctx = { setup: goodSetup, skill: { state: 'UNKNOWN', skillWeight: 0, accountPoints: 0 }, catalyst: { status: 'VERIFIED_SECONDARY' }, social: { confirmation: 0.4, independentClusters: 2 }, market: { liquidityOk: true, preMovePct: 1 }, regime: { supportive: true } };

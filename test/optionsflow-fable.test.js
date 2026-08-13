@@ -39,11 +39,14 @@ test('parseAnalyses tolerates empty / malformed input', () => {
 });
 
 // ── mergeAnalyses: attach r.ai + agrees flag, non-destructive ────────────────
-test('mergeAnalyses attaches ai and computes agrees vs mechanical net', () => {
+// `agrees` compares the desk read against the LEDGER's historical call/put sign convention
+// (the A/B control arm), derived from premium composition. That control is never presented
+// as a directional view — see optionsflow.LEDGER_SIGN_NOTE.
+test('mergeAnalyses attaches ai and computes agrees vs the ledger composition control', () => {
   const rollups = [
-    { ticker: 'NVDA', net: 'bullish', totalPremium: 5e6 },
-    { ticker: 'AMD', net: 'bearish', totalPremium: 2e6 },
-    { ticker: 'MU', net: 'mixed', totalPremium: 1e6 },
+    { ticker: 'NVDA', premiumSkew: 'call-dominant', totalPremium: 5e6 },
+    { ticker: 'AMD', premiumSkew: 'put-dominant', totalPremium: 2e6 },
+    { ticker: 'MU', premiumSkew: 'balanced', totalPremium: 1e6 },
   ];
   const doc = { analyses: {
     NVDA: { bias: 'bullish', evidenceClarity: 'clear', vehicle: 'shares' },

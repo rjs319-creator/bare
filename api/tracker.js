@@ -425,6 +425,9 @@ async function handleRequest(req, res) {
   if (req.query.op === 'optionsradar') return require('../lib/optionsflow-v2-routes').runOptionsRadar(req, res);
   if (req.query.op === 'optionsevidence2') return require('../lib/optionsflow-v2-routes').runOptionsEvidenceV2(req, res);
   if (req.query.op === 'optionshealth2') return require('../lib/optionsflow-v2-routes').runOptionsHealthV2(req, res);
+  // Shared Decision Queue — read-only view across Pulse / Alerts / Options v2. Owns no
+  // storage, starts no LLM call, hits no provider. Off by default (DECISION_QUEUE_MODE).
+  if (req.query.op === 'decisionqueue') return require('../lib/decision-queue-routes').runDecisionQueue(req, res);
   if (req.query.op === 'perf') return require('../lib/perf-routes').runPerf(req, res);
   if (req.query.op === 'brief') return runBrief(req, res);
   if (req.query.op === 'brieftick') return runBriefTick(req, res);
