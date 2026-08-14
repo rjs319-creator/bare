@@ -66,7 +66,7 @@ and currently gets 1 (the curve proxy, derived from ETF prices). It reports
 **Needed:** `growth`, `inflation`, `liquidity`, `earningsRevisions`, `valuation`, each as
 `{ trend: 'up'|'down'|'flat', value, source }`.
 
-**Good news:** four of the five are **free**.
+**Good news:** all five are **free** — the earnings-revisions leg turned out to be on the existing FMP plan (§4), not a purchase.
 
 | Leg | Source | Cost |
 |---|---|---|
@@ -74,7 +74,7 @@ and currently gets 1 (the curve proxy, derived from ETF prices). It reports
 | inflation | FRED (`CPIAUCSL`, `PCEPILFE`) | free |
 | liquidity | FRED (`WALCL`, `RRPONTSYD`, `WTREGEN`) | free |
 | valuation | derivable from existing index data + FRED yields | free |
-| **earningsRevisions** | **not free** — needs an estimates vendor | see §4 |
+| **earningsRevisions** | FMP `analyst-estimates` (annual) — **already on the plan**, already archiving | free; blocked on vintage depth, see §4 |
 
 **STATUS: BUILT — needs only the key.** `lib/fred.js` + `lib/pulse2-macro.js` are wired
 into `pulse2statetick`. Growth, inflation, and net liquidity come up as soon as
@@ -103,18 +103,54 @@ constant. Three of four legs is already above the strategic layer's two-leg floo
 **Blocks:** the `earningsRevisions` strategic leg, and the "investor expectation analysis"
 section of the mission brief (consensus revenue/EPS/FCF revisions, what is already priced).
 
-**Prior art:** a Nasdaq Data Link key exists in Vercel prod and a shadow estimates adapter
-was built, but the pull returned EMPTY — see `nasdaq-data-link-setup` in memory. That path
-should be re-verified before anything new is bought.
+**PLAN CHECKED 2026-08-14 — NOT A PURCHASE.** Answered from the public `op=archivehealth`
+(no key needed: `lib/est-archive.js` records a plan-gate as *data*, incrementing
+`gatedPeriods[period]` only on a `PLAN_GATED` 401/402/403, never on a transient error):
 
-| Option | Order of magnitude |
+```json
+"estarchive": { "days": 5, "latestDate": "2026-08-13",
+                "latestSymbols": 98, "latestPlanned": 120,
+                "latestGatedPeriods": { "quarter": 120 } }
+```
+
+| period | status |
 |---|---|
-| FMP (already integrated) — `analyst-estimates` | included in some tiers; **check the current plan first** |
-| Nasdaq Data Link / Zacks | ~$50+/mo |
-| Refinitiv / FactSet | enterprise; not proportionate here |
+| **annual** | ✅ **on the plan** — 98 symbols/day archiving, vintages accumulating |
+| **quarter** | ❌ **plan-gated** — all 120 symbols refused |
 
-**Do first:** confirm whether the existing FMP plan already covers estimates. This may be
-a zero-cost fix.
+`revarchive` is separately healthy (6 days, `latestGrades: 100`, `latestTargets: 100`), so
+analyst **grades and price targets are also on the plan**.
+
+### Why this is not built yet — and the exact trigger to build it
+
+The estimate *vintages* are a revision series by construction (consensus today vs.
+consensus N days ago). The blocker is **history depth, not access**.
+
+> ⛔ **DO NOT wire `earningsRevisions` until the trigger below is met.** With ~5 vintages a
+> revision "trend" is indistinguishable from vintage noise, and the strategic layer would
+> publish a confidently-wrong leg. This is the same failure the FRED noise floor
+> (`belowNoiseFloor`, `lib/fred.js`) was added to prevent — do not reintroduce it here.
+
+**Trigger — build when ALL of these hold:**
+
+1. `op=archivehealth` → `estarchive.days >= 40` (≈2 trading months of annual vintages).
+2. `estarchive.latestSymbols / latestPlanned >= 0.8` sustained, so coverage is not so thin
+   that the revision breadth is a sampling artifact.
+3. A revision is measured as **breadth**, not level: the share of covered names whose
+   consensus moved up vs. down between vintages. A single name's EPS estimate drifting is
+   noise; breadth is the signal the strategic layer wants.
+4. The same z-scored trend treatment as the other legs, including the noise floor, so a
+   quiet period reads `flat` rather than manufacturing a direction.
+
+**Faster alternative, available now:** `revarchive` grades/price-targets as a
+leading-revision proxy — upgrades/downgrades and target changes move ahead of consensus
+EPS. Same trigger conditions apply (breadth, not level; noise floor honored).
+
+**Standing limitation, not solvable here:** quarterly estimates are plan-gated, so the
+mission brief's *investor expectation analysis* (quarter-ahead consensus revenue/EPS/FCF)
+is coarser than specified — annual-only. That is a genuine plan ceiling. Upgrading the FMP
+tier or a Zacks/Nasdaq feed (~$50+/mo) is the only way past it, and it is not obviously
+worth it while the whole layer is shadow.
 
 ---
 
@@ -200,7 +236,7 @@ engineering.
 
 1. ~~**§5 corporate actions**~~ — **DONE** (`lib/corp-actions.js`); live-plan check pending.
 2. ~~**§3 macro via FRED**~~ — **DONE** (`lib/fred.js`, `lib/pulse2-macro.js`); key set, 3/4 legs live.
-3. **§4 estimates** — check the existing FMP plan before spending anything.
+3. ~~**§4 estimates**~~ — **plan checked: annual is FREE/on-plan, quarterly gated.** Not a purchase. Blocked on vintage depth — see the trigger in §4 (`estarchive.days >= 40`).
 4. **§1 spread** — the single highest-impact paid item; unblocks execution coverage.
 5. **§7 cadence** — only if intraday freshness actually matters to how you use the page.
 6. **§2 borrow / §6 Greeks** — probably decline both; declared-unavailable is honest and
