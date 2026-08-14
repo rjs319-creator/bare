@@ -463,6 +463,12 @@ async function handleRequest(req, res) {
   if (req.query.op === 'psrlhealth') return require('../lib/psrl-routes').runPsrlHealth(req, res);
   if (req.query.op === 'psrltick') return require('../lib/psrl-routes').runPsrlTick(req, res);
   if (req.query.op === 'psrlresearch') return require('../lib/psrl-routes').runPsrlResearch(req, res);
+  // CATALYST–FLOW RANKER — event-conditioned swing ranking (shadow, weight-0).
+  // Read-only by design: the model is trained offline and these ops only READ the
+  // published artifact, so no request can ever train or recompute a ranking.
+  if (req.query.op === 'catalystflow') return require('../lib/catalyst-flow-routes').runCatalystFlow(req, res);
+  if (req.query.op === 'catalystflowcoverage') return require('../lib/catalyst-flow-routes').runCatalystFlowCoverage(req, res);
+  if (req.query.op === 'catalystflowregistry') return require('../lib/catalyst-flow-routes').runCatalystFlowRegistry(req, res);
   if (req.query.op === 'alphabook') return require('../lib/alphabook-routes').runAlphaBook(req, res);
   if (req.query.op === 'vrptick') return require('../lib/vrp-routes').runVrpTick(req, res);
   if (req.query.op === 'vrpbook') return require('../lib/vrp-routes').runVrpBook(req, res);

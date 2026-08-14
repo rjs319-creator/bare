@@ -629,6 +629,569 @@
       "immutable": true
     },
     {
+      "recordedAt": "2026-08-14T12:25:39.063Z",
+      "id": "catalyst-flow-ranker-2026-08",
+      "hypothesis": "Post-earnings/guidance underreaction, ranked by LambdaMART over frozen event features, beats a transparent PEAD score on net 5-session sector-excess return.",
+      "version": "catalyst-arms-v1",
+      "config": {
+        "primary": {
+          "scheme": "expanding",
+          "testMonths": 6,
+          "costCase": "liquidityAware",
+          "declaredBeforeReadingResults": true
+        },
+        "arms": [
+          "E0_CURRENT_OMEGA",
+          "E1_SIMPLE_PEAD",
+          "E2_CATALYST_RANKER",
+          "E3_CATALYST_FLOW_RANKER"
+        ],
+        "ablations": [
+          "E2_MINUS_E1",
+          "E3_MINUS_E2"
+        ]
+      },
+      "dataSnapshot": {
+        "rows": 23869,
+        "dates": 310,
+        "datasetSha256": "def055caa7dbf0dde8f0c921f10c7f5e7158ef7e953eb32b6e1ac5d13e36aef5"
+      },
+      "variationsAttempted": 80,
+      "result": {
+        "E0": -0.01,
+        "E1": -0.01,
+        "E2": 0,
+        "E3": "INSUFFICIENT_DATA",
+        "ablationE2minusE1": 0
+      },
+      "fdr": [
+        {
+          "id": "E0_CURRENT_OMEGA",
+          "p": 0.000030927049392115435,
+          "q": 0.00012370819756846174,
+          "rank": 1,
+          "index": 0,
+          "survives": true,
+          "alpha": 0.05
+        },
+        {
+          "id": "E1_SIMPLE_PEAD",
+          "p": 0.00012003020560680255,
+          "q": 0.0002400604112136051,
+          "rank": 2,
+          "index": 1,
+          "survives": true,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_CATALYST_RANKER",
+          "p": 0.9999999989999999,
+          "q": 0.9999999989999999,
+          "rank": 3,
+          "index": 2,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_MINUS_E1",
+          "p": 0.9999999989999999,
+          "q": 0.9999999989999999,
+          "rank": 4,
+          "index": 3,
+          "survives": false,
+          "alpha": 0.05
+        }
+      ],
+      "costStress": [
+        "fixed10bps",
+        "liquidityAware",
+        "stress25bps"
+      ],
+      "decision": "RESEARCH_ONLY — not promotable",
+      "reason": "estimates are not point-in-time (0 of 24,533 ledger rows observed at their own cutoff); delisting RETURNS are absent from the price cache (survivorship not proven safe); no signed customer opening option flow — E3 was never measurable; NDCG@10 is near-degenerate on this cohort distribution (median cohort 8 names ≤ 10)",
+      "immutable": true
+    },
+    {
+      "recordedAt": "2026-08-14T12:27:49.383Z",
+      "id": "catalyst-flow-ranker-2026-08.r2",
+      "hypothesis": "Post-earnings/guidance underreaction, ranked by LambdaMART over frozen event features, beats a transparent PEAD score on net 5-session sector-excess return.",
+      "version": "catalyst-arms-v1",
+      "config": {
+        "primary": {
+          "scheme": "expanding",
+          "testMonths": 6,
+          "costCase": "liquidityAware",
+          "declaredBeforeReadingResults": true
+        },
+        "arms": [
+          "E0_CURRENT_OMEGA",
+          "E1_SIMPLE_PEAD",
+          "E2_CATALYST_RANKER",
+          "E3_CATALYST_FLOW_RANKER"
+        ],
+        "ablations": [
+          "E2_MINUS_E1",
+          "E3_MINUS_E2"
+        ]
+      },
+      "dataSnapshot": {
+        "rows": 23869,
+        "dates": 310,
+        "datasetSha256": "def055caa7dbf0dde8f0c921f10c7f5e7158ef7e953eb32b6e1ac5d13e36aef5"
+      },
+      "variationsAttempted": 80,
+      "result": {
+        "E0": -0.01,
+        "E1": -0.01,
+        "E2": 0,
+        "E3": "INSUFFICIENT_DATA",
+        "ablationE2minusE1": 0
+      },
+      "fdr": [
+        {
+          "id": "E0_CURRENT_OMEGA",
+          "p": 0.0055670082493795014,
+          "q": 0.022268032997518006,
+          "rank": 1,
+          "index": 0,
+          "survives": true,
+          "alpha": 0.05
+        },
+        {
+          "id": "E1_SIMPLE_PEAD",
+          "p": 0.0150569814516337,
+          "q": 0.0301139629032674,
+          "rank": 2,
+          "index": 1,
+          "survives": true,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_CATALYST_RANKER",
+          "p": 0.47850358321332775,
+          "q": 0.47850358321332775,
+          "rank": 4,
+          "index": 2,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_MINUS_E1",
+          "p": 0.14834347428814132,
+          "q": 0.1977912990508551,
+          "rank": 3,
+          "index": 3,
+          "survives": false,
+          "alpha": 0.05
+        }
+      ],
+      "costStress": [
+        "fixed10bps",
+        "liquidityAware",
+        "stress25bps"
+      ],
+      "decision": "RESEARCH_ONLY — not promotable",
+      "reason": "estimates are not point-in-time (0 of 24,533 ledger rows observed at their own cutoff); delisting RETURNS are absent from the price cache (survivorship not proven safe); no signed customer opening option flow — E3 was never measurable; NDCG@10 is near-degenerate on this cohort distribution (median cohort 8 names ≤ 10)",
+      "immutable": true,
+      "parentExperimentId": "catalyst-flow-ranker-2026-08"
+    },
+    {
+      "recordedAt": "2026-08-14T12:28:11.440Z",
+      "id": "catalyst-flow-ranker-2026-08.r3",
+      "hypothesis": "Post-earnings/guidance underreaction, ranked by LambdaMART over frozen event features, beats a transparent PEAD score on net 5-session sector-excess return.",
+      "version": "catalyst-arms-v1",
+      "config": {
+        "primary": {
+          "scheme": "expanding",
+          "testMonths": 6,
+          "costCase": "liquidityAware",
+          "declaredBeforeReadingResults": true
+        },
+        "arms": [
+          "E0_CURRENT_OMEGA",
+          "E1_SIMPLE_PEAD",
+          "E2_CATALYST_RANKER",
+          "E3_CATALYST_FLOW_RANKER"
+        ],
+        "ablations": [
+          "E2_MINUS_E1",
+          "E3_MINUS_E2"
+        ]
+      },
+      "dataSnapshot": {
+        "rows": 23869,
+        "dates": 310,
+        "datasetSha256": "def055caa7dbf0dde8f0c921f10c7f5e7158ef7e953eb32b6e1ac5d13e36aef5"
+      },
+      "variationsAttempted": 80,
+      "result": {
+        "E0": -0.01,
+        "E1": -0.01,
+        "E2": 0,
+        "E3": "INSUFFICIENT_DATA",
+        "ablationE2minusE1": 0
+      },
+      "fdr": [
+        {
+          "id": "E0_CURRENT_OMEGA",
+          "p": 0.0055670082493795014,
+          "q": 0.022268032997518006,
+          "rank": 1,
+          "index": 0,
+          "survives": true,
+          "alpha": 0.05
+        },
+        {
+          "id": "E1_SIMPLE_PEAD",
+          "p": 0.0150569814516337,
+          "q": 0.0301139629032674,
+          "rank": 2,
+          "index": 1,
+          "survives": true,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_CATALYST_RANKER",
+          "p": 0.47850358321332775,
+          "q": 0.47850358321332775,
+          "rank": 4,
+          "index": 2,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_MINUS_E1",
+          "p": 0.14834347428814132,
+          "q": 0.1977912990508551,
+          "rank": 3,
+          "index": 3,
+          "survives": false,
+          "alpha": 0.05
+        }
+      ],
+      "costStress": [
+        "fixed10bps",
+        "liquidityAware",
+        "stress25bps"
+      ],
+      "decision": "RESEARCH_ONLY — not promotable",
+      "reason": "estimates are not point-in-time (0 of 24,533 ledger rows observed at their own cutoff); delisting RETURNS are absent from the price cache (survivorship not proven safe); no signed customer opening option flow — E3 was never measurable; NDCG@10 is near-degenerate on this cohort distribution (median cohort 8 names ≤ 10)",
+      "immutable": true,
+      "parentExperimentId": "catalyst-flow-ranker-2026-08"
+    },
+    {
+      "recordedAt": "2026-08-14T12:40:07.112Z",
+      "id": "catalyst-flow-ranker-2026-08.r4",
+      "hypothesis": "Post-earnings/guidance underreaction, ranked by LambdaMART over frozen event features, beats a transparent PEAD score on net 5-session sector-excess return.",
+      "version": "catalyst-arms-v1",
+      "config": {
+        "primary": {
+          "scheme": "expanding",
+          "testMonths": 6,
+          "costCase": "liquidityAware",
+          "declaredBeforeReadingResults": true
+        },
+        "arms": [
+          "E0_CURRENT_OMEGA",
+          "E1_SIMPLE_PEAD",
+          "E2_CATALYST_RANKER",
+          "E3_CATALYST_FLOW_RANKER"
+        ],
+        "ablations": [
+          "E2_MINUS_E1",
+          "E3_MINUS_E2"
+        ]
+      },
+      "dataSnapshot": {
+        "rows": 23869,
+        "dates": 310,
+        "datasetSha256": "def055caa7dbf0dde8f0c921f10c7f5e7158ef7e953eb32b6e1ac5d13e36aef5"
+      },
+      "variationsAttempted": 80,
+      "unit": "basis points of sector-excess return per decision-date cohort, net of cost",
+      "result": {
+        "E0": -66.5,
+        "E1": -63.2,
+        "E2": -19.8,
+        "RIDGE": -33.7,
+        "E3": "INSUFFICIENT_DATA",
+        "ablationE2minusE1": 43.4,
+        "ablationE3minusE2": "INSUFFICIENT_DATA"
+      },
+      "deflatedSharpe": {
+        "trialCount": 80,
+        "E2_CATALYST_RANKER": {
+          "dsr": 0.246,
+          "sr0": 0,
+          "sharpePerCohort": -0.0402,
+          "n": 310,
+          "annualised": false
+        },
+        "E1_SIMPLE_PEAD": {
+          "dsr": 0.0017,
+          "sr0": 0,
+          "sharpePerCohort": -0.1609,
+          "n": 310,
+          "annualised": false
+        }
+      },
+      "fdr": [
+        {
+          "id": "E0_CURRENT_OMEGA",
+          "p": 0.0055670082493795014,
+          "q": 0.022268032997518006,
+          "rank": 1,
+          "index": 0,
+          "survives": true,
+          "alpha": 0.05
+        },
+        {
+          "id": "E1_SIMPLE_PEAD",
+          "p": 0.0150569814516337,
+          "q": 0.0301139629032674,
+          "rank": 2,
+          "index": 1,
+          "survives": true,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_CATALYST_RANKER",
+          "p": 0.47850358321332775,
+          "q": 0.47850358321332775,
+          "rank": 4,
+          "index": 2,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_MINUS_E1",
+          "p": 0.14834347428814132,
+          "q": 0.1977912990508551,
+          "rank": 3,
+          "index": 3,
+          "survives": false,
+          "alpha": 0.05
+        }
+      ],
+      "costStress": [
+        "fixed10bps",
+        "liquidityAware",
+        "stress25bps"
+      ],
+      "decision": "RESEARCH_ONLY — not promotable",
+      "reason": "estimates are not point-in-time (0 of 24,533 ledger rows observed at their own cutoff); delisting RETURNS are absent from the price cache (survivorship not proven safe); no signed customer opening option flow — E3 was never measurable; NDCG@10 is near-degenerate on this cohort distribution (median cohort 8 names ≤ 10)",
+      "immutable": true,
+      "parentExperimentId": "catalyst-flow-ranker-2026-08"
+    },
+    {
+      "recordedAt": "2026-08-14T12:49:03.317Z",
+      "id": "catalyst-flow-ranker-2026-08.r5",
+      "hypothesis": "Post-earnings/guidance underreaction, ranked by LambdaMART over frozen event features, beats a transparent PEAD score on net 5-session sector-excess return.",
+      "version": "catalyst-arms-v1",
+      "config": {
+        "primary": {
+          "scheme": "expanding",
+          "testMonths": 6,
+          "costCase": "liquidityAware",
+          "declaredBeforeReadingResults": true
+        },
+        "arms": [
+          "E0_CURRENT_OMEGA",
+          "E1_SIMPLE_PEAD",
+          "E2_CATALYST_RANKER",
+          "E3_CATALYST_FLOW_RANKER"
+        ],
+        "ablations": [
+          "E2_MINUS_E1",
+          "E3_MINUS_E2"
+        ]
+      },
+      "dataSnapshot": {
+        "rows": 23869,
+        "dates": 310,
+        "datasetSha256": "def055caa7dbf0dde8f0c921f10c7f5e7158ef7e953eb32b6e1ac5d13e36aef5"
+      },
+      "variationsAttempted": 80,
+      "unit": "basis points of sector-excess return per decision-date cohort, net of cost",
+      "result": {
+        "E0": -0.9,
+        "E1": -3.3,
+        "E2": -19.8,
+        "RIDGE": 0,
+        "E3": "INSUFFICIENT_DATA",
+        "ablationE2minusE1": -16.5,
+        "ablationE3minusE2": "INSUFFICIENT_DATA"
+      },
+      "deflatedSharpe": {
+        "trialCount": 80,
+        "E2_CATALYST_RANKER": {
+          "dsr": 0.246,
+          "sr0": 0,
+          "sharpePerCohort": -0.0402,
+          "n": 310,
+          "annualised": false
+        },
+        "E1_SIMPLE_PEAD": {
+          "dsr": 0.3334,
+          "sr0": 0,
+          "sharpePerCohort": -0.0255,
+          "n": 310,
+          "annualised": false
+        }
+      },
+      "fdr": [
+        {
+          "id": "E0_CURRENT_OMEGA",
+          "p": 0.9188700180759408,
+          "q": 0.9188700180759408,
+          "rank": 4,
+          "index": 0,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E1_SIMPLE_PEAD",
+          "p": 0.7121344761944881,
+          "q": 0.9188700180759408,
+          "rank": 3,
+          "index": 1,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_CATALYST_RANKER",
+          "p": 0.47850358321332775,
+          "q": 0.9188700180759408,
+          "rank": 1,
+          "index": 2,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_MINUS_E1",
+          "p": 0.5688415099721165,
+          "q": 0.9188700180759408,
+          "rank": 2,
+          "index": 3,
+          "survives": false,
+          "alpha": 0.05
+        }
+      ],
+      "costStress": [
+        "fixed10bps",
+        "liquidityAware",
+        "stress25bps"
+      ],
+      "decision": "RESEARCH_ONLY — not promotable",
+      "reason": "estimates are not point-in-time (0 of 24,533 ledger rows observed at their own cutoff); delisting RETURNS are absent from the price cache (survivorship not proven safe); no signed customer opening option flow — E3 was never measurable; NDCG@10 is near-degenerate on this cohort distribution (median cohort 8 names ≤ 10)",
+      "immutable": true,
+      "parentExperimentId": "catalyst-flow-ranker-2026-08"
+    },
+    {
+      "recordedAt": "2026-08-14T12:49:43.449Z",
+      "id": "catalyst-flow-ranker-2026-08.r6",
+      "hypothesis": "Post-earnings/guidance underreaction, ranked by LambdaMART over frozen event features, beats a transparent PEAD score on net 5-session sector-excess return.",
+      "version": "catalyst-arms-v1",
+      "config": {
+        "primary": {
+          "scheme": "expanding",
+          "testMonths": 6,
+          "costCase": "liquidityAware",
+          "declaredBeforeReadingResults": true
+        },
+        "arms": [
+          "E0_CURRENT_OMEGA",
+          "E1_SIMPLE_PEAD",
+          "E2_CATALYST_RANKER",
+          "E3_CATALYST_FLOW_RANKER"
+        ],
+        "ablations": [
+          "E2_MINUS_E1",
+          "E3_MINUS_E2"
+        ]
+      },
+      "dataSnapshot": {
+        "rows": 23869,
+        "dates": 310,
+        "datasetSha256": "def055caa7dbf0dde8f0c921f10c7f5e7158ef7e953eb32b6e1ac5d13e36aef5"
+      },
+      "variationsAttempted": 80,
+      "unit": "basis points of sector-excess return per decision-date cohort, net of cost",
+      "result": {
+        "E0": -0.9,
+        "E1": -3.3,
+        "E2": -19.8,
+        "RIDGE": 0,
+        "E3": "INSUFFICIENT_DATA",
+        "ablationE2minusE1": -16.5,
+        "ablationE3minusE2": "INSUFFICIENT_DATA"
+      },
+      "deflatedSharpe": {
+        "trialCount": 80,
+        "E2_CATALYST_RANKER": {
+          "dsr": 0.246,
+          "sr0": 0,
+          "sharpePerCohort": -0.0402,
+          "n": 310,
+          "annualised": false
+        },
+        "E1_SIMPLE_PEAD": {
+          "dsr": 0.3334,
+          "sr0": 0,
+          "sharpePerCohort": -0.0255,
+          "n": 310,
+          "annualised": false
+        }
+      },
+      "fdr": [
+        {
+          "id": "E0_CURRENT_OMEGA",
+          "p": 0.9188700180759408,
+          "q": 0.9188700180759408,
+          "rank": 4,
+          "index": 0,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E1_SIMPLE_PEAD",
+          "p": 0.7121344761944881,
+          "q": 0.9188700180759408,
+          "rank": 3,
+          "index": 1,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_CATALYST_RANKER",
+          "p": 0.47850358321332775,
+          "q": 0.9188700180759408,
+          "rank": 1,
+          "index": 2,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_MINUS_E1",
+          "p": 0.5688415099721165,
+          "q": 0.9188700180759408,
+          "rank": 2,
+          "index": 3,
+          "survives": false,
+          "alpha": 0.05
+        }
+      ],
+      "costStress": [
+        "fixed10bps",
+        "liquidityAware",
+        "stress25bps"
+      ],
+      "decision": "RESEARCH_ONLY — not promotable",
+      "reason": "estimates are not point-in-time (0 of 24,533 ledger rows observed at their own cutoff); delisting RETURNS are absent from the price cache (survivorship not proven safe); no signed customer opening option flow — E3 was never measurable; NDCG@10 is near-degenerate on this cohort distribution (median cohort 8 names ≤ 10)",
+      "immutable": true,
+      "parentExperimentId": "catalyst-flow-ranker-2026-08"
+    },
+    {
       "recordedAt": "2026-08-13T00:33:55.140Z",
       "id": "constrained-alpha-maximization-2026-08",
       "hypothesis": "A constrained, momentum-anchored combination of entry quality, filed fundamental acceleration and soft risk controls can improve cost-net top-10 excess over residual momentum on purged later dates.",

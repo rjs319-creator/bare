@@ -24,6 +24,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadGridlock } from './gridlock.js';
   import { loadCflLab } from './cfl-lab.js';
   import { loadPsrlLab } from './psrl-lab.js';
+  import { renderCatalystLab } from './catalyst-lab.js';
   import { renderShell as renderPulse2Shell } from './pulse2-render.js';
   import { loadTechCommand } from './tech-command.js';
   import { loadLeaderboard } from './leaderboard.js';
@@ -50,7 +51,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     markets:    ['rotation', 'sectors', 'news', 'thesis', 'pulse', 'evolve'],
     predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     proof:      ['scoreboard', 'evidence', 'movermiss', 'intradayval', 'baselines', 'leaderboard', 'coreperf'],
-    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge', 'cfl', 'orbitlab', 'rltlab', 'psrl', 'gridlock', 'peerlab'],
+    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge', 'cfl', 'orbitlab', 'rltlab', 'psrl', 'gridlock', 'catalyst', 'peerlab'],
   };
   // Holding-horizon of each candidate/position sub-tab → drives the horizon dividers
   // in the sub-nav so the app is visibly separated by time horizon (the spec ask).
@@ -72,7 +73,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     movermiss: '🔍 Mover Miss Audit', intradayval: '🧪 Intraday Validation',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', thesis: '🧾 Thesis Changes', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
-    backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)', rltlab: '🧭 Leadership (shadow)', gridlock: '⚡ GRIDLOCK (shadow)', peerlab: '🕸 Peers (shadow)', cfl: '🔭 Counterfactual Lab', psrl: '🪜 Persistent Trends (shadow)',
+    backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)', rltlab: '🧭 Leadership (shadow)', gridlock: '⚡ GRIDLOCK (shadow)', peerlab: '🕸 Peers (shadow)', cfl: '🔭 Counterfactual Lab', psrl: '🪜 Persistent Trends (shadow)', catalyst: '⚡ Catalyst–Flow (research)',
     leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', evidence: '🎖️ Evidence', baselines: '🧪 Baselines', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
   // Plain-English "what is this tab?" hovers for a novice investor — one line per
@@ -356,6 +357,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       act: `Nothing to trade here. Use it to understand WHICH component needs work — e.g. if most misses are "ranked below the cut", ranking is the bottleneck, not discovery.`,
       catch: `Historical sweeps can't see delisted stocks (survivorship), so past miss rates are estimates. Probabilities are deliberately withheld until enough graded history exists.`,
     },
+    catalyst: {
+      what: `An event-conditioned <b>ranking</b> experiment: fresh earnings or guidance events, observed for one full post-event session, then ranked for the next five trading sessions against the stock's own SECTOR benchmark, after costs.`,
+      read: `Scores are ORDINAL — a ranking model's relevance value. They are not expected returns and not probabilities, and no percentage is shown for one anywhere on the board. The limitations panel is the point of the page as much as the ranking is.`,
+      act: `Nothing. This is research/shadow at weight 0. The promotion gates panel lists exactly what would have to be true before it could count for anything.`,
+      catch: `Two hard limits. The historical consensus behind the surprise features is a vendor snapshot taken AFTER the events, so that evidence is exploratory and cannot support promotion. And there is no signed customer opening option flow, so the arm that would test it reports INSUFFICIENT_DATA — which is not a finding that the signal is worthless.`,
+    },
     psrl: {
       what: `Stocks in <b>persistent</b> uptrends — gradual staircases rather than one-day jumps — compared against SPY and their own sector after adjusting for beta, so market passengers don't masquerade as leaders.`,
       read: `Four arrows per stock: price trend, vs market, vs sector, and trajectory (is the leadership strengthening or fading). "Jump-plateau" flags a one-day repricing that then went nowhere. Retained names stay listed with the reason they fell out.`,
@@ -458,6 +465,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'gridlock' && typeof ensureGridlock === 'function') ensureGridlock();
     if (sub === 'cfl' && typeof ensureCflLab === 'function') ensureCflLab();
     if (sub === 'psrl' && typeof ensurePsrlLab === 'function') ensurePsrlLab();
+    if (sub === 'catalyst' && typeof ensureCatalystLab === 'function') ensureCatalystLab();
     if (sub === 'tech-command' && typeof ensureTechCommand === 'function') ensureTechCommand();
     if (sub === 'evidence' && typeof ensureEvidence === 'function') ensureEvidence();
     if (sub === 'thesis' && typeof ensureThesis === 'function') ensureThesis();
@@ -4492,6 +4500,20 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (btn) btn.addEventListener('click', () => loadPsrlLab(document.getElementById('psrl-container')));
     }
     loadPsrlLab(document.getElementById('psrl-container'));
+  }
+
+  // ⚡ CATALYST–FLOW RANKER (research/shadow) — read-only board over op=catalystflow.
+  // The serving layer only ever READS a published artifact, so opening this tab cannot
+  // trigger training or a recompute; with nothing published it renders its own
+  // "not published" state rather than an empty ranking that looks like a result.
+  let catalystLabLoaded = false;
+  function ensureCatalystLab() {
+    if (!catalystLabLoaded) {
+      catalystLabLoaded = true;
+      const btn = document.getElementById('catalyst-refresh-btn');
+      if (btn) btn.addEventListener('click', () => renderCatalystLab(document.getElementById('catalyst-container')));
+    }
+    renderCatalystLab(document.getElementById('catalyst-container'));
   }
 
   // 🖥 TECHNOLOGY COMMAND CENTER — reads the versioned op=techcommand projection.

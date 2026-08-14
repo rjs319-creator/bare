@@ -1,0 +1,16 @@
+# CATALYST-FLOW offline trainer. Pinned to minimum versions, deliberately minimal.
+#
+# Setup:
+#   python3 -m venv research/catalyst_flow/.venv
+#   research/catalyst_flow/.venv/bin/pip install -r research/catalyst_flow/requirements.txt
+#
+# macOS additionally needs the OpenMP runtime LightGBM links against:
+#   brew install libomp
+#
+# LightGBM is NOT optional and is never substituted. If it will not import, the trainer
+# exits with the setup instructions rather than quietly training a different model.
+lightgbm>=4.3
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10
+scikit-learn>=1.3
