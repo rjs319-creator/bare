@@ -74,3 +74,29 @@ test('PRICE_TREND_ENGINES is a subset of SOURCE_FAMILY priceTrend ids (family ma
     assert.ok(familyIds.has(id), `core engine ${id} missing from the priceTrend family`);
   }
 });
+
+// WIRED (audit 2026-08-14): trend-core is no longer an orphan — lib/decision.js
+// evidenceFor() consumes PRICE_TREND_ENGINES to consolidate asserted-prior credit
+// between trend engines into ONE price unit (measured credits pass through untouched).
+// Full behavioral coverage lives in test/decision-trend-core-wiring.test.js; this pins
+// the consolidation itself from trend-core's side.
+test('decision.js consolidates unmeasured trend-engine agreement into one evidence unit', () => {
+  const D = require('../lib/decision');
+  const R = require('../lib/redundancy');
+  const famOf = (s) => D.SOURCE_FAMILY[s] || null;
+  const dates = Array.from({ length: 20 }, (_, i) => `2026-06-${String(i + 1).padStart(2, '0')}`);
+  const rows = (algorithm) => dates.flatMap(date => ['AAA', 'BBB'].map(ticker =>
+    ({ date, ticker, algorithm, excess: (ticker.charCodeAt(0) % 5) - 2 + dates.indexOf(date) * 0.1 })));
+  // screener↔momentum measured near-duplicates; apex/trendrider unmeasured trend engines.
+  const model = R.buildRedundancyModel([...rows('screener'), ...rows('momentum')],
+    { priorCredit: D.CORR_DISCOUNT, familyOf: famOf });
+  const sig = D.makeSignal({
+    ticker: 'AAA', source: 'screener', sources: ['screener', 'momentum', 'apex', 'trendrider'],
+    horizon: 'swing', side: 'long', family: 'priceTrend', evidenceFamilies: ['priceTrend'],
+  }).signal;
+  const ev = D.evidenceFor(sig, model);
+  assert.equal(ev.measured, true);
+  assert.deepEqual(ev.trendCore.consolidatedEngines, ['apex', 'trendrider']);
+  assert.ok(ev.effectiveCount < ev.unconsolidatedCount, 'consolidation may only LOWER the count');
+  assert.ok(ev.effectiveCount < 1.5, 'four correlated trend engines ≈ one price unit, not four');
+});
