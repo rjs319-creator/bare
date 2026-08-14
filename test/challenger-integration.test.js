@@ -92,8 +92,11 @@ test('challenger-eval: evaluate returns the full validation battery without thro
 test('challenger-eval: promotionCheck reports strict criteria, never auto-promotes on first pass', () => {
   const ev = evalLib.evaluate(fixture(), { now: '2026-07-18' });
   const promo = evalLib.promotionCheck(ev, {}); // no live-forward record supplied
-  assert.strictEqual(promo.criteria.length, 10);
+  // 10 base criteria + the CSCV-PBO criterion (this fixture's 8 dates × 3 covered
+  // variant columns are enough for pbo() to compute, so the demote-only row appears).
+  assert.strictEqual(promo.criteria.length, 11);
   assert.ok(promo.criteria.every((c) => typeof c.pass === 'boolean'));
+  assert.ok(promo.pbo && ['blocked', 'pass'].includes(promo.pbo.verdictInput), 'promotion doc carries a computable PBO stamp');
   assert.strictEqual(typeof promo.promotable, 'boolean');
   // With no live-forward evidence, the live-shadow criterion must fail => not promotable.
   assert.ok(!promo.criteria.find((c) => /live-forward/.test(c.name)).pass);
