@@ -127,8 +127,22 @@ this hypothesis staying open weakens every options read slightly.
 
 **Needed:** ex-dividend dates and split dates per symbol, forward-looking ~30 days.
 
-**Cost:** effectively free — FMP already provides both endpoints and is already integrated.
-This is **plumbing, not acquisition**, and arguably should not be on this list.
+**STATUS: BUILT.** `lib/corp-actions.js` pulls the FMP dividend and split calendars
+(date-ranged, **two calls per scan regardless of universe size**) and feeds
+`options-hypotheses-v2`.
+
+The load-bearing behavior is an asymmetry that is easy to get wrong: a calendar that
+**answers** and lists nothing **REFUTES** the hypothesis; a calendar that **failed or is
+plan-gated** leaves it **UNRESOLVED**. Both produce an empty result, and treating them
+alike would manufacture a refutation out of a provider outage. Each ticker therefore
+carries a `coverage: { dividend, split }` flag, and only full coverage permits a
+refutation. Test-locked as an explicit regression.
+
+**Live-plan verification still outstanding:** no FMP key is available locally, so the
+endpoints have not been exercised against the real subscription. If they are not on the
+plan, `fmp-client` categorizes it `plan-gated` and the diagnostics say so permanently
+rather than retrying — check `op=optionsradar` → `corpActions.dividend.category` after the
+next scan.
 
 ---
 
@@ -184,8 +198,8 @@ engineering.
 
 ## Suggested order
 
-1. **§5 corporate actions** — free, already-integrated vendor, closes an open hypothesis.
-2. **§3 macro via FRED** — free, four of five legs, turns a whole regime layer on.
+1. ~~**§5 corporate actions**~~ — **DONE** (`lib/corp-actions.js`); live-plan check pending.
+2. ~~**§3 macro via FRED**~~ — **DONE** (`lib/fred.js`, `lib/pulse2-macro.js`); key set, 3/4 legs live.
 3. **§4 estimates** — check the existing FMP plan before spending anything.
 4. **§1 spread** — the single highest-impact paid item; unblocks execution coverage.
 5. **§7 cadence** — only if intraday freshness actually matters to how you use the page.
