@@ -372,3 +372,26 @@ test('ticks3 forces the challenger eval strictly AFTER the resolve that feeds it
   assert.ok(resolveIdx >= 0, 'challengerresolve must stay in ticks3');
   assert.ok(evalIdx > resolveIdx, 'challengereval&force=1 must run after challengerresolve');
 });
+
+// 🚨 Audit 2026-08-14: an awaited @child used to claim a FRESH full deadline regardless of
+// how much the parent had already spent — a parent 200s in could await a child entitled
+// to 240s more, blowing the parent's 300s wall mid-await (504, no report persisted).
+// A nested dispatch now hands the child the parent's REMAINING budget.
+test('runChain: a nested @chain inherits the parent\'s REMAINING budget, not a fresh deadline', async () => {
+  const c = clock(0);
+  const call = recorder({ tick: () => c.advance(60000) }); // each step burns 60s
+  await WC.runChain('ledger', { call, now: c.now, deadlineMs: 240000 });
+  const nested = call.calls.filter(p => p.includes('op=warmchain'));
+  assert.ok(nested.length > 0, 'ledger must dispatch at least one nested chain');
+  for (const p of nested) {
+    const m = p.match(/budgetMs=(\d+)/);
+    assert.ok(m, `nested dispatch must carry budgetMs: ${p}`);
+    assert.ok(Number(m[1]) < 240000, `inherited budget must be less than a fresh deadline: ${p}`);
+  }
+});
+
+test('pathFor: budgetMs rides only on nested dispatches, and only when given', () => {
+  assert.ok(!WC.pathFor('@decision').includes('budgetMs'), 'no budget given → no param (root dispatch)');
+  assert.ok(WC.pathFor('@decision', 120000).includes('budgetMs=120000'));
+  assert.ok(!WC.pathFor('op=track', 120000).includes('budgetMs'), 'plain ops never carry it');
+});
