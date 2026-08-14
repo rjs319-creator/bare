@@ -18736,6 +18736,106 @@
       "parentExperimentId": "news-composite-100-formula-2026-08"
     },
     {
+      "recordedAt": "2026-08-14T14:49:09.785Z",
+      "id": "omega-ridge-lift-2026-08",
+      "hypothesis": "A ridge (alpha=25, frozen preprocessing) trained on OMEGA's own published features adds net 5-session alpha over the FIXED production OMEGA score at top-10 on the options-liquid universe.",
+      "family": "swing-ranking",
+      "frozenConfig": {
+        "ridgeAlpha": 25,
+        "folds": 4,
+        "purgeCohorts": 2,
+        "bootstrap": {
+          "B": 5000,
+          "blockLen": 4,
+          "seed": 20260813
+        },
+        "axis": "SPY step-5 from idx 262",
+        "primaryUniverse": "LIQUID_OPTIONS minus ETFs (62)",
+        "broadUniverse": "LARGE ∪ SMALL_CAPS ∩ cache, ADV>=20M, top 500 by ADV (got 306)",
+        "features": [
+          "score",
+          "utility",
+          "pPositive",
+          "p3pct",
+          "p5pct",
+          "expResid10",
+          "r10",
+          "distFrom52High",
+          "relVol5",
+          "regRiskOn",
+          "regBearish"
+        ],
+        "specs": [
+          "primary_62_top10_5s",
+          "broad_top10_5s",
+          "secondary_top5_5s",
+          "secondary_top10_10s",
+          "doubledcost_top10_5s"
+        ],
+        "controls": [
+          "shuffledLabelRidge",
+          "seededRandomRanker",
+          "r10MomentumRanker",
+          "drop3BestDates"
+        ],
+        "seeds": {
+          "shuffle": 20260814,
+          "random": 4242
+        }
+      },
+      "dataSnapshot": {
+        "primaryPanelDates": 197,
+        "primaryRows": 11956,
+        "broadTickers": 306,
+        "broadRows": 59193,
+        "oosDates": 158
+      },
+      "codeVersion": "ridge-lift-v1",
+      "variationsAttempted": 5,
+      "result": {
+        "verdict": "SHADOW_CANDIDATE",
+        "verdictReasons": [],
+        "primaryLift": {
+          "meanPct": 0.6729,
+          "medianPct": 0.1661,
+          "winRate": 0.538,
+          "pOneSided": 0.026774,
+          "pTwoSided": 0.053548,
+          "ci95": {
+            "lo": 0.1117,
+            "hi": 1.3403
+          },
+          "drop3BestMeanPct": 0.3808,
+          "maxDrawdownPct": -23.613
+        },
+        "broadLift": {
+          "meanPct": 1.0189,
+          "medianPct": 0.6142,
+          "winRate": 0.5633,
+          "pOneSided": 0.02518,
+          "pTwoSided": 0.05036,
+          "ci95": {
+            "lo": 0.1128,
+            "hi": 1.9839
+          },
+          "drop3BestMeanPct": 0.5736,
+          "maxDrawdownPct": -46.9631
+        },
+        "controls": {
+          "momentumLift": 0.9149,
+          "ridgeVsMomentum": -0.2421,
+          "randomLift": 0.4342,
+          "shuffledLift": 0.1094
+        },
+        "interpretation": {
+          "momentumExplainsLift": true,
+          "fixedOmegaBelowRandom": true,
+          "conclusion": "The gates pass, but the momentum control explains the lift: plain r10 beats fixed OMEGA by at least as much as the ridge does, and the ridge does not beat plain r10 — the \"training lift\" is momentum exposure, not learned structure. A seeded random ranker also beats fixed OMEGA, so beat-A lifts sit on a below-random baseline. Recommendation: do NOT build a ridge overlay; the repeat finding is that the fixed OMEGA score ranks poorly on its own universe (consistent with lib/omega-research-verdict.json)."
+        }
+      },
+      "immutable": true
+    },
+    {
       "recordedAt": "2026-08-14T02:04:08.395Z",
       "id": "omega-si-level-5d-top10-2026-08",
       "hypothesis": "FINRA consolidated short-interest crowding LEVEL (log days-to-cover + >=7 DTC flag + 4 frozen interactions) adds incremental 5-session net residual alpha to a trained OMEGA baseline on the options-liquid universe (top-10, next-open entry, 0.16% cost).",
