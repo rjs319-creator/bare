@@ -145,6 +145,90 @@ test('tracker + warm chains wiring: omegaabtick privileged, chain registered and
   assert.ok(WC.ROOT_CHAINS.includes('omegaab'));
 });
 
+// ── resolution robustness (audit 2026-08-14) ────────────────────────────────
+// A row must never flip terminal UNRESOLVABLE off ONE night's bad fetch: a truncated
+// provider series that lost the decision bar tonight may serve it fine tomorrow. The
+// row stays PENDING with an additive `attempts` counter and only becomes UNRESOLVABLE
+// after >= FROZEN.maxResolveAttempts failed attempts on different runs.
+
+test('a lost decision bar keeps the row PENDING with an attempts counter — terminal only after 3 runs', () => {
+  const doc = AB.buildDecisionDoc({ date: D, rows: mkRows(25), createdAt: 'now' });
+  // Every series LOST the decision bar (history starts the day after).
+  const lost = new Map(doc.rows.map((r) => [r.ticker,
+    candlesFrom('2026-08-15', [100, 101, 102, 103, 104, 105, 106], [100, 101, 102, 103, 104, 105, 106])]));
+  const spy = candlesFrom(D, [500, 500, 500, 500, 500, 500, 500], [500, 500, 500, 500, 500, 505, 505]);
+  assert.strictEqual(AB.FROZEN.maxResolveAttempts, 3);
+  let cur = doc;
+  for (let run = 1; run < AB.FROZEN.maxResolveAttempts; run++) {
+    const { doc: next, pending } = AB.resolveDecisionDoc(cur, { histories: lost, spy, resolvedAt: 'later' });
+    assert.ok(next.rows.every((r) => r.outcomeStatus === 'PENDING' && r.attempts === run),
+      `run ${run}: rows must stay PENDING with attempts=${run}`);
+    assert.ok(pending > 0, 'failed-but-retryable rows count as pending');
+    assert.strictEqual(next.resolved, false);
+    cur = next;
+  }
+  const { doc: final } = AB.resolveDecisionDoc(cur, { histories: lost, spy, resolvedAt: 'later' });
+  assert.ok(final.rows.every((r) => r.outcomeStatus === 'UNRESOLVABLE' && r.attempts === AB.FROZEN.maxResolveAttempts));
+  assert.strictEqual(final.resolved, true, 'all-settled after the attempts budget is exhausted');
+});
+
+test('an immature series accrues NO attempts — waiting is not failing', () => {
+  const doc = AB.buildDecisionDoc({ date: D, rows: mkRows(25), createdAt: 'now' });
+  const shortHist = new Map(doc.rows.map((r) => [r.ticker, candlesFrom(D, [100, 101, 102], [100, 101, 102])]));
+  const spy = candlesFrom(D, [500, 500, 500, 500, 500, 500, 500], [500, 500, 500, 500, 500, 505, 505]);
+  const { doc: next } = AB.resolveDecisionDoc(doc, { histories: shortHist, spy, resolvedAt: 'later' });
+  assert.ok(next.rows.every((r) => r.outcomeStatus === 'PENDING' && !(r.attempts > 0)),
+    'immaturity must not burn the attempts budget');
+});
+
+test('a legacy doc without attempts fields still resolves normally', () => {
+  const doc = AB.buildDecisionDoc({ date: D, rows: mkRows(25), createdAt: 'now' });
+  const legacy = { ...doc, rows: doc.rows.map(({ attempts, ...r }) => r) };   // pre-audit shape
+  const opens = [100, 101, 102, 103, 104, 105, 106];
+  const closes = [100, 108, 109, 110, 111, 115, 116];
+  const histories = new Map(legacy.rows.map((r) => [r.ticker, candlesFrom(D, opens, closes)]));
+  const spy = candlesFrom(D, [500, 500, 500, 500, 500, 500, 500], [500, 500, 500, 500, 500, 505, 505]);
+  const { doc: next, pending } = AB.resolveDecisionDoc(legacy, { histories, spy, resolvedAt: 'later' });
+  assert.strictEqual(pending, 0);
+  assert.strictEqual(next.resolved, true);
+});
+
+// ── forming-bar guard (audit 2026-08-14) ────────────────────────────────────
+// Only cron timing used to keep a decision from being stamped off a forming intraday
+// SPY bar. The guard is now code-level: the bar date must be strictly before the
+// current NY calendar date, or equal to it with NY time >= 16:05.
+
+test('isCompletedSessionBar: prior session yes, forming session no, post-16:05 yes, future never', () => {
+  // 2026-08-14 is EDT (UTC-4): 18:00Z = 14:00 NY (RTH, forming).
+  assert.strictEqual(AB.isCompletedSessionBar('2026-08-14', new Date('2026-08-14T18:00:00Z')), false);
+  // 20:04Z = 16:04 NY — one minute early is still forming.
+  assert.strictEqual(AB.isCompletedSessionBar('2026-08-14', new Date('2026-08-14T20:04:00Z')), false);
+  // 20:05Z = 16:05 NY — session complete.
+  assert.strictEqual(AB.isCompletedSessionBar('2026-08-14', new Date('2026-08-14T20:05:00Z')), true);
+  // A prior session's bar is always complete, whatever the clock says.
+  assert.strictEqual(AB.isCompletedSessionBar('2026-08-13', new Date('2026-08-14T14:00:00Z')), true);
+  // A future-dated bar is never acceptable.
+  assert.strictEqual(AB.isCompletedSessionBar('2026-08-15', new Date('2026-08-14T21:00:00Z')), false);
+  // Garbage input fails closed.
+  assert.strictEqual(AB.isCompletedSessionBar('not-a-date', new Date('2026-08-14T21:00:00Z')), false);
+  assert.strictEqual(AB.isCompletedSessionBar(null, new Date('2026-08-14T21:00:00Z')), false);
+});
+
+test('the tick guards the stamp, retries ALL matured unresolved days oldest-first, and surfaces stuckDates', () => {
+  const src = require('node:fs').readFileSync(require.resolve('../lib/omega-ab-routes.js'), 'utf8');
+  // Guard runs BEFORE the decision write.
+  const guardIdx = src.indexOf('isCompletedSessionBar');
+  const stampIdx = src.indexOf('writeJSON(dayKey(today)');
+  assert.ok(guardIdx > -1, 'the forming-bar guard must be applied in the tick');
+  assert.ok(stampIdx > -1 && guardIdx < stampIdx, 'the guard must run before the decision is stamped');
+  // The 30-day retry window silently dropped days stuck pending longer than 30 matured
+  // days. All unresolved matured days are retried (bounded, oldest first) and anything
+  // left over is surfaced instead of dropped.
+  assert.ok(!/matured\.slice\(-30\)/.test(src), 'the silent 30-day retry window must not return');
+  assert.match(src, /MAX_RESOLVE_PER_TICK/, 'per-tick resolution work stays bounded');
+  assert.match(src, /stuckDates/, 'days stuck unresolved must be surfaced, not dropped');
+});
+
 test('live OMEGA has no code path into the A/B', () => {
   const fs = require('node:fs');
   const omega = fs.readFileSync(require.resolve('../lib/omega-swing.js'), 'utf8');

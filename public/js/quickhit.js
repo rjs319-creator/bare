@@ -235,7 +235,11 @@ export async function loadQuickHit(container, bindNav) {
   if (moversTimer) { clearInterval(moversTimer); moversTimer = null; }   // drop any prior tab's timer
   container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning large, small &amp; micro caps for today's top research candidates…</p></div>`;
   const j = op => fetchJSON('/api/tracker?op=' + op).catch(() => null);
-  const scr = scope => fetchJSON('/api/screener?scope=' + scope).catch(() => null);
+  // A failed cap-size fetch is an ERROR, not an empty tape — track which scopes errored
+  // so "no setups today" is only ever claimed for scopes that genuinely answered.
+  const scopeErrors = new Set();
+  const scr = scope => fetchJSON('/api/screener?scope=' + scope)
+    .catch(() => { scopeErrors.add(scope); return null; });
   let large, small, micro, sb, drift, rt, an, sw, ca, ts, of, pr;
   try {
     [large, small, micro, sb, drift, rt, an, sw, ca, ts, of, pr] = await Promise.all([
@@ -306,19 +310,30 @@ export async function loadQuickHit(container, bindNav) {
   // so every tier is one tap away even when the ranked Top 5 skews to one cap.
   html += `<div class="qh-caps"><span class="qh-caps-h">🏆 Best by cap size:</span>` + CAP_ORDER.map(cap => {
     const m = CAP_META[cap], b = best[cap];
+    // An errored scope must never read as an honest "none today" abstention.
+    if (!b && scopeErrors.has(cap)) return `<span class="qh-capchip off" title="The ${m.label} screen failed to load — this is a data error, not an empty screen">${m.chip} · ⚠️ unavailable</span>`;
     if (!b) return `<span class="qh-capchip off">${m.chip} · none today</span>`;
     return `<span class="qh-capchip on" data-go="opportunities" data-scope="${cap}" style="border-color:${m.col};color:${m.col}" title="Open ⭐ Opportunities · ${m.label}">${m.chip}: <b>${esc(b.ticker)}</b> ${conviction(b.opp).stars}</span>`;
   }).join('') + `</div>`;
 
+  // Partial-failure banner: some scopes errored, so the shortlist below is missing tiers.
+  const erroredCaps = CAP_ORDER.filter(cap => scopeErrors.has(cap));
+  if (erroredCaps.length) {
+    const labels = erroredCaps.map(cap => CAP_META[cap].label).join(', ');
+    html += `<div class="dt-note" style="border-left-color:var(--amber,#f59e0b)">⚠️ <b>${esc(labels)} screen${erroredCaps.length > 1 ? 's' : ''} unavailable</b> — the fetch failed, so ${erroredCaps.length > 1 ? 'those tiers are' : 'that tier is'} missing from this shortlist (not screened empty). Try Refresh in a moment.</div>`;
+  }
+  // The "across any cap size" abstention is only honest when EVERY scope actually answered.
   html += top.length
     ? top.map((c, i) => qhCard(c, i + 1)).join('')
-    : `<div class="dt-note">No clean setups cleared the screen across any cap size today — that happens on quiet days. Check the individual screeners, or come back after the next refresh.</div>`;
+    : erroredCaps.length
+      ? `<div class="dt-note">No clean setups cleared the screen in the cap sizes that loaded — and the ⚠️ unavailable tier${erroredCaps.length > 1 ? 's' : ''} above couldn't be screened at all. Try Refresh before reading this as a quiet day.</div>`
+      : `<div class="dt-note">No clean setups cleared the screen across any cap size today — that happens on quiet days. Check the individual screeners, or come back after the next refresh.</div>`;
 
   // Two performance leaderboards (day movers + week/month momentum) under the shortlist.
   // Rendered into a placeholder so the 30s live refresh can repaint just this block.
   html += `<div id="qh-movers"></div>`;
 
-  html += `<div class="dt-dim opp-foot">Ranked by setup quality — momentum quant, setup stage &amp; narrative, boosted when an AI screener independently agrees. Shadow-strategy reads (Ghost accumulation, conviction model, drift monitor) are shown as context and do <b>not</b> move this ranking (registry: zero weight). A cap tier only takes a Top-${TOP_N} slot when its best name is genuinely solid (no forced quotas); the 🏆 row above always shows each tier's best regardless. Research, not advice — confirm on a chart and use a stop.</div>`;
+  html += `<div class="dt-dim opp-foot">Ranked by setup quality — momentum quant, setup stage &amp; narrative. When an AI screener independently agrees, that agreement is a 🤝 badge only — it never moves the rank (measured redundancy found agreement doesn't pay). Shadow-strategy reads (Ghost accumulation, conviction model, drift monitor) are likewise shown as context and do <b>not</b> move this ranking (registry: zero weight). A cap tier only takes a Top-${TOP_N} slot when its best name is genuinely solid (no forced quotas); the 🏆 row above always shows each tier's best regardless. Research, not advice — confirm on a chart and use a stop.</div>`;
 
   container.innerHTML = html;
   // Scope-aware references: remember which cap to show before ⭐ Opportunities opens.

@@ -162,3 +162,34 @@ test('every governed (registered, sectioned) signal strategy declares a frozen p
     .map(e => e.id);
   assert.deepEqual(missing, [], 'a core sectioned strategy without policyTiers pools control cohorts into its promotion record');
 });
+
+// 🚨 Regression: summarizeDateSeries rounds avg to 2dp for DISPLAY, but pValueOf used the
+// rounded fields — a genuine ~0.003/cohort effect computed t from 0.00 and reported p≈1.
+// The summary must carry full-precision avgExact/seExact and pValueOf must prefer them.
+test('pValueOf resolves a small-magnitude (sub-0.01) mean instead of rounding it to zero', () => {
+  // 40 cohorts, mean ≈ +0.003, tiny dispersion — an unambiguous nonzero effect.
+  const series = Array.from({ length: 40 }, (_, i) => 0.003 + (i % 2 ? 0.0004 : -0.0004));
+  const s = ES.summarizeDateSeries(series, { B: 200 });
+  assert.ok(s, 'summary must resolve');
+  assert.ok(Number.isFinite(s.avgExact) && Math.abs(s.avgExact - 0.003) < 1e-6,
+    'summary must carry the full-precision mean');
+  assert.ok(Number.isFinite(s.seExact) && s.seExact > 0, 'summary must carry the full-precision SE');
+  const p = ES.pValueOf(s);
+  assert.ok(Number.isFinite(p), 'p-value must resolve');
+  assert.ok(p < 0.05, `a clear nonzero effect must not report p≈1 (got ${p})`);
+});
+
+test('pValueOf still resolves on a legacy persisted summary (rounded fields only)', () => {
+  const p = ES.pValueOf({ avg: 1.5, se: 0.4 });
+  assert.ok(Number.isFinite(p) && p < 0.05, 'legacy summaries without exact fields must keep working');
+});
+
+test('pValueOf uses Student-t at df = effectiveN − 1, not the normal CDF', () => {
+  // t = 2.2 at effectiveN 12 → df 11: exact two-sided t p ≈ 0.050; the old normal
+  // CDF gave ≈ 0.028 — anti-conservative p's feeding the BH demote family.
+  const p = ES.pValueOf({ avgExact: 2.2, seExact: 1, effectiveN: 12 });
+  assert.ok(Math.abs(p - 0.0501) < 0.005, `expected ≈0.050, got ${p}`);
+  // Without effectiveN (legacy persisted summary) the normal CDF is retained.
+  const pLegacy = ES.pValueOf({ avg: 2.2, se: 1 });
+  assert.ok(Math.abs(pLegacy - 0.0278) < 0.005, `legacy path stays normal-CDF, got ${pLegacy}`);
+});

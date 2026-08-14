@@ -93,6 +93,37 @@ test('writers that mutate durable state or spend metered budget are privileged',
   }
 });
 
+test('op=lifecyclegrade is privileged — its grade write unconditionally overwrites a historical day', () => {
+  // lib/lifecycle-routes.runLifecycleGrade accepts an arbitrary ?date= and
+  // lifecycle-store.saveGrades OVERWRITES lifecycle/<strategy>/grades/<date>.json.
+  // Once the provider's 5-min bars age out, a rerun grades to {} — so an anonymous GET
+  // could wipe a historical graded day. The warm capture chain already dispatches it
+  // with the CRON_SECRET bearer, so requiring it costs nothing.
+  const privileged = TRACKER.slice(TRACKER.indexOf('const PRIVILEGED_OPS'), TRACKER.indexOf('const EXPENSIVE_OPS'));
+  assert.ok(privileged.includes("'lifecyclegrade'"), 'lifecyclegrade rewrites durable grades and must require the bearer');
+  // The read-only projection stays public — only the grader is gated.
+  assert.ok(!privileged.includes("'lifecycle'\n") && !/'lifecycle',/.test(privileged),
+    'op=lifecycle (read-only projection) must not become bearer-only');
+});
+
+test('op=challengereval loses its force/recompute lever for untrusted callers', () => {
+  // challengereval sits in EXPENSIVE_OPS (rate limit), but force=1 bypasses the cached
+  // doc, recomputes the walk-forward evaluation over every resolved shadow prediction
+  // AND overwrites shadow/eval.json. That is a recompute + write lever, so it belongs in
+  // SHARED_FORCE_OPS: anonymous callers keep the cached read, cron keeps force=1
+  // (warm-chains dispatches op=challengereval&force=1 with the bearer).
+  const shared = TRACKER.slice(TRACKER.indexOf('const SHARED_FORCE_OPS'), TRACKER.indexOf('const INGEST_OPS'));
+  assert.ok(shared.includes("'challengereval'"), 'challengereval must strip force for untrusted callers');
+  withSecret('s3cret-value', () => {
+    const anon = anonReq({ op: 'challengereval', force: '1' });
+    stripForceParams(anon);
+    assert.equal(anon.query.force, undefined, 'anonymous force=1 must not survive');
+    const cron = cronReq({ op: 'challengereval', force: '1' }, 's3cret-value');
+    stripForceParams(cron);
+    assert.equal(cron.query.force, '1', 'the nightly chain must still be able to rebuild the eval');
+  });
+});
+
 test('op=maturity gates the capital-control WRITE, not the public read', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'maturity-routes.js'), 'utf8');
   // The read must stay public — the evidence banner on ~35 tabs fetches this op, so

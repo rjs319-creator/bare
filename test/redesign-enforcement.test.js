@@ -42,7 +42,7 @@ test('a RESEARCH signal can never enter the portfolio — in either mode', () =>
 
 test('an incomplete plan is never sizable, however strong the score', () => {
   const src = EL.assessSource('screener', { gov: EL.indexGovernance(GOV, NOW), registryVersionOf: () => 'screener-v2' });
-  const noTarget = EL.assessSignal({ source: 'screener', ticker: 'A', side: 'long', entry: 10, stop: 9, liquidity: { dollarVol: 9e7 } }, src, {});
+  const noTarget = EL.assessSignal({ source: 'screener', ticker: 'A', side: 'long', tier: 'Early', universeScope: 'large', entry: 10, stop: 9, liquidity: { dollarVol: 9e7 } }, src, {});
   assert.equal(noTarget.signalClass, 'QUALIFIED_LEAD');
   assert.equal(noTarget.sizingWeight, 0);
   assert.ok(noTarget.reasonCodes.includes(EL.REASON_CODE.NO_PLAN));
@@ -61,8 +61,8 @@ test('a lead-only CONTRACT can never be sized even if levels are attached downst
 
 test('QUALIFIED_LEAD is preserved through gateSignals, the payload and the API response shape', () => {
   const g = EL.gateSignals([
-    { source: 'screener', ticker: 'AAA', side: 'long', entry: 1, stop: 0.9, target: 1.3, liquidity: { dollarVol: 5e7 } },
-    { source: 'screener', ticker: 'BBB', side: 'long', liquidity: { dollarVol: 5e7 } },
+    { source: 'screener', ticker: 'AAA', side: 'long', tier: 'Early', universeScope: 'large', entry: 1, stop: 0.9, target: 1.3, liquidity: { dollarVol: 5e7 } },
+    { source: 'screener', ticker: 'BBB', side: 'long', tier: 'Early', universeScope: 'large', liquidity: { dollarVol: 5e7 } },
     { source: 'coil', ticker: 'CCC', side: 'long' },
   ], { governance: GOV, nowMs: NOW });
   assert.deepEqual(g.classCounts, { ACTIONABLE: 1, QUALIFIED_LEAD: 1, RESEARCH: 1 });

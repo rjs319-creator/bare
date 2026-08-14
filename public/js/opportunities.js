@@ -22,12 +22,19 @@ const GHOST_LABEL = { GHOST: 'heavy accumulation', STALKING: 'quiet accumulation
 // (RT-07). The key now carries scope; the map is DISPLAY-ONLY (track-record line on
 // the card) and no longer tilts the rank (RT-01).
 export const relKey = (section, tier, scope) => `${section}|${tier}|${scope || ''}`;
+// Scoreboard horizon keys are 1d/5d/10d/20d/1m/3m — prefer the 1m record, fall back to
+// the nearest neighbours. The horizon that ACTUALLY supplied the figure is carried so
+// the card can label it honestly (a 3m fallback must not be captioned "(1m)").
+export const RELIABILITY_HORIZONS = ['1m', '20d', '3m'];
 export function buildReliability(groups) {
   const map = {};
   (groups || []).forEach(g => {
     const h = g.horizons || {};
-    const best = h['1m'] || h['1w'] || h['3m'] || null;
-    map[relKey(g.section, g.tier, g.scope)] = best ? { avg: best.avg, winRate: best.winRate, n: best.n } : { n: 0 };
+    const key = RELIABILITY_HORIZONS.find(k => h[k]);
+    const best = key ? h[key] : null;
+    map[relKey(g.section, g.tier, g.scope)] = best
+      ? { avg: best.avg, winRate: best.winRate, n: best.n, horizon: key }
+      : { n: 0 };
   });
   return map;
 }
@@ -203,7 +210,8 @@ function oppTrack(c) {
   const col = (r.avg ?? 0) >= 0 ? 'opp-pos' : 'opp-neg';
   const winTxt = r.winRate != null ? `${r.winRate}% win` : '';
   const avgTxt = r.avg != null ? `${r.avg > 0 ? '+' : ''}${r.avg}% avg` : '';
-  return `<div class="opp-track ${col}">📊 This setup class: ${[winTxt, avgTxt].filter(Boolean).join(' · ')} (1m) · n=${r.n} `
+  const hzTxt = r.horizon ? ` (${r.horizon})` : '';
+  return `<div class="opp-track ${col}">📊 This setup class: ${[winTxt, avgTxt].filter(Boolean).join(' · ')}${hzTxt} · n=${r.n} `
     + `<span class="dt-dim">— realized forward return, not a forecast</span></div>`;
 }
 
@@ -327,7 +335,7 @@ export async function loadOpportunities(container, scope = 'large', limit = 6) {
       return `<div class="opp-ai-row"><span class="opp-ai-tk">$${esc(r.ticker)}</span><span class="opp-ai-badges">${badges}</span><span class="opp-ai-note">${esc(r.note)}</span></div>`;
     }).join('') + `</div>`;
   }
-  html += `<div class="dt-dim opp-foot">Scored on accumulation, setup stage, momentum &amp; the model's ${L('conviction', 'results-trained conviction')}. Per-name order is tilted by each Ghost-tier's own resolved record; the whole list's conviction is then dialed by the model's live results (a uniform scalar — it does not reorder the names). Algorithm-specific, evidence-gated reranking lives in the 📋 Swing Supervisor. Not advice; always confirm and use a ${L('stop', 'stop')}.</div>`;
+  html += `<div class="dt-dim opp-foot">Ranked on momentum quant, setup stage, narrative &amp; theme/institutional signals only. Ghost accumulation, the conviction model, track records and the drift monitor are shown as labeled context — none of them tilts, scales or reorders this ranking (registry: shadow, zero weight). Algorithm-specific, evidence-gated reranking lives in the 📋 Swing Supervisor. Not advice; always confirm and use a ${L('stop', 'stop')}.</div>`;
   container.innerHTML = html;
 }
 

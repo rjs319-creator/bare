@@ -226,12 +226,28 @@ const PICK_TOOL = {
   },
 };
 
+// CDN cache policy (audit 2026-08-14). Only a HEALTHY run WITH picks may pin the CDN
+// for 4 hours. Empty states are never long-cached ("never CDN-cache empty state"):
+// a genuine quiet-day abstention gets 30 minutes, and a degraded run (any news feed
+// failed) gets 5 minutes so the next healthy fetch can replace it quickly.
+const CACHE_HEALTHY_PICKS_S = 14400;
+const CACHE_HEALTHY_ABSTAIN_S = 1800;
+const CACHE_DEGRADED_S = 300;
+
 async function fetchNews(query, apiKey, size = 20) {
   const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&sortBy=publishedAt&pageSize=${size}&domains=${DOMAINS}&apiKey=${apiKey}`;
   const res = await fetch(url);
+  // A 429/5xx used to be swallowed into [] here — indistinguishable from "no articles",
+  // so a provider outage read as a quiet news day and was recorded as an abstention.
+  if (!res.ok) throw new Error(`NewsAPI ${res.status}`);
   const data = await res.json();
   return (data.articles || []).filter(a => a.title && a.title !== '[Removed]');
 }
+
+// Per-feed guard: null = THIS FEED FAILED (outage/rate-limit/network) — an explicitly
+// different value from [] ("the feed answered: nothing"). Also keeps a thrown network
+// error from rejecting the handler's Promise.all into a 500.
+const fetchNewsSafe = (query, apiKey, size) => fetchNews(query, apiKey, size).catch(() => null);
 
 async function fetchSectors() {
   try {
@@ -261,30 +277,41 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'API keys not configured.' });
   }
 
-  // 4 parallel fetches — broader, deeper coverage
-  const [stocksArticles, macroArticles, earningsArticles, optionsArticles, sectors] = await Promise.all([
+  // 4 parallel fetches — broader, deeper coverage. Each news feed fails soft to null
+  // (never rejects the Promise.all); a null feed marks the whole run DEGRADED.
+  const [stocksFeed, macroFeed, earningsFeed, optionsFeed, sectors] = await Promise.all([
     // Broad stock market news
-    fetchNews(
+    fetchNewsSafe(
       'stocks OR "stock market" OR NASDAQ OR NYSE OR "S&P 500" OR "Dow Jones" OR "stock rally" OR "stock surge" OR "stock decline" OR buyback OR "share repurchase"',
       newsApiKey, 20
     ),
     // Macro & market-moving events
-    fetchNews(
+    fetchNewsSafe(
       '"Federal Reserve" OR inflation OR "interest rates" OR GDP OR recession OR "treasury yields" OR "oil prices" OR "trade war" OR CPI OR PCE OR payrolls OR "dollar index"',
       newsApiKey, 20
     ),
     // Earnings, analyst actions, insider activity — highest signal for specific stocks
-    fetchNews(
+    fetchNewsSafe(
       '"earnings beat" OR "earnings miss" OR "raised guidance" OR "lowered guidance" OR "analyst upgrade" OR "analyst downgrade" OR "price target" OR "strong buy" OR "insider buying" OR "quarterly results" OR "revenue beat" OR "EPS beat" OR "profit surge"',
       newsApiKey, 20
     ),
     // Options flow & institutional signals
-    fetchNews(
+    fetchNewsSafe(
       '"unusual options" OR "call sweep" OR "put sweep" OR "options activity" OR "options flow" OR "bullish bet" OR "bearish bet" OR "call buying" OR "block trade" OR "dark pool"',
       newsApiKey, 10
     ),
     fetchSectors(),
   ]);
+
+  // Provider health. A degraded run may still produce usable picks from the surviving
+  // feeds, but its output must never be recorded as a full-coverage read — and an empty
+  // book from a starved model must never be recorded as a genuine abstention.
+  const newsFeedsFailed = [stocksFeed, macroFeed, earningsFeed, optionsFeed].filter(f => f === null).length;
+  const degraded = newsFeedsFailed > 0;
+  const stocksArticles = stocksFeed || [];
+  const macroArticles = macroFeed || [];
+  const earningsArticles = earningsFeed || [];
+  const optionsArticles = optionsFeed || [];
 
   // Deduplicate across all feeds
   const seen = new Set();
@@ -394,8 +421,10 @@ ${newsSummary}`,
   // ABSTENTION CONTRACT (alpha-research brief §3). The economically correct output is
   // permitted to be "no position". `abstained` is true only when the model returned a
   // genuinely empty book — not when downstream classification happens to leave a track
-  // empty, which is a different (and normal) state.
-  const abstained = all.length === 0;
+  // empty, which is a different (and normal) state — and NOT when the empty book was
+  // caused by a failed news feed: a starved model is not an abstaining model, and
+  // stamping an outage as abstention would corrupt the abstention track record.
+  const abstained = all.length === 0 && !degraded;
   const rejectionReasonCounts = abstained
     ? { noQualifyingCatalyst: 1 }
     : {
@@ -406,12 +435,20 @@ ${newsSummary}`,
         belowActionableGate: watch.length,
       };
 
-  res.setHeader('Cache-Control', 's-maxage=14400');
+  // Cache by health, then by emptiness — see the constants above fetchNews.
+  const cacheSeconds = degraded ? CACHE_DEGRADED_S
+    : (all.length > 0 ? CACHE_HEALTHY_PICKS_S : CACHE_HEALTHY_ABSTAIN_S);
+  res.setHeader('Cache-Control', `s-maxage=${cacheSeconds}`);
   return res.json({
     shortTerm,
     longTerm,
     watch,
     abstained,
+    degraded,
+    newsFeedsFailed,
+    ...(degraded && all.length === 0
+      ? { degradedNote: 'news provider failure — empty book is NOT a genuine abstention' }
+      : {}),
     actionableCount: shortTerm.length + longTerm.length,
     screenedCount: all.length,
     rejectionReasonCounts,

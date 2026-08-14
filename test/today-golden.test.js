@@ -45,6 +45,16 @@
 //        biotech:swing:AGIO evidenceMult 1.09 -> 1, score 68.2 -> 60.8, rank 2 -> 4;
 //        gapgo and coremo shift rank as a consequence. No row vanished, no cost,
 //        confidence or execution value changed.
+//
+//    GOLDEN v5 (entry-basis fix, 2026-08-14) — CURRENT golden only; the Day Trade
+//    BASELINE is untouched and all four DAY TRADE FROZEN guards still pass. One change:
+//      • decision-costs now prices the cost/net-EV waterfall off the expected FILL
+//        (published level + adverse exec-v1 entry-side slippage) instead of the published
+//        entry, matching the basis the track record is graded on (strategy-contracts
+//        fillPolicy next-session-open, apex-routes entry-v2.2). Non-daytrade rows'
+//        costPenalty/score shrink slightly (e.g. coil swing 53.9 -> 53.7); the daytrade
+//        section is pinned to the published-level basis because its grading is pinned to
+//        legacy (entryBasisForSection returns null), so Day Trade rows are byte-identical.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
