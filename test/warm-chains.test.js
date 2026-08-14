@@ -288,16 +288,23 @@ test('the compile runs strictly AFTER every scan (the parent awaits the nested c
   assert.ok(steps.indexOf('op=secmasterbuild') > compileAt);
 });
 
-test('every scan step advances the SHARED cursor at the 200-name cap', () => {
+test('every scan step targets a DISTINCT deterministic slot at the 200-name cap', () => {
+  // Audit 2026-08-14: the shared Blob cursor this test used to pin was the bug — an
+  // overwritten cursor propagates with a 10-30s+ read-back lag, so back-to-back steps
+  // read the SAME cursor and re-scanned the same slice (halving the claimed coverage).
+  // slot=N is a pure function of (epoch day, slot): nothing stored, nothing to lag.
   const scanChains = ['universescan1', 'universescan2', 'universescan3', 'universescan4'];
+  const slots = [];
   let total = 0;
   for (const c of scanChains) {
     for (const step of WC.CHAINS[c]) {
-      assert.match(step, /^op=universescan&cursor=1&limit=200$/,
-        'cursor=1 keeps the scans sequential over one cursor — without it they would refetch the same slice');
+      const m = step.match(/^op=universescan&slot=(\d+)&limit=200$/);
+      assert.ok(m, `slot mode keeps same-night scans collision-free with no Blob dependency: ${step}`);
+      slots.push(Number(m[1]));
       total += 200;
     }
   }
+  assert.equal(new Set(slots).size, slots.length, 'each step must own its own slot');
   assert.equal(total, 1600, 'nightly coverage: 1,600 names (was 300)');
 });
 
