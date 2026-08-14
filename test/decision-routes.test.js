@@ -83,14 +83,22 @@ test('buildToday: gap-down shorts rank ABOVE longs in risk-off (validated lever)
   assert.ok(zzz.score > aaa.score, 'short outranks a long in risk-off');
 });
 
-test('fromScreener: attaches breakout + ghost + fundamentals evidence families', () => {
+test('fromScreener: ghost evidence family is GATED on ghost trade-eligibility (rejected ⇒ no boost)', () => {
+  // Audit 2026-08-14: ghost is registry 'rejected' ("MUST NOT originate, boost, or add
+  // verdict weight") yet its GHOST-tier read attached the volumeAccum family ungated,
+  // raising live ranks through the evidence multiplier. Under the REAL registry the
+  // family must NOT attach; with ghost injected back to production it must.
   const sigs = N.fromScreener(SCREENER);
   assert.equal(sigs.length, 2);
   const aaa = sigs.find(s => s.ticker === 'AAA');
-  assert.deepEqual(aaa.evidenceFamilies, ['priceTrend', 'volumeAccum']); // GHOST tier adds volume family
+  assert.deepEqual(aaa.evidenceFamilies, ['priceTrend'], 'rejected ghost must not add volumeAccum');
   assert.equal(aaa.horizon, 'swing');
   assert.equal(aaa.section, 'screener');
   assert.equal(aaa.liquidity.dollarVol, 5e8);
+  const { STRATEGY_REGISTRY } = require('../lib/strategy-registry');
+  const regGhostProd = STRATEGY_REGISTRY.map(e => (e.id === 'ghost' ? { ...e, maturity: 'production' } : e));
+  const boosted = N.fromScreener(SCREENER, { registry: regGhostProd }).find(s => s.ticker === 'AAA');
+  assert.deepEqual(boosted.evidenceFamilies, ['priceTrend', 'volumeAccum'], 'an eligible ghost still confirms');
 });
 
 test('fromGapGo / fromDayTrade / fromCoil map levels + horizon correctly', () => {
@@ -111,10 +119,11 @@ test('sectorStrength: ranks leading/weakening and scores names -1..1', () => {
 
 test('buildToday: merges AAA across screener+gapgo into one multi-family signal', () => {
   const p = buildToday({ screener: SCREENER, gapgo: GAPGO, daytrade: DAYTRADE, coil: COIL, sectors: SECTORS, scoreboard: SCOREBOARD, ai: AI }, null, null, null, ANNOTATE);
-  // AAA appears in screener(swing) and gapgo(intraday) — different horizons, so NOT merged,
-  // but its swing copy carries priceTrend+volumeAccum (breakout+ghost).
+  // AAA appears in screener(swing) and gapgo(intraday) — different horizons, so NOT merged.
+  // Its swing copy carries priceTrend; the ghost volumeAccum family no longer attaches
+  // while ghost is registry-rejected (see the fromScreener gating test above).
   const swingAAA = p.horizons.swing.find(x => x.ticker === 'AAA');
-  assert.ok(swingAAA.evidence.familyCount >= 2);
+  assert.ok(swingAAA.evidence.familyCount >= 1);
   assert.equal(p.horizons.intraday.some(x => x.ticker === 'AAA'), true); // gapgo intraday
   assert.equal(p.horizons.intraday.some(x => x.ticker === 'CCC'), true); // daytrade
 });
