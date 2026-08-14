@@ -44,6 +44,16 @@ cannot start an LLM call, hit a market-data provider, or write storage (test-loc
   immutable first-seen, measured narrative lifecycle incl. cooling/resolution/expiry,
   direction-flip transitions.
 - `lib/pulse2-market-state.js` — deterministic market state + market mode + playbook.
+- `lib/pulse2-regime-stack.js` — three-layer regime stack (intraday / tactical / strategic),
+  reported separately with supporting AND contradicting observations, persistence,
+  transition times, and a falsifiable flip condition per layer. No composite score.
+- `lib/pulse2-cross-asset.js` — 17-leg cross-asset confirmation matrix. Every leg names the
+  ETF **proxy** it actually used; unmeasurable legs are excluded from the ratio, never
+  counted neutral.
+- `lib/fred.js` + `lib/pulse2-macro.js` — the strategic layer's macro legs (growth,
+  inflation, net Fed liquidity, valuation) from FRED. Needs `FRED_API_KEY`; without it the
+  strategic layer reports UNAVAILABLE rather than inferring macro from price. Latest-vintage
+  data ⇒ `backtestSafe: false` (live read only).
 - `lib/pulse2-views.js` — Day/Swing/Investor policies, trade states, actionability contract.
 - `lib/pulse2-alerts.js` — transition-only alerts, dedup by transition id, cooldowns.
 - `lib/pulse2-grade.js` — appendable per-horizon outcomes, awareness repair, cluster-aware
@@ -90,7 +100,10 @@ and only a trusted caller regenerates.
   and the frontend automatically falls back to the v1 feed. This is the rollback lever.
 - Reuses existing `ANTHROPIC_API_KEY` (collection/refine only — absent ⇒ narrative layer
   reports UNAVAILABLE, market state still works), `BLOB_READ_WRITE_TOKEN`, `CRON_SECRET`.
-  No new secrets.
+- `FRED_API_KEY` — **optional, free** (fredaccount.stlouisfed.org). Enables the strategic
+  (1–6 month) regime layer's growth / inflation / net-liquidity legs. Absent ⇒ that layer
+  reports UNAVAILABLE naming the missing key; nothing else is affected and macro is never
+  inferred from price. Read-only public data, no cost, no rate risk at this volume.
 
 ## Scheduling reality
 
