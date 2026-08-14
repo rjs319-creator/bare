@@ -169,6 +169,10 @@ const PRIVILEGED_OPS = new Set([
   // SI OVERLAY prospective logger/resolver — writes the frozen-model shadow ledger
   // (si/v1/prospective/*) + a ~75-name provider fan-out. Cron/manual-with-bearer only.
   'sitick',
+  // SCREENER intraday fill-verification channel (screener-verify-v1) — writes the
+  // canonical episode shards + rollup (episodes/screener/*) and spends a bounded FMP
+  // 5-min + daily-candle fan-out. Cron/manual-with-bearer only.
+  'swingverify',
   // OMEGA R10-vs-SCORE shadow A/B logger/resolver — writes the prospective decision
   // ledger (omegaab/v1/*) + a ~75-name provider fan-out. Cron/manual-with-bearer only.
   'omegaabtick',
@@ -386,6 +390,7 @@ async function handleRequest(req, res) {
   if (req.query.op === 'gapgo') return runGapGo(req, res);
   if (req.query.op === 'gapgotick') return runGapGoTick(req, res);
   if (req.query.op === 'gapgoverify') return require('../lib/gapgo-verify').runGapGoVerify(req, res);
+  if (req.query.op === 'swingverify') return require('../lib/screener-verify').runScreenerVerify(req, res);
   if (req.query.op === 'gapgobook') return runGapGoBook(req, res);
   if (req.query.op === 'downday') return runDownDay(req, res);
   if (req.query.op === 'downdaytick') return runDownDayTick(req, res);
