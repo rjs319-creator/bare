@@ -1,0 +1,911 @@
+{
+  "experimentId": "OMEGA_SI_LEVEL_5D_TOP10",
+  "specs": [
+    {
+      "id": "primary_13d_top10_5s",
+      "lagDays": 13,
+      "excludeRevised": false,
+      "topK": 10,
+      "horizon": 5,
+      "primary": true
+    },
+    {
+      "id": "stale_16d_top10_5s",
+      "lagDays": 16,
+      "excludeRevised": false,
+      "topK": 10,
+      "horizon": 5
+    },
+    {
+      "id": "exRevised_13d_top10_5s",
+      "lagDays": 13,
+      "excludeRevised": true,
+      "topK": 10,
+      "horizon": 5
+    },
+    {
+      "id": "exRevised_16d_top10_5s",
+      "lagDays": 16,
+      "excludeRevised": true,
+      "topK": 10,
+      "horizon": 5
+    },
+    {
+      "id": "secondary_top5_5s",
+      "lagDays": 13,
+      "excludeRevised": false,
+      "topK": 5,
+      "horizon": 5,
+      "secondary": true
+    },
+    {
+      "id": "secondary_top10_10s",
+      "lagDays": 13,
+      "excludeRevised": false,
+      "topK": 10,
+      "horizon": 10,
+      "secondary": true
+    }
+  ],
+  "results": {
+    "primary_13d_top10_5s": {
+      "label": "primary_13d_top10_5s",
+      "horizon": 5,
+      "topK": 10,
+      "joinedRows": 11956,
+      "tickers": 62,
+      "candidateDates": 197,
+      "oosDates": 158,
+      "siCoverage": 1,
+      "arms": {
+        "A": {
+          "dates": 158,
+          "meanPct": -0.0033,
+          "medianPct": -0.1642,
+          "winRate": 0.481,
+          "sharpeLike": -0.009
+        },
+        "B": {
+          "dates": 158,
+          "meanPct": 0.6696,
+          "medianPct": 0.3273,
+          "winRate": 0.5443,
+          "sharpeLike": 1.07
+        },
+        "C": {
+          "dates": 158,
+          "meanPct": 0.5625,
+          "medianPct": 0.2316,
+          "winRate": 0.5443,
+          "sharpeLike": 0.921
+        }
+      },
+      "meanIC": {
+        "A": -0.0016,
+        "B": 0.0021,
+        "C": -0.0054
+      },
+      "incremental": {
+        "meanPct": -0.1071,
+        "medianPct": 0.1227,
+        "winRate": 0.5316,
+        "tTest": {
+          "t": -0.5855,
+          "pOneSided": 0.720905,
+          "pTwoSided": 0.55819,
+          "n": 158
+        },
+        "bootstrap": {
+          "lo": -0.4635,
+          "hi": 0.2056,
+          "B": 5000,
+          "blockLen": 4,
+          "seed": 20260813
+        },
+        "maxDrawdownPct": -39.9716
+      },
+      "portfolio": {
+        "meanOverlap": 0.6278,
+        "meanTurnover": 0.3722,
+        "meanAddedDtc": 4.746,
+        "meanRemovedDtc": 1.737,
+        "crowdedShareB": 0.0291,
+        "crowdedShareC": 0.0601
+      },
+      "folds": [
+        {
+          "fold": 1,
+          "usable": true,
+          "trainDates": {
+            "n": 37,
+            "first": "2022-07-21",
+            "last": "2023-04-10"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 40,
+            "first": "2023-05-01",
+            "last": "2024-02-08"
+          },
+          "incrementalMeanPct": -0.148
+        },
+        {
+          "fold": 2,
+          "usable": true,
+          "trainDates": {
+            "n": 77,
+            "first": "2022-07-21",
+            "last": "2024-01-25"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 39,
+            "first": "2024-02-15",
+            "last": "2024-11-15"
+          },
+          "incrementalMeanPct": 0.3905
+        },
+        {
+          "fold": 3,
+          "usable": true,
+          "trainDates": {
+            "n": 116,
+            "first": "2022-07-21",
+            "last": "2024-11-01"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 40,
+            "first": "2024-11-22",
+            "last": "2025-09-08"
+          },
+          "incrementalMeanPct": -0.5319
+        },
+        {
+          "fold": 4,
+          "usable": true,
+          "trainDates": {
+            "n": 156,
+            "first": "2022-07-21",
+            "last": "2025-08-22"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 39,
+            "first": "2025-09-15",
+            "last": "2026-06-17"
+          },
+          "incrementalMeanPct": -0.127
+        }
+      ],
+      "usableFolds": 4,
+      "positiveFolds": 1
+    },
+    "stale_16d_top10_5s": {
+      "label": "stale_16d_top10_5s",
+      "horizon": 5,
+      "topK": 10,
+      "joinedRows": 11956,
+      "tickers": 62,
+      "candidateDates": 197,
+      "oosDates": 158,
+      "siCoverage": 1,
+      "arms": {
+        "A": {
+          "dates": 158,
+          "meanPct": -0.0033,
+          "medianPct": -0.1642,
+          "winRate": 0.481,
+          "sharpeLike": -0.009
+        },
+        "B": {
+          "dates": 158,
+          "meanPct": 0.6696,
+          "medianPct": 0.3273,
+          "winRate": 0.5443,
+          "sharpeLike": 1.07
+        },
+        "C": {
+          "dates": 158,
+          "meanPct": 0.6489,
+          "medianPct": 0.5267,
+          "winRate": 0.5633,
+          "sharpeLike": 1.086
+        }
+      },
+      "meanIC": {
+        "A": -0.0016,
+        "B": 0.0021,
+        "C": 0.004
+      },
+      "incremental": {
+        "meanPct": -0.0207,
+        "medianPct": 0.1181,
+        "winRate": 0.5253,
+        "tTest": {
+          "t": -0.1052,
+          "pOneSided": 0.541878,
+          "pTwoSided": 0.916244,
+          "n": 158
+        },
+        "bootstrap": {
+          "lo": -0.3635,
+          "hi": 0.3128,
+          "B": 5000,
+          "blockLen": 4,
+          "seed": 20260813
+        },
+        "maxDrawdownPct": -41.6971
+      },
+      "portfolio": {
+        "meanOverlap": 0.6272,
+        "meanTurnover": 0.3728,
+        "meanAddedDtc": 4.736,
+        "meanRemovedDtc": 1.704,
+        "crowdedShareB": 0.0304,
+        "crowdedShareC": 0.0595
+      },
+      "folds": [
+        {
+          "fold": 1,
+          "usable": true,
+          "trainDates": {
+            "n": 37,
+            "first": "2022-07-21",
+            "last": "2023-04-10"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 40,
+            "first": "2023-05-01",
+            "last": "2024-02-08"
+          },
+          "incrementalMeanPct": 0.3874
+        },
+        {
+          "fold": 2,
+          "usable": true,
+          "trainDates": {
+            "n": 77,
+            "first": "2022-07-21",
+            "last": "2024-01-25"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 39,
+            "first": "2024-02-15",
+            "last": "2024-11-15"
+          },
+          "incrementalMeanPct": 0.2523
+        },
+        {
+          "fold": 3,
+          "usable": true,
+          "trainDates": {
+            "n": 116,
+            "first": "2022-07-21",
+            "last": "2024-11-01"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 40,
+            "first": "2024-11-22",
+            "last": "2025-09-08"
+          },
+          "incrementalMeanPct": -0.5267
+        },
+        {
+          "fold": 4,
+          "usable": true,
+          "trainDates": {
+            "n": 156,
+            "first": "2022-07-21",
+            "last": "2025-08-22"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 39,
+            "first": "2025-09-15",
+            "last": "2026-06-17"
+          },
+          "incrementalMeanPct": -0.1932
+        }
+      ],
+      "usableFolds": 4,
+      "positiveFolds": 2
+    },
+    "exRevised_13d_top10_5s": {
+      "label": "exRevised_13d_top10_5s",
+      "horizon": 5,
+      "topK": 10,
+      "joinedRows": 11956,
+      "tickers": 62,
+      "candidateDates": 197,
+      "oosDates": 158,
+      "siCoverage": 0.9699,
+      "arms": {
+        "A": {
+          "dates": 158,
+          "meanPct": -0.0033,
+          "medianPct": -0.1642,
+          "winRate": 0.481,
+          "sharpeLike": -0.009
+        },
+        "B": {
+          "dates": 158,
+          "meanPct": 0.6696,
+          "medianPct": 0.3273,
+          "winRate": 0.5443,
+          "sharpeLike": 1.07
+        },
+        "C": {
+          "dates": 158,
+          "meanPct": 0.6052,
+          "medianPct": 0.177,
+          "winRate": 0.5506,
+          "sharpeLike": 0.976
+        }
+      },
+      "meanIC": {
+        "A": -0.0016,
+        "B": 0.0021,
+        "C": -0.0046
+      },
+      "incremental": {
+        "meanPct": -0.0644,
+        "medianPct": 0.0678,
+        "winRate": 0.538,
+        "tTest": {
+          "t": -0.3351,
+          "pOneSided": 0.631233,
+          "pTwoSided": 0.737535,
+          "n": 158
+        },
+        "bootstrap": {
+          "lo": -0.4106,
+          "hi": 0.259,
+          "B": 5000,
+          "blockLen": 4,
+          "seed": 20260813
+        },
+        "maxDrawdownPct": -39.7016
+      },
+      "portfolio": {
+        "meanOverlap": 0.5949,
+        "meanTurnover": 0.4051,
+        "meanAddedDtc": 4.762,
+        "meanRemovedDtc": 1.882,
+        "crowdedShareB": 0.0285,
+        "crowdedShareC": 0.0576
+      },
+      "folds": [
+        {
+          "fold": 1,
+          "usable": true,
+          "trainDates": {
+            "n": 37,
+            "first": "2022-07-21",
+            "last": "2023-04-10"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 40,
+            "first": "2023-05-01",
+            "last": "2024-02-08"
+          },
+          "incrementalMeanPct": 0.0214
+        },
+        {
+          "fold": 2,
+          "usable": true,
+          "trainDates": {
+            "n": 77,
+            "first": "2022-07-21",
+            "last": "2024-01-25"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 39,
+            "first": "2024-02-15",
+            "last": "2024-11-15"
+          },
+          "incrementalMeanPct": 0.5239
+        },
+        {
+          "fold": 3,
+          "usable": true,
+          "trainDates": {
+            "n": 116,
+            "first": "2022-07-21",
+            "last": "2024-11-01"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 40,
+            "first": "2024-11-22",
+            "last": "2025-09-08"
+          },
+          "incrementalMeanPct": -0.7459
+        },
+        {
+          "fold": 4,
+          "usable": true,
+          "trainDates": {
+            "n": 156,
+            "first": "2022-07-21",
+            "last": "2025-08-22"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 39,
+            "first": "2025-09-15",
+            "last": "2026-06-17"
+          },
+          "incrementalMeanPct": -0.0418
+        }
+      ],
+      "usableFolds": 4,
+      "positiveFolds": 2
+    },
+    "exRevised_16d_top10_5s": {
+      "label": "exRevised_16d_top10_5s",
+      "horizon": 5,
+      "topK": 10,
+      "joinedRows": 11956,
+      "tickers": 62,
+      "candidateDates": 197,
+      "oosDates": 158,
+      "siCoverage": 0.9705,
+      "arms": {
+        "A": {
+          "dates": 158,
+          "meanPct": -0.0033,
+          "medianPct": -0.1642,
+          "winRate": 0.481,
+          "sharpeLike": -0.009
+        },
+        "B": {
+          "dates": 158,
+          "meanPct": 0.6696,
+          "medianPct": 0.3273,
+          "winRate": 0.5443,
+          "sharpeLike": 1.07
+        },
+        "C": {
+          "dates": 158,
+          "meanPct": 0.6426,
+          "medianPct": 0.3421,
+          "winRate": 0.5696,
+          "sharpeLike": 1.093
+        }
+      },
+      "meanIC": {
+        "A": -0.0016,
+        "B": 0.0021,
+        "C": 0.0029
+      },
+      "incremental": {
+        "meanPct": -0.027,
+        "medianPct": 0.1466,
+        "winRate": 0.538,
+        "tTest": {
+          "t": -0.1387,
+          "pOneSided": 0.555167,
+          "pTwoSided": 0.889667,
+          "n": 158
+        },
+        "bootstrap": {
+          "lo": -0.3698,
+          "hi": 0.3011,
+          "B": 5000,
+          "blockLen": 4,
+          "seed": 20260813
+        },
+        "maxDrawdownPct": -38.2469
+      },
+      "portfolio": {
+        "meanOverlap": 0.6095,
+        "meanTurnover": 0.3905,
+        "meanAddedDtc": 4.698,
+        "meanRemovedDtc": 1.874,
+        "crowdedShareB": 0.0304,
+        "crowdedShareC": 0.0519
+      },
+      "folds": [
+        {
+          "fold": 1,
+          "usable": true,
+          "trainDates": {
+            "n": 37,
+            "first": "2022-07-21",
+            "last": "2023-04-10"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 40,
+            "first": "2023-05-01",
+            "last": "2024-02-08"
+          },
+          "incrementalMeanPct": 0.3693
+        },
+        {
+          "fold": 2,
+          "usable": true,
+          "trainDates": {
+            "n": 77,
+            "first": "2022-07-21",
+            "last": "2024-01-25"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 39,
+            "first": "2024-02-15",
+            "last": "2024-11-15"
+          },
+          "incrementalMeanPct": 0.1707
+        },
+        {
+          "fold": 3,
+          "usable": true,
+          "trainDates": {
+            "n": 116,
+            "first": "2022-07-21",
+            "last": "2024-11-01"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 40,
+            "first": "2024-11-22",
+            "last": "2025-09-08"
+          },
+          "incrementalMeanPct": -0.4474
+        },
+        {
+          "fold": 4,
+          "usable": true,
+          "trainDates": {
+            "n": 156,
+            "first": "2022-07-21",
+            "last": "2025-08-22"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 39,
+            "first": "2025-09-15",
+            "last": "2026-06-17"
+          },
+          "incrementalMeanPct": -0.2
+        }
+      ],
+      "usableFolds": 4,
+      "positiveFolds": 2
+    },
+    "secondary_top5_5s": {
+      "label": "secondary_top5_5s",
+      "horizon": 5,
+      "topK": 5,
+      "joinedRows": 11956,
+      "tickers": 62,
+      "candidateDates": 197,
+      "oosDates": 158,
+      "siCoverage": 1,
+      "arms": {
+        "A": {
+          "dates": 158,
+          "meanPct": -0.107,
+          "medianPct": -0.3464,
+          "winRate": 0.462,
+          "sharpeLike": -0.243
+        },
+        "B": {
+          "dates": 158,
+          "meanPct": 0.8927,
+          "medianPct": 0.4737,
+          "winRate": 0.5443,
+          "sharpeLike": 1.027
+        },
+        "C": {
+          "dates": 158,
+          "meanPct": 0.5055,
+          "medianPct": 0.2265,
+          "winRate": 0.5253,
+          "sharpeLike": 0.68
+        }
+      },
+      "meanIC": {
+        "A": -0.0016,
+        "B": 0.0021,
+        "C": -0.0054
+      },
+      "incremental": {
+        "meanPct": -0.3872,
+        "medianPct": 0,
+        "winRate": 0.462,
+        "tTest": {
+          "t": -1.3524,
+          "pOneSided": 0.911871,
+          "pTwoSided": 0.176259,
+          "n": 158
+        },
+        "bootstrap": {
+          "lo": -0.9766,
+          "hi": 0.094,
+          "B": 5000,
+          "blockLen": 4,
+          "seed": 20260813
+        },
+        "maxDrawdownPct": -86.3148
+      },
+      "portfolio": {
+        "meanOverlap": 0.5696,
+        "meanTurnover": 0.4304,
+        "meanAddedDtc": 5.347,
+        "meanRemovedDtc": 1.868,
+        "crowdedShareB": 0.0354,
+        "crowdedShareC": 0.0797
+      },
+      "folds": [
+        {
+          "fold": 1,
+          "usable": true,
+          "trainDates": {
+            "n": 37,
+            "first": "2022-07-21",
+            "last": "2023-04-10"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 40,
+            "first": "2023-05-01",
+            "last": "2024-02-08"
+          },
+          "incrementalMeanPct": -0.3922
+        },
+        {
+          "fold": 2,
+          "usable": true,
+          "trainDates": {
+            "n": 77,
+            "first": "2022-07-21",
+            "last": "2024-01-25"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 39,
+            "first": "2024-02-15",
+            "last": "2024-11-15"
+          },
+          "incrementalMeanPct": 0.575
+        },
+        {
+          "fold": 3,
+          "usable": true,
+          "trainDates": {
+            "n": 116,
+            "first": "2022-07-21",
+            "last": "2024-11-01"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 40,
+            "first": "2024-11-22",
+            "last": "2025-09-08"
+          },
+          "incrementalMeanPct": -1.0969
+        },
+        {
+          "fold": 4,
+          "usable": true,
+          "trainDates": {
+            "n": 156,
+            "first": "2022-07-21",
+            "last": "2025-08-22"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 39,
+            "first": "2025-09-15",
+            "last": "2026-06-17"
+          },
+          "incrementalMeanPct": -0.6162
+        }
+      ],
+      "usableFolds": 4,
+      "positiveFolds": 1
+    },
+    "secondary_top10_10s": {
+      "label": "secondary_top10_10s",
+      "horizon": 10,
+      "topK": 10,
+      "joinedRows": 11932,
+      "tickers": 62,
+      "candidateDates": 197,
+      "oosDates": 158,
+      "siCoverage": 1,
+      "arms": {
+        "A": {
+          "dates": 158,
+          "meanPct": 0.2697,
+          "medianPct": -0.0248,
+          "winRate": 0.5,
+          "sharpeLike": 0.493
+        },
+        "B": {
+          "dates": 158,
+          "meanPct": 1.6994,
+          "medianPct": 0.5846,
+          "winRate": 0.5506,
+          "sharpeLike": 1.687
+        },
+        "C": {
+          "dates": 158,
+          "meanPct": 1.2416,
+          "medianPct": 0.2489,
+          "winRate": 0.519,
+          "sharpeLike": 1.324
+        }
+      },
+      "meanIC": {
+        "A": -0.0006,
+        "B": 0.0124,
+        "C": -0.0013
+      },
+      "incremental": {
+        "meanPct": -0.4577,
+        "medianPct": -0.246,
+        "winRate": 0.4494,
+        "tTest": {
+          "t": -1.8322,
+          "pOneSided": 0.966537,
+          "pTwoSided": 0.066927,
+          "n": 158
+        },
+        "bootstrap": {
+          "lo": -0.9886,
+          "hi": -0.0478,
+          "B": 5000,
+          "blockLen": 4,
+          "seed": 20260813
+        },
+        "maxDrawdownPct": -96.329
+      },
+      "portfolio": {
+        "meanOverlap": 0.5873,
+        "meanTurnover": 0.4127,
+        "meanAddedDtc": 4.611,
+        "meanRemovedDtc": 1.813,
+        "crowdedShareB": 0.0323,
+        "crowdedShareC": 0.0329
+      },
+      "folds": [
+        {
+          "fold": 1,
+          "usable": true,
+          "trainDates": {
+            "n": 37,
+            "first": "2022-07-21",
+            "last": "2023-04-10"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 40,
+            "first": "2023-05-01",
+            "last": "2024-02-08"
+          },
+          "incrementalMeanPct": -0.1857
+        },
+        {
+          "fold": 2,
+          "usable": true,
+          "trainDates": {
+            "n": 77,
+            "first": "2022-07-21",
+            "last": "2024-01-25"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 39,
+            "first": "2024-02-15",
+            "last": "2024-11-15"
+          },
+          "incrementalMeanPct": 0.5021
+        },
+        {
+          "fold": 3,
+          "usable": true,
+          "trainDates": {
+            "n": 116,
+            "first": "2022-07-21",
+            "last": "2024-11-01"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 40,
+            "first": "2024-11-22",
+            "last": "2025-09-08"
+          },
+          "incrementalMeanPct": -1.4804
+        },
+        {
+          "fold": 4,
+          "usable": true,
+          "trainDates": {
+            "n": 156,
+            "first": "2022-07-21",
+            "last": "2025-08-22"
+          },
+          "purgedDates": 2,
+          "testDates": {
+            "n": 39,
+            "first": "2025-09-15",
+            "last": "2026-06-17"
+          },
+          "incrementalMeanPct": -0.6477
+        }
+      ],
+      "usableFolds": 4,
+      "positiveFolds": 1
+    }
+  },
+  "fdr": {
+    "family": [
+      {
+        "id": "primary_13d_top10_5s",
+        "p": 0.720905,
+        "q": 0.9665370000000001,
+        "rank": 4,
+        "index": 0,
+        "survives": false,
+        "alpha": 0.1
+      },
+      {
+        "id": "stale_16d_top10_5s",
+        "p": 0.541878,
+        "q": 0.9665370000000001,
+        "rank": 1,
+        "index": 1,
+        "survives": false,
+        "alpha": 0.1
+      },
+      {
+        "id": "exRevised_13d_top10_5s",
+        "p": 0.631233,
+        "q": 0.9665370000000001,
+        "rank": 3,
+        "index": 2,
+        "survives": false,
+        "alpha": 0.1
+      },
+      {
+        "id": "exRevised_16d_top10_5s",
+        "p": 0.555167,
+        "q": 0.9665370000000001,
+        "rank": 2,
+        "index": 3,
+        "survives": false,
+        "alpha": 0.1
+      },
+      {
+        "id": "secondary_top5_5s",
+        "p": 0.911871,
+        "q": 0.9665370000000001,
+        "rank": 5,
+        "index": 4,
+        "survives": false,
+        "alpha": 0.1
+      },
+      {
+        "id": "secondary_top10_10s",
+        "p": 0.966537,
+        "q": 0.9665370000000001,
+        "rank": 6,
+        "index": 5,
+        "survives": false,
+        "alpha": 0.1
+      }
+    ],
+    "primaryQ": 0.9665,
+    "alpha": 0.1
+  },
+  "generatedAt": "2026-08-14T02:20:22.248Z"
+}
