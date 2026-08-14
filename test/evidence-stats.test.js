@@ -183,3 +183,13 @@ test('pValueOf still resolves on a legacy persisted summary (rounded fields only
   const p = ES.pValueOf({ avg: 1.5, se: 0.4 });
   assert.ok(Number.isFinite(p) && p < 0.05, 'legacy summaries without exact fields must keep working');
 });
+
+test('pValueOf uses Student-t at df = effectiveN − 1, not the normal CDF', () => {
+  // t = 2.2 at effectiveN 12 → df 11: exact two-sided t p ≈ 0.050; the old normal
+  // CDF gave ≈ 0.028 — anti-conservative p's feeding the BH demote family.
+  const p = ES.pValueOf({ avgExact: 2.2, seExact: 1, effectiveN: 12 });
+  assert.ok(Math.abs(p - 0.0501) < 0.005, `expected ≈0.050, got ${p}`);
+  // Without effectiveN (legacy persisted summary) the normal CDF is retained.
+  const pLegacy = ES.pValueOf({ avg: 2.2, se: 1 });
+  assert.ok(Math.abs(pLegacy - 0.0278) < 0.005, `legacy path stays normal-CDF, got ${pLegacy}`);
+});
