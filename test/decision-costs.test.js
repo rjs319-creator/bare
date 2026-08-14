@@ -50,14 +50,19 @@ test('costTierFor: unknown liquidity can never be the cheapest tier while a meas
 });
 
 // ── the cost model ──────────────────────────────────────────────────────────
-test('costModel: charges the round trip against the trade OWN target move', () => {
-  // entry 100 → target 110 = a 10% gross move. Liquid round trip = 0.16%.
+test('costModel: charges the round trip against the trade OWN target move — on the FILL basis', () => {
+  // BASIS CHANGE (audit 2026-08-14, entry-basis fix): entry 100 → target 110 is a 10%
+  // move off the PRINTED level, but the graded contract (strategy-contracts fillPolicy
+  // next-session-open, apex-routes entry-v2.2) fills at the next open — exec-v1 models
+  // that as printed level + adverse entry-side slippage. Liquid slip = 0.08%, so the
+  // expected fill is 100.08 and the gross move charged is (110−100.08)/100.08 = 9.91%.
   const m = C.costModel({ entry: 100, target: 110, liquidity: { dollarVol: 5e8 } });
   assert.strictEqual(m.known, true);
-  assert.strictEqual(m.grossMovePct, 10);
+  assert.strictEqual(m.grossMovePct, 9.91);
+  assert.strictEqual(m.grossMovePrintedPct, 10, 'the printed-level move stays auditable');
   assert.strictEqual(m.roundTripPct, roundTripCostPct('liquid'));
-  assert.strictEqual(m.netMovePct, +(10 - roundTripCostPct('liquid')).toFixed(2));
-  // Cost is a trivial share of a 10% move → penalty barely below 1.
+  assert.strictEqual(m.netMovePct, +(9.91 - roundTripCostPct("liquid")).toFixed(2));
+  // Cost is a trivial share of a ~10% move → penalty barely below 1.
   assert.ok(m.penalty > 0.98, `expected a light penalty, got ${m.penalty}`);
 });
 
@@ -89,8 +94,11 @@ test('costModel: a zero or inverted move degrades to neutral rather than dividin
 });
 
 test('costModel: shorts are charged the same round trip as longs', () => {
+  // Fill basis: a short's adverse entry fill is BELOW the print (sells down) — 99.92 on
+  // the liquid tier — so the 10% printed move is a 9.93% expected move from the fill.
   const short = C.costModel({ entry: 100, target: 90, side: 'short', liquidity: { dollarVol: 5e8 } });
-  assert.strictEqual(short.grossMovePct, 10, 'a short target below entry is still a 10% move');
+  assert.strictEqual(short.grossMovePrintedPct, 10, 'a short target below entry is still a 10% printed move');
+  assert.strictEqual(short.grossMovePct, 9.93, 'fill-adjusted: (99.92−90)/99.92');
   assert.ok(short.penalty > 0.98);
 });
 
@@ -159,6 +167,89 @@ test('SAFETY: a signal with no target ranks EXACTLY as it did before costs bound
     // no costPenalty argument at all = the pre-change call signature
   });
   assert.strictEqual(ranked.score, expected);
+});
+
+// ── ENTRY BASIS (audit 2026-08-14) ──────────────────────────────────────────
+// THE DEFECT: the live board's cost/net-EV waterfall priced off the PUBLISHED entry
+// (screener Breakout = signal-day close; Early/Setup = pivot stop-entry), but the strategy
+// contract (fillPolicy next-session-open) and the grading path (apex-routes entry-v2.2)
+// grade the track record from next-open fills. exec-v1 (lib/execution-policy) is the
+// canonical fill model: the achievable fill sits an adverse entry-side slippage leg beyond
+// the printed level. The decision math must price the expected FILL, not the print — and
+// the correction may only SHRINK the expected net move, never flatter it.
+const { EXECUTION_POLICY_VERSION, perSideSlippagePct } = require('../lib/execution-policy');
+
+test('ENTRY BASIS: the fill adjustment reuses exec-v1 per-side slippage — one source of friction truth', () => {
+  const adj = C.entryAdjustmentFor({ entry: 100, target: 110, liquidity: { dollarVol: 5e8 } });
+  assert.strictEqual(adj.adjusted, true);
+  assert.strictEqual(adj.slippagePct, perSideSlippagePct('liquid'));
+  assert.strictEqual(adj.execModel, EXECUTION_POLICY_VERSION);
+});
+
+test('REGRESSION: the net expected move SHRINKS vs the printed-level computation (long, quantified)', () => {
+  // Representative screener-style long: entry 100 → target 110, measured-liquid.
+  // OLD (printed-level) basis: gross 10.00%, net 10.00 − 0.16 = 9.84%.
+  // NEW (fill) basis: fill = 100 × (1 + 0.0008) = 100.08 → gross 9.91%, net 9.75%.
+  const m = C.costModel({ source: 'screener', section: 'screener', entry: 100, target: 110, liquidity: { dollarVol: 5e8 } });
+  const oldNet = +(10 - m.roundTripPct).toFixed(2);
+  assert.strictEqual(oldNet, 9.84);
+  assert.strictEqual(m.netMovePct, 9.75, 'fill-adjusted net');
+  assert.ok(m.netMovePct < oldNet, `net must shrink: ${m.netMovePct} vs printed-basis ${oldNet}`);
+  assert.strictEqual(+(oldNet - m.netMovePct).toFixed(2), 0.09, 'the haircut is ~0.09pp on a liquid 10% target');
+});
+
+test('CONSERVATIVE INVARIANT: the fill adjustment can only shrink the expected move, never flatter it', () => {
+  const cases = [
+    { entry: 100, target: 110, liquidity: { dollarVol: 5e8 } },          // liquid long
+    { entry: 100, target: 90, side: 'short', liquidity: { dollarVol: 5e8 } }, // liquid short
+    { entry: 30.2, target: 34, liquidity: { dollarVol: 5e6 } },          // small long
+    { entry: 8.35, target: 9.6, liquidity: { dollarVol: 3e5 } },         // micro long
+    { entry: 50, target: 49, side: 'short', liquidity: { dollarVol: 3e5 } }, // micro short
+    { entry: 20, target: 20.1, liquidity: { price: 20 } },               // unknown tier, thin move
+    { section: 'Biotech', entry: 40, target: 48, liquidity: { dollarVol: 1e7 } },
+  ];
+  for (const sig of cases) {
+    const m = C.costModel(sig);
+    assert.strictEqual(m.known, true);
+    assert.ok(m.grossMovePct <= m.grossMovePrintedPct,
+      `fill basis must never exceed the printed basis: ${JSON.stringify(sig)} → ${m.grossMovePct} vs ${m.grossMovePrintedPct}`);
+  }
+});
+
+test('ENTRY BASIS: a move fully eaten by the entry leg is 0 (charged), never null (neutral)', () => {
+  // micro slip = 0.75%; a 0.5% printed move is gone before the round trip is even charged.
+  // Returning null here would mean known:false → penalty 1 — missing move as a favorable
+  // assumption, the exact failure class this codebase bans.
+  const m = C.costModel({ entry: 100, target: 100.5, liquidity: { dollarVol: 3e5 } });
+  assert.strictEqual(m.known, true);
+  assert.strictEqual(m.grossMovePct, 0);
+  assert.ok(m.netMovePct < 0, 'net is the full round trip underwater');
+  assert.strictEqual(m.penalty, C.MAX_COST_DRAG_FLOOR);
+});
+
+test('BASIS STAMP: the cost payload is self-describing about which basis the decision used', () => {
+  const m = C.costModel({ entry: 100, target: 110, liquidity: { dollarVol: 5e8 } });
+  assert.strictEqual(m.entryBasis, 'next-open+slippage');
+  assert.strictEqual(m.execModel, EXECUTION_POLICY_VERSION);
+  assert.strictEqual(m.basis, `next-open+slippage (${EXECUTION_POLICY_VERSION})`);
+  assert.strictEqual(m.entrySlippagePct, +(perSideSlippagePct('liquid') * 100).toFixed(3));
+  // A lead with no target still says which basis WOULD apply — audits never guess.
+  const lead = C.costModel({ entry: 100, liquidity: { dollarVol: 5e8 } });
+  assert.strictEqual(lead.known, false);
+  assert.strictEqual(lead.entryBasis, 'next-open+slippage');
+  assert.strictEqual(lead.execModel, EXECUTION_POLICY_VERSION);
+});
+
+test('DAY TRADE FROZEN: the daytrade section keeps the published-level basis (grading is pinned to legacy)', () => {
+  // apex-routes entryBasisForSection returns null for daytrade — its displayed record is
+  // contractually frozen on the logged entry, so the decision basis must match IT, not
+  // the next-open contract the other sections grade on.
+  const m = C.costModel({ section: 'daytrade', source: 'daytrade', entry: 100, target: 110, liquidity: { dollarVol: 5e8 } });
+  assert.strictEqual(m.grossMovePct, 10, 'printed-level move, exactly as before the basis fix');
+  assert.strictEqual(m.netMovePct, +(10 - m.roundTripPct).toFixed(2));
+  assert.strictEqual(m.entryBasis, 'published-level');
+  assert.strictEqual(m.execModel, null);
+  assert.match(m.basis, /published-level/);
 });
 
 test('SAFETY: a fat swing target is essentially unaffected by the round trip', () => {
