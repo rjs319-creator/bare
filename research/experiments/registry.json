@@ -18836,6 +18836,155 @@
       "immutable": true
     },
     {
+      "recordedAt": "2026-08-14T16:25:19.114Z",
+      "id": "omega-score-autopsy-2026-08",
+      "hypothesis": "The fixed OMEGA score misranks its own cohort because identifiable components/penalties carry negative information; a transparent frozen re-specification exists that beats the current score without losing to plain r10.",
+      "family": "swing-ranking",
+      "frozenConfig": {
+        "horizon": 5,
+        "topK": 10,
+        "folds": 4,
+        "purgeCohorts": 2,
+        "bootstrap": {
+          "B": 5000,
+          "blockLen": 4,
+          "seed": 20260813
+        },
+        "axis": "SPY step-5 from idx 262",
+        "primaryUniverse": "LIQUID_OPTIONS minus ETFs (62)",
+        "broadUniverse": "LARGE ∪ SMALL_CAPS ∩ cache, ADV>=20M, top 500 (got 306)",
+        "variants": [
+          "V1_noPenalty",
+          "V2_icPruned (train-IC rule)",
+          "V3_momentumTilt {\"relStrength\":0.3,\"momentumPersistence\":0.25,\"volumeQuality\":0.1,\"trendSmoothness\":0.1,\"catalystPersistence\":0.05,\"setupQuality\":0.05,\"regime\":0.05,\"modelResidual\":0.1}",
+          "V4_blendR10",
+          "V5_r10"
+        ],
+        "simplicityOrder": [
+          "V1_noPenalty",
+          "V3_momentumTilt",
+          "V2_icPruned",
+          "V4_blendR10"
+        ],
+        "fdrFamily": "5 variants x 2 universes = 10 one-sided lift tests"
+      },
+      "dataSnapshot": {
+        "primaryPanelDates": 197,
+        "primaryRows": 11974,
+        "broadTickers": 306,
+        "oosDates": 158
+      },
+      "codeVersion": "score-autopsy-v1",
+      "variationsAttempted": 10,
+      "result": {
+        "verdict": "NO_INCREMENTAL_ALPHA",
+        "fixCandidate": null,
+        "gateReport": {
+          "V1_noPenalty": {
+            "ok": false,
+            "why": [
+              "loses to r10 on primary (-0.3659)",
+              "loses to r10 on broad (-0.4095)"
+            ]
+          },
+          "V3_momentumTilt": {
+            "ok": false,
+            "why": [
+              "primary lift not positive",
+              "primary CI not above zero",
+              "folds 1/4",
+              "q 0.6963",
+              "loses to r10 on primary (-0.926)",
+              "loses to r10 on broad (-0.9281)",
+              "outlier-driven (drop-3-best <= 0)"
+            ]
+          },
+          "V2_icPruned": {
+            "ok": false,
+            "why": [
+              "primary lift not positive",
+              "primary CI not above zero",
+              "folds 1/4",
+              "q 0.9637",
+              "broad lift not positive",
+              "loses to r10 on primary (-1.1895)",
+              "loses to r10 on broad (-1.0643)",
+              "outlier-driven (drop-3-best <= 0)"
+            ]
+          },
+          "V4_blendR10": {
+            "ok": false,
+            "why": [
+              "loses to r10 on primary (-0.2525)",
+              "loses to r10 on broad (-0.2104)"
+            ]
+          }
+        },
+        "autopsyHeadlines": {
+          "finalScoreIC": {
+            "meanIC": 0.0043,
+            "ci95": {
+              "lo": -0.019,
+              "hi": 0.0286
+            },
+            "dates": 197
+          },
+          "prePenaltyBaseIC": {
+            "meanIC": 0.009,
+            "ci95": {
+              "lo": -0.0148,
+              "hi": 0.035
+            },
+            "dates": 197
+          },
+          "penaltyMultIC": {
+            "meanIC": -0.0102,
+            "ci95": {
+              "lo": -0.0406,
+              "hi": 0.0171
+            },
+            "dates": 197
+          },
+          "r10IC": {
+            "meanIC": 0.0138,
+            "ci95": {
+              "lo": -0.0171,
+              "hi": 0.0438
+            },
+            "dates": 197
+          }
+        },
+        "variantHeadlines": {
+          "V1_noPenalty": {
+            "lift": 0.549,
+            "vsR10": -0.3659,
+            "q": 0.0178
+          },
+          "V2_icPruned": {
+            "lift": -0.2746,
+            "vsR10": -1.1895,
+            "q": 0.9637
+          },
+          "V3_momentumTilt": {
+            "lift": -0.0111,
+            "vsR10": -0.926,
+            "q": 0.6963
+          },
+          "V4_blendR10": {
+            "lift": 0.6624,
+            "vsR10": -0.2525,
+            "q": 0.0178
+          },
+          "V5_r10": {
+            "lift": 0.9149,
+            "vsR10": 0,
+            "q": 0.0178
+          }
+        }
+      },
+      "immutable": true
+    },
+    {
       "recordedAt": "2026-08-14T02:04:08.395Z",
       "id": "omega-si-level-5d-top10-2026-08",
       "hypothesis": "FINRA consolidated short-interest crowding LEVEL (log days-to-cover + >=7 DTC flag + 4 frozen interactions) adds incremental 5-session net residual alpha to a trained OMEGA baseline on the options-liquid universe (top-10, next-open entry, 0.16% cost).",
