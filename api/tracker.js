@@ -162,6 +162,9 @@ const PRIVILEGED_OPS = new Set([
   // SI OVERLAY prospective logger/resolver — writes the frozen-model shadow ledger
   // (si/v1/prospective/*) + a ~75-name provider fan-out. Cron/manual-with-bearer only.
   'sitick',
+  // OMEGA R10-vs-SCORE shadow A/B logger/resolver — writes the prospective decision
+  // ledger (omegaab/v1/*) + a ~75-name provider fan-out. Cron/manual-with-bearer only.
+  'omegaabtick',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
@@ -464,6 +467,9 @@ async function handleRequest(req, res) {
   if (req.query.op === 'cfltick') return require('../lib/cfl-routes').runCflTick(req, res);
   if (req.query.op === 'cflbackfill') return require('../lib/cfl-routes').runCflBackfill(req, res);
   // SI OVERLAY — Short Interest Overlay shadow research (OMEGA_SI_LEVEL_5D_TOP10, weight-0).
+  // OMEGA R10-vs-SCORE prospective shadow A/B (research/90-91 follow-through, weight-0).
+  if (req.query.op === 'omegaab') return require('../lib/omega-ab-routes').runOmegaAb(req, res);
+  if (req.query.op === 'omegaabtick') return require('../lib/omega-ab-routes').runOmegaAbTick(req, res);
   if (req.query.op === 'sistatus') return require('../lib/si-overlay-routes').runSiStatus(req, res);
   if (req.query.op === 'sisnapshot') return require('../lib/si-overlay-routes').runSiSnapshot(req, res);
   if (req.query.op === 'sihealth') return require('../lib/si-overlay-routes').runSiHealth(req, res);
