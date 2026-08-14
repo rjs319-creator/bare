@@ -23,6 +23,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadPeerLab } from './peer-lab.js';
   import { loadGridlock } from './gridlock.js';
   import { loadCflLab } from './cfl-lab.js';
+  import { loadSiLab } from './si-lab.js';
   import { loadPsrlLab } from './psrl-lab.js';
   import { renderShell as renderPulse2Shell } from './pulse2-render.js';
   import { loadTechCommand } from './tech-command.js';
@@ -50,7 +51,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     markets:    ['rotation', 'sectors', 'news', 'thesis', 'pulse', 'evolve'],
     predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     proof:      ['scoreboard', 'evidence', 'movermiss', 'intradayval', 'baselines', 'leaderboard', 'coreperf'],
-    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge', 'cfl', 'orbitlab', 'rltlab', 'psrl', 'gridlock', 'peerlab'],
+    // NOTE: ignition-live-routes.test.js pins 'edge','cfl','orbitlab' + 'rltlab','psrl',
+    // 'gridlock' adjacencies and requires 'peerlab' to close the list — insert new lab
+    // tabs only at the unpinned seams (silab sits between gridlock and peerlab).
+    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge', 'cfl', 'orbitlab', 'rltlab', 'psrl', 'gridlock', 'silab', 'peerlab'],
   };
   // Holding-horizon of each candidate/position sub-tab → drives the horizon dividers
   // in the sub-nav so the app is visibly separated by time horizon (the spec ask).
@@ -72,7 +76,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     movermiss: '🔍 Mover Miss Audit', intradayval: '🧪 Intraday Validation',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', thesis: '🧾 Thesis Changes', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
-    backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)', rltlab: '🧭 Leadership (shadow)', gridlock: '⚡ GRIDLOCK (shadow)', peerlab: '🕸 Peers (shadow)', cfl: '🔭 Counterfactual Lab', psrl: '🪜 Persistent Trends (shadow)',
+    backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)', rltlab: '🧭 Leadership (shadow)', gridlock: '⚡ GRIDLOCK (shadow)', peerlab: '🕸 Peers (shadow)', cfl: '🔭 Counterfactual Lab', silab: '📉 Short Interest (shadow)', psrl: '🪜 Persistent Trends (shadow)',
     leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', evidence: '🎖️ Evidence', baselines: '🧪 Baselines', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
   // Plain-English "what is this tab?" hovers for a novice investor — one line per
@@ -113,6 +117,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     peerlab: 'Peer Propagation — shadow engine flagging stocks whose PEERS and historical leaders have moved while their own price has not yet reacted. Early/confirming stages only; zero weight, never a buy signal, no probabilities until out-of-fold calibration is earned.',
     gridlock: 'GRIDLOCK — shadow engine mapping PHYSICAL constraints (AI data-center power demand, plant retirements, turbine orders — PJM first) to companies with VERIFIED exposure. Decomposed research scores only; zero weight, no probabilities, never a buy signal.',
     psrl: 'Persistent Trends — shadow layer ranking stocks by CONTINUITY of their advance (gradual staircase vs one-day jump-and-plateau) and by beta-adjusted leadership vs SPY and their sector. Evidence scores only, zero weight, never a buy signal; probabilities are not trained or calibrated.',
+    silab: 'Short Interest Overlay — a SHADOW experiment testing whether FINRA consolidated short-interest crowding (days-to-cover) adds incremental 5-session alpha to OMEGA selection. Reports the honest verdict, walk-forward evidence and per-ticker crowding context. Weight-0; it does not affect the live OMEGA ranking and is never a buy/sell or squeeze signal.',
     cfl: 'Counterfactual Lab — which big winners the pipeline MISSED (and at exactly which stage: universe, data, screeners, ranking, timing, risk gate, display), which picks became duds and why, and whether each miss was preventable or genuinely unforecastable. Measurement only; never a buy signal.',
     'tech-command': 'One technology universe, three INDEPENDENT conclusions: a day-trade board projected read-only from the frozen Day Trade engine, a swing board that inherits the app\u2019s governed eligibility gate, and a separate long-term investment model. Every candidate states why now, the exact trigger and what invalidates it; an \u201cAround the Corner\u201d timeline covers past, present and scheduled events. Options and social attention are weight-zero annotations that can never originate a trade, and no probability is shown because none is calibrated.',
     rotation: 'Which sectors money is rotating into and out of, week over week.',
@@ -457,6 +462,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'peerlab' && typeof ensurePeerLab === 'function') ensurePeerLab();
     if (sub === 'gridlock' && typeof ensureGridlock === 'function') ensureGridlock();
     if (sub === 'cfl' && typeof ensureCflLab === 'function') ensureCflLab();
+    if (sub === 'silab' && typeof ensureSiLab === 'function') ensureSiLab();
     if (sub === 'psrl' && typeof ensurePsrlLab === 'function') ensurePsrlLab();
     if (sub === 'tech-command' && typeof ensureTechCommand === 'function') ensureTechCommand();
     if (sub === 'evidence' && typeof ensureEvidence === 'function') ensureEvidence();
@@ -4479,6 +4485,19 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (btn) btn.addEventListener('click', () => loadCflLab(document.getElementById('cfl-container')));
     }
     loadCflLab(document.getElementById('cfl-container'));
+  }
+
+  // 📉 Short Interest Overlay (shadow) — read-only Research Lab panel (loadSiLab
+  // renders op=sistatus / siwf / sisnapshot). Weight-0 experiment readout; never
+  // a buy signal, never affects the live OMEGA rank.
+  let siLabLoaded = false;
+  function ensureSiLab() {
+    if (!siLabLoaded) {
+      siLabLoaded = true;
+      const btn = document.getElementById('silab-refresh-btn');
+      if (btn) btn.addEventListener('click', () => loadSiLab(document.getElementById('silab-container')));
+    }
+    loadSiLab(document.getElementById('silab-container'));
   }
 
   // 🪜 Persistent Trends (shadow) — read-only PSRL board (loadPsrlLab renders

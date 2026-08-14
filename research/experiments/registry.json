@@ -1166,6 +1166,297 @@
       "immutable": true
     },
     {
+      "recordedAt": "2026-08-14T00:36:34.230Z",
+      "id": "cot-incremental-2026-08",
+      "hypothesis": "Point-in-time CFTC TFF positioning (levered-fund z-scores, crowding-reversal flags) improves 5/10-session swing selection, either by timing the cohort or via predeclared crowding x momentum interactions.",
+      "family": "macro-overlay",
+      "frozenConfig": {
+        "markets": {
+          "ES": "13874+",
+          "NQ": "20974+",
+          "RTY": "239742",
+          "VIX": "1170E1",
+          "TY": "043602",
+          "DX": "098662"
+        },
+        "horizons": [
+          5,
+          10
+        ],
+        "topK": 10,
+        "demote": 10,
+        "step": 5,
+        "maxNames": 1500,
+        "availability": "report date + 4 calendar days (cot-features.asOfJoin, the only join door)",
+        "bootstrap": {
+          "B": 1000,
+          "blockLen": 21,
+          "seed": 20260813
+        },
+        "battery": "9 timing features x 2 horizons + 2 crowding-demotion interactions x 2 horizons, FDR across all 22"
+      },
+      "dataSnapshot": {
+        "cotRows": 2376,
+        "cotRange": {
+          "first": "2022-09-13",
+          "reports": 396
+        },
+        "panelDates": 0,
+        "panelRange": null
+      },
+      "codeVersion": "cot-incremental-v1",
+      "variationsAttempted": 0,
+      "result": {
+        "verdict": "NO_INCREMENTAL_ALPHA",
+        "fdrSurvivors": [],
+        "ranking": {
+          "ES.crowdDemote@5d": {
+            "activeDates": 0
+          },
+          "NQ.crowdDemote@5d": {
+            "activeDates": 0
+          },
+          "ES.crowdDemote@10d": {
+            "activeDates": 0
+          },
+          "NQ.crowdDemote@10d": {
+            "activeDates": 0
+          }
+        },
+        "timingHeadlines": {}
+      },
+      "immutable": true
+    },
+    {
+      "recordedAt": "2026-08-14T00:37:32.290Z",
+      "id": "cot-incremental-2026-08.r2",
+      "hypothesis": "Point-in-time CFTC TFF positioning (levered-fund z-scores, crowding-reversal flags) improves 5/10-session swing selection, either by timing the cohort or via predeclared crowding x momentum interactions.",
+      "family": "macro-overlay",
+      "frozenConfig": {
+        "markets": {
+          "ES": "13874+",
+          "NQ": "20974+",
+          "RTY": "239742",
+          "VIX": "1170E1",
+          "TY": "043602",
+          "DX": "098662"
+        },
+        "horizons": [
+          5,
+          10
+        ],
+        "topK": 10,
+        "demote": 10,
+        "step": 5,
+        "maxNames": 1500,
+        "availability": "report date + 4 calendar days (cot-features.asOfJoin, the only join door)",
+        "bootstrap": {
+          "B": 1000,
+          "blockLen": 21,
+          "seed": 20260813
+        },
+        "battery": "9 timing features x 2 horizons + 2 crowding-demotion interactions x 2 horizons, FDR across all 22"
+      },
+      "dataSnapshot": {
+        "cotRows": 2376,
+        "cotRange": {
+          "first": "2022-09-13",
+          "reports": 396
+        },
+        "panelDates": 196,
+        "panelRange": {
+          "first": "2022-07-21",
+          "last": "2026-06-10"
+        }
+      },
+      "codeVersion": "cot-incremental-v1",
+      "variationsAttempted": 18,
+      "result": {
+        "verdict": "NO_INCREMENTAL_ALPHA",
+        "fdrSurvivors": [],
+        "ranking": {
+          "ES.crowdDemote@5d": {
+            "version": "evidence-stats-v1",
+            "n": 196,
+            "effectiveN": 196,
+            "avg": 0,
+            "sd": 0.06,
+            "se": 0.0042,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0.01
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0.01
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0.01,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                0.017,
+                0,
+                0,
+                0
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 196,
+            "observations": 196,
+            "activeDates": 3
+          },
+          "NQ.crowdDemote@5d": {
+            "version": "evidence-stats-v1",
+            "n": 196,
+            "effectiveN": 196,
+            "avg": 0,
+            "sd": 0,
+            "se": 0,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "iid (too few observations for HAC)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 196,
+            "observations": 196,
+            "activeDates": 0
+          },
+          "ES.crowdDemote@10d": {
+            "version": "evidence-stats-v1",
+            "n": 196,
+            "effectiveN": 196,
+            "avg": 0,
+            "sd": 0.01,
+            "se": 0.0005,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 10,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 9, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                -0.002,
+                0,
+                0,
+                0
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 196,
+            "observations": 196,
+            "activeDates": 3
+          },
+          "NQ.crowdDemote@10d": {
+            "version": "evidence-stats-v1",
+            "n": 196,
+            "effectiveN": 196,
+            "avg": 0,
+            "sd": 0,
+            "se": 0,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 10,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "iid (too few observations for HAC)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 196,
+            "observations": 196,
+            "activeDates": 0
+          }
+        },
+        "timingHeadlines": {
+          "TY.lev.z52@10d": {
+            "n": 196,
+            "obs": -0.0979,
+            "ci95": {
+              "lo": -0.2596,
+              "hi": 0.0072
+            },
+            "p": 0.056,
+            "B": 1000
+          }
+        }
+      },
+      "immutable": true,
+      "parentExperimentId": "cot-incremental-2026-08"
+    },
+    {
       "recordedAt": "2026-08-05T04:41:31.817Z",
       "id": "D-revision-breadth-2026-08",
       "hypothesis": "Analyst estimate-revision BREADTH (share of analysts revising up) and ACCELERATION (change in that breadth) rank forward returns better than a price-only ranking on the identical PIT universe and dates.",
@@ -18443,6 +18734,410 @@
       },
       "immutable": true,
       "parentExperimentId": "news-composite-100-formula-2026-08"
+    },
+    {
+      "recordedAt": "2026-08-14T02:04:08.395Z",
+      "id": "omega-si-level-5d-top10-2026-08",
+      "hypothesis": "FINRA consolidated short-interest crowding LEVEL (log days-to-cover + >=7 DTC flag + 4 frozen interactions) adds incremental 5-session net residual alpha to a trained OMEGA baseline on the options-liquid universe (top-10, next-open entry, 0.16% cost).",
+      "family": "crowding-overlay",
+      "frozenConfig": {
+        "horizonSessions": 5,
+        "topK": 10,
+        "ridgeAlpha": 25,
+        "testFolds": 4,
+        "purgeCohorts": 2,
+        "bootstrap": {
+          "B": 5000,
+          "blockLen": 4,
+          "seed": 20260813
+        },
+        "costRoundTripPct": 0.16,
+        "lagDaysPrimary": 13,
+        "lagDaysStale": 16,
+        "annualizeCohorts": 7.0992957397195395,
+        "minOosDates": 40,
+        "minCoverage": 0.6,
+        "minUsableFolds": 2,
+        "shadowMinOosDates": 100,
+        "shadowMinPositiveFolds": 3,
+        "shadowMaxQ": 0.1,
+        "universe": "LIQUID_OPTIONS minus ETFs (62 names, lib/optionsflow)",
+        "axis": "SPY step-5 cohorts from index 262",
+        "availability": "finra-si.asOfJoinSi — settlement + 13 calendar days, conservative fallback (the only join door)",
+        "features": {
+          "baseline": [
+            "score",
+            "utility",
+            "pPositive",
+            "p3pct",
+            "p5pct",
+            "expResid10",
+            "r10",
+            "distFrom52High",
+            "relVol5",
+            "regRiskOn",
+            "regBearish"
+          ],
+          "si": [
+            "siLogDtc",
+            "siCrowded7",
+            "siXscoreZ",
+            "siXr10Z",
+            "siC7XscoreZ",
+            "siC7Xr10Z"
+          ],
+          "sectors": [
+            "Communication Services",
+            "Consumer Discretionary",
+            "Consumer Staples",
+            "Energy",
+            "Financials",
+            "Health Care",
+            "Industrials",
+            "Technology"
+          ]
+        },
+        "specs": [
+          "primary_13d_top10_5s",
+          "stale_16d_top10_5s",
+          "exRevised_13d_top10_5s",
+          "exRevised_16d_top10_5s",
+          "secondary_top5_5s",
+          "secondary_top10_10s"
+        ]
+      },
+      "dataSnapshot": {
+        "siSnapshots": 124,
+        "panelDates": 197,
+        "joinedRows": 11956,
+        "tickers": 62,
+        "oosDates": 158
+      },
+      "codeVersion": "si-overlay-v1",
+      "variationsAttempted": 0,
+      "result": {
+        "verdict": "NO_INCREMENTAL_ALPHA",
+        "verdictReasons": [
+          "incremental mean 0 not positive",
+          "bootstrap 95% interval not entirely above zero",
+          "positive folds 0 < 3",
+          "sign reversal (or missing result) under the 16-day availability delay",
+          "material collapse after excluding revised records",
+          "FDR q null > 0.1"
+        ],
+        "primaryIncremental": {
+          "meanPct": 0,
+          "ci95": {
+            "lo": 0,
+            "hi": 0,
+            "B": 5000,
+            "blockLen": 4,
+            "seed": 20260813
+          },
+          "pOneSided": null,
+          "q": null,
+          "positiveFolds": 0
+        },
+        "reproductionCheck": {
+          "preliminary": {
+            "joinedRows": 11770,
+            "tickers": 62,
+            "oosDates": 129,
+            "incrementalMeanPct": 0.517,
+            "ci95": {
+              "lo": 0.172,
+              "hi": 0.878
+            },
+            "positiveFolds": 4,
+            "pOneSided": 0.0027,
+            "q": 0.064
+          },
+          "observed": {
+            "joinedRows": 11956,
+            "tickers": 62,
+            "oosDates": 158,
+            "incrementalMeanPct": 0,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "positiveFolds": 0,
+            "pOneSided": null,
+            "q": null
+          }
+        }
+      },
+      "immutable": true
+    },
+    {
+      "recordedAt": "2026-08-14T02:06:11.742Z",
+      "id": "omega-si-level-5d-top10-2026-08.r2",
+      "hypothesis": "FINRA consolidated short-interest crowding LEVEL (log days-to-cover + >=7 DTC flag + 4 frozen interactions) adds incremental 5-session net residual alpha to a trained OMEGA baseline on the options-liquid universe (top-10, next-open entry, 0.16% cost).",
+      "family": "crowding-overlay",
+      "frozenConfig": {
+        "horizonSessions": 5,
+        "topK": 10,
+        "ridgeAlpha": 25,
+        "testFolds": 4,
+        "purgeCohorts": 2,
+        "bootstrap": {
+          "B": 5000,
+          "blockLen": 4,
+          "seed": 20260813
+        },
+        "costRoundTripPct": 0.16,
+        "lagDaysPrimary": 13,
+        "lagDaysStale": 16,
+        "annualizeCohorts": 7.0992957397195395,
+        "minOosDates": 40,
+        "minCoverage": 0.6,
+        "minUsableFolds": 2,
+        "shadowMinOosDates": 100,
+        "shadowMinPositiveFolds": 3,
+        "shadowMaxQ": 0.1,
+        "universe": "LIQUID_OPTIONS minus ETFs (62 names, lib/optionsflow)",
+        "axis": "SPY step-5 cohorts from index 262",
+        "availability": "finra-si.asOfJoinSi — settlement + 13 calendar days, conservative fallback (the only join door)",
+        "features": {
+          "baseline": [
+            "score",
+            "utility",
+            "pPositive",
+            "p3pct",
+            "p5pct",
+            "expResid10",
+            "r10",
+            "distFrom52High",
+            "relVol5",
+            "regRiskOn",
+            "regBearish"
+          ],
+          "si": [
+            "siLogDtc",
+            "siCrowded7",
+            "siXscoreZ",
+            "siXr10Z",
+            "siC7XscoreZ",
+            "siC7Xr10Z"
+          ],
+          "sectors": [
+            "Communication Services",
+            "Consumer Discretionary",
+            "Consumer Staples",
+            "Energy",
+            "Financials",
+            "Health Care",
+            "Industrials",
+            "Technology"
+          ]
+        },
+        "specs": [
+          "primary_13d_top10_5s",
+          "stale_16d_top10_5s",
+          "exRevised_13d_top10_5s",
+          "exRevised_16d_top10_5s",
+          "secondary_top5_5s",
+          "secondary_top10_10s"
+        ]
+      },
+      "dataSnapshot": {
+        "siSnapshots": 124,
+        "panelDates": 197,
+        "joinedRows": 11956,
+        "tickers": 62,
+        "oosDates": 158
+      },
+      "codeVersion": "si-overlay-v1",
+      "variationsAttempted": 6,
+      "result": {
+        "verdict": "NO_INCREMENTAL_ALPHA",
+        "verdictReasons": [
+          "incremental mean -0.1071 not positive",
+          "bootstrap 95% interval not entirely above zero",
+          "positive folds 1 < 3",
+          "sign reversal (or missing result) under the 16-day availability delay",
+          "material collapse after excluding revised records",
+          "FDR q 0.9665 > 0.1"
+        ],
+        "primaryIncremental": {
+          "meanPct": -0.1071,
+          "ci95": {
+            "lo": -0.4635,
+            "hi": 0.2056,
+            "B": 5000,
+            "blockLen": 4,
+            "seed": 20260813
+          },
+          "pOneSided": 0.720905,
+          "q": 0.9665,
+          "positiveFolds": 1
+        },
+        "reproductionCheck": {
+          "preliminary": {
+            "joinedRows": 11770,
+            "tickers": 62,
+            "oosDates": 129,
+            "incrementalMeanPct": 0.517,
+            "ci95": {
+              "lo": 0.172,
+              "hi": 0.878
+            },
+            "positiveFolds": 4,
+            "pOneSided": 0.0027,
+            "q": 0.064
+          },
+          "observed": {
+            "joinedRows": 11956,
+            "tickers": 62,
+            "oosDates": 158,
+            "incrementalMeanPct": -0.1071,
+            "ci95": {
+              "lo": -0.4635,
+              "hi": 0.2056
+            },
+            "positiveFolds": 1,
+            "pOneSided": 0.720905,
+            "q": 0.9665
+          }
+        }
+      },
+      "immutable": true,
+      "parentExperimentId": "omega-si-level-5d-top10-2026-08"
+    },
+    {
+      "recordedAt": "2026-08-14T02:09:38.897Z",
+      "id": "omega-si-level-5d-top10-2026-08.r3",
+      "hypothesis": "FINRA consolidated short-interest crowding LEVEL (log days-to-cover + >=7 DTC flag + 4 frozen interactions) adds incremental 5-session net residual alpha to a trained OMEGA baseline on the options-liquid universe (top-10, next-open entry, 0.16% cost).",
+      "family": "crowding-overlay",
+      "frozenConfig": {
+        "horizonSessions": 5,
+        "topK": 10,
+        "ridgeAlpha": 25,
+        "testFolds": 4,
+        "purgeCohorts": 2,
+        "bootstrap": {
+          "B": 5000,
+          "blockLen": 4,
+          "seed": 20260813
+        },
+        "costRoundTripPct": 0.16,
+        "lagDaysPrimary": 13,
+        "lagDaysStale": 16,
+        "annualizeCohorts": 7.0992957397195395,
+        "minOosDates": 40,
+        "minCoverage": 0.6,
+        "minUsableFolds": 2,
+        "shadowMinOosDates": 100,
+        "shadowMinPositiveFolds": 3,
+        "shadowMaxQ": 0.1,
+        "universe": "LIQUID_OPTIONS minus ETFs (62 names, lib/optionsflow)",
+        "axis": "SPY step-5 cohorts from index 262",
+        "availability": "finra-si.asOfJoinSi — settlement + 13 calendar days, conservative fallback (the only join door)",
+        "features": {
+          "baseline": [
+            "score",
+            "utility",
+            "pPositive",
+            "p3pct",
+            "p5pct",
+            "expResid10",
+            "r10",
+            "distFrom52High",
+            "relVol5",
+            "regRiskOn",
+            "regBearish"
+          ],
+          "si": [
+            "siLogDtc",
+            "siCrowded7",
+            "siXscoreZ",
+            "siXr10Z",
+            "siC7XscoreZ",
+            "siC7Xr10Z"
+          ],
+          "sectors": [
+            "Communication Services",
+            "Consumer Discretionary",
+            "Consumer Staples",
+            "Energy",
+            "Financials",
+            "Health Care",
+            "Industrials",
+            "Technology"
+          ]
+        },
+        "specs": [
+          "primary_13d_top10_5s",
+          "stale_16d_top10_5s",
+          "exRevised_13d_top10_5s",
+          "exRevised_16d_top10_5s",
+          "secondary_top5_5s",
+          "secondary_top10_10s"
+        ]
+      },
+      "dataSnapshot": {
+        "siSnapshots": 124,
+        "panelDates": 197,
+        "joinedRows": 11956,
+        "tickers": 62,
+        "oosDates": 158
+      },
+      "codeVersion": "si-overlay-v1",
+      "variationsAttempted": 6,
+      "result": {
+        "verdict": "NO_INCREMENTAL_ALPHA",
+        "verdictReasons": [
+          "incremental mean -0.1071 not positive",
+          "bootstrap 95% interval not entirely above zero",
+          "positive folds 1 < 3",
+          "sign reversal (or missing result) under the 16-day availability delay",
+          "material collapse after excluding revised records",
+          "FDR q 0.9665 > 0.1"
+        ],
+        "primaryIncremental": {
+          "meanPct": -0.1071,
+          "ci95": {
+            "lo": -0.4635,
+            "hi": 0.2056,
+            "B": 5000,
+            "blockLen": 4,
+            "seed": 20260813
+          },
+          "pOneSided": 0.720905,
+          "q": 0.9665,
+          "positiveFolds": 1
+        },
+        "reproductionCheck": {
+          "preliminary": {
+            "joinedRows": 11770,
+            "tickers": 62,
+            "oosDates": 129,
+            "incrementalMeanPct": 0.517,
+            "ci95": {
+              "lo": 0.172,
+              "hi": 0.878
+            },
+            "positiveFolds": 4,
+            "pOneSided": 0.0027,
+            "q": 0.064
+          },
+          "observed": {
+            "joinedRows": 11956,
+            "tickers": 62,
+            "oosDates": 158,
+            "incrementalMeanPct": -0.1071,
+            "ci95": {
+              "lo": -0.4635,
+              "hi": 0.2056
+            },
+            "positiveFolds": 1,
+            "pOneSided": 0.720905,
+            "q": 0.9665
+          }
+        }
+      },
+      "immutable": true,
+      "parentExperimentId": "omega-si-level-5d-top10-2026-08"
     },
     {
       "recordedAt": "2026-08-13T01:14:46.660Z",

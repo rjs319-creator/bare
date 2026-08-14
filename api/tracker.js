@@ -159,6 +159,9 @@ const PRIVILEGED_OPS = new Set([
   //     candle-fetch budget.
   //   swinggrade     — calls STORE.recordResolved, writing resolved outcomes.
   'universecurate', 'researchgrade', 'swinggrade',
+  // SI OVERLAY prospective logger/resolver — writes the frozen-model shadow ledger
+  // (si/v1/prospective/*) + a ~75-name provider fan-out. Cron/manual-with-bearer only.
+  'sitick',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
@@ -188,6 +191,9 @@ const EXPENSIVE_OPS = new Set([
   // page traffic coalesces; the throttle stops a cache-busting caller from driving the
   // rebuild at will.
   'techcommand', 'techcommandticker',
+  // SI overlay heavier reads: sisnapshot may refresh the live FINRA cache, siledger can
+  // page Blob prospective docs, siexport streams the full CSV ledger.
+  'sisnapshot', 'siledger', 'siexport',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -457,6 +463,14 @@ async function handleRequest(req, res) {
   if (req.query.op === 'cflforecast') return require('../lib/cfl-routes').runCflForecast(req, res);
   if (req.query.op === 'cfltick') return require('../lib/cfl-routes').runCflTick(req, res);
   if (req.query.op === 'cflbackfill') return require('../lib/cfl-routes').runCflBackfill(req, res);
+  // SI OVERLAY — Short Interest Overlay shadow research (OMEGA_SI_LEVEL_5D_TOP10, weight-0).
+  if (req.query.op === 'sistatus') return require('../lib/si-overlay-routes').runSiStatus(req, res);
+  if (req.query.op === 'sisnapshot') return require('../lib/si-overlay-routes').runSiSnapshot(req, res);
+  if (req.query.op === 'sihealth') return require('../lib/si-overlay-routes').runSiHealth(req, res);
+  if (req.query.op === 'siwf') return require('../lib/si-overlay-routes').runSiWf(req, res);
+  if (req.query.op === 'siledger') return require('../lib/si-overlay-routes').runSiLedger(req, res);
+  if (req.query.op === 'siexport') return require('../lib/si-overlay-routes').runSiExport(req, res);
+  if (req.query.op === 'sitick') return require('../lib/si-overlay-routes').runSiTick(req, res);
   // PSRL — Persistent Staircase Relative Leadership (shadow, weight-0).
   if (req.query.op === 'psrl') return require('../lib/psrl-routes').runPsrlBoard(req, res);
   if (req.query.op === 'psrldetail') return require('../lib/psrl-routes').runPsrlDetail(req, res);
