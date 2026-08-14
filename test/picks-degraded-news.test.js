@@ -25,14 +25,22 @@ const path = require('node:path');
 // end-to-end with no network and no real key (same require-cache seam as the
 // @vercel/blob stub in test/store-read-completeness.test.js).
 let anthropicResponse = { content: [] };
-const sdkId = require.resolve('@anthropic-ai/sdk');
-require.cache[sdkId] = {
-  id: sdkId, filename: sdkId, loaded: true,
-  exports: class FakeAnthropic {
-    constructor() { this.messages = { create: async () => anthropicResponse }; }
-  },
-};
-const handler = require('../api/picks');
+// CI runs the suite DEPENDENCY-FREE (no npm install step) — the SDK is only present
+// locally. The functional battery needs the require-cache stub, so it skips cleanly
+// where the module cannot resolve; the structural source assertions below always run.
+let sdkId = null;
+try { sdkId = require.resolve('@anthropic-ai/sdk'); } catch { /* dependency-free CI */ }
+if (sdkId) {
+  require.cache[sdkId] = {
+    id: sdkId, filename: sdkId, loaded: true,
+    exports: class FakeAnthropic {
+      constructor() { this.messages = { create: async () => anthropicResponse }; }
+    },
+  };
+}
+const handler = sdkId ? require('../api/picks') : null;
+// Functional tests (need the stubbed SDK); structural tests keep the plain `test`.
+const ftest = (name, fn) => test(name, { skip: sdkId ? false : '@anthropic-ai/sdk not installed (dependency-free CI)' }, fn);
 
 const SRC = fs.readFileSync(path.join(__dirname, '..', 'api', 'picks.js'), 'utf8');
 
@@ -58,7 +66,7 @@ function mkRes() {
 }
 async function run() { const res = mkRes(); await handler({ query: {}, headers: {} }, res); return res; }
 
-test('a news-provider 429 with zero picks is degraded, NOT a genuine abstention, and short-cached', async () => {
+ftest('a news-provider 429 with zero picks is degraded, NOT a genuine abstention, and short-cached', async () => {
   global.fetch = async (url) => {
     if (String(url).includes('newsapi.org')) return resp(429, { status: 'error', code: 'rateLimited' });
     throw new Error('unexpected fetch: ' + url);
@@ -72,7 +80,7 @@ test('a news-provider 429 with zero picks is degraded, NOT a genuine abstention,
     'a degraded run must not pin the CDN — 5 minutes, not 4 hours');
 });
 
-test('a THROWN news fetch no longer rejects the unguarded Promise.all into a 500', async () => {
+ftest('a THROWN news fetch no longer rejects the unguarded Promise.all into a 500', async () => {
   global.fetch = async (url) => {
     if (String(url).includes('newsapi.org')) throw new Error('ECONNRESET');
     throw new Error('unexpected fetch: ' + url);
@@ -84,7 +92,7 @@ test('a THROWN news fetch no longer rejects the unguarded Promise.all into a 500
   assert.equal(res.body.abstained, false);
 });
 
-test('a healthy genuine abstention keeps abstained:true but is short-cached (never 4h on empty state)', async () => {
+ftest('a healthy genuine abstention keeps abstained:true but is short-cached (never 4h on empty state)', async () => {
   global.fetch = async (url) => {
     if (String(url).includes('newsapi.org')) return resp(200, { status: 'ok', articles: [] });
     throw new Error('no sectors today');       // fetchSectors degrades to null on its own
@@ -99,7 +107,7 @@ test('a healthy genuine abstention keeps abstained:true but is short-cached (nev
     'a genuine abstention is cacheable, briefly — never CDN-pinned for 4h');
 });
 
-test('only a healthy run WITH picks keeps the 4-hour CDN cache', async () => {
+ftest('only a healthy run WITH picks keeps the 4-hour CDN cache', async () => {
   global.fetch = async (url) => {
     const u = String(url);
     if (u.includes('newsapi.org')) {
@@ -116,7 +124,7 @@ test('only a healthy run WITH picks keeps the 4-hour CDN cache', async () => {
   assert.match(String(res.headers['Cache-Control']), /s-maxage=14400\b/);
 });
 
-test('a degraded run that still yields picks is flagged and short-cached too', async () => {
+ftest('a degraded run that still yields picks is flagged and short-cached too', async () => {
   // 3 of 4 feeds answer; one is down. The picks are usable but the read is partial —
   // it must not be pinned for 4h as if it were a full-coverage run.
   let newsCalls = 0;
