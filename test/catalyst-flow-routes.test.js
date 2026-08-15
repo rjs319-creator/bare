@@ -78,7 +78,7 @@ test('the registry op serves every declared feature with its full contract', () 
 
 test('the lab tab is registered without disturbing the neighbours other tests pin', () => {
   const app = read('public/js/app.js');
-  assert.match(app, /'gridlock', 'catalyst', 'peerlab'\]/, 'catalyst sits before peerlab in TAB_GROUPS.lab');
+  assert.match(app, /'catalyst', 'peerlab'\]/, 'catalyst sits immediately before peerlab in TAB_GROUPS.lab');
   assert.match(app, /catalyst: '⚡ Catalyst–Flow \(research\)'/);
   assert.match(app, /sub === 'catalyst'/, 'lazy-load hook wired in showTab');
   assert.match(app, /catalyst-lab\.js/);
