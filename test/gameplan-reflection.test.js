@@ -216,8 +216,8 @@ test('SYSTEM prompt instructs calibration-correction with a per-clause budget th
 test('route wiring: ET date anchor, gated SPY fetch, decoupled persistence, rebase before record', () => {
   const src = read('lib/gameplan-routes.js');
   assert.match(src, /require\('\.\/gameplan-reflection'\)/);
-  assert.match(src, /sessionInfoAt\(new Date\(\)\)\.etDate/, 'plan + ledger date must be the ET calendar date, not UTC');
-  assert.doesNotMatch(src, /new Date\(\)\.toISOString\(\)\.slice\(0, 10\)/, 'the UTC date stamp must be gone');
+  assert.match(src, /const date = sessionInfoAt\(new Date\(\)\)\.etDate/, 'plan + ledger date must be the ET calendar date, not UTC');
+  assert.doesNotMatch(src, /const date = new Date\(\)\.toISOString\(\)\.slice\(0, 10\)/, 'the UTC plan-date stamp must be gone');
   assert.match(src, /hasMaturablePending/, 'SPY fetch gated on a maturable entry');
   assert.match(src, /'6mo'/, "SPY range must clear fetchDailyHistory's 60-candle floor");
   assert.match(src, /reflection: reflectionText/);
