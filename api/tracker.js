@@ -181,6 +181,13 @@ const PRIVILEGED_OPS = new Set([
   // fan-out. Cron/manual-with-bearer only; op=dilution (read) stays public.
   'dilutiontick',
   'dilutionresolve',
+  // TECH OPERATIONAL EVIDENCE collectors/resolvers — write the techev/v1/* observation
+  // ledgers + forward ledger and spend bounded official-API fan-outs (npm/GitHub/SEC/
+  // job boards/status pages) plus a candle fan-out on resolve. Cron/manual-with-bearer
+  // only; op=techev / op=techevdetail (reads) stay public.
+  'techevtick',
+  'techevresolve',
+  'techevbackfill',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
@@ -213,6 +220,10 @@ const EXPENSIVE_OPS = new Set([
   // SI overlay heavier reads: sisnapshot may refresh the live FINRA cache, siledger can
   // page Blob prospective docs, siexport streams the full CSV ledger.
   'sisnapshot', 'siledger', 'siexport',
+  // techev/techevdetail: cached Blob-projection reads (several documents per call, and the
+  // detail read fans across per-source series docs). CDN-cached when populated; the throttle
+  // stops a cache-busting anonymous loop from driving repeated multi-doc Blob reads.
+  'techev', 'techevdetail',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -516,6 +527,11 @@ async function handleRequest(req, res) {
   if (req.query.op === 'dilution') return require('../lib/dilution-routes').runDilution(req, res);
   if (req.query.op === 'dilutiontick') return require('../lib/dilution-routes').runDilutionTick(req, res);
   if (req.query.op === 'dilutionresolve') return require('../lib/dilution-routes').runDilutionResolve(req, res);
+  if (req.query.op === 'techev') return require('../lib/tech-evidence-routes').runTechEv(req, res);
+  if (req.query.op === 'techevdetail') return require('../lib/tech-evidence-routes').runTechEvDetail(req, res);
+  if (req.query.op === 'techevtick') return require('../lib/tech-evidence-routes').runTechEvTick(req, res);
+  if (req.query.op === 'techevresolve') return require('../lib/tech-evidence-routes').runTechEvResolve(req, res);
+  if (req.query.op === 'techevbackfill') return require('../lib/tech-evidence-routes').runTechEvBackfill(req, res);
   if (req.query.op === 'alphabook') return require('../lib/alphabook-routes').runAlphaBook(req, res);
   if (req.query.op === 'vrptick') return require('../lib/vrp-routes').runVrpTick(req, res);
   if (req.query.op === 'vrpbook') return require('../lib/vrp-routes').runVrpBook(req, res);

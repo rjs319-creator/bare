@@ -3404,6 +3404,13 @@
 @keyframes tc-shimmer { 0% { background-position:200% 0; } 100% { background-position:-200% 0; } }
 @media (prefers-reduced-motion:reduce) { .tc-skel-block { animation:none; } }
 
+/* Operational Evidence panel (tech-evidence-render.js) */
+.tc-scroll { overflow-x:auto; margin:8px 0; }
+.tc-table { width:100%; min-width:520px; border-collapse:collapse; font-size:0.72rem; }
+.tc-table th { text-align:left; font-size:0.62rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-dim); border-bottom:1px solid var(--border); padding:4px 6px; font-weight:600; }
+.tc-table td { padding:4px 6px; border-bottom:1px solid var(--border); color:var(--text); }
+.tc-table .tc-subrow td { border-bottom:1px solid var(--border-hi); padding-top:0; }
+
 @media (max-width:640px) {
   .tc-kvgrid, .tc-kvgrid-tight { grid-template-columns:1fr; }
   .tc-align-row { grid-template-columns:minmax(64px,1fr) repeat(4,minmax(76px,1fr)); font-size:0.6rem; }
