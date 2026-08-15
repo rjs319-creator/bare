@@ -71,19 +71,32 @@ test('appendObservations merges first-wins by id and reports zero added on repla
   assert.equal(stored[0].firstObservedAt, NOW, 'firstObservedAt is preserved from the first sighting');
 });
 
-test('appendForwardRows enforces the row cap and discloses trimming', async (t) => {
-  const docs = {};
-  const origRead = STORE.readJSON;
-  const origWrite = STORE.writeJSON;
-  STORE.readJSON = async (key, fallback) => (key in docs ? docs[key] : fallback);
-  STORE.writeJSON = async (key, doc) => { docs[key] = doc; return { pathname: key }; };
-  t.after(() => { STORE.readJSON = origRead; STORE.writeJSON = origWrite; });
+test('rowsFromDayDocs: derived cache rebuilds from immutable day docs — Blob RMW lost-update corruption self-heals', () => {
+  const toRow = (event, o) => ({ d: event.cutoffDate, t: event.ticker, arm: event.arm, n: [o.netResidual[1], o.netResidual[5], o.netResidual[10]] });
+  const outcome = (id) => ({ id, status: 'resolved', netResidual: { 1: 0.01, 5: 0.02, 10: 0.03 } });
+  const dayDocs = [
+    { date: '2026-06-01', events: [{ id: 'e1', cutoffDate: '2026-06-01', ticker: 'MDB', arm: 'npm' }, { id: 'e2', cutoffDate: '2026-06-01', ticker: 'DDOG', arm: 'npm' }], resolved: { outcomes: [outcome('e1'), outcome('e2'), { id: 'e2x', status: 'no-history-after-retries' }] } },
+    { date: '2026-06-08', events: [{ id: 'e3', cutoffDate: '2026-06-08', ticker: 'MDB', arm: 'github' }], resolved: { outcomes: [outcome('e3')] } },
+    { date: '2026-06-15', events: [{ id: 'e4', cutoffDate: '2026-06-15', ticker: 'NET', arm: 'npm' }] }, // unresolved day — excluded
+  ];
+  const built = TSTORE.rowsFromDayDocs(dayDocs, { toRow });
+  assert.equal(built.rows.length, 3, 'every resolved outcome across day docs becomes exactly one row');
+  assert.equal(built.trimmed, 0);
+  // Deterministic: rebuilding from the same day docs yields the same rows regardless of
+  // any prior rows.json content — this is what makes lost updates unrepresentable.
+  assert.deepEqual(TSTORE.rowsFromDayDocs(dayDocs, { toRow }).rows, built.rows);
+});
 
-  const mkRows = (n, tag) => Array.from({ length: n }, (_, i) => ({ d: '2026-01-01', t: `${tag}${i}`, arm: 'npm', n: [0, 0, 0] }));
-  await TSTORE.appendForwardRows(mkRows(TSTORE.EVENT_ROW_CAP, 'a'));
-  const r = await TSTORE.appendForwardRows(mkRows(10, 'b'));
-  assert.equal(r.total, TSTORE.EVENT_ROW_CAP);
-  assert.equal(r.trimmed, 10, 'silent truncation is forbidden — the trim count must be disclosed');
+test('rowsFromDayDocs enforces the row cap and discloses trimming', () => {
+  const toRow = (event) => ({ d: event.cutoffDate, t: event.ticker, arm: 'npm', n: [0, 0, 0] });
+  const dayDocs = Array.from({ length: TSTORE.EVENT_ROW_CAP + 10 }, (_, i) => ({
+    date: '2026-06-01',
+    events: [{ id: `e${i}`, cutoffDate: '2026-06-01', ticker: `T${i}`, arm: 'npm' }],
+    resolved: { outcomes: [{ id: `e${i}`, status: 'resolved', netResidual: { 1: 0, 5: 0, 10: 0 } }] },
+  }));
+  const built = TSTORE.rowsFromDayDocs(dayDocs, { toRow });
+  assert.equal(built.rows.length, TSTORE.EVENT_ROW_CAP);
+  assert.equal(built.trimmed, 10, 'silent truncation is forbidden — the trim count must be disclosed');
 });
 
 test('mergeHealth: a failing run never erases the previous lastSuccessAt', async (t) => {
@@ -100,21 +113,6 @@ test('mergeHealth: a failing run never erases the previous lastSuccessAt', async
   const h = await TSTORE.readHealth();
   assert.equal(h.sources.npm.lastSuccessAt, 't1', 'the success record must survive a failing night');
   assert.equal(h.sources.npm.lastError, 'HTTP 503');
-});
-
-test('appendForwardRows dedupes by (cutoff,ticker,arm) — a crashed pass cannot double-count', async (t) => {
-  const docs = {};
-  const origRead = STORE.readJSON;
-  const origWrite = STORE.writeJSON;
-  STORE.readJSON = async (key, fallback) => (key in docs ? docs[key] : fallback);
-  STORE.writeJSON = async (key, doc) => { docs[key] = doc; return { pathname: key }; };
-  t.after(() => { STORE.readJSON = origRead; STORE.writeJSON = origWrite; });
-
-  const r = { d: '2026-06-01', t: 'MDB', arm: 'npm', n: [0, 0.01, 0.02] };
-  await TSTORE.appendForwardRows([r]);
-  const second = await TSTORE.appendForwardRows([r]);
-  assert.equal(second.added, 0);
-  assert.equal(second.total, 1, 'replaying the same resolution must not duplicate the row');
 });
 
 test('series day cap trims the OLDEST days', () => {
