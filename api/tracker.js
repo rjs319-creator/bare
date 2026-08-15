@@ -176,6 +176,11 @@ const PRIVILEGED_OPS = new Set([
   // OMEGA R10-vs-SCORE shadow A/B logger/resolver — writes the prospective decision
   // ledger (omegaab/v1/*) + a ~75-name provider fan-out. Cron/manual-with-bearer only.
   'omegaabtick',
+  // 424B5 DILUTION FLAG shadow logger/resolver — writes the snapshot + write-once
+  // prospective ledger (dilution/v1/*) and spends an EDGAR fetch / a ≤60-name candle
+  // fan-out. Cron/manual-with-bearer only; op=dilution (read) stays public.
+  'dilutiontick',
+  'dilutionresolve',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
@@ -507,6 +512,10 @@ async function handleRequest(req, res) {
   if (req.query.op === 'catalystflow') return require('../lib/catalyst-flow-routes').runCatalystFlow(req, res);
   if (req.query.op === 'catalystflowcoverage') return require('../lib/catalyst-flow-routes').runCatalystFlowCoverage(req, res);
   if (req.query.op === 'catalystflowregistry') return require('../lib/catalyst-flow-routes').runCatalystFlowRegistry(req, res);
+  // 424B5 DILUTION FLAG — shadow avoid-flag overlay (weight-0; research/95 finding).
+  if (req.query.op === 'dilution') return require('../lib/dilution-routes').runDilution(req, res);
+  if (req.query.op === 'dilutiontick') return require('../lib/dilution-routes').runDilutionTick(req, res);
+  if (req.query.op === 'dilutionresolve') return require('../lib/dilution-routes').runDilutionResolve(req, res);
   if (req.query.op === 'alphabook') return require('../lib/alphabook-routes').runAlphaBook(req, res);
   if (req.query.op === 'vrptick') return require('../lib/vrp-routes').runVrpTick(req, res);
   if (req.query.op === 'vrpbook') return require('../lib/vrp-routes').runVrpBook(req, res);

@@ -4,6 +4,7 @@
   import { fetchJSON, HEAVY_TIMEOUT_MS } from './fetch-json.js';
   import { startLivePrices as startScreenerLive, stopLivePrices as stopScreenerLive, LIVE_SCREENERS } from './live-price.js';
   import { startFlowBadges, setFlowNav, FLOW_BADGE_TABS } from './flow-badge.js';
+  import { startDilutionBadges, DILUTION_BADGE_TABS } from './dilution-badge.js';
   import { initCommandPalette, openPalette, revealTicker } from './command-palette.js';
 import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadOpportunities, mountOpportunitiesTab, whyNowBadge } from './opportunities.js';
@@ -547,6 +548,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // Live intraday price overlay on the stock screeners (daily-bar signals, live price).
     if (LIVE_SCREENERS.has(sub)) startScreenerLive(document.getElementById(sub)); else stopScreenerLive();
     if (FLOW_BADGE_TABS.has(sub)) startFlowBadges(document.getElementById(sub));
+    // Shadow 424B5 dilution flag (research/95) — display-only avoid-flag badge.
+    if (DILUTION_BADGE_TABS.has(sub)) startDilutionBadges(document.getElementById(sub));
 
     const act = document.querySelector('.mobile-top-tabs .mtt-item.active');
     if (act) act.scrollIntoView({ inline: 'center', block: 'nearest', behavior: opts.instant ? 'auto' : 'smooth' });
