@@ -36,14 +36,17 @@ function qualityChip(q) {
 function healthStrip(p) {
   const h = p.health || {};
   const sources = Object.entries(h.sources || {});
-  const fresh = sources.filter(([, s]) => s && s.lastSuccessAt && !s.lastError).length;
-  const failing = sources.filter(([, s]) => s && s.lastError).length;
+  // Disjoint buckets: a partial success (delivered data despite an error) is degraded,
+  // never counted as an outright failure with zero freshness.
   const notConfigured = sources.filter(([, s]) => s && s.configured === false).length;
+  const healthy = sources.filter(([, s]) => s && s.configured !== false && s.lastSuccessAt && !s.lastError).length;
+  const degraded = sources.filter(([, s]) => s && s.configured !== false && s.lastSuccessAt && s.lastError).length;
+  const failing = sources.filter(([, s]) => s && s.configured !== false && !s.lastSuccessAt && s.lastError).length;
   const fw = p.forward || {};
   const cells = [
     ['Last collection', h.updatedAt ? dt(h.updatedAt) : 'never'],
     ['Verified mappings', `${p.coverage ? p.coverage.verifiedMappings : 0} (${p.coverage ? p.coverage.verifiedTickers.length : 0} tickers)`],
-    ['Sources fresh / failing / unconfigured', `${fresh} / ${failing} / ${notConfigured}`],
+    ['Sources healthy / degraded / failing / unconfigured', `${healthy} / ${degraded} / ${failing} / ${notConfigured}`],
     ['Eligible forward events', String(fw.eligibleEvents ?? 0)],
     ['Resolved events', String(fw.resolvedEvents ?? 0)],
   ];

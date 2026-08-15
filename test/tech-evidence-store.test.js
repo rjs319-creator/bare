@@ -86,6 +86,37 @@ test('appendForwardRows enforces the row cap and discloses trimming', async (t) 
   assert.equal(r.trimmed, 10, 'silent truncation is forbidden — the trim count must be disclosed');
 });
 
+test('mergeHealth: a failing run never erases the previous lastSuccessAt', async (t) => {
+  const docs = {};
+  const origRead = STORE.readJSON;
+  const origWrite = STORE.writeJSON;
+  STORE.readJSON = async (key, fallback) => (key in docs ? docs[key] : fallback);
+  STORE.writeJSON = async (key, doc) => { docs[key] = doc; return { pathname: key }; };
+  t.after(() => { STORE.readJSON = origRead; STORE.writeJSON = origWrite; });
+
+  await TSTORE.mergeHealth({ sources: { npm: { lastAttemptAt: 't1', lastSuccessAt: 't1', lastError: null } } });
+  // a failed run patches lastSuccessAt: undefined — the shallow-spread bug clobbered it
+  await TSTORE.mergeHealth({ sources: { npm: { lastAttemptAt: 't2', lastSuccessAt: undefined, lastError: 'HTTP 503' } } });
+  const h = await TSTORE.readHealth();
+  assert.equal(h.sources.npm.lastSuccessAt, 't1', 'the success record must survive a failing night');
+  assert.equal(h.sources.npm.lastError, 'HTTP 503');
+});
+
+test('appendForwardRows dedupes by (cutoff,ticker,arm) — a crashed pass cannot double-count', async (t) => {
+  const docs = {};
+  const origRead = STORE.readJSON;
+  const origWrite = STORE.writeJSON;
+  STORE.readJSON = async (key, fallback) => (key in docs ? docs[key] : fallback);
+  STORE.writeJSON = async (key, doc) => { docs[key] = doc; return { pathname: key }; };
+  t.after(() => { STORE.readJSON = origRead; STORE.writeJSON = origWrite; });
+
+  const r = { d: '2026-06-01', t: 'MDB', arm: 'npm', n: [0, 0.01, 0.02] };
+  await TSTORE.appendForwardRows([r]);
+  const second = await TSTORE.appendForwardRows([r]);
+  assert.equal(second.added, 0);
+  assert.equal(second.total, 1, 'replaying the same resolution must not duplicate the row');
+});
+
 test('series day cap trims the OLDEST days', () => {
   let series = TSTORE.emptySeries('npm');
   let d = '2024-01-01';

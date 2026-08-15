@@ -29,6 +29,7 @@ const state = {
   techev: null,           // op=techev payload (optional enrichment — its failure never blanks the page)
   techevError: null,
   techevLoading: false,
+  techevAt: 0,            // last successful fetch (ms) — refreshed when stale, not on every poll
   timer: null,
   container: null,
   prefs: {
@@ -218,13 +219,16 @@ async function load({ force = false } = {}) {
 
 // Optional enrichment: the Operational Evidence panel. Its failure or absence must
 // never blank the command boards — it degrades to an in-section error state.
+const TECHEV_REFRESH_MS = 30 * 60 * 1000; // snapshot changes ~daily; a day-long tab must not pin day-old data
+
 async function loadTechEvidence({ force = false } = {}) {
   if (state.techevLoading) return;
-  if (!force && state.techev) return; // snapshot changes at most daily — no need to re-poll
+  if (!force && state.techev && Date.now() - state.techevAt < TECHEV_REFRESH_MS) return;
   state.techevLoading = true;
   try {
     const data = await fetchJSON(`/api/tracker?op=techev${force ? `&_=${Date.now()}` : ''}`, { timeoutMs: OPTIONAL_TIMEOUT_MS });
     state.techev = data;
+    state.techevAt = Date.now();
     state.techevError = null;
   } catch (e) {
     state.techevError = String((e && e.message) || e);

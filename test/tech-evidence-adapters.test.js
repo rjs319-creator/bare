@@ -31,6 +31,19 @@ test('guardedFetch enforces the body-size cap', async () => {
   assert.equal(r.category, 'oversized');
 });
 
+test('budget exhaustion skips remaining mappings VISIBLY instead of overrunning', async () => {
+  const NPM = require('../lib/tech-evidence/adapters/npm');
+  const spentBudget = { t0: Date.now() - 10000, deadlineMs: 1 }; // already over
+  let called = 0;
+  const r = await NPM.collectNpm({
+    mappings: [{ ticker: 'MDB', mappingId: 'm1', version: 2, sourceId: 'mongodb' }],
+    now: NOW, budget: spentBudget, fetchImpl: async () => { called += 1; return okJson({}); },
+  });
+  assert.equal(called, 0, 'no new fetch may start past the deadline');
+  assert.equal(r.ok, false);
+  assert.match(r.errors[0], /skipped:budget/, 'a starved mapping must be visible in the report, not silently absent');
+});
+
 test('github: drafts skipped, 403 treated as rate limit, partial pages survive', async () => {
   const mapping = { ticker: 'MDB', mappingId: 'MDB-github-node-driver', version: 2, sourceId: 'mongodb/node-mongodb-native' };
   const rel = (tag, at, extra = {}) => ({ tag_name: tag, published_at: at, html_url: `https://github.com/r/${tag}`, ...extra });
