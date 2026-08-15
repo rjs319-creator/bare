@@ -29486,6 +29486,30 @@
       },
       "immutable": true,
       "parentExperimentId": "vcp-template-swing-incremental-2026-08"
+    },
+    {
+      "recordedAt": "2026-08-15T23:59:00.000Z",
+      "id": "stbull-ratio-2026-08",
+      "hypothesis": "NEGATIVE mean (contrarian AVOID) — extreme one-sided retail bullishness (user-labeled bull share >= 90% with >= 10 labeled messages among the last 30 StockTwits posts on a trending equity) marks crowd over-extension and carries negative 5-session forward SPY-excess.",
+      "family": "attention-sentiment",
+      "frozenConfig": {
+        "id": "stbull-ratio-2026-08",
+        "family": "attention-sentiment",
+        "declaredBeforeReadingResults": true,
+        "source": "StockTwits trending equities (top 30) + per-symbol streams (last 30 messages, user-labeled Bullish/Bearish tags only)",
+        "flagRule": "labeled >= 10 AND bullPct >= 90",
+        "decisionUnit": "fresh threshold crossings vs the previous ledger day's flag set (repeat-flag days are not independent decisions)",
+        "entry": "next session OPEN after the ET decision date; exit close(entry+5) — byte-identical to dilution excess5",
+        "outcome": "stock forward − SPY forward (5-session, next-open basis)",
+        "prospectiveGate": "minResolvedDates=50, then formal date-clustered eval (HAC + block bootstrap); the running mean is NOT the gate; promotion is a manual reviewed registry change and starts as annotation only",
+        "prior": "WEAK — adjacent to fade-the-loudest, which survived only as a short-side AVOID filter; imported from the TradingAgents source audit (2026-08-15)"
+      },
+      "codeVersion": "stbull-flag-v1",
+      "result": {
+        "verdict": "COLLECTING",
+        "note": "prospective ledger opened 2026-08; no outcomes read yet"
+      },
+      "immutable": true
     }
   ]
 }
