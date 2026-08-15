@@ -181,6 +181,55 @@ test('an immature series accrues NO attempts — waiting is not failing', () => 
     'immaturity must not burn the attempts budget');
 });
 
+// ── waiting-state grace (review 2026-08-15) ─────────────────────────────────
+// "Waiting is not failing" left a hole: a DELISTED ticker's history is null forever,
+// so its rows never burned attempts and its date could never terminate — it consumed
+// the tick's resolve budget every night while newer dates starved. Waiting states now
+// burn attempts once the doc is > horizon + missingHistoryGraceSessions SPY sessions
+// past the decision, so such rows eventually reach terminal UNRESOLVABLE.
+
+test('null history WITHIN the grace window accrues NO attempts — still just waiting', () => {
+  const doc = AB.buildDecisionDoc({ date: D, rows: mkRows(25), createdAt: 'now' });
+  // 12 SPY bars → 11 sessions past the decision ≤ horizon(5) + grace(10).
+  const flat = Array.from({ length: 12 }, () => 500);
+  const spy = candlesFrom(D, flat, flat);
+  const { doc: next } = AB.resolveDecisionDoc(doc, { histories: new Map(), spy, resolvedAt: 'later' });
+  assert.ok(next.rows.every((r) => r.outcomeStatus === 'PENDING' && !(r.attempts > 0)),
+    'within grace, missing history must not burn the attempts budget');
+});
+
+test('persistent null history PAST the grace window burns attempts and reaches UNRESOLVABLE', () => {
+  const doc = AB.buildDecisionDoc({ date: D, rows: mkRows(25), createdAt: 'now' });
+  // 20 SPY bars → 19 sessions past the decision > horizon(5) + grace(10).
+  const flat = Array.from({ length: 20 }, () => 500);
+  const spy = candlesFrom(D, flat, flat);
+  let cur = doc;
+  for (let run = 1; run < AB.FROZEN.maxResolveAttempts; run++) {
+    const { doc: next } = AB.resolveDecisionDoc(cur, { histories: new Map(), spy, resolvedAt: 'later' });
+    assert.ok(next.rows.every((r) => r.outcomeStatus === 'PENDING' && r.attempts === run),
+      `run ${run}: expired waiting must burn one attempt per run`);
+    cur = next;
+  }
+  const { doc: final } = AB.resolveDecisionDoc(cur, { histories: new Map(), spy, resolvedAt: 'later' });
+  assert.ok(final.rows.every((r) => r.outcomeStatus === 'UNRESOLVABLE'),
+    'a delisted ticker must eventually terminate instead of pending forever');
+  assert.strictEqual(final.resolved, true);
+  // Both arms all-UNRESOLVABLE → the resolved doc yields NO series point (degenerate):
+  // the tick must account for it explicitly, never fold it into the series.
+  assert.strictEqual(AB.seriesPoint(final), null);
+});
+
+test('a series that stays short of the horizon past grace is likewise terminal, not immortal', () => {
+  const doc = AB.buildDecisionDoc({ date: D, rows: mkRows(25), createdAt: 'now' });
+  const flat = Array.from({ length: 20 }, () => 500);
+  const spy = candlesFrom(D, flat, flat);
+  // History EXISTS and contains the decision bar, but never grows past 3 bars.
+  const short = new Map(doc.rows.map((r) => [r.ticker, candlesFrom(D, [100, 101, 102], [100, 101, 102])]));
+  const { doc: next } = AB.resolveDecisionDoc(doc, { histories: short, spy, resolvedAt: 'later' });
+  assert.ok(next.rows.every((r) => r.attempts === 1),
+    'a stuck-short series past grace must burn attempts like missing history does');
+});
+
 test('a legacy doc without attempts fields still resolves normally', () => {
   const doc = AB.buildDecisionDoc({ date: D, rows: mkRows(25), createdAt: 'now' });
   const legacy = { ...doc, rows: doc.rows.map(({ attempts, ...r }) => r) };   // pre-audit shape
