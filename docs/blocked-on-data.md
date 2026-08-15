@@ -232,6 +232,40 @@ engineering.
 
 ---
 
+## 9. Signed customer opening option flow (Cboe Open-Close)
+
+**Blocks:** feature family C of the CATALYST–FLOW RANKER (`docs/catalyst-flow-ranker.md`),
+and with it the entire `E3_CATALYST_FLOW_RANKER` arm, which currently reports
+`INSUFFICIENT_DATA` rather than any verdict about alpha.
+
+**Needed:** a feed that identifies, per trade, **participant** (customer / professional
+customer / firm / market maker), **side** (buy or sell), and **open vs close**. All three,
+not two.
+
+**Why nothing we already have can substitute.** `lib/optionsflow.js` reads free Yahoo
+option chains — end-of-day volume and open interest. That determines none of the three. A
+call print may be a customer buying to open, a customer selling to close, or a market maker
+hedging, and relabelling calls "bullish" and puts "bearish" is not an approximation of
+signed opening flow, it is a different measurement wearing its name.
+`lib/catalyst-flow/options-signed.js` therefore **refuses** any adapter that does not
+declare all three capabilities, and leaves the features `null` rather than `0` — a zero
+would assert balanced flow, which is a measurement nobody made.
+
+| Option | Order of magnitude | Notes |
+|---|---|---|
+| Cboe Open-Close (LiveVol) | licensed, quote required | The intended source. Preserve the exchange-coverage fields: **C1 history is longer than BZX/EDGX/C2**, and mixing a C1-only early period with a four-exchange later period compares two different instruments. |
+| Vendor resellers of the same file | licensed | Only if participant/side/open-close survive the repackaging — verify before assuming. |
+
+**Acceptance:** `optionsSignedCoverage === true` with `exchangeCoverageComplete` recorded
+honestly, and `op=catalystflowcoverage` reporting `E3_CATALYST_FLOW_RANKER: MEASURABLE`.
+
+**Recommendation:** do not buy for this yet. The arm it unblocks sits behind three other
+failing promotion gates (point-in-time estimates, delisting returns, and an ablation that
+does not survive FDR correction), so paying for the feed today would purchase the ability
+to measure one input to a study that still could not promote.
+
+---
+
 ## Suggested order
 
 1. ~~**§5 corporate actions**~~ — **DONE** (`lib/corp-actions.js`); live-plan check pending.

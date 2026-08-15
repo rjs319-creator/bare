@@ -629,6 +629,569 @@
       "immutable": true
     },
     {
+      "recordedAt": "2026-08-14T12:25:39.063Z",
+      "id": "catalyst-flow-ranker-2026-08",
+      "hypothesis": "Post-earnings/guidance underreaction, ranked by LambdaMART over frozen event features, beats a transparent PEAD score on net 5-session sector-excess return.",
+      "version": "catalyst-arms-v1",
+      "config": {
+        "primary": {
+          "scheme": "expanding",
+          "testMonths": 6,
+          "costCase": "liquidityAware",
+          "declaredBeforeReadingResults": true
+        },
+        "arms": [
+          "E0_CURRENT_OMEGA",
+          "E1_SIMPLE_PEAD",
+          "E2_CATALYST_RANKER",
+          "E3_CATALYST_FLOW_RANKER"
+        ],
+        "ablations": [
+          "E2_MINUS_E1",
+          "E3_MINUS_E2"
+        ]
+      },
+      "dataSnapshot": {
+        "rows": 23869,
+        "dates": 310,
+        "datasetSha256": "def055caa7dbf0dde8f0c921f10c7f5e7158ef7e953eb32b6e1ac5d13e36aef5"
+      },
+      "variationsAttempted": 80,
+      "result": {
+        "E0": -0.01,
+        "E1": -0.01,
+        "E2": 0,
+        "E3": "INSUFFICIENT_DATA",
+        "ablationE2minusE1": 0
+      },
+      "fdr": [
+        {
+          "id": "E0_CURRENT_OMEGA",
+          "p": 0.000030927049392115435,
+          "q": 0.00012370819756846174,
+          "rank": 1,
+          "index": 0,
+          "survives": true,
+          "alpha": 0.05
+        },
+        {
+          "id": "E1_SIMPLE_PEAD",
+          "p": 0.00012003020560680255,
+          "q": 0.0002400604112136051,
+          "rank": 2,
+          "index": 1,
+          "survives": true,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_CATALYST_RANKER",
+          "p": 0.9999999989999999,
+          "q": 0.9999999989999999,
+          "rank": 3,
+          "index": 2,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_MINUS_E1",
+          "p": 0.9999999989999999,
+          "q": 0.9999999989999999,
+          "rank": 4,
+          "index": 3,
+          "survives": false,
+          "alpha": 0.05
+        }
+      ],
+      "costStress": [
+        "fixed10bps",
+        "liquidityAware",
+        "stress25bps"
+      ],
+      "decision": "RESEARCH_ONLY — not promotable",
+      "reason": "estimates are not point-in-time (0 of 24,533 ledger rows observed at their own cutoff); delisting RETURNS are absent from the price cache (survivorship not proven safe); no signed customer opening option flow — E3 was never measurable; NDCG@10 is near-degenerate on this cohort distribution (median cohort 8 names ≤ 10)",
+      "immutable": true
+    },
+    {
+      "recordedAt": "2026-08-14T12:27:49.383Z",
+      "id": "catalyst-flow-ranker-2026-08.r2",
+      "hypothesis": "Post-earnings/guidance underreaction, ranked by LambdaMART over frozen event features, beats a transparent PEAD score on net 5-session sector-excess return.",
+      "version": "catalyst-arms-v1",
+      "config": {
+        "primary": {
+          "scheme": "expanding",
+          "testMonths": 6,
+          "costCase": "liquidityAware",
+          "declaredBeforeReadingResults": true
+        },
+        "arms": [
+          "E0_CURRENT_OMEGA",
+          "E1_SIMPLE_PEAD",
+          "E2_CATALYST_RANKER",
+          "E3_CATALYST_FLOW_RANKER"
+        ],
+        "ablations": [
+          "E2_MINUS_E1",
+          "E3_MINUS_E2"
+        ]
+      },
+      "dataSnapshot": {
+        "rows": 23869,
+        "dates": 310,
+        "datasetSha256": "def055caa7dbf0dde8f0c921f10c7f5e7158ef7e953eb32b6e1ac5d13e36aef5"
+      },
+      "variationsAttempted": 80,
+      "result": {
+        "E0": -0.01,
+        "E1": -0.01,
+        "E2": 0,
+        "E3": "INSUFFICIENT_DATA",
+        "ablationE2minusE1": 0
+      },
+      "fdr": [
+        {
+          "id": "E0_CURRENT_OMEGA",
+          "p": 0.0055670082493795014,
+          "q": 0.022268032997518006,
+          "rank": 1,
+          "index": 0,
+          "survives": true,
+          "alpha": 0.05
+        },
+        {
+          "id": "E1_SIMPLE_PEAD",
+          "p": 0.0150569814516337,
+          "q": 0.0301139629032674,
+          "rank": 2,
+          "index": 1,
+          "survives": true,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_CATALYST_RANKER",
+          "p": 0.47850358321332775,
+          "q": 0.47850358321332775,
+          "rank": 4,
+          "index": 2,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_MINUS_E1",
+          "p": 0.14834347428814132,
+          "q": 0.1977912990508551,
+          "rank": 3,
+          "index": 3,
+          "survives": false,
+          "alpha": 0.05
+        }
+      ],
+      "costStress": [
+        "fixed10bps",
+        "liquidityAware",
+        "stress25bps"
+      ],
+      "decision": "RESEARCH_ONLY — not promotable",
+      "reason": "estimates are not point-in-time (0 of 24,533 ledger rows observed at their own cutoff); delisting RETURNS are absent from the price cache (survivorship not proven safe); no signed customer opening option flow — E3 was never measurable; NDCG@10 is near-degenerate on this cohort distribution (median cohort 8 names ≤ 10)",
+      "immutable": true,
+      "parentExperimentId": "catalyst-flow-ranker-2026-08"
+    },
+    {
+      "recordedAt": "2026-08-14T12:28:11.440Z",
+      "id": "catalyst-flow-ranker-2026-08.r3",
+      "hypothesis": "Post-earnings/guidance underreaction, ranked by LambdaMART over frozen event features, beats a transparent PEAD score on net 5-session sector-excess return.",
+      "version": "catalyst-arms-v1",
+      "config": {
+        "primary": {
+          "scheme": "expanding",
+          "testMonths": 6,
+          "costCase": "liquidityAware",
+          "declaredBeforeReadingResults": true
+        },
+        "arms": [
+          "E0_CURRENT_OMEGA",
+          "E1_SIMPLE_PEAD",
+          "E2_CATALYST_RANKER",
+          "E3_CATALYST_FLOW_RANKER"
+        ],
+        "ablations": [
+          "E2_MINUS_E1",
+          "E3_MINUS_E2"
+        ]
+      },
+      "dataSnapshot": {
+        "rows": 23869,
+        "dates": 310,
+        "datasetSha256": "def055caa7dbf0dde8f0c921f10c7f5e7158ef7e953eb32b6e1ac5d13e36aef5"
+      },
+      "variationsAttempted": 80,
+      "result": {
+        "E0": -0.01,
+        "E1": -0.01,
+        "E2": 0,
+        "E3": "INSUFFICIENT_DATA",
+        "ablationE2minusE1": 0
+      },
+      "fdr": [
+        {
+          "id": "E0_CURRENT_OMEGA",
+          "p": 0.0055670082493795014,
+          "q": 0.022268032997518006,
+          "rank": 1,
+          "index": 0,
+          "survives": true,
+          "alpha": 0.05
+        },
+        {
+          "id": "E1_SIMPLE_PEAD",
+          "p": 0.0150569814516337,
+          "q": 0.0301139629032674,
+          "rank": 2,
+          "index": 1,
+          "survives": true,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_CATALYST_RANKER",
+          "p": 0.47850358321332775,
+          "q": 0.47850358321332775,
+          "rank": 4,
+          "index": 2,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_MINUS_E1",
+          "p": 0.14834347428814132,
+          "q": 0.1977912990508551,
+          "rank": 3,
+          "index": 3,
+          "survives": false,
+          "alpha": 0.05
+        }
+      ],
+      "costStress": [
+        "fixed10bps",
+        "liquidityAware",
+        "stress25bps"
+      ],
+      "decision": "RESEARCH_ONLY — not promotable",
+      "reason": "estimates are not point-in-time (0 of 24,533 ledger rows observed at their own cutoff); delisting RETURNS are absent from the price cache (survivorship not proven safe); no signed customer opening option flow — E3 was never measurable; NDCG@10 is near-degenerate on this cohort distribution (median cohort 8 names ≤ 10)",
+      "immutable": true,
+      "parentExperimentId": "catalyst-flow-ranker-2026-08"
+    },
+    {
+      "recordedAt": "2026-08-14T12:40:07.112Z",
+      "id": "catalyst-flow-ranker-2026-08.r4",
+      "hypothesis": "Post-earnings/guidance underreaction, ranked by LambdaMART over frozen event features, beats a transparent PEAD score on net 5-session sector-excess return.",
+      "version": "catalyst-arms-v1",
+      "config": {
+        "primary": {
+          "scheme": "expanding",
+          "testMonths": 6,
+          "costCase": "liquidityAware",
+          "declaredBeforeReadingResults": true
+        },
+        "arms": [
+          "E0_CURRENT_OMEGA",
+          "E1_SIMPLE_PEAD",
+          "E2_CATALYST_RANKER",
+          "E3_CATALYST_FLOW_RANKER"
+        ],
+        "ablations": [
+          "E2_MINUS_E1",
+          "E3_MINUS_E2"
+        ]
+      },
+      "dataSnapshot": {
+        "rows": 23869,
+        "dates": 310,
+        "datasetSha256": "def055caa7dbf0dde8f0c921f10c7f5e7158ef7e953eb32b6e1ac5d13e36aef5"
+      },
+      "variationsAttempted": 80,
+      "unit": "basis points of sector-excess return per decision-date cohort, net of cost",
+      "result": {
+        "E0": -66.5,
+        "E1": -63.2,
+        "E2": -19.8,
+        "RIDGE": -33.7,
+        "E3": "INSUFFICIENT_DATA",
+        "ablationE2minusE1": 43.4,
+        "ablationE3minusE2": "INSUFFICIENT_DATA"
+      },
+      "deflatedSharpe": {
+        "trialCount": 80,
+        "E2_CATALYST_RANKER": {
+          "dsr": 0.246,
+          "sr0": 0,
+          "sharpePerCohort": -0.0402,
+          "n": 310,
+          "annualised": false
+        },
+        "E1_SIMPLE_PEAD": {
+          "dsr": 0.0017,
+          "sr0": 0,
+          "sharpePerCohort": -0.1609,
+          "n": 310,
+          "annualised": false
+        }
+      },
+      "fdr": [
+        {
+          "id": "E0_CURRENT_OMEGA",
+          "p": 0.0055670082493795014,
+          "q": 0.022268032997518006,
+          "rank": 1,
+          "index": 0,
+          "survives": true,
+          "alpha": 0.05
+        },
+        {
+          "id": "E1_SIMPLE_PEAD",
+          "p": 0.0150569814516337,
+          "q": 0.0301139629032674,
+          "rank": 2,
+          "index": 1,
+          "survives": true,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_CATALYST_RANKER",
+          "p": 0.47850358321332775,
+          "q": 0.47850358321332775,
+          "rank": 4,
+          "index": 2,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_MINUS_E1",
+          "p": 0.14834347428814132,
+          "q": 0.1977912990508551,
+          "rank": 3,
+          "index": 3,
+          "survives": false,
+          "alpha": 0.05
+        }
+      ],
+      "costStress": [
+        "fixed10bps",
+        "liquidityAware",
+        "stress25bps"
+      ],
+      "decision": "RESEARCH_ONLY — not promotable",
+      "reason": "estimates are not point-in-time (0 of 24,533 ledger rows observed at their own cutoff); delisting RETURNS are absent from the price cache (survivorship not proven safe); no signed customer opening option flow — E3 was never measurable; NDCG@10 is near-degenerate on this cohort distribution (median cohort 8 names ≤ 10)",
+      "immutable": true,
+      "parentExperimentId": "catalyst-flow-ranker-2026-08"
+    },
+    {
+      "recordedAt": "2026-08-14T12:49:03.317Z",
+      "id": "catalyst-flow-ranker-2026-08.r5",
+      "hypothesis": "Post-earnings/guidance underreaction, ranked by LambdaMART over frozen event features, beats a transparent PEAD score on net 5-session sector-excess return.",
+      "version": "catalyst-arms-v1",
+      "config": {
+        "primary": {
+          "scheme": "expanding",
+          "testMonths": 6,
+          "costCase": "liquidityAware",
+          "declaredBeforeReadingResults": true
+        },
+        "arms": [
+          "E0_CURRENT_OMEGA",
+          "E1_SIMPLE_PEAD",
+          "E2_CATALYST_RANKER",
+          "E3_CATALYST_FLOW_RANKER"
+        ],
+        "ablations": [
+          "E2_MINUS_E1",
+          "E3_MINUS_E2"
+        ]
+      },
+      "dataSnapshot": {
+        "rows": 23869,
+        "dates": 310,
+        "datasetSha256": "def055caa7dbf0dde8f0c921f10c7f5e7158ef7e953eb32b6e1ac5d13e36aef5"
+      },
+      "variationsAttempted": 80,
+      "unit": "basis points of sector-excess return per decision-date cohort, net of cost",
+      "result": {
+        "E0": -0.9,
+        "E1": -3.3,
+        "E2": -19.8,
+        "RIDGE": 0,
+        "E3": "INSUFFICIENT_DATA",
+        "ablationE2minusE1": -16.5,
+        "ablationE3minusE2": "INSUFFICIENT_DATA"
+      },
+      "deflatedSharpe": {
+        "trialCount": 80,
+        "E2_CATALYST_RANKER": {
+          "dsr": 0.246,
+          "sr0": 0,
+          "sharpePerCohort": -0.0402,
+          "n": 310,
+          "annualised": false
+        },
+        "E1_SIMPLE_PEAD": {
+          "dsr": 0.3334,
+          "sr0": 0,
+          "sharpePerCohort": -0.0255,
+          "n": 310,
+          "annualised": false
+        }
+      },
+      "fdr": [
+        {
+          "id": "E0_CURRENT_OMEGA",
+          "p": 0.9188700180759408,
+          "q": 0.9188700180759408,
+          "rank": 4,
+          "index": 0,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E1_SIMPLE_PEAD",
+          "p": 0.7121344761944881,
+          "q": 0.9188700180759408,
+          "rank": 3,
+          "index": 1,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_CATALYST_RANKER",
+          "p": 0.47850358321332775,
+          "q": 0.9188700180759408,
+          "rank": 1,
+          "index": 2,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_MINUS_E1",
+          "p": 0.5688415099721165,
+          "q": 0.9188700180759408,
+          "rank": 2,
+          "index": 3,
+          "survives": false,
+          "alpha": 0.05
+        }
+      ],
+      "costStress": [
+        "fixed10bps",
+        "liquidityAware",
+        "stress25bps"
+      ],
+      "decision": "RESEARCH_ONLY — not promotable",
+      "reason": "estimates are not point-in-time (0 of 24,533 ledger rows observed at their own cutoff); delisting RETURNS are absent from the price cache (survivorship not proven safe); no signed customer opening option flow — E3 was never measurable; NDCG@10 is near-degenerate on this cohort distribution (median cohort 8 names ≤ 10)",
+      "immutable": true,
+      "parentExperimentId": "catalyst-flow-ranker-2026-08"
+    },
+    {
+      "recordedAt": "2026-08-14T12:49:43.449Z",
+      "id": "catalyst-flow-ranker-2026-08.r6",
+      "hypothesis": "Post-earnings/guidance underreaction, ranked by LambdaMART over frozen event features, beats a transparent PEAD score on net 5-session sector-excess return.",
+      "version": "catalyst-arms-v1",
+      "config": {
+        "primary": {
+          "scheme": "expanding",
+          "testMonths": 6,
+          "costCase": "liquidityAware",
+          "declaredBeforeReadingResults": true
+        },
+        "arms": [
+          "E0_CURRENT_OMEGA",
+          "E1_SIMPLE_PEAD",
+          "E2_CATALYST_RANKER",
+          "E3_CATALYST_FLOW_RANKER"
+        ],
+        "ablations": [
+          "E2_MINUS_E1",
+          "E3_MINUS_E2"
+        ]
+      },
+      "dataSnapshot": {
+        "rows": 23869,
+        "dates": 310,
+        "datasetSha256": "def055caa7dbf0dde8f0c921f10c7f5e7158ef7e953eb32b6e1ac5d13e36aef5"
+      },
+      "variationsAttempted": 80,
+      "unit": "basis points of sector-excess return per decision-date cohort, net of cost",
+      "result": {
+        "E0": -0.9,
+        "E1": -3.3,
+        "E2": -19.8,
+        "RIDGE": 0,
+        "E3": "INSUFFICIENT_DATA",
+        "ablationE2minusE1": -16.5,
+        "ablationE3minusE2": "INSUFFICIENT_DATA"
+      },
+      "deflatedSharpe": {
+        "trialCount": 80,
+        "E2_CATALYST_RANKER": {
+          "dsr": 0.246,
+          "sr0": 0,
+          "sharpePerCohort": -0.0402,
+          "n": 310,
+          "annualised": false
+        },
+        "E1_SIMPLE_PEAD": {
+          "dsr": 0.3334,
+          "sr0": 0,
+          "sharpePerCohort": -0.0255,
+          "n": 310,
+          "annualised": false
+        }
+      },
+      "fdr": [
+        {
+          "id": "E0_CURRENT_OMEGA",
+          "p": 0.9188700180759408,
+          "q": 0.9188700180759408,
+          "rank": 4,
+          "index": 0,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E1_SIMPLE_PEAD",
+          "p": 0.7121344761944881,
+          "q": 0.9188700180759408,
+          "rank": 3,
+          "index": 1,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_CATALYST_RANKER",
+          "p": 0.47850358321332775,
+          "q": 0.9188700180759408,
+          "rank": 1,
+          "index": 2,
+          "survives": false,
+          "alpha": 0.05
+        },
+        {
+          "id": "E2_MINUS_E1",
+          "p": 0.5688415099721165,
+          "q": 0.9188700180759408,
+          "rank": 2,
+          "index": 3,
+          "survives": false,
+          "alpha": 0.05
+        }
+      ],
+      "costStress": [
+        "fixed10bps",
+        "liquidityAware",
+        "stress25bps"
+      ],
+      "decision": "RESEARCH_ONLY — not promotable",
+      "reason": "estimates are not point-in-time (0 of 24,533 ledger rows observed at their own cutoff); delisting RETURNS are absent from the price cache (survivorship not proven safe); no signed customer opening option flow — E3 was never measurable; NDCG@10 is near-degenerate on this cohort distribution (median cohort 8 names ≤ 10)",
+      "immutable": true,
+      "parentExperimentId": "catalyst-flow-ranker-2026-08"
+    },
+    {
       "recordedAt": "2026-08-13T00:33:55.140Z",
       "id": "constrained-alpha-maximization-2026-08",
       "hypothesis": "A constrained, momentum-anchored combination of entry quality, filed fundamental acceleration and soft risk controls can improve cost-net top-10 excess over residual momentum on purged later dates.",
@@ -5862,6 +6425,1289 @@
         "bytes": 225452
       },
       "immutable": true
+    },
+    {
+      "recordedAt": "2026-08-15T20:43:44.861Z",
+      "id": "dilution-events-2026-08",
+      "hypothesis": "NEGATIVE mean (dilution/supply events are an avoid signal) — 424B5 supply events carry negative forward SPY-excess, usable only as an AVOID flag.",
+      "family": "dilution-events",
+      "frozenConfig": {
+        "id": "dilution-events-2026-08",
+        "family": "dilution-events",
+        "declaredBeforeReadingResults": true,
+        "source": "EDGAR full-text search, forms=424B5, biweekly windows over the bars-cache span",
+        "eligibility": "ticker resolvable from the filing, present in the bars cache, trailing 60-session ADV >= $5M at the event",
+        "dedupe": "first filing per ticker; subsequent filings within 30 sessions suppressed (ATM programs re-file constantly)",
+        "entry": "next session OPEN after the filed date; exit close(entry+H)",
+        "horizons": [
+          5,
+          21,
+          63
+        ],
+        "outcome": "stock forward − SPY forward − one tiered round-trip cost",
+        "hypothesis": "NEGATIVE mean (dilution/supply events are an avoid signal)",
+        "primaryCells": [
+          "DIL_5",
+          "DIL_21",
+          "DIL_63"
+        ],
+        "multipleTesting": "Benjamini-Hochberg across the 3 cells",
+        "promisingGate": "mean < 0 with q < 0.05 AND >= 3/4 chronological blocks negative — then RESEARCH_PROMISING as an AVOID flag only",
+        "insufficient": "fewer than 100 eligible events in a cell → INSUFFICIENT_DATA",
+        "pitClass": "EDGAR filing dates are immutable public record — the event CLOCK is genuine PIT; prices are the shared research cache"
+      },
+      "dataSnapshot": {
+        "filingsFetched": 13820,
+        "eligibleEvents": 1722,
+        "attrition": {
+          "noTicker": 4774,
+          "noSeries": 4455,
+          "illiquid": 1550,
+          "dedupedAtm": 1296,
+          "noDecisionBar": 23,
+          "truncated": {
+            "5": 29,
+            "21": 66,
+            "63": 178
+          }
+        },
+        "counts": {
+          "DIL_5": 1693,
+          "DIL_21": 1656,
+          "DIL_63": 1544
+        }
+      },
+      "trialCount": 3,
+      "results": {
+        "results": {
+          "DIL_5": {
+            "label": "DIL_5",
+            "version": "evidence-stats-v1",
+            "n": 814,
+            "effectiveN": 601,
+            "avg": -0.02,
+            "sd": 0.09,
+            "se": 0.0032,
+            "avgExact": -0.015456307267341401,
+            "seExact": 0.003165446088430496,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.02,
+              "hi": -0.01
+            },
+            "tCI": {
+              "lo": -0.02,
+              "hi": -0.01
+            },
+            "bootstrapCI": {
+              "lo": -0.02,
+              "hi": -0.01,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                -0.013,
+                -0.02,
+                -0.021,
+                -0.007
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 814,
+            "observations": 1693,
+            "avgPrecise": -0.012948,
+            "avgBpsPerEvent": -129.5,
+            "p": 0.00005208225846597969
+          },
+          "DIL_21": {
+            "label": "DIL_21",
+            "version": "evidence-stats-v1",
+            "n": 797,
+            "effectiveN": 462,
+            "avg": -0.02,
+            "sd": 0.17,
+            "se": 0.0076,
+            "avgExact": -0.016146861815205447,
+            "seExact": 0.0076247279056613345,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.03,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": -0.03,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": -0.03,
+              "hi": 0,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                -0.011,
+                -0.022,
+                -0.039,
+                0.008
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 797,
+            "observations": 1656,
+            "avgPrecise": -0.016605,
+            "avgBpsPerEvent": -166.1,
+            "p": 0.028896691451242518
+          },
+          "DIL_63": {
+            "label": "DIL_63",
+            "version": "evidence-stats-v1",
+            "n": 759,
+            "effectiveN": 443,
+            "avg": -0.03,
+            "sd": 0.27,
+            "se": 0.0132,
+            "avgExact": -0.027079424572092736,
+            "seExact": 0.013187945470485941,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.05,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": -0.05,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": -0.05,
+              "hi": 0,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                -0.026,
+                -0.042,
+                -0.073,
+                0.031
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 759,
+            "observations": 1544,
+            "avgPrecise": -0.029341,
+            "avgBpsPerEvent": -293.4,
+            "p": 0.026230114351764033
+          }
+        },
+        "fdr": [
+          {
+            "id": "DIL_5",
+            "p": 0.00005208225846597969,
+            "q": 0.00015624677539793907,
+            "rank": 1,
+            "index": 0,
+            "survives": true,
+            "alpha": 0.05
+          },
+          {
+            "id": "DIL_21",
+            "p": 0.028896691451242518,
+            "q": 0.028896691451242518,
+            "rank": 3,
+            "index": 1,
+            "survives": true,
+            "alpha": 0.05
+          },
+          {
+            "id": "DIL_63",
+            "p": 0.026230114351764033,
+            "q": 0.028896691451242518,
+            "rank": 2,
+            "index": 2,
+            "survives": true,
+            "alpha": 0.05
+          }
+        ],
+        "verdicts": {
+          "DIL_5": "RESEARCH_PROMISING_AVOID_FLAG",
+          "DIL_21": "RESEARCH_PROMISING_AVOID_FLAG",
+          "DIL_63": "RESEARCH_PROMISING_AVOID_FLAG"
+        }
+      },
+      "artifact": {
+        "file": "/Users/ravishah/dev/mna-catalyst/research/data/dilution-events/dilution-events-result.json",
+        "sha256": "b9200254b784a5b0f3953cc4319a394b9c4201e1a996d0b8c5b0935e5e99d95f",
+        "bytes": 5821
+      },
+      "immutable": true
+    },
+    {
+      "recordedAt": "2026-08-15T20:44:36.963Z",
+      "id": "dilution-events-2026-08.r2",
+      "hypothesis": "NEGATIVE mean (dilution/supply events are an avoid signal) — 424B5 supply events carry negative forward SPY-excess, usable only as an AVOID flag.",
+      "family": "dilution-events",
+      "frozenConfig": {
+        "id": "dilution-events-2026-08",
+        "family": "dilution-events",
+        "declaredBeforeReadingResults": true,
+        "source": "EDGAR full-text search, forms=424B5, biweekly windows over the bars-cache span",
+        "eligibility": "ticker resolvable from the filing, present in the bars cache, trailing 60-session ADV >= $5M at the event",
+        "dedupe": "first filing per ticker; subsequent filings within 30 sessions suppressed (ATM programs re-file constantly)",
+        "entry": "next session OPEN after the filed date; exit close(entry+H)",
+        "horizons": [
+          5,
+          21,
+          63
+        ],
+        "outcome": "stock forward − SPY forward − one tiered round-trip cost",
+        "hypothesis": "NEGATIVE mean (dilution/supply events are an avoid signal)",
+        "primaryCells": [
+          "DIL_5",
+          "DIL_21",
+          "DIL_63"
+        ],
+        "multipleTesting": "Benjamini-Hochberg across the 3 cells",
+        "promisingGate": "mean < 0 with q < 0.05 AND >= 3/4 chronological blocks negative — then RESEARCH_PROMISING as an AVOID flag only",
+        "insufficient": "fewer than 100 eligible events in a cell → INSUFFICIENT_DATA",
+        "pitClass": "EDGAR filing dates are immutable public record — the event CLOCK is genuine PIT; prices are the shared research cache"
+      },
+      "dataSnapshot": {
+        "filingsFetched": 13820,
+        "eligibleEvents": 1722,
+        "attrition": {
+          "noTicker": 4774,
+          "noSeries": 4455,
+          "illiquid": 1550,
+          "dedupedAtm": 1296,
+          "noDecisionBar": 23,
+          "truncated": {
+            "5": 29,
+            "21": 66,
+            "63": 178
+          }
+        },
+        "counts": {
+          "DIL_5": 1693,
+          "DIL_21": 1656,
+          "DIL_63": 1544
+        }
+      },
+      "trialCount": 3,
+      "results": {
+        "results": {
+          "DIL_5": {
+            "label": "DIL_5",
+            "version": "evidence-stats-v1",
+            "n": 814,
+            "effectiveN": 601,
+            "avg": -0.02,
+            "sd": 0.09,
+            "se": 0.0032,
+            "avgExact": -0.015456307267341401,
+            "seExact": 0.003165446088430496,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.02,
+              "hi": -0.01
+            },
+            "tCI": {
+              "lo": -0.02,
+              "hi": -0.01
+            },
+            "bootstrapCI": {
+              "lo": -0.02,
+              "hi": -0.01,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                -0.013,
+                -0.02,
+                -0.021,
+                -0.007
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 814,
+            "observations": 1693,
+            "avgPrecise": -0.012948,
+            "avgBpsPerEvent": -129.5,
+            "p": 0.00005208225846597969
+          },
+          "DIL_21": {
+            "label": "DIL_21",
+            "version": "evidence-stats-v1",
+            "n": 797,
+            "effectiveN": 462,
+            "avg": -0.02,
+            "sd": 0.17,
+            "se": 0.0076,
+            "avgExact": -0.016146861815205447,
+            "seExact": 0.0076247279056613345,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.03,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": -0.03,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": -0.03,
+              "hi": 0,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                -0.011,
+                -0.022,
+                -0.039,
+                0.008
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 797,
+            "observations": 1656,
+            "avgPrecise": -0.016605,
+            "avgBpsPerEvent": -166.1,
+            "p": 0.028896691451242518
+          },
+          "DIL_63": {
+            "label": "DIL_63",
+            "version": "evidence-stats-v1",
+            "n": 759,
+            "effectiveN": 443,
+            "avg": -0.03,
+            "sd": 0.27,
+            "se": 0.0132,
+            "avgExact": -0.027079424572092736,
+            "seExact": 0.013187945470485941,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.05,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": -0.05,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": -0.05,
+              "hi": 0,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                -0.026,
+                -0.042,
+                -0.073,
+                0.031
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 759,
+            "observations": 1544,
+            "avgPrecise": -0.029341,
+            "avgBpsPerEvent": -293.4,
+            "p": 0.026230114351764033
+          }
+        },
+        "controls": {
+          "DIL_5_GROSS": {
+            "label": "DIL_5_GROSS (no cost haircut — the avoid-flag lane)",
+            "version": "evidence-stats-v1",
+            "n": 814,
+            "effectiveN": 600,
+            "avg": -0.01,
+            "sd": 0.09,
+            "se": 0.0032,
+            "avgExact": -0.012120322711356836,
+            "seExact": 0.0031608075261783932,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.02,
+              "hi": -0.01
+            },
+            "tCI": {
+              "lo": -0.02,
+              "hi": -0.01
+            },
+            "bootstrapCI": {
+              "lo": -0.02,
+              "hi": -0.01,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                -0.01,
+                -0.016,
+                -0.018,
+                -0.004
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 814,
+            "observations": 1693,
+            "avgPrecise": -0.009718,
+            "avgBpsPerEvent": -97.2,
+            "p": 0.0023898388576466534
+          },
+          "DIL_5_VS_PLACEBO": {
+            "label": "DIL_5_VS_PLACEBO (event − same-ticker 126-sessions-earlier drift)",
+            "version": "evidence-stats-v1",
+            "n": 743,
+            "effectiveN": 593,
+            "avg": -0.01,
+            "sd": 0.12,
+            "se": 0.0046,
+            "avgExact": -0.014711589939696798,
+            "seExact": 0.004647667718872945,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.02,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": -0.02,
+              "hi": -0.01
+            },
+            "bootstrapCI": {
+              "lo": -0.02,
+              "hi": 0,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                -0.018,
+                -0.009,
+                -0.019,
+                -0.013
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 743,
+            "observations": 1548,
+            "avgPrecise": -0.009046,
+            "avgBpsPerEvent": -90.5,
+            "p": 0.049231050543360855
+          },
+          "DIL_21_GROSS": {
+            "label": "DIL_21_GROSS (no cost haircut — the avoid-flag lane)",
+            "version": "evidence-stats-v1",
+            "n": 797,
+            "effectiveN": 462,
+            "avg": -0.01,
+            "sd": 0.17,
+            "se": 0.0076,
+            "avgExact": -0.01280145224359763,
+            "seExact": 0.0076178251591455335,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.03,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": -0.03,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": -0.03,
+              "hi": 0,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                -0.008,
+                -0.019,
+                -0.035,
+                0.011
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 797,
+            "observations": 1656,
+            "avgPrecise": -0.013371,
+            "avgBpsPerEvent": -133.7,
+            "p": 0.0785166846889096
+          },
+          "DIL_21_VS_PLACEBO": {
+            "label": "DIL_21_VS_PLACEBO (event − same-ticker 126-sessions-earlier drift)",
+            "version": "evidence-stats-v1",
+            "n": 724,
+            "effectiveN": 461,
+            "avg": -0.03,
+            "sd": 0.23,
+            "se": 0.011,
+            "avgExact": -0.027963200906905013,
+            "seExact": 0.010974249607704566,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.05,
+              "hi": -0.01
+            },
+            "tCI": {
+              "lo": -0.05,
+              "hi": -0.01
+            },
+            "bootstrapCI": {
+              "lo": -0.05,
+              "hi": -0.01,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                -0.038,
+                -0.018,
+                -0.051,
+                -0.006
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 724,
+            "observations": 1500,
+            "avgPrecise": -0.025316,
+            "avgBpsPerEvent": -253.2,
+            "p": 0.021366719209802376
+          },
+          "DIL_63_GROSS": {
+            "label": "DIL_63_GROSS (no cost haircut — the avoid-flag lane)",
+            "version": "evidence-stats-v1",
+            "n": 759,
+            "effectiveN": 443,
+            "avg": -0.02,
+            "sd": 0.27,
+            "se": 0.0132,
+            "avgExact": -0.023751598485136197,
+            "seExact": 0.013173225443402487,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.05,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": -0.05,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": -0.05,
+              "hi": 0,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                -0.023,
+                -0.038,
+                -0.069,
+                0.034
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 759,
+            "observations": 1544,
+            "avgPrecise": -0.026114,
+            "avgBpsPerEvent": -261.1,
+            "p": 0.04789457021838972
+          },
+          "DIL_63_VS_PLACEBO": {
+            "label": "DIL_63_VS_PLACEBO (event − same-ticker 126-sessions-earlier drift)",
+            "version": "evidence-stats-v1",
+            "n": 681,
+            "effectiveN": 406,
+            "avg": -0.05,
+            "sd": 0.41,
+            "se": 0.0232,
+            "avgExact": -0.0454517302174893,
+            "seExact": 0.023169349181756203,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.09,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": -0.09,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": -0.09,
+              "hi": 0,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                -0.039,
+                -0.041,
+                -0.082,
+                -0.021
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 681,
+            "observations": 1362,
+            "avgPrecise": -0.042301,
+            "avgBpsPerEvent": -423,
+            "p": 0.06825585624522823
+          }
+        },
+        "fdr": [
+          {
+            "id": "DIL_5",
+            "p": 0.00005208225846597969,
+            "q": 0.00015624677539793907,
+            "rank": 1,
+            "index": 0,
+            "survives": true,
+            "alpha": 0.05
+          },
+          {
+            "id": "DIL_21",
+            "p": 0.028896691451242518,
+            "q": 0.028896691451242518,
+            "rank": 3,
+            "index": 1,
+            "survives": true,
+            "alpha": 0.05
+          },
+          {
+            "id": "DIL_63",
+            "p": 0.026230114351764033,
+            "q": 0.028896691451242518,
+            "rank": 2,
+            "index": 2,
+            "survives": true,
+            "alpha": 0.05
+          }
+        ],
+        "verdicts": {
+          "DIL_5": "RESEARCH_PROMISING_AVOID_FLAG",
+          "DIL_21": "RESEARCH_PROMISING_AVOID_FLAG",
+          "DIL_63": "RESEARCH_PROMISING_AVOID_FLAG"
+        }
+      },
+      "artifact": {
+        "file": "/Users/ravishah/dev/mna-catalyst/research/data/dilution-events/dilution-events-result.json",
+        "sha256": "7dd4369d37486fe0a1fda50b28a81110529a7a2a321a3faa5bb8c0a0703a19de",
+        "bytes": 13020
+      },
+      "immutable": true,
+      "parentExperimentId": "dilution-events-2026-08"
+    },
+    {
+      "recordedAt": "2026-08-15T20:45:11.353Z",
+      "id": "dilution-events-2026-08.r3",
+      "hypothesis": "NEGATIVE mean (dilution/supply events are an avoid signal) — 424B5 supply events carry negative forward SPY-excess, usable only as an AVOID flag.",
+      "family": "dilution-events",
+      "frozenConfig": {
+        "id": "dilution-events-2026-08",
+        "family": "dilution-events",
+        "declaredBeforeReadingResults": true,
+        "source": "EDGAR full-text search, forms=424B5, biweekly windows over the bars-cache span",
+        "eligibility": "ticker resolvable from the filing, present in the bars cache, trailing 60-session ADV >= $5M at the event",
+        "dedupe": "first filing per ticker; subsequent filings within 30 sessions suppressed (ATM programs re-file constantly)",
+        "entry": "next session OPEN after the filed date; exit close(entry+H)",
+        "horizons": [
+          5,
+          21,
+          63
+        ],
+        "outcome": "stock forward − SPY forward − one tiered round-trip cost",
+        "hypothesis": "NEGATIVE mean (dilution/supply events are an avoid signal)",
+        "primaryCells": [
+          "DIL_5",
+          "DIL_21",
+          "DIL_63"
+        ],
+        "multipleTesting": "Benjamini-Hochberg across the 3 cells",
+        "promisingGate": "mean < 0 with q < 0.05 AND >= 3/4 chronological blocks negative — then RESEARCH_PROMISING as an AVOID flag only",
+        "insufficient": "fewer than 100 eligible events in a cell → INSUFFICIENT_DATA",
+        "pitClass": "EDGAR filing dates are immutable public record — the event CLOCK is genuine PIT; prices are the shared research cache"
+      },
+      "dataSnapshot": {
+        "filingsFetched": 13820,
+        "eligibleEvents": 1722,
+        "attrition": {
+          "noTicker": 4774,
+          "noSeries": 4455,
+          "illiquid": 1550,
+          "dedupedAtm": 1296,
+          "noDecisionBar": 23,
+          "truncated": {
+            "5": 29,
+            "21": 66,
+            "63": 178
+          }
+        },
+        "counts": {
+          "DIL_5": 1693,
+          "DIL_21": 1656,
+          "DIL_63": 1544
+        }
+      },
+      "trialCount": 3,
+      "results": {
+        "results": {
+          "DIL_5": {
+            "label": "DIL_5",
+            "version": "evidence-stats-v1",
+            "n": 814,
+            "effectiveN": 601,
+            "avg": -0.02,
+            "sd": 0.09,
+            "se": 0.0032,
+            "avgExact": -0.015456307267341401,
+            "seExact": 0.003165446088430496,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.02,
+              "hi": -0.01
+            },
+            "tCI": {
+              "lo": -0.02,
+              "hi": -0.01
+            },
+            "bootstrapCI": {
+              "lo": -0.02,
+              "hi": -0.01,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                -0.013,
+                -0.02,
+                -0.021,
+                -0.007
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 814,
+            "observations": 1693,
+            "avgPrecise": -0.012948,
+            "avgBpsPerEvent": -129.5,
+            "p": 0.00005208225846597969
+          },
+          "DIL_21": {
+            "label": "DIL_21",
+            "version": "evidence-stats-v1",
+            "n": 797,
+            "effectiveN": 462,
+            "avg": -0.02,
+            "sd": 0.17,
+            "se": 0.0076,
+            "avgExact": -0.016146861815205447,
+            "seExact": 0.0076247279056613345,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.03,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": -0.03,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": -0.03,
+              "hi": 0,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                -0.011,
+                -0.022,
+                -0.039,
+                0.008
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 797,
+            "observations": 1656,
+            "avgPrecise": -0.016605,
+            "avgBpsPerEvent": -166.1,
+            "p": 0.028896691451242518
+          },
+          "DIL_63": {
+            "label": "DIL_63",
+            "version": "evidence-stats-v1",
+            "n": 759,
+            "effectiveN": 443,
+            "avg": -0.03,
+            "sd": 0.27,
+            "se": 0.0132,
+            "avgExact": -0.027079424572092736,
+            "seExact": 0.013187945470485941,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.05,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": -0.05,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": -0.05,
+              "hi": 0,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                -0.026,
+                -0.042,
+                -0.073,
+                0.031
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 759,
+            "observations": 1544,
+            "avgPrecise": -0.029341,
+            "avgBpsPerEvent": -293.4,
+            "p": 0.026230114351764033
+          }
+        },
+        "controls": {
+          "DIL_5_GROSS": {
+            "label": "DIL_5_GROSS (no cost haircut — the avoid-flag lane)",
+            "version": "evidence-stats-v1",
+            "n": 814,
+            "effectiveN": 600,
+            "avg": -0.01,
+            "sd": 0.09,
+            "se": 0.0032,
+            "avgExact": -0.012120322711356836,
+            "seExact": 0.0031608075261783932,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.02,
+              "hi": -0.01
+            },
+            "tCI": {
+              "lo": -0.02,
+              "hi": -0.01
+            },
+            "bootstrapCI": {
+              "lo": -0.02,
+              "hi": -0.01,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                -0.01,
+                -0.016,
+                -0.018,
+                -0.004
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 814,
+            "observations": 1693,
+            "avgPrecise": -0.009718,
+            "avgBpsPerEvent": -97.2,
+            "p": 0.0023898388576466534
+          },
+          "DIL_5_VS_PLACEBO": {
+            "label": "DIL_5_VS_PLACEBO (event − same-ticker 126-sessions-earlier drift)",
+            "version": "evidence-stats-v1",
+            "n": 743,
+            "effectiveN": 593,
+            "avg": -0.01,
+            "sd": 0.12,
+            "se": 0.0046,
+            "avgExact": -0.014711589939696798,
+            "seExact": 0.004647667718872945,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.02,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": -0.02,
+              "hi": -0.01
+            },
+            "bootstrapCI": {
+              "lo": -0.02,
+              "hi": 0,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                -0.018,
+                -0.009,
+                -0.019,
+                -0.013
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 743,
+            "observations": 1548,
+            "avgPrecise": -0.009046,
+            "avgBpsPerEvent": -90.5,
+            "p": 0.049231050543360855
+          },
+          "DIL_21_GROSS": {
+            "label": "DIL_21_GROSS (no cost haircut — the avoid-flag lane)",
+            "version": "evidence-stats-v1",
+            "n": 797,
+            "effectiveN": 462,
+            "avg": -0.01,
+            "sd": 0.17,
+            "se": 0.0076,
+            "avgExact": -0.01280145224359763,
+            "seExact": 0.0076178251591455335,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.03,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": -0.03,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": -0.03,
+              "hi": 0,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                -0.008,
+                -0.019,
+                -0.035,
+                0.011
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 797,
+            "observations": 1656,
+            "avgPrecise": -0.013371,
+            "avgBpsPerEvent": -133.7,
+            "p": 0.0785166846889096
+          },
+          "DIL_21_VS_PLACEBO": {
+            "label": "DIL_21_VS_PLACEBO (event − same-ticker 126-sessions-earlier drift)",
+            "version": "evidence-stats-v1",
+            "n": 724,
+            "effectiveN": 461,
+            "avg": -0.03,
+            "sd": 0.23,
+            "se": 0.011,
+            "avgExact": -0.027963200906905013,
+            "seExact": 0.010974249607704566,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.05,
+              "hi": -0.01
+            },
+            "tCI": {
+              "lo": -0.05,
+              "hi": -0.01
+            },
+            "bootstrapCI": {
+              "lo": -0.05,
+              "hi": -0.01,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                -0.038,
+                -0.018,
+                -0.051,
+                -0.006
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 724,
+            "observations": 1500,
+            "avgPrecise": -0.025316,
+            "avgBpsPerEvent": -253.2,
+            "p": 0.021366719209802376
+          },
+          "DIL_63_GROSS": {
+            "label": "DIL_63_GROSS (no cost haircut — the avoid-flag lane)",
+            "version": "evidence-stats-v1",
+            "n": 759,
+            "effectiveN": 443,
+            "avg": -0.02,
+            "sd": 0.27,
+            "se": 0.0132,
+            "avgExact": -0.023751598485136197,
+            "seExact": 0.013173225443402487,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.05,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": -0.05,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": -0.05,
+              "hi": 0,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                -0.023,
+                -0.038,
+                -0.069,
+                0.034
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 759,
+            "observations": 1544,
+            "avgPrecise": -0.026114,
+            "avgBpsPerEvent": -261.1,
+            "p": 0.04789457021838972
+          },
+          "DIL_63_VS_PLACEBO": {
+            "label": "DIL_63_VS_PLACEBO (event − same-ticker 126-sessions-earlier drift)",
+            "version": "evidence-stats-v1",
+            "n": 681,
+            "effectiveN": 406,
+            "avg": -0.05,
+            "sd": 0.41,
+            "se": 0.0232,
+            "avgExact": -0.0454517302174893,
+            "seExact": 0.023169349181756203,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.09,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": -0.09,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": -0.09,
+              "hi": 0,
+              "blockLen": 21,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                -0.039,
+                -0.041,
+                -0.082,
+                -0.021
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 681,
+            "observations": 1362,
+            "avgPrecise": -0.042301,
+            "avgBpsPerEvent": -423,
+            "p": 0.06825585624522823
+          }
+        },
+        "robustness": {
+          "DIL_5": {
+            "medianBps": -67.2,
+            "shareNegative": 0.559,
+            "meanBpsAfterDropping10Worst": -71.1,
+            "events": 1693
+          },
+          "DIL_21": {
+            "medianBps": -203.4,
+            "shareNegative": 0.587,
+            "meanBpsAfterDropping10Worst": -90.5,
+            "events": 1656
+          },
+          "DIL_63": {
+            "medianBps": -456.1,
+            "shareNegative": 0.608,
+            "meanBpsAfterDropping10Worst": -206.4,
+            "events": 1544
+          }
+        },
+        "fdr": [
+          {
+            "id": "DIL_5",
+            "p": 0.00005208225846597969,
+            "q": 0.00015624677539793907,
+            "rank": 1,
+            "index": 0,
+            "survives": true,
+            "alpha": 0.05
+          },
+          {
+            "id": "DIL_21",
+            "p": 0.028896691451242518,
+            "q": 0.028896691451242518,
+            "rank": 3,
+            "index": 1,
+            "survives": true,
+            "alpha": 0.05
+          },
+          {
+            "id": "DIL_63",
+            "p": 0.026230114351764033,
+            "q": 0.028896691451242518,
+            "rank": 2,
+            "index": 2,
+            "survives": true,
+            "alpha": 0.05
+          }
+        ],
+        "verdicts": {
+          "DIL_5": "RESEARCH_PROMISING_AVOID_FLAG",
+          "DIL_21": "RESEARCH_PROMISING_AVOID_FLAG",
+          "DIL_63": "RESEARCH_PROMISING_AVOID_FLAG"
+        }
+      },
+      "artifact": {
+        "file": "/Users/ravishah/dev/mna-catalyst/research/data/dilution-events/dilution-events-result.json",
+        "sha256": "8fa1af7d8a2942b7a5822e5a0cc4aaea425b03ceffbb571e9d63e950e431c8f6",
+        "bytes": 13476
+      },
+      "immutable": true,
+      "parentExperimentId": "dilution-events-2026-08"
     },
     {
       "recordedAt": "2026-08-13T22:47:21.039Z",
@@ -17896,6 +19742,410 @@
       "parentExperimentId": "improved-news-composite-diagnostic-2026-08"
     },
     {
+      "recordedAt": "2026-08-15T20:40:22.590Z",
+      "id": "index-events-2026-08",
+      "hypothesis": "S&P 500 deletions rebound (positive net SPY-excess) after forced selling clears; additions are the paired control cell expected ≈ 0.",
+      "family": "index-events",
+      "frozenConfig": {
+        "id": "index-events-2026-08",
+        "family": "index-events",
+        "declaredBeforeReadingResults": true,
+        "events": "S&P 500 changes table (Wikipedia), effective dates within the bars cache window",
+        "exclusions": "deletions with reason matching /acquir|merg|taken private|purchas|bought|combin/i (no tradeable post-event security); names without a decision bar within 7 calendar days of the effective date (renamed/halted/delisted)",
+        "entry": "next session OPEN after the last session ≤ effective date; exit at close(entry+H)",
+        "horizons": [
+          5,
+          21,
+          63
+        ],
+        "outcome": "stock forward return − SPY forward return − one tiered round-trip cost (kit costFractions on trailing ADV)",
+        "primaryCells": [
+          "DEL_5",
+          "DEL_21",
+          "DEL_63",
+          "ADD_5",
+          "ADD_21",
+          "ADD_63"
+        ],
+        "multipleTesting": "Benjamini-Hochberg across the 6 cells",
+        "insufficient": "a cell with fewer than 30 events is INSUFFICIENT_DATA regardless of its point estimate",
+        "promisingGate": "q < 0.05 AND ≥3/4 chronological blocks agree AND positive after doubled costs — still EXPLORATORY (effective-date-only capture, scraped source)"
+      },
+      "dataSnapshot": {
+        "eventsInWindow": 104,
+        "counts": {
+          "DEL_5": 55,
+          "DEL_21": 50,
+          "DEL_63": 50,
+          "ADD_5": 41,
+          "ADD_21": 40,
+          "ADD_63": 40
+        },
+        "attrition": {
+          "mnaDeletions": 27,
+          "noSeries": 55,
+          "noDecisionBar": 0,
+          "truncated": {
+            "5": 6,
+            "21": 12,
+            "63": 12
+          },
+          "other": 0
+        }
+      },
+      "trialCount": 6,
+      "results": {
+        "results": {
+          "DEL_5": {
+            "label": "DEL_5",
+            "version": "evidence-stats-v1",
+            "n": 31,
+            "effectiveN": 31,
+            "avg": 0,
+            "sd": 0.1,
+            "se": 0.0185,
+            "avgExact": 0.003933000889755796,
+            "seExact": 0.018505061111146446,
+            "tCritical": 2.042,
+            "ci95": {
+              "lo": -0.03,
+              "hi": 0.04
+            },
+            "tCI": {
+              "lo": -0.03,
+              "hi": 0.04
+            },
+            "bootstrapCI": {
+              "lo": -0.01,
+              "hi": 0.04,
+              "blockLen": 15,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 2,
+              "means": [
+                -0.017,
+                0.068,
+                0.007,
+                -0.028
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 2,
+            "dates": 31,
+            "observations": 55,
+            "avgPrecise": 0.00117,
+            "avgBpsPerEvent": 11.7,
+            "p": 0.9495573899357543
+          },
+          "DEL_21": {
+            "label": "DEL_21",
+            "version": "evidence-stats-v1",
+            "n": 26,
+            "effectiveN": 19,
+            "avg": -0.03,
+            "sd": 0.11,
+            "se": 0.0215,
+            "avgExact": -0.03368273588363913,
+            "seExact": 0.021515738265226538,
+            "tCritical": 2.101,
+            "ci95": {
+              "lo": -0.08,
+              "hi": 0.01
+            },
+            "tCI": {
+              "lo": -0.08,
+              "hi": 0.01
+            },
+            "bootstrapCI": {
+              "lo": -0.08,
+              "hi": -0.03,
+              "blockLen": 13,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                -0.005,
+                -0.057,
+                -0.082,
+                -0.001
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 26,
+            "observations": 50,
+            "avgPrecise": -0.016923,
+            "avgBpsPerEvent": -169.2,
+            "p": 0.43120866517560197
+          },
+          "DEL_63": {
+            "label": "DEL_63",
+            "version": "evidence-stats-v1",
+            "n": 26,
+            "effectiveN": 8,
+            "avg": -0.04,
+            "sd": 0.15,
+            "se": 0.0394,
+            "avgExact": -0.03685800074927635,
+            "seExact": 0.03937246210129765,
+            "tCritical": 2.365,
+            "ci95": {
+              "lo": -0.13,
+              "hi": 0.06
+            },
+            "tCI": {
+              "lo": -0.13,
+              "hi": 0.06
+            },
+            "bootstrapCI": {
+              "lo": -0.12,
+              "hi": 0.01,
+              "blockLen": 13,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                -0.042,
+                -0.16,
+                -0.06,
+                0.077
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 26,
+            "observations": 50,
+            "avgPrecise": -0.021608,
+            "avgBpsPerEvent": -216.1,
+            "p": 0.5833981557684011
+          },
+          "ADD_5": {
+            "label": "ADD_5",
+            "version": "evidence-stats-v1",
+            "n": 34,
+            "effectiveN": 34,
+            "avg": 0.01,
+            "sd": 0.05,
+            "se": 0.0082,
+            "avgExact": 0.005296787149754186,
+            "seExact": 0.00824304439975381,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.01,
+              "hi": 0.02
+            },
+            "tCI": {
+              "lo": -0.01,
+              "hi": 0.02
+            },
+            "bootstrapCI": {
+              "lo": -0.01,
+              "hi": 0.01,
+              "blockLen": 17,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 3,
+              "means": [
+                0.018,
+                0.002,
+                -0.001,
+                0.003
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 3,
+            "dates": 34,
+            "observations": 41,
+            "avgPrecise": 0.01073,
+            "avgBpsPerEvent": 107.3,
+            "p": 0.19070148611965143
+          },
+          "ADD_21": {
+            "label": "ADD_21",
+            "version": "evidence-stats-v1",
+            "n": 33,
+            "effectiveN": 33,
+            "avg": -0.01,
+            "sd": 0.11,
+            "se": 0.0184,
+            "avgExact": -0.01218503454016247,
+            "seExact": 0.01842980316316895,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.05,
+              "hi": 0.02
+            },
+            "tCI": {
+              "lo": -0.05,
+              "hi": 0.02
+            },
+            "bootstrapCI": {
+              "lo": -0.04,
+              "hi": -0.01,
+              "blockLen": 16,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 2,
+              "means": [
+                0.017,
+                -0.041,
+                0.007,
+                -0.03
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 2,
+            "dates": 33,
+            "observations": 40,
+            "avgPrecise": -0.008048,
+            "avgBpsPerEvent": -80.5,
+            "p": 0.6618101763123834
+          },
+          "ADD_63": {
+            "label": "ADD_63",
+            "version": "evidence-stats-v1",
+            "n": 33,
+            "effectiveN": 29,
+            "avg": -0.01,
+            "sd": 0.36,
+            "se": 0.0622,
+            "avgExact": -0.012944243294539982,
+            "seExact": 0.06217384909540969,
+            "tCritical": 2.048,
+            "ci95": {
+              "lo": -0.14,
+              "hi": 0.11
+            },
+            "tCI": {
+              "lo": -0.14,
+              "hi": 0.11
+            },
+            "bootstrapCI": {
+              "lo": -0.08,
+              "hi": 0.02,
+              "blockLen": 16,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 20, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                -0.05,
+                -0.085,
+                -0.051,
+                0.117
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 33,
+            "observations": 40,
+            "avgPrecise": 0.002904,
+            "avgBpsPerEvent": 29,
+            "p": 0.9627633830512967
+          }
+        },
+        "fdr": [
+          {
+            "id": "DEL_5",
+            "p": 0.9495573899357543,
+            "q": 0.9627633830512967,
+            "rank": 5,
+            "index": 0,
+            "survives": false,
+            "alpha": 0.05
+          },
+          {
+            "id": "DEL_21",
+            "p": 0.43120866517560197,
+            "q": 0.9627633830512967,
+            "rank": 2,
+            "index": 1,
+            "survives": false,
+            "alpha": 0.05
+          },
+          {
+            "id": "DEL_63",
+            "p": 0.5833981557684011,
+            "q": 0.9627633830512967,
+            "rank": 3,
+            "index": 2,
+            "survives": false,
+            "alpha": 0.05
+          },
+          {
+            "id": "ADD_5",
+            "p": 0.19070148611965143,
+            "q": 0.9627633830512967,
+            "rank": 1,
+            "index": 3,
+            "survives": false,
+            "alpha": 0.05
+          },
+          {
+            "id": "ADD_21",
+            "p": 0.6618101763123834,
+            "q": 0.9627633830512967,
+            "rank": 4,
+            "index": 4,
+            "survives": false,
+            "alpha": 0.05
+          },
+          {
+            "id": "ADD_63",
+            "p": 0.9627633830512967,
+            "q": 0.9627633830512967,
+            "rank": 6,
+            "index": 5,
+            "survives": false,
+            "alpha": 0.05
+          }
+        ],
+        "verdicts": {
+          "DEL_5": "POSITIVE_BUT_NOT_SIGNIFICANT",
+          "DEL_21": "NO_EDGE",
+          "DEL_63": "NO_EDGE",
+          "ADD_5": "POSITIVE_BUT_NOT_SIGNIFICANT",
+          "ADD_21": "NO_EDGE",
+          "ADD_63": "POSITIVE_BUT_NOT_SIGNIFICANT"
+        }
+      },
+      "artifact": {
+        "file": "/Users/ravishah/dev/mna-catalyst/research/data/index-events/index-events-result.json",
+        "sha256": "12455e0f3afc33e1fc7399b21c9e63389069e4def03b89beae16755edb9bb6cd",
+        "bytes": 30500
+      },
+      "immutable": true
+    },
+    {
       "recordedAt": "2026-08-13T22:53:08.997Z",
       "id": "intraday-window-timing-2026-08",
       "hypothesis": "Long entries during 10:00-11:00 or 14:00-15:00 ET earn higher same-holding-period returns than entries at other times of day.",
@@ -18256,6 +20506,1629 @@
         }
       },
       "immutable": true
+    },
+    {
+      "recordedAt": "2026-08-15T20:36:57.782Z",
+      "id": "negative-overlay-2026-08",
+      "hypothesis": "The app's robust NEGATIVE findings pay as subtraction (exclusion overlays on a top-10 event book) or inversion (shorting the forced book) net of realistic frictions.",
+      "family": "negative-overlay",
+      "frozenConfig": {
+        "id": "negative-overlay-2026-08",
+        "family": "negative-overlay",
+        "declaredBeforeReadingResults": true,
+        "base": "forced top-10 by transparentPeadScore (no abstention, sector cap 3) — the same forced-book construction the arms study used",
+        "filters": {
+          "F1_DTC7": {
+            "rule": "features.extremeCrowdingFlag === 1 (daysToCover >= 7)",
+            "provenance": "frozen-original (catalyst-flow config, si-overlay pass)"
+          },
+          "F2_GAP10": {
+            "rule": "features.overnightGap >= 0.10",
+            "provenance": "ADAPTED proxy of the ≥10% gap + trend-template −0.21R AVOID (trend-catalyst-vcp-smc pass)"
+          },
+          "F3_MOMCHASE": {
+            "rule": "features.preEventReturn20 >= within-date cohort 80th percentile",
+            "provenance": "ADAPTED proxy of large-cap momentum-chase mean-reversion (fade/finviz validation)"
+          }
+        },
+        "short": {
+          "construction": "short every base-book name at next open, 5 sessions, hedged with the sector ETF (sector-relative by construction of the target)",
+          "winsorisation": "primary uses the dataset's winsorised return; UNWINSORISED variant reported because winsorisation clips exactly the short's squeeze tail",
+          "costs": "stock round trip (dataset liquidity-aware costFraction) + 4bps flat sector-ETF hedge round trip + borrow at {0.5%, 2%, 8%}/yr × 7/365 per trade; primary = 2%"
+        },
+        "primaryTests": [
+          "EXCL_F1_REPL",
+          "EXCL_F2_REPL",
+          "EXCL_F3_REPL",
+          "SHORT_TOP10@borrow2"
+        ],
+        "multipleTesting": "Benjamini-Hochberg across the 4 primary tests; every secondary variant recorded in the trial count",
+        "promisingGate": "BH q < 0.05 AND positive after doubled trading costs AND >= 3/4 chronological blocks positive — and even then the verdict is only RESEARCH-PROMISING (exploratory PIT class blocks anything more)",
+        "insufficient": "a filter that fires on < 200 base-book slots proves nothing → INSUFFICIENT_DATA for that cell"
+      },
+      "dataSnapshot": {
+        "dates": 1061,
+        "rows": 23869,
+        "pitClass": "RECONSTRUCTED_EXPLORATORY (inherited from the catalyst dataset)"
+      },
+      "trialCount": 11,
+      "results": {
+        "base": {
+          "label": "BASE_TOP10_PEAD",
+          "version": "evidence-stats-v1",
+          "n": 1061,
+          "effectiveN": 573,
+          "avg": -0.01,
+          "sd": 0.04,
+          "se": 0.0015,
+          "avgExact": -0.0059757575445085,
+          "seExact": 0.0014571504460782325,
+          "tCritical": 1.96,
+          "ci95": {
+            "lo": -0.01,
+            "hi": 0
+          },
+          "tCI": {
+            "lo": -0.01,
+            "hi": 0
+          },
+          "bootstrapCI": {
+            "lo": -0.01,
+            "hi": 0,
+            "blockLen": 5,
+            "B": 1000,
+            "seed": 20260805
+          },
+          "seBasis": "newey-west (lags 4, floored at IID)",
+          "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+          "blockStability": {
+            "blocks": 4,
+            "positive": 1,
+            "means": [
+              -0.008,
+              -0.01,
+              -0.008,
+              0.001
+            ],
+            "usable": true
+          },
+          "positiveBlocks": 1,
+          "dates": 1061,
+          "observations": 1061,
+          "avgPrecise": -0.005976,
+          "avgBpsPerCohort": -59.8,
+          "p": 0.00006784189838704435
+        },
+        "primaries": {
+          "EXCL_F1_REPL": {
+            "label": "EXCL_F1_REPL",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 1061,
+            "avg": 0,
+            "sd": 0.02,
+            "se": 0.0006,
+            "avgExact": -0.00019996141995466302,
+            "seExact": 0.0005989415345987009,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                0,
+                0.001,
+                -0.001,
+                -0.001
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": -0.0002,
+            "avgBpsPerCohort": -2,
+            "p": 0.738931348124793
+          },
+          "EXCL_F2_REPL": {
+            "label": "EXCL_F2_REPL",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 1041,
+            "avg": 0,
+            "sd": 0.02,
+            "se": 0.0005,
+            "avgExact": -0.00005216540296658573,
+            "seExact": 0.0004949252433598721,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                0,
+                0.001,
+                0,
+                -0.001
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": -0.000052,
+            "avgBpsPerCohort": -0.5,
+            "p": 0.9169067230390358
+          },
+          "EXCL_F3_REPL": {
+            "label": "EXCL_F3_REPL",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 996,
+            "avg": 0,
+            "sd": 0.01,
+            "se": 0.0004,
+            "avgExact": -0.0000921558504292415,
+            "seExact": 0.00039265612300500426,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": -0.000092,
+            "avgBpsPerCohort": -0.9,
+            "p": 0.8177891116605687
+          },
+          "SHORT_TOP10@borrow2": {
+            "label": "SHORT_TOP10@borrow2",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 581,
+            "avg": 0,
+            "sd": 0.04,
+            "se": 0.0014,
+            "avgExact": -0.001927755627535009,
+            "seExact": 0.001447969300469485,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                0,
+                0.001,
+                0,
+                -0.008
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": -0.001928,
+            "avgBpsPerCohort": -19.3,
+            "p": 0.16852216487743332
+          }
+        },
+        "secondaries": {
+          "EXCL_F1_SHRINK": {
+            "label": "EXCL_F1_SHRINK",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 1051,
+            "avg": 0,
+            "sd": 0.02,
+            "se": 0.0005,
+            "avgExact": 0.0015426887702975488,
+            "seExact": 0.0005354235968500886,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 3,
+              "means": [
+                0.002,
+                0.003,
+                0.001,
+                0
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 3,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": 0.001543,
+            "avgBpsPerCohort": 15.4,
+            "p": 0.0020330760556044325
+          },
+          "EXCL_F2_SHRINK": {
+            "label": "EXCL_F2_SHRINK",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 1016,
+            "avg": 0,
+            "sd": 0.01,
+            "se": 0.0005,
+            "avgExact": 0.0006364487093319102,
+            "seExact": 0.00045249327398115736,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 2,
+              "means": [
+                0,
+                0.001,
+                0.002,
+                0
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 2,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": 0.000636,
+            "avgBpsPerCohort": 6.4,
+            "p": 0.20305458288350464
+          },
+          "EXCL_F3_SHRINK": {
+            "label": "EXCL_F3_SHRINK",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 928,
+            "avg": 0,
+            "sd": 0.01,
+            "se": 0.0004,
+            "avgExact": 0.0009960772126974009,
+            "seExact": 0.000352066260466219,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 4,
+              "means": [
+                0.001,
+                0.001,
+                0.002,
+                0.001
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 4,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": 0.000996,
+            "avgBpsPerCohort": 10,
+            "p": 0.012767398701983401
+          },
+          "EXCL_UNION_REPL": {
+            "label": "EXCL_UNION_REPL",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 1061,
+            "avg": 0,
+            "sd": 0.03,
+            "se": 0.0008,
+            "avgExact": -0.00032118901506087913,
+            "seExact": 0.0008216625482482706,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                0.001,
+                0,
+                0,
+                -0.002
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": -0.000321,
+            "avgBpsPerCohort": -3.2,
+            "p": 0.6880622429474847
+          },
+          "SHORT@borrow0.5": {
+            "label": "SHORT@borrow0.5",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 581,
+            "avg": 0,
+            "sd": 0.04,
+            "se": 0.0014,
+            "avgExact": -0.001640084394658296,
+            "seExact": 0.001447969300469485,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                0,
+                0.002,
+                0,
+                -0.008
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": -0.00164,
+            "avgBpsPerCohort": -16.4,
+            "p": 0.24140245706652808
+          },
+          "SHORT@borrow8": {
+            "label": "SHORT@borrow8",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 581,
+            "avg": 0,
+            "sd": 0.04,
+            "se": 0.0014,
+            "avgExact": -0.0030784405590418597,
+            "seExact": 0.001447969300469485,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.01,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": -0.01,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": -0.01,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                -0.002,
+                0,
+                -0.001,
+                -0.01
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": -0.003078,
+            "avgBpsPerCohort": -30.8,
+            "p": 0.02788592473784357
+          },
+          "SHORT@borrow2_UNWINSORISED": {
+            "label": "SHORT@borrow2_UNWINSORISED",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 658,
+            "avg": 0,
+            "sd": 0.05,
+            "se": 0.0018,
+            "avgExact": -0.0031049215043357768,
+            "seExact": 0.0018436007588103303,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.01,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": -0.01,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": -0.01,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                -0.002,
+                0.002,
+                -0.001,
+                -0.012
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": -0.003105,
+            "avgBpsPerCohort": -31,
+            "p": 0.08453526001660983
+          }
+        },
+        "fired": {
+          "F1_DTC7": {
+            "slotsExcludedFromBooks": 1416,
+            "rowsFlaggedInCohorts": 5069
+          },
+          "F2_GAP10": {
+            "slotsExcludedFromBooks": 425,
+            "rowsFlaggedInCohorts": 1113
+          },
+          "F3_MOMCHASE": {
+            "slotsExcludedFromBooks": 1386,
+            "rowsFlaggedInCohorts": 4874
+          },
+          "UNION": {
+            "slotsExcludedFromBooks": 2720,
+            "rowsFlaggedInCohorts": 9538
+          }
+        },
+        "fdr": [
+          {
+            "id": "EXCL_F1_REPL",
+            "p": 0.738931348124793,
+            "q": 0.9169067230390358,
+            "rank": 2,
+            "index": 0,
+            "survives": false,
+            "alpha": 0.05
+          },
+          {
+            "id": "EXCL_F2_REPL",
+            "p": 0.9169067230390358,
+            "q": 0.9169067230390358,
+            "rank": 4,
+            "index": 1,
+            "survives": false,
+            "alpha": 0.05
+          },
+          {
+            "id": "EXCL_F3_REPL",
+            "p": 0.8177891116605687,
+            "q": 0.9169067230390358,
+            "rank": 3,
+            "index": 2,
+            "survives": false,
+            "alpha": 0.05
+          },
+          {
+            "id": "SHORT_TOP10@borrow2",
+            "p": 0.16852216487743332,
+            "q": 0.6740886595097333,
+            "rank": 1,
+            "index": 3,
+            "survives": false,
+            "alpha": 0.05
+          }
+        ],
+        "verdicts": {
+          "EXCL_F1_REPL": "NO_IMPROVEMENT",
+          "EXCL_F2_REPL": "NO_IMPROVEMENT",
+          "EXCL_F3_REPL": "NO_IMPROVEMENT",
+          "SHORT_TOP10@borrow2": "NO_IMPROVEMENT"
+        }
+      },
+      "artifact": {
+        "file": "/Users/ravishah/dev/mna-catalyst/research/data/negative-overlay/negative-overlay-result.json",
+        "sha256": "db7337f711f93205b97317f35bf030138c1b1de0b50c4dee4c7f518c8d7eb05c",
+        "bytes": 16948
+      },
+      "immutable": true
+    },
+    {
+      "recordedAt": "2026-08-15T20:37:58.800Z",
+      "id": "negative-overlay-2026-08.r2",
+      "hypothesis": "The app's robust NEGATIVE findings pay as subtraction (exclusion overlays on a top-10 event book) or inversion (shorting the forced book) net of realistic frictions.",
+      "family": "negative-overlay",
+      "frozenConfig": {
+        "id": "negative-overlay-2026-08",
+        "family": "negative-overlay",
+        "declaredBeforeReadingResults": true,
+        "base": "forced top-10 by transparentPeadScore (no abstention, sector cap 3) — the same forced-book construction the arms study used",
+        "filters": {
+          "F1_DTC7": {
+            "rule": "features.extremeCrowdingFlag === 1 (daysToCover >= 7)",
+            "provenance": "frozen-original (catalyst-flow config, si-overlay pass)"
+          },
+          "F2_GAP10": {
+            "rule": "features.overnightGap >= 0.10",
+            "provenance": "ADAPTED proxy of the ≥10% gap + trend-template −0.21R AVOID (trend-catalyst-vcp-smc pass)"
+          },
+          "F3_MOMCHASE": {
+            "rule": "features.preEventReturn20 >= within-date cohort 80th percentile",
+            "provenance": "ADAPTED proxy of large-cap momentum-chase mean-reversion (fade/finviz validation)"
+          }
+        },
+        "short": {
+          "construction": "short every base-book name at next open, 5 sessions, hedged with the sector ETF (sector-relative by construction of the target)",
+          "winsorisation": "primary uses the dataset's winsorised return; UNWINSORISED variant reported because winsorisation clips exactly the short's squeeze tail",
+          "costs": "stock round trip (dataset liquidity-aware costFraction) + 4bps flat sector-ETF hedge round trip + borrow at {0.5%, 2%, 8%}/yr × 7/365 per trade; primary = 2%"
+        },
+        "primaryTests": [
+          "EXCL_F1_REPL",
+          "EXCL_F2_REPL",
+          "EXCL_F3_REPL",
+          "SHORT_TOP10@borrow2"
+        ],
+        "multipleTesting": "Benjamini-Hochberg across the 4 primary tests; every secondary variant recorded in the trial count",
+        "promisingGate": "BH q < 0.05 AND positive after doubled trading costs AND >= 3/4 chronological blocks positive — and even then the verdict is only RESEARCH-PROMISING (exploratory PIT class blocks anything more)",
+        "insufficient": "a filter that fires on < 200 base-book slots proves nothing → INSUFFICIENT_DATA for that cell"
+      },
+      "dataSnapshot": {
+        "dates": 1061,
+        "rows": 23869,
+        "pitClass": "RECONSTRUCTED_EXPLORATORY (inherited from the catalyst dataset)"
+      },
+      "trialCount": 11,
+      "results": {
+        "base": {
+          "label": "BASE_TOP10_PEAD",
+          "version": "evidence-stats-v1",
+          "n": 1061,
+          "effectiveN": 573,
+          "avg": -0.01,
+          "sd": 0.04,
+          "se": 0.0015,
+          "avgExact": -0.0059757575445085,
+          "seExact": 0.0014571504460782325,
+          "tCritical": 1.96,
+          "ci95": {
+            "lo": -0.01,
+            "hi": 0
+          },
+          "tCI": {
+            "lo": -0.01,
+            "hi": 0
+          },
+          "bootstrapCI": {
+            "lo": -0.01,
+            "hi": 0,
+            "blockLen": 5,
+            "B": 1000,
+            "seed": 20260805
+          },
+          "seBasis": "newey-west (lags 4, floored at IID)",
+          "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+          "blockStability": {
+            "blocks": 4,
+            "positive": 1,
+            "means": [
+              -0.008,
+              -0.01,
+              -0.008,
+              0.001
+            ],
+            "usable": true
+          },
+          "positiveBlocks": 1,
+          "dates": 1061,
+          "observations": 1061,
+          "avgPrecise": -0.005976,
+          "avgBpsPerCohort": -59.8,
+          "p": 0.00006784189838704435
+        },
+        "primaries": {
+          "EXCL_F1_REPL": {
+            "label": "EXCL_F1_REPL",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 1061,
+            "avg": 0,
+            "sd": 0.02,
+            "se": 0.0006,
+            "avgExact": -0.00019996141995466302,
+            "seExact": 0.0005989415345987009,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                0,
+                0.001,
+                -0.001,
+                -0.001
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": -0.0002,
+            "avgBpsPerCohort": -2,
+            "p": 0.738931348124793
+          },
+          "EXCL_F2_REPL": {
+            "label": "EXCL_F2_REPL",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 1041,
+            "avg": 0,
+            "sd": 0.02,
+            "se": 0.0005,
+            "avgExact": -0.00005216540296658573,
+            "seExact": 0.0004949252433598721,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                0,
+                0.001,
+                0,
+                -0.001
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": -0.000052,
+            "avgBpsPerCohort": -0.5,
+            "p": 0.9169067230390358
+          },
+          "EXCL_F3_REPL": {
+            "label": "EXCL_F3_REPL",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 996,
+            "avg": 0,
+            "sd": 0.01,
+            "se": 0.0004,
+            "avgExact": -0.0000921558504292415,
+            "seExact": 0.00039265612300500426,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": -0.000092,
+            "avgBpsPerCohort": -0.9,
+            "p": 0.8177891116605687
+          },
+          "SHORT_TOP10@borrow2": {
+            "label": "SHORT_TOP10@borrow2",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 581,
+            "avg": 0,
+            "sd": 0.04,
+            "se": 0.0014,
+            "avgExact": -0.001927755627535009,
+            "seExact": 0.001447969300469485,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                0,
+                0.001,
+                0,
+                -0.008
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": -0.001928,
+            "avgBpsPerCohort": -19.3,
+            "p": 0.16852216487743332
+          }
+        },
+        "secondaries": {
+          "EXCL_F1_SHRINK": {
+            "label": "EXCL_F1_SHRINK",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 1051,
+            "avg": 0,
+            "sd": 0.02,
+            "se": 0.0005,
+            "avgExact": 0.0015426887702975488,
+            "seExact": 0.0005354235968500886,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 3,
+              "means": [
+                0.002,
+                0.003,
+                0.001,
+                0
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 3,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": 0.001543,
+            "avgBpsPerCohort": 15.4,
+            "p": 0.0020330760556044325
+          },
+          "EXCL_F2_SHRINK": {
+            "label": "EXCL_F2_SHRINK",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 1016,
+            "avg": 0,
+            "sd": 0.01,
+            "se": 0.0005,
+            "avgExact": 0.0006364487093319102,
+            "seExact": 0.00045249327398115736,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 2,
+              "means": [
+                0,
+                0.001,
+                0.002,
+                0
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 2,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": 0.000636,
+            "avgBpsPerCohort": 6.4,
+            "p": 0.20305458288350464
+          },
+          "EXCL_F3_SHRINK": {
+            "label": "EXCL_F3_SHRINK",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 928,
+            "avg": 0,
+            "sd": 0.01,
+            "se": 0.0004,
+            "avgExact": 0.0009960772126974009,
+            "seExact": 0.000352066260466219,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 4,
+              "means": [
+                0.001,
+                0.001,
+                0.002,
+                0.001
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 4,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": 0.000996,
+            "avgBpsPerCohort": 10,
+            "p": 0.012767398701983401
+          },
+          "EXCL_UNION_REPL": {
+            "label": "EXCL_UNION_REPL",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 1061,
+            "avg": 0,
+            "sd": 0.03,
+            "se": 0.0008,
+            "avgExact": -0.00032118901506087913,
+            "seExact": 0.0008216625482482706,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                0.001,
+                0,
+                0,
+                -0.002
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": -0.000321,
+            "avgBpsPerCohort": -3.2,
+            "p": 0.6880622429474847
+          },
+          "SHORT@borrow0.5": {
+            "label": "SHORT@borrow0.5",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 581,
+            "avg": 0,
+            "sd": 0.04,
+            "se": 0.0014,
+            "avgExact": -0.001640084394658296,
+            "seExact": 0.001447969300469485,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                0,
+                0.002,
+                0,
+                -0.008
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": -0.00164,
+            "avgBpsPerCohort": -16.4,
+            "p": 0.24140245706652808
+          },
+          "SHORT@borrow8": {
+            "label": "SHORT@borrow8",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 581,
+            "avg": 0,
+            "sd": 0.04,
+            "se": 0.0014,
+            "avgExact": -0.0030784405590418597,
+            "seExact": 0.001447969300469485,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.01,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": -0.01,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": -0.01,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 0,
+              "means": [
+                -0.002,
+                0,
+                -0.001,
+                -0.01
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 0,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": -0.003078,
+            "avgBpsPerCohort": -30.8,
+            "p": 0.02788592473784357
+          },
+          "SHORT@borrow2_UNWINSORISED": {
+            "label": "SHORT@borrow2_UNWINSORISED",
+            "version": "evidence-stats-v1",
+            "n": 1061,
+            "effectiveN": 658,
+            "avg": 0,
+            "sd": 0.05,
+            "se": 0.0018,
+            "avgExact": -0.0031049215043357768,
+            "seExact": 0.0018436007588103303,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.01,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": -0.01,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": -0.01,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                -0.002,
+                0.002,
+                -0.001,
+                -0.012
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 1061,
+            "observations": 1061,
+            "avgPrecise": -0.003105,
+            "avgBpsPerCohort": -31,
+            "p": 0.08453526001660983
+          }
+        },
+        "diagnostics": {
+          "CONTRAST_F1_DTC7": {
+            "label": "CONTRAST_F1_DTC7 (flagged − unflagged within base book)",
+            "version": "evidence-stats-v1",
+            "n": 700,
+            "effectiveN": 699,
+            "avg": 0,
+            "sd": 0.06,
+            "se": 0.0023,
+            "avgExact": 0.000617185713288416,
+            "seExact": 0.002344114223803261,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0.01
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0.01
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0.01,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                -0.004,
+                0,
+                -0.002,
+                0.008
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 700,
+            "observations": 700,
+            "avgPrecise": 0.000617,
+            "avgBpsPerCohort": 6.2,
+            "p": 0.7884365004692273
+          },
+          "PLACEBO_F1_DTC7": {
+            "label": "PLACEBO_F1_DTC7 (filter shrink − random-exclusion shrink, 20 seeded draws)",
+            "version": "evidence-stats-v1",
+            "n": 747,
+            "effectiveN": 725,
+            "avg": 0,
+            "sd": 0.01,
+            "se": 0.0004,
+            "avgExact": -0.00003647484893900217,
+            "seExact": 0.0004042757860440843,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                0.001,
+                0,
+                0,
+                -0.001
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 747,
+            "observations": 747,
+            "avgPrecise": -0.000036,
+            "avgBpsPerCohort": -0.4,
+            "p": 0.9273437829756013
+          },
+          "CONTRAST_F2_GAP10": {
+            "label": "CONTRAST_F2_GAP10 (flagged − unflagged within base book)",
+            "version": "evidence-stats-v1",
+            "n": 312,
+            "effectiveN": 295,
+            "avg": 0,
+            "sd": 0.08,
+            "se": 0.0045,
+            "avgExact": 0.0021549396311935916,
+            "seExact": 0.004541336016722178,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": -0.01,
+              "hi": 0.01
+            },
+            "tCI": {
+              "lo": -0.01,
+              "hi": 0.01
+            },
+            "bootstrapCI": {
+              "lo": -0.01,
+              "hi": 0.01,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                -0.001,
+                0.014,
+                0,
+                -0.004
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 312,
+            "observations": 312,
+            "avgPrecise": 0.002155,
+            "avgBpsPerCohort": 21.5,
+            "p": 0.6320272400716482
+          },
+          "PLACEBO_F2_GAP10": {
+            "label": "PLACEBO_F2_GAP10 (filter shrink − random-exclusion shrink, 20 seeded draws)",
+            "version": "evidence-stats-v1",
+            "n": 319,
+            "effectiveN": 307,
+            "avg": 0,
+            "sd": 0.01,
+            "se": 0.0007,
+            "avgExact": 0.00012464971635261035,
+            "seExact": 0.0006896136880764512,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                0,
+                -0.001,
+                0,
+                0.001
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 319,
+            "observations": 319,
+            "avgPrecise": 0.000125,
+            "avgBpsPerCohort": 1.2,
+            "p": 0.8586672128287738
+          },
+          "CONTRAST_F3_MOMCHASE": {
+            "label": "CONTRAST_F3_MOMCHASE (flagged − unflagged within base book)",
+            "version": "evidence-stats-v1",
+            "n": 656,
+            "effectiveN": 656,
+            "avg": 0,
+            "sd": 0.06,
+            "se": 0.0022,
+            "avgExact": -0.0000381789172603933,
+            "seExact": 0.0022038617859454985,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 2,
+              "means": [
+                -0.003,
+                0.005,
+                -0.004,
+                0.001
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 2,
+            "dates": 656,
+            "observations": 656,
+            "avgPrecise": -0.000038,
+            "avgBpsPerCohort": -0.4,
+            "p": 0.9861540911424633
+          },
+          "PLACEBO_F3_MOMCHASE": {
+            "label": "PLACEBO_F3_MOMCHASE (filter shrink − random-exclusion shrink, 20 seeded draws)",
+            "version": "evidence-stats-v1",
+            "n": 656,
+            "effectiveN": 656,
+            "avg": 0,
+            "sd": 0.01,
+            "se": 0.0004,
+            "avgExact": 0.00007697267143942925,
+            "seExact": 0.0004002715041632225,
+            "tCritical": 1.96,
+            "ci95": {
+              "lo": 0,
+              "hi": 0
+            },
+            "tCI": {
+              "lo": 0,
+              "hi": 0
+            },
+            "bootstrapCI": {
+              "lo": 0,
+              "hi": 0,
+              "blockLen": 5,
+              "B": 1000,
+              "seed": 20260805
+            },
+            "seBasis": "newey-west (lags 4, floored at IID)",
+            "ciBasis": "widest of Student-t (df = effective sample size) and a seeded moving-block bootstrap — a correction may only widen a promotion gate",
+            "blockStability": {
+              "blocks": 4,
+              "positive": 1,
+              "means": [
+                0,
+                -0.001,
+                0.001,
+                0
+              ],
+              "usable": true
+            },
+            "positiveBlocks": 1,
+            "dates": 656,
+            "observations": 656,
+            "avgPrecise": 0.000077,
+            "avgBpsPerCohort": 0.8,
+            "p": 0.8474041181114162
+          }
+        },
+        "fired": {
+          "F1_DTC7": {
+            "slotsExcludedFromBooks": 1416,
+            "rowsFlaggedInCohorts": 5069
+          },
+          "F2_GAP10": {
+            "slotsExcludedFromBooks": 425,
+            "rowsFlaggedInCohorts": 1113
+          },
+          "F3_MOMCHASE": {
+            "slotsExcludedFromBooks": 1386,
+            "rowsFlaggedInCohorts": 4874
+          },
+          "UNION": {
+            "slotsExcludedFromBooks": 2720,
+            "rowsFlaggedInCohorts": 9538
+          }
+        },
+        "fdr": [
+          {
+            "id": "EXCL_F1_REPL",
+            "p": 0.738931348124793,
+            "q": 0.9169067230390358,
+            "rank": 2,
+            "index": 0,
+            "survives": false,
+            "alpha": 0.05
+          },
+          {
+            "id": "EXCL_F2_REPL",
+            "p": 0.9169067230390358,
+            "q": 0.9169067230390358,
+            "rank": 4,
+            "index": 1,
+            "survives": false,
+            "alpha": 0.05
+          },
+          {
+            "id": "EXCL_F3_REPL",
+            "p": 0.8177891116605687,
+            "q": 0.9169067230390358,
+            "rank": 3,
+            "index": 2,
+            "survives": false,
+            "alpha": 0.05
+          },
+          {
+            "id": "SHORT_TOP10@borrow2",
+            "p": 0.16852216487743332,
+            "q": 0.6740886595097333,
+            "rank": 1,
+            "index": 3,
+            "survives": false,
+            "alpha": 0.05
+          }
+        ],
+        "verdicts": {
+          "EXCL_F1_REPL": "NO_IMPROVEMENT",
+          "EXCL_F2_REPL": "NO_IMPROVEMENT",
+          "EXCL_F3_REPL": "NO_IMPROVEMENT",
+          "SHORT_TOP10@borrow2": "NO_IMPROVEMENT"
+        }
+      },
+      "artifact": {
+        "file": "/Users/ravishah/dev/mna-catalyst/research/data/negative-overlay/negative-overlay-result.json",
+        "sha256": "9ad62d3aede45ebad9957e39cb6ba3fba8b925cd48c52147b0e3028abd05236c",
+        "bytes": 24049
+      },
+      "immutable": true,
+      "parentExperimentId": "negative-overlay-2026-08"
     },
     {
       "recordedAt": "2026-08-12T23:34:49.606Z",
