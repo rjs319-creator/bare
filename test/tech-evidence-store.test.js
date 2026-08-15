@@ -115,6 +115,31 @@ test('mergeHealth: a failing run never erases the previous lastSuccessAt', async
   assert.equal(h.sources.npm.lastError, 'HTTP 503');
 });
 
+test('rebuildForwardRows unions with the prior cache — CDN-stale day-doc reads cannot shrink it', async (t) => {
+  const docs = {};
+  const origRead = STORE.readJSON;
+  const origWrite = STORE.writeJSON;
+  const origReadAll = STORE.readAllByPrefix;
+  STORE.readJSON = async (key, fallback) => (key in docs ? docs[key] : fallback);
+  STORE.writeJSON = async (key, doc) => { docs[key] = doc; return { pathname: key }; };
+  t.after(() => { STORE.readJSON = origRead; STORE.writeJSON = origWrite; STORE.readAllByPrefix = origReadAll; });
+
+  const toRow = (event, o) => ({ d: event.cutoffDate, t: event.ticker, arm: event.arm, n: [o.netResidual[1], o.netResidual[5], o.netResidual[10]] });
+  const annotatedDay = {
+    date: '2026-06-01',
+    events: [{ id: 'e1', cutoffDate: '2026-06-01', ticker: 'MDB', arm: 'npm' }],
+    resolved: { outcomes: [{ id: 'e1', status: 'resolved', netResidual: { 1: 0.01, 5: 0.02, 10: 0.03 } }] },
+  };
+  STORE.readAllByPrefix = async () => [annotatedDay];
+  const first = await TSTORE.rebuildForwardRows({ toRow });
+  assert.equal(first.total, 1);
+  // Propagation flap: the same day now reads back WITHOUT its annotation.
+  STORE.readAllByPrefix = async () => [{ date: '2026-06-01', events: annotatedDay.events }];
+  const second = await TSTORE.rebuildForwardRows({ toRow });
+  assert.equal(second.total, 1, 'a stale pre-annotation read must never shrink the derived cache');
+  assert.equal(second.fromDayDocs, 0);
+});
+
 test('series day cap trims the OLDEST days', () => {
   let series = TSTORE.emptySeries('npm');
   let d = '2024-01-01';
