@@ -29,8 +29,21 @@ test('tierForPick reads liquidity from the ledger metadata', () => {
   assert.strictEqual(tierForPick({ section: 'Biotech' }), 'biotech');
   assert.strictEqual(tierForPick({ bench: 'XBI' }), 'biotech');
   assert.strictEqual(tierForPick({ scope: 'large' }), 'liquid');
-  assert.strictEqual(tierForPick({}), 'liquid');
-  assert.strictEqual(tierForPick(null), 'liquid');
+  // These two previously pinned the fail-OPEN defect ({} / null → cheapest 'liquid'
+  // tier). Unknown liquidity must never earn the cheapest tier (audit 2026-08-15):
+  // 'liquid' is only granted by an explicit scope stamp or an explicit map entry.
+  assert.strictEqual(tierForPick({}), 'small');
+  assert.strictEqual(tierForPick(null), 'small');
+});
+
+test('an unmapped/missing/misspelled section fails CLOSED to the small tier, never liquid', () => {
+  assert.strictEqual(tierForPick({ section: 'NoSuchSection' }), 'small');
+  assert.strictEqual(tierForPick({ section: 'Screener' }), 'small'); // case drift ≠ the mapped 'screener'
+  assert.strictEqual(tierForPick({ section: null }), 'small');
+  // An explicit map entry (or a stamped scope) still earns 'liquid' — only the
+  // silent fallback is closed.
+  assert.strictEqual(tierForPick({ section: 'screener' }), 'liquid');
+  assert.strictEqual(tierForPick({ section: 'NoSuchSection', scope: 'large' }), 'liquid');
 });
 
 test('netReturn subtracts the round-trip cost as a positive drag', () => {
