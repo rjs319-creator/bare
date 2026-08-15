@@ -402,3 +402,47 @@ test('pathFor: budgetMs rides only on nested dispatches, and only when given', (
   assert.ok(WC.pathFor('@decision', 120000).includes('budgetMs=120000'));
   assert.ok(!WC.pathFor('op=track', 120000).includes('budgetMs'), 'plain ops never carry it');
 });
+
+// 🚨 Review 2026-08-15: falsy-zero budget hand-off. A parent dispatching at exactly
+// elapsed === deadlineMs sends budgetMs=0 (pathFor clamps at 0), and the child guard
+// `inheritedMs > 0` read 0 as "absent" → granted the FULL fresh 240s — the exact
+// parent-wall blowup the parameter exists to prevent. Any finite budget >= 0 now counts
+// as inherited and clamps to the 15s floor.
+test('inheritedDeadlineMs: budgetMs=0 is INHERITED (15s floor), never a fresh full deadline', () => {
+  const WCR = require('../lib/warm-chains-routes');
+  assert.equal(WCR.inheritedDeadlineMs('0'), WCR.CHILD_DEADLINE_FLOOR_MS, 'zero budget → floor, not full deadline');
+  assert.equal(WCR.inheritedDeadlineMs(0), WCR.CHILD_DEADLINE_FLOOR_MS);
+  assert.equal(WCR.CHILD_DEADLINE_FLOOR_MS, 15000);
+});
+
+test('inheritedDeadlineMs: absent/garbage budget keeps the full deadline; real budgets clamp to [floor, deadline]', () => {
+  const WCR = require('../lib/warm-chains-routes');
+  assert.equal(WCR.inheritedDeadlineMs(undefined), WC.CHAIN_DEADLINE_MS, 'root dispatch (no param) → full deadline');
+  assert.equal(WCR.inheritedDeadlineMs(''), WC.CHAIN_DEADLINE_MS);
+  assert.equal(WCR.inheritedDeadlineMs('nope'), WC.CHAIN_DEADLINE_MS);
+  assert.equal(WCR.inheritedDeadlineMs('-5000'), WC.CHAIN_DEADLINE_MS, 'pathFor never emits a negative — treat as absent');
+  assert.equal(WCR.inheritedDeadlineMs('120000'), 120000, 'a real remaining budget passes through');
+  assert.equal(WCR.inheritedDeadlineMs('7000'), WCR.CHILD_DEADLINE_FLOOR_MS, 'tiny budgets floor at 15s');
+  assert.equal(WCR.inheritedDeadlineMs(String(WC.CHAIN_DEADLINE_MS * 2)), WC.CHAIN_DEADLINE_MS, 'never above a fresh deadline');
+});
+
+test('runWarmChain passes the inherited (floored) deadline into runChain — budgetMs=0 wiring end to end', async () => {
+  // Patch runChain on the shared warm-chains exports BEFORE the routes module loads and
+  // destructures it, then restore. Proves the route actually uses inheritedDeadlineMs.
+  const routesPath = require.resolve('../lib/warm-chains-routes');
+  const realRunChain = WC.runChain;
+  const seen = [];
+  WC.runChain = async (name, opts) => { seen.push(opts.deadlineMs); return { name, complete: true, failed: [], skipped: [], steps: [], elapsedMs: 1 }; };
+  delete require.cache[routesPath];
+  try {
+    const R = require(routesPath);
+    const mkRes = () => ({ headers: {}, code: null, body: null, setHeader() {}, status(c) { this.code = c; return this; }, json(o) { this.body = o; return this; } });
+    await R.runWarmChain({ query: { name: 'pulse', budgetMs: '0' } }, mkRes());
+    await R.runWarmChain({ query: { name: 'pulse' } }, mkRes());
+    assert.equal(seen[0], 15000, 'budgetMs=0 → 15s floor reaches runChain');
+    assert.equal(seen[1], WC.CHAIN_DEADLINE_MS, 'absent budget → full deadline reaches runChain');
+  } finally {
+    WC.runChain = realRunChain;
+    delete require.cache[routesPath];
+  }
+});

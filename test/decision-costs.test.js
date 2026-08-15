@@ -76,8 +76,11 @@ test('costModel: a micro-cap scalp is punished far harder than a liquid swing', 
 
 test('costModel: when the round trip EXCEEDS the target move, the penalty floors', () => {
   // micro round trip 1.5% vs a 1% target = the trade cannot pay for itself.
+  // CONTRACT CHANGE (review finding #9, 2026-08-15): costShare ∈ [0,1] — it saturates at
+  // the worst-case sentinel 1 instead of reporting an unbounded ratio, so consumers can
+  // treat it as a fraction of the move (see WORST_COST_SHARE in lib/decision-costs.js).
   const m = C.costModel({ entry: 100, target: 101, liquidity: { dollarVol: 3e5 } });
-  assert.ok(m.costShare > 1, 'cost should exceed the whole move');
+  assert.strictEqual(m.costShare, 1, 'cost exceeding the whole move saturates at 1');
   assert.ok(m.netMovePct < 0, 'net expected move is negative');
   assert.strictEqual(m.penalty, C.MAX_COST_DRAG_FLOOR);
 });

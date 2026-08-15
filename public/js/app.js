@@ -908,14 +908,46 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
 
   function renderPicks(data) {
-    const { shortTerm = [], longTerm = [], watch = [], generatedAt, sourceCount, articleCount, fundamentalsEnabled } = data;
+    const { shortTerm = [], longTerm = [], watch = [], generatedAt, sourceCount, articleCount, fundamentalsEnabled, degraded, degradedNote, newsFeedsFailed } = data;
     if (generatedAt) picksGenTime.textContent = `Generated ${stampText(generatedAt)}`;
     if (sourceCount) picksSourceCount.textContent = `· ${articleCount ? articleCount + ' articles · ' : ''}${sourceCount} sources`;
 
     picksContainer.innerHTML = '';
+    // Outage honesty (2026-08-15): /api/picks marks a run `degraded` when any news feed
+    // failed. An empty book from a starved model must NEVER render as the standard
+    // "no picks cleared the screen" abstention — that copy claims a screen that didn't
+    // run. No picks at all ⇒ a loud outage state REPLACES the tracks; picks present ⇒
+    // a warning banner above them (partial coverage, still usable).
+    const hasPicks = shortTerm.length + longTerm.length + watch.length > 0;
+    if (degraded) {
+      picksContainer.appendChild(buildPicksOutageNotice(newsFeedsFailed, degradedNote, hasPicks));
+      if (!hasPicks) return;
+    }
     picksContainer.appendChild(buildPickTrack('short', shortTerm, fundamentalsEnabled));
     picksContainer.appendChild(buildPickTrack('long', longTerm, fundamentalsEnabled));
     if (watch.length) picksContainer.appendChild(buildPickTrack('watch', watch, fundamentalsEnabled));
+  }
+
+  // stocks + macro + earnings + options — the four feeds /api/picks screens from.
+  const PICKS_TOTAL_NEWS_FEEDS = 4;
+  function buildPicksOutageNotice(newsFeedsFailed, degradedNote, hasPicks) {
+    const failedCount = Number.isFinite(+newsFeedsFailed) && +newsFeedsFailed > 0 ? +newsFeedsFailed : null;
+    const feeds = failedCount
+      ? `${failedCount} of ${PICKS_TOTAL_NEWS_FEEDS} news feeds failed`
+      : 'a news feed failed';
+    const note = degradedNote || 'coverage is partial — this is a degraded read, not a full screen';
+    const n = document.createElement('div');
+    if (hasPicks) {
+      // Same convention as the day-trade stale banner: reuse .dt-note + a loud border.
+      n.className = 'dt-note picks-degraded-banner';
+      n.style.borderLeftColor = 'var(--red,#ef4444)';
+      n.textContent = `⚠️ ${feeds} — ${note}. Picks below come from the surviving feeds only.`;
+    } else {
+      n.className = 'picks-status error picks-degraded';
+      n.innerHTML = `<p style="font-size:1rem">⚠️ <b>News provider outage — not an abstention.</b></p>
+        <p>${esc(feeds)}. ${esc(note)}. Nothing was screened, so an empty board here says nothing about the market.</p>`;
+    }
+    return n;
   }
 
   const PICK_TRACK_META = {
