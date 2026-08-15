@@ -208,3 +208,13 @@ test('every scoreboard section has an EXPLICIT cost-tier decision (a new section
     assert.strictEqual(tierForPick({ section }), tier, `tierForPick disagrees with the declared default for ${section}`);
   }
 });
+
+// Follow-up to the fail-closed tierForPick change: challenger-routes must stamp the
+// scope it already knows (capTier), or large-cap picks silently repriced 16→60bps.
+test('challenger-routes stamps scope from capTier — large reclaims liquid, unknown stays conservative', () => {
+  const src = require('node:fs').readFileSync(require.resolve('../lib/challenger-routes.js'), 'utf8');
+  assert.match(src, /p\.capTier === 'large' \? 'large'/, 'large capTier must stamp scope large');
+  const { tierForPick } = require('../lib/costs');
+  assert.equal(tierForPick({ scope: 'large' }), 'liquid');
+  assert.equal(tierForPick({ scope: undefined }), 'small', 'unknown capTier keeps the conservative fallback');
+});
