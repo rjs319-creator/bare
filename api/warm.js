@@ -57,7 +57,8 @@ async function warmChainOne(name) {
 
 module.exports = async function handler(req, res) {
   // Gate the cron entrypoint: Vercel auto-sends the CRON_SECRET bearer on scheduled
-  // runs; when the secret is unset this fails open (deploy-safe). See lib/auth.js.
+  // runs. When the secret is unset this fails CLOSED in production (503 — a missing
+  // secret must never mean "allow") and open only in non-prod bootstrap. See lib/auth.js.
   if (!requireTrusted(req, res)) return;
 
   const START = Date.now();
