@@ -14,6 +14,7 @@
 import { esc } from './format.js';
 import { fetchJSON, HEAVY_TIMEOUT_MS, OPTIONAL_TIMEOUT_MS } from './fetch-json.js';
 import * as R from './tech-command-render.js';
+import { renderTechEvidence } from './tech-evidence-render.js';
 
 const POLL_MS = { regular: 90000, premarket: 180000, afterhours: 180000, closed: 900000 };
 const STORAGE_KEY = 'techCommandPrefs';
@@ -25,6 +26,9 @@ const state = {
   error: null,
   dossier: null,
   dossierLoading: false,
+  techev: null,           // op=techev payload (optional enrichment — its failure never blanks the page)
+  techevError: null,
+  techevLoading: false,
   timer: null,
   container: null,
   prefs: {
@@ -34,6 +38,8 @@ const state = {
     catalystWindow: 'all',
     evidence: 'all',      // all | actionable | research
     query: '',
+    evArm: 'all',         // operational-evidence section: all | npm | github | sec
+    evShow: 'all',        // operational-evidence section: all | available | eligible
   },
 };
 
@@ -152,6 +158,7 @@ function render() {
     ${R.renderOptions(p.options)}
     ${R.renderSentiment(p.sentiment)}
     ${R.renderRisk(p.risk)}
+    ${renderTechEvidence(state.techev, state.prefs, { error: state.techevError, loading: state.techevLoading && !state.techev })}
     ${R.renderHealth(p)}
   `;
   state.renderedAt = p.generatedAt;
@@ -167,6 +174,7 @@ function wire() {
   const bind = (id, key, ev = 'change') => on(id, ev, e => { state.prefs[key] = e.target.value; savePrefs(); render(); });
   bind('tc-horizon', 'horizon'); bind('tc-subsector', 'subsector');
   bind('tc-catalyst', 'catalystWindow'); bind('tc-evidence', 'evidence');
+  bind('tcev-arm', 'evArm'); bind('tcev-show', 'evShow');
   const q = el.querySelector('#tc-query');
   if (q) {
     let t = null;
@@ -204,6 +212,25 @@ async function load({ force = false } = {}) {
   } finally {
     state.loading = false;
     schedule();
+  }
+  loadTechEvidence({ force });
+}
+
+// Optional enrichment: the Operational Evidence panel. Its failure or absence must
+// never blank the command boards — it degrades to an in-section error state.
+async function loadTechEvidence({ force = false } = {}) {
+  if (state.techevLoading) return;
+  if (!force && state.techev) return; // snapshot changes at most daily — no need to re-poll
+  state.techevLoading = true;
+  try {
+    const data = await fetchJSON(`/api/tracker?op=techev${force ? `&_=${Date.now()}` : ''}`, { timeoutMs: OPTIONAL_TIMEOUT_MS });
+    state.techev = data;
+    state.techevError = null;
+  } catch (e) {
+    state.techevError = String((e && e.message) || e);
+  } finally {
+    state.techevLoading = false;
+    render();
   }
 }
 
