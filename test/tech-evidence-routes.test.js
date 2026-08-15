@@ -128,6 +128,14 @@ test('public unconfigured state is honest and un-cached (degraded, not empty-suc
   assert.equal(res.headers['cache-control'], 'no-store');
 });
 
+test('lib/store exports the prefix readers the rows rebuild depends on', () => {
+  // Regression: rebuildForwardRows called STORE.readAllByPrefix while it was module-
+  // internal; the local smoke masked it because monkey-patching CREATED the property.
+  const STORE = require('../lib/store');
+  assert.equal(typeof STORE.readAllByPrefix, 'function');
+  assert.equal(typeof STORE.listBlobPaths, 'function');
+});
+
 test('the frontend section is actually mounted on the Technology page', () => {
   const tc = read('public/js/tech-command.js');
   assert.match(tc, /renderTechEvidence\(/, 'tech-command must render the Operational Evidence section');
