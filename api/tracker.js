@@ -181,6 +181,11 @@ const PRIVILEGED_OPS = new Set([
   // fan-out. Cron/manual-with-bearer only; op=dilution (read) stays public.
   'dilutiontick',
   'dilutionresolve',
+  // STOCKTWITS BULL-RATIO FLAG shadow logger/resolver — writes the snapshot + write-once
+  // prospective ledger (stbull/v1/*) and spends a StockTwits fan-out / a ≤60-name candle
+  // fan-out. Cron/manual-with-bearer only; op=stbull (read) stays public.
+  'stbulltick',
+  'stbullresolve',
   // TECH OPERATIONAL EVIDENCE collectors/resolvers — write the techev/v1/* observation
   // ledgers + forward ledger and spend bounded official-API fan-outs (npm/GitHub/SEC/
   // job boards/status pages) plus a candle fan-out on resolve. Cron/manual-with-bearer
@@ -527,6 +532,9 @@ async function handleRequest(req, res) {
   if (req.query.op === 'dilution') return require('../lib/dilution-routes').runDilution(req, res);
   if (req.query.op === 'dilutiontick') return require('../lib/dilution-routes').runDilutionTick(req, res);
   if (req.query.op === 'dilutionresolve') return require('../lib/dilution-routes').runDilutionResolve(req, res);
+  if (req.query.op === 'stbull') return require('../lib/stbull-routes').runStbull(req, res);
+  if (req.query.op === 'stbulltick') return require('../lib/stbull-routes').runStbullTick(req, res);
+  if (req.query.op === 'stbullresolve') return require('../lib/stbull-routes').runStbullResolve(req, res);
   if (req.query.op === 'techev') return require('../lib/tech-evidence-routes').runTechEv(req, res);
   if (req.query.op === 'techevdetail') return require('../lib/tech-evidence-routes').runTechEvDetail(req, res);
   if (req.query.op === 'techevtick') return require('../lib/tech-evidence-routes').runTechEvTick(req, res);
