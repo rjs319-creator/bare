@@ -128,3 +128,8 @@ test('the frozen config cannot silently drift from the research it operationalis
   assert.equal(FLAG.FROZEN.prospectiveGate.minResolvedDates, 50);
   assert.equal(FLAG.FROZEN.experimentId, 'dilution-events-2026-08');
 });
+
+test('the empty state is never CDN-cached (pre-first-tick response must not stick for 10 min)', () => {
+  const routes = read('lib/dilution-routes.js');
+  assert.match(routes, /if \(snap\) cached\(res\); else noStore\(res\);/);
+});
