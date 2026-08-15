@@ -159,3 +159,16 @@ test('a PASS verdict is only ever provisional and never claims production', () =
   }
   assert.equal(out.manifest.researchValidity.productionGrade, false);
 });
+
+// Audit follow-up 2026-08-14: paired-test p-values use Student-t at df = pairedN − 1,
+// not the normal CDF (anti-conservative at the paired-date counts these tests see;
+// the p's feed the BH trial denominator).
+test('paired p-values are Student-t at df = pairedN − 1, not the normal approximation', () => {
+  const S3 = require('../lib/research/stats-v3');
+  const src = require('node:fs').readFileSync(require.resolve('../lib/research/harness-v3.js'), 'utf8');
+  assert.match(src, /pFromT\(nw\.tstat,\s*Math\.max\(1,\s*paired\.pairedN - 1\)\)/,
+    'harness-v3 must pass the paired df to pFromT');
+  // The behavioral premise the wiring rests on: at small df the t-based p is materially
+  // larger (more conservative) than the normal p.
+  assert.ok(S3.pFromT(2.2, 11) > S3.pFromT(2.2) * 1.5, 'df must actually change the p at small n');
+});
