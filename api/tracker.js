@@ -186,6 +186,10 @@ const PRIVILEGED_OPS = new Set([
   // fan-out. Cron/manual-with-bearer only; op=stbull (read) stays public.
   'stbulltick',
   'stbullresolve',
+  // STRUCTURED BEAR CASE generator — one bounded Haiku call over the day's top board
+  // rows, persisted to bearcase/<date>.json. Cron/manual-with-bearer only; op=bearcase
+  // (read) stays public.
+  'bearcasetick',
   // TECH OPERATIONAL EVIDENCE collectors/resolvers — write the techev/v1/* observation
   // ledgers + forward ledger and spend bounded official-API fan-outs (npm/GitHub/SEC/
   // job boards/status pages) plus a candle fan-out on resolve. Cron/manual-with-bearer
@@ -535,6 +539,8 @@ async function handleRequest(req, res) {
   if (req.query.op === 'stbull') return require('../lib/stbull-routes').runStbull(req, res);
   if (req.query.op === 'stbulltick') return require('../lib/stbull-routes').runStbullTick(req, res);
   if (req.query.op === 'stbullresolve') return require('../lib/stbull-routes').runStbullResolve(req, res);
+  if (req.query.op === 'bearcase') return require('../lib/bearcase-routes').runBearcase(req, res);
+  if (req.query.op === 'bearcasetick') return require('../lib/bearcase-routes').runBearcaseTick(req, res);
   if (req.query.op === 'techev') return require('../lib/tech-evidence-routes').runTechEv(req, res);
   if (req.query.op === 'techevdetail') return require('../lib/tech-evidence-routes').runTechEvDetail(req, res);
   if (req.query.op === 'techevtick') return require('../lib/tech-evidence-routes').runTechEvTick(req, res);

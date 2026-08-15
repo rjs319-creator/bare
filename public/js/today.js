@@ -30,6 +30,9 @@ let GRADES = {};
 // clearly labeled SHADOW / zero-weight; it never affects the production ranks above it.
 let CHALLENGER = null;
 function applyChallenger(c) { CHALLENGER = c && c.ok ? c : null; }
+// Structured bear cases (payload.bearCases side-map) — model-generated adversarial reads
+// of the board's own served evidence. Display-only: weight 0, never a rank input.
+let BEARCASES = null;
 function gradeChip(sig) {
   const g = GRADES[sig.section];
   if (!g) return '';
@@ -192,6 +195,18 @@ function failureLine(sig) {
     + (drivers ? ` — ${esc(drivers)}` : '') + ` <span class="td-dim">· suggests ${sizePct}% size (not applied)</span></div>`;
 }
 
+// Structured bear case — the strongest honest argument AGAINST the pick, argued by a
+// model from the card's own served evidence. Same shadow idiom as failureLine: always
+// labeled model-generated, never a rank input, and it shows the invalidation (what
+// would prove the bear WRONG) so it reads as a check, not a verdict.
+function bearLine(sig) {
+  const bc = BEARCASES && BEARCASES.cases && BEARCASES.cases[sig.ticker];
+  if (!bc || !bc.bearCase) return '';
+  const title = `Model-generated adversarial read (${esc(BEARCASES.model || 'LLM')}) of this card's own evidence. It does NOT affect this rank or any selection, and it carries no measured track record.`;
+  return `<div class="td-remain re-part td-bear" title="${title}">🐻 <b>bear case</b> (model view, not a rank input): ${esc(bc.bearCase)}`
+    + (bc.invalidation ? ` <span class="td-dim">· wrong if: ${esc(bc.invalidation)}</span>` : '') + `</div>`;
+}
+
 function levels(sig) {
   const parts = [];
   if (sig.entry > 0) {
@@ -227,6 +242,7 @@ function signalCard(sig, legend) {
     + `<div class="td-breadth-row">${breadthChip(sig)}</div>`
     + remainingLine(sig)
     + failureLine(sig)
+    + bearLine(sig)
     + levels(sig)
     + whyNowLine(sig)
     + `<div class="td-foot">${trackLine(sig)}${eventChip(sig.event)}${sig.catalyst ? `<span class="td-cat" title="${esc(sig.catalyst)}">📰 catalyst</span>` : ''}</div>`
@@ -409,6 +425,7 @@ export function renderCommandCenter(container, p) {
   if (!p || !p.ok) { container.innerHTML = `<div class="dt-note" style="border-left-color:var(--red)">⚠️ The command center couldn't load its signals right now — a data source may be down. Try Refresh.</div>`; return; }
   const legend = p.evidenceLegend || {};
   FAM_LEGEND = p.strategyFamilyLegend || {};
+  BEARCASES = p.bearCases && p.bearCases.cases ? p.bearCases : null;
   const reg = p.regime || {};
   const regCol = reg.bearish ? 'var(--red)' : reg.riskOn ? 'var(--green)' : 'var(--amber,#f59e0b)';
 
