@@ -167,16 +167,16 @@ export function renderTechEvidence(p, prefs = {}, { error = null, loading = fals
   const head = `<div class="tc-board-head"><h3 class="tc-h3">🧾 Operational Evidence <span class="tc-note">between-report activity monitor</span></h3></div>
     <p class="tc-note">Monitors operational changes between company reports from verified official sources (SEC facts, npm downloads, GitHub releases, job boards, status pages).
     <b>Research evidence, not a trade recommendation. No source is assumed to provide alpha until the forward ledger validates it.</b></p>`;
-  if (loading) return `<section class="tc-board" id="tc-evidence" aria-busy="true">${head}<p class="tc-note">Loading operational evidence…</p></section>`;
+  if (loading) return `<section class="tc-board" id="tc-opev" aria-busy="true">${head}<p class="tc-note">Loading operational evidence…</p></section>`;
   if (error) {
-    return `<section class="tc-board" id="tc-evidence">${head}
+    return `<section class="tc-board" id="tc-opev">${head}
       <div class="tc-error" role="alert"><b>Operational evidence could not load.</b><p>${esc(error)}</p>
       <p class="tc-note">This panel is empty because of the failure above — not because nothing changed operationally.</p></div></section>`;
   }
-  if (!p) return `<section class="tc-board" id="tc-evidence">${head}<div class="tc-empty">Not loaded yet.</div></section>`;
+  if (!p) return `<section class="tc-board" id="tc-opev">${head}<div class="tc-empty">Not loaded yet.</div></section>`;
   if (p.ok === false) {
     const reason = p.reason || p.error || (p.state === 'not-configured' ? 'Storage is not configured, so no evidence can persist.' : 'Unavailable.');
-    return `<section class="tc-board" id="tc-evidence">${head}
+    return `<section class="tc-board" id="tc-opev">${head}
       <div class="tc-empty">${esc(reason)}</div></section>`;
   }
   const filterRow = `<div class="tc-controls" role="group" aria-label="Evidence filters">
@@ -187,7 +187,7 @@ export function renderTechEvidence(p, prefs = {}, { error = null, loading = fals
       ${[['all', 'Everything'], ['available', 'Computable signals'], ['eligible', 'Forward-ledger events']].map(([v, t]) => `<option value="${esc(v)}"${(prefs.evShow || 'all') === v ? ' selected' : ''}>${esc(t)}</option>`).join('')}
     </select></label>
   </div>`;
-  return `<section class="tc-board" id="tc-evidence">
+  return `<section class="tc-board" id="tc-opev">
     ${head}
     ${healthStrip(p)}
     ${filterRow}
