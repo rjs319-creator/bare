@@ -4,7 +4,7 @@
 // (not a screener-count), lifecycle state, execution-aware ranking, upcoming risk
 // events, and data-freshness. The engine lives in lib/decision.js (server) — this
 // module only renders, so there is no client/server scoring skew.
-import { esc } from './format.js';
+import { esc, timeAgo } from './format.js';
 import { fetchJSON, HEAVY_TIMEOUT_MS, OPTIONAL_TIMEOUT_MS } from './fetch-json.js';
 
 const HORIZONS = [
@@ -647,18 +647,10 @@ const TODAY_CACHE_KEY = 'today.cc.v1';
 // worse than a spinner).
 const TODAY_CACHE_AGE_NOTE_MS = 30 * 60 * 1000;
 const TODAY_CACHE_MAX_PAINT_MS = 24 * 60 * 60 * 1000;
-const MINUTE_MS = 60 * 1000;
-const HOUR_MS = 60 * MINUTE_MS;
-
-// Human age of the cached payload ("42m ago" / "3h ago" / "2d ago").
-function cacheAgeText(at) {
-  if (!Number.isFinite(at)) return 'an unknown time';
-  const ms = Date.now() - at;
-  if (ms < MINUTE_MS) return 'moments ago';
-  if (ms < HOUR_MS) return `${Math.floor(ms / MINUTE_MS)}m ago`;
-  const h = Math.floor(ms / HOUR_MS);
-  return h < 48 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`;
-}
+// The cached payload's human age comes from the shared timeAgo() (format.js) —
+// the ONE relative-age formatter — so this banner never disagrees with the
+// "Updated …" stamps elsewhere. It also covers the undated-cache case honestly
+// ("a while ago" instead of the old local "an unknown time").
 
 // op=today self-fetches 12 sources in parallel (each bounded server-side at 12s) and measures
 // 11-13s cold — the scoreboard source alone takes ~10.3s, leaving almost nothing under the 20s
@@ -716,7 +708,7 @@ export async function loadCommandCenter(container) {
     const age = c && Number.isFinite(c.at) ? Date.now() - c.at : Infinity;
     if (c && c.p && c.p.ok && age <= TODAY_CACHE_MAX_PAINT_MS) {
       applyGrades(c.mat); applyChallenger(c.chal); renderCommandCenter(container, c.p);
-      markUpdating(container, true, age > TODAY_CACHE_AGE_NOTE_MS ? cacheAgeText(c.at) : null);
+      markUpdating(container, true, age > TODAY_CACHE_AGE_NOTE_MS ? timeAgo(c.at) : null);
       painted = true; cachedAt = c.at;
     }
   } catch { /* corrupt cache → ignore */ }
@@ -749,7 +741,7 @@ export async function loadCommandCenter(container) {
   } else {
     // Fresh fetch failed but a stale cached board is on screen: keep it, but swap the
     // "refreshing…" hint for a loud failure banner carrying the data's real age.
-    markRefreshFailed(container, cacheAgeText(cachedAt));
+    markRefreshFailed(container, timeAgo(cachedAt));
   }
   return p;
 }

@@ -37,8 +37,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // Every "Updated …" stamp on a payload's generatedAt must go through stampText():
   // a time-of-day alone ("Updated 4:02 PM") makes a days-old blob indistinguishable
   // from fresh. Same NY trading day → clock time; older → date + explicit age.
-  const STAMP_MS_PER_HOUR = 60 * 60 * 1000;
-  const STAMP_MS_PER_DAY = 24 * STAMP_MS_PER_HOUR;
+  // stampText owns ONLY the date-vs-clock decision; the age wording/buckets are
+  // delegated to the shared timeAgo() (format.js) so every surface renders the
+  // same age for the same payload.
+  const STAMP_MS_PER_DAY = 24 * 60 * 60 * 1000;
   const STAMP_NY_DAY = { timeZone: 'America/New_York', year: 'numeric', month: 'short', day: 'numeric' };
   function stampText(ts) {
     const d = new Date(ts);
@@ -49,13 +51,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     try { sameNyDay = d.toLocaleDateString('en-US', STAMP_NY_DAY) === now.toLocaleDateString('en-US', STAMP_NY_DAY); }
     catch { sameNyDay = now - d < STAMP_MS_PER_DAY; } // no TZ data → coarse fallback
     if (sameNyDay && now - d < STAMP_MS_PER_DAY) return time;
-    const ageMs = Math.max(0, now - d);
-    const days = Math.floor(ageMs / STAMP_MS_PER_DAY);
-    const age = days >= 1 ? `${days}d ago` : `${Math.max(1, Math.floor(ageMs / STAMP_MS_PER_HOUR))}h ago`;
     let dateTxt;
     try { dateTxt = d.toLocaleDateString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' }); }
     catch { dateTxt = d.toLocaleDateString(); }
-    return `${dateTxt}, ${time} (${age})`;
+    return `${dateTxt}, ${time} (${timeAgo(d)})`;
   }
 
   // Tapping a "💰 flow" badge on any screener card jumps to the Options tab.
@@ -2504,11 +2503,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function hcAgeText() {
     const meta = loadHCMeta(); const ats = HC_SCOPES.map(s => meta[s] && meta[s].at).filter(Boolean);
     if (!ats.length) return 'using defaults';
-    const m = Math.floor((Date.now() - Math.max(...ats)) / 60000);
-    if (m < 1) return 'updated just now';
-    if (m < 60) return 'updated ' + m + 'm ago';
-    const h = Math.floor(m / 60);
-    return h < 24 ? 'updated ' + h + 'h ago' : 'updated ' + Math.floor(h / 24) + 'd ago';
+    return 'updated ' + timeAgo(Math.max(...ats)); // shared age buckets (format.js)
   }
   function updateHCLabel() {
     const lab = { large: 'L', small: 'S', micro: 'M' };

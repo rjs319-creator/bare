@@ -273,19 +273,29 @@ const ROW = () => ({ ticker: 'ABCD', section: 'screener', tier: 'Early', scope: 
 const spyCal = (ds) => ds.map((date, i) => ({ date, close: 100 + i }));
 const FILLED_ENTRY = { status: 'filled', at: '10:05', referencePrice: 100, fill: 100.18, reason: 'stop-trigger', trigger: 100, slippagePct: 0.0018 };
 
-function opHarness({ docs = {}, bars = {}, daily = {} } = {}) {
+function opHarness({ docs = {}, bars = {}, daily = {}, blobExists = null } = {}) {
   const writes = {};
+  const reads = [];
   S.readJSON = async (key, dflt) => {
+    reads.push(key);
     if (key in writes) return clone(writes[key]);
     return key in docs ? clone(docs[key]) : dflt;
   };
   S.writeJSON = async (key, doc) => { writes[key] = clone(doc); return { persisted: true }; };
+  // Deterministic in both CI modes (with and without @vercel/blob installed): the op's
+  // quiet-day existence probe must never hit the real store from a test.
+  S.blobExists = blobExists || (async () => false);
   const deps = {
     fetch5min: async (ticker) => (ticker in bars ? clone(bars[ticker]) : null),
     fetchDaily: async (ticker) => (ticker in daily ? { candles: clone(daily[ticker]) } : null),
+    // Mirror the real store: the full-rebuild path lists whatever shard docs "exist".
+    listBlobs: async () => ({
+      blobs: Object.keys(docs).filter(k => k.startsWith('episodes/screener/')).map(pathname => ({ pathname })),
+      cursor: undefined,
+    }),
   };
   const res = { headers: {}, body: null, setHeader(k, v) { this.headers[k] = v; }, json(x) { this.body = x; return x; } };
-  return { writes, deps, res };
+  return { writes, reads, deps, res };
 }
 
 test('op: a partial entry session DEFERS — no immutable episode is written (Finding 5)', async () => {
@@ -386,6 +396,185 @@ test('op: an OPEN fill beyond the 21-day window is reopened and resolved (Findin
   assert.equal(ep.exitReason, EL.EXIT_REASON.TIME);
   assert.equal(ep.exitTs, '2026-08-19', 'exit = close of the 5th session after the entry session');
   assert.ok(Number.isFinite(ep.netReturnPct));
+});
+
+// ── FINDING A — bounded-concurrency fan-out + per-(ticker,range) dedupe ──────
+// Phase 1/2 previously awaited up to 25 latency-bound FMP calls ONE AT A TIME (a
+// 25-50s serial wall inside the warm-chain budget), and Phase 2 re-fetched the SAME
+// ticker's identical daily history once per shard date.
+
+test('op: the same OPEN ticker across 3 shard dates fetches its daily history ONCE (dedupe)', async () => {
+  const docs = {};
+  for (const d of ['2026-08-10', '2026-08-11', '2026-08-12']) {
+    const ep = SV.buildEpisode({ ticker: 'ABCD', date: d, entry: 100, signalVersion: 'screener-v2' },
+      { status: 'ok', entrySession: addDays(d, 1) }, FILLED_ENTRY);
+    docs[`episodes/screener/${d}.json`] = { version: SV.SCREENER_VERIFY_VERSION, date: d, episodes: { ABCD: ep } };
+  }
+  const dailyDates = Array.from({ length: 10 }, (_, i) => addDays('2026-08-11', i));
+  const { writes, deps, res } = opHarness({ docs, daily: { ABCD: spyCal(dailyDates) } });
+  const dailyCalls = [];
+  const countingDaily = async (ticker, range) => { dailyCalls.push(`${ticker}|${range}`); return deps.fetchDaily(ticker, range); };
+  await SV.runScreenerVerify({}, res, { ...deps, fetchDaily: countingDaily, now: '2026-08-20T18:00:00Z' });
+  assert.equal(res.body.resolvedNow, 3, 'every episode still resolves');
+  assert.deepEqual(dailyCalls, ['ABCD|3mo'], 'one identical (ticker, range) history is fetched exactly once, not once per date');
+  assert.equal(writes['episodes/screener/rollup.json'].episodes.length, 3);
+});
+
+test('op: 5-min entry fetches run CONCURRENTLY and bounded (mapLimit, not a serial wall)', async () => {
+  assert.ok(SV.FETCH_CONCURRENCY >= 2 && SV.FETCH_CONCURRENCY <= 6, 'bounded fan-out in the reviewed 2..6 band');
+  const picks = Array.from({ length: 12 }, (_, i) => ({ ...ROW(), ticker: `T${i}` }));
+  const { deps, res } = opHarness({ docs: { 'picks/2026-08-10.json': { picks } } });
+  let inFlight = 0, maxInFlight = 0, calls = 0;
+  const gauged5min = async () => {
+    calls++; inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise(r => setImmediate(r));
+    inFlight--; return null; // bars unavailable → young picks defer; only scheduling is under test
+  };
+  await SV.runScreenerVerify({}, res, { ...deps, fetch5min: gauged5min, now: '2026-08-12T18:00:00Z' });
+  assert.equal(calls, 12);
+  assert.equal(maxInFlight, SV.FETCH_CONCURRENCY, 'the pool actually fans out AND never exceeds its bound');
+  assert.equal(res.body.deferred, 12);
+});
+
+test('op: daily resolution fetches run CONCURRENTLY and bounded (mapLimit)', async () => {
+  const docs = {}; const episodes = {}; const rollupEps = [];
+  for (let i = 0; i < 12; i++) {
+    const ep = SV.buildEpisode({ ticker: `T${i}`, date: '2026-08-10', entry: 100, signalVersion: 'screener-v2' },
+      { status: 'ok', entrySession: '2026-08-11' }, FILLED_ENTRY);
+    episodes[`T${i}`] = ep; rollupEps.push(SV.projectEpisode(ep));
+  }
+  docs['episodes/screener/2026-08-10.json'] = { version: SV.SCREENER_VERIFY_VERSION, date: '2026-08-10', episodes };
+  docs['episodes/screener/rollup.json'] = { version: SV.SCREENER_VERIFY_VERSION, episodes: rollupEps };
+  const { deps, res } = opHarness({ docs });
+  let inFlight = 0, maxInFlight = 0, calls = 0;
+  const gaugedDaily = async () => {
+    calls++; inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise(r => setImmediate(r));
+    inFlight--; return null; // no candles → episodes stay honestly open
+  };
+  await SV.runScreenerVerify({}, res, { ...deps, fetchDaily: gaugedDaily, now: '2026-08-20T18:00:00Z' });
+  assert.equal(calls, 12, 'distinct tickers cannot be deduped — all fetched');
+  assert.equal(maxInFlight, SV.FETCH_CONCURRENCY);
+  assert.equal(res.body.resolvedNow, 0);
+  assert.equal(res.body.deferredResolves, 0, 'a bounded POOL is not a cap: nothing is deferred by concurrency');
+});
+
+// ── FINDING B — rollup splice-update, existence probe, compact scoreboard doc ─
+// The rollup used to be rebuilt from EVERY historical shard on EVERY run (O(history)
+// Blob reads, growing forever), and the Scoreboard downloaded the whole rollup on
+// every op=scoreboard just to re-derive a few-hundred-byte reduction.
+
+function historyFixture() {
+  const docs = {}; const rollupEps = [];
+  for (let i = 0; i < 30; i++) {
+    const d = addDays('2026-07-01', i), t = `H${i}`;
+    const pick = { ticker: t, date: d, entry: 100, signalVersion: 'screener-v2' };
+    const sel = { status: 'ok', entrySession: addDays(d, 1) };
+    const ep = i % 3 === 0
+      ? SV.buildEpisode(pick, sel, FILLED_ENTRY, { resolution: { exitPrice: 103, exitTs: addDays(d, 8) } })
+      : i % 3 === 1
+        ? SV.buildEpisode(pick, sel, { status: 'no-trigger', trigger: 100 })
+        : SV.buildEpisode(pick, sel, { status: 'gap-skip', trigger: 100 });
+    docs[`episodes/screener/${d}.json`] = { version: SV.SCREENER_VERIFY_VERSION, date: d, episodes: { [t]: ep } };
+    rollupEps.push(SV.projectEpisode(ep));
+  }
+  return { docs, rollupEps };
+}
+
+test('op: splice-update equals a full ?rebuild=1 rebuild on a 30-day episode history', async () => {
+  const { docs, rollupEps } = historyFixture();
+  const baseDocs = {
+    ...docs,
+    'episodes/screener/rollup.json': { version: SV.SCREENER_VERIFY_VERSION, episodes: rollupEps },
+    'picks/2026-09-01.json': { picks: [ROW()] },
+  };
+  const bars = { ABCD: { '2026-09-02': session(99) } }; // full session, level never trades → NO_FILL
+  const daily = { SPY: spyCal(['2026-08-31', '2026-09-01', '2026-09-02', '2026-09-03']) };
+
+  const splice = opHarness({ docs: baseDocs, bars, daily });
+  await SV.runScreenerVerify({}, splice.res, { ...splice.deps, now: '2026-09-03T18:00:00Z' });
+  const rebuild = opHarness({ docs: baseDocs, bars, daily });
+  await SV.runScreenerVerify({ query: { rebuild: '1' } }, rebuild.res, { ...rebuild.deps, now: '2026-09-03T18:00:00Z' });
+
+  const spliced = splice.writes['episodes/screener/rollup.json'];
+  const rebuilt = rebuild.writes['episodes/screener/rollup.json'];
+  assert.ok(spliced && rebuilt, 'both runs persist a rollup (this run graded an episode)');
+  assert.equal(spliced.count, 31, '30 historical + 1 newly graded');
+  assert.deepEqual(spliced.episodes, rebuilt.episodes, 'splice must be byte-equivalent to the repair rebuild');
+  // The whole point: the steady-state path re-reads NO historical shard.
+  const historicalReads = splice.reads.filter(k => /^episodes\/screener\/2026-07-\d{2}\.json$/.test(k));
+  assert.deepEqual(historicalReads, [], 'splice-update must not re-read beyond-window shards');
+  assert.ok(rebuild.reads.some(k => /^episodes\/screener\/2026-07-\d{2}\.json$/.test(k)),
+    'fixture sanity: the explicit rebuild DOES read the history');
+});
+
+test('op: quiet-day bootstrap probes existence via STORE.blobExists, and unknown is NOT absent', async () => {
+  // Provably absent → bootstrap an empty rollup once.
+  const absent = opHarness({ blobExists: async (p) => { absent.probed.push(p); return false; } });
+  absent.probed = [];
+  await SV.runScreenerVerify({}, absent.res, { ...absent.deps, now: '2026-08-20T18:00:00Z' });
+  assert.ok(absent.probed.includes('episodes/screener/rollup.json'), 'existence is probed, not downloaded');
+  assert.ok(absent.writes['episodes/screener/rollup.json'], 'a provably-absent rollup is bootstrapped');
+
+  // Exists (but unreadable this run) → the safe path is to leave it alone.
+  const present = opHarness({ blobExists: async () => true });
+  await SV.runScreenerVerify({}, present.res, { ...present.deps, now: '2026-08-20T18:00:00Z' });
+  assert.equal(present.res.body.ok, true);
+  assert.equal('episodes/screener/rollup.json' in present.writes, false, 'an existing doc is never clobbered on a quiet day');
+
+  // Unverifiable (blobExists THROWS) → unknown ≠ absent: no write, and the op survives.
+  const unknown = opHarness({ blobExists: async () => { throw new Error('list failed'); } });
+  await SV.runScreenerVerify({}, unknown.res, { ...unknown.deps, now: '2026-08-20T18:00:00Z' });
+  assert.equal(unknown.res.body.ok, true, 'an unverifiable probe must not crash the op');
+  assert.equal('episodes/screener/rollup.json' in unknown.writes, false);
+});
+
+test('source pin: the existence probe is S.blobExists, not a full rollup download', () => {
+  const src = require('node:fs').readFileSync(require.resolve('../lib/screener-verify.js'), 'utf8');
+  assert.match(src, /S\.blobExists\(ROLLUP_DOC\)/);
+});
+
+test('op: persists the compact fill-verification doc the Scoreboard reads (Finding B-c)', async () => {
+  const { docs, rollupEps } = historyFixture();
+  const { writes, deps, res } = opHarness({
+    docs: {
+      ...docs,
+      'episodes/screener/rollup.json': { version: SV.SCREENER_VERIFY_VERSION, episodes: rollupEps },
+      'picks/2026-09-01.json': { picks: [ROW()] },
+    },
+    bars: { ABCD: { '2026-09-02': session(99) } },
+    daily: { SPY: spyCal(['2026-08-31', '2026-09-01', '2026-09-02', '2026-09-03']) },
+  });
+  await SV.runScreenerVerify({}, res, { ...deps, now: '2026-09-03T18:00:00Z' });
+  const doc = writes[SV.FILL_VERIFICATION_DOC];
+  assert.ok(doc, 'the compact doc is written alongside the rollup');
+  assert.ok(doc.fillVerification && doc.fillVerification.screener);
+  assert.equal(doc.fillVerification.screener.episodes, 31);
+  assert.equal(doc.fillVerification.screener.channel, SV.SCREENER_VERIFY_VERSION);
+  assert.deepEqual(doc.fillVerification, SV.fillVerificationForSummary({ episodes: writes['episodes/screener/rollup.json'].episodes, updatedAt: doc.fillVerification.screener.updatedAt }),
+    'the persisted reduction is exactly the rollup reduction the summary used to derive live');
+});
+
+test('readFillVerificationForSummary fails closed: absent/malformed compact doc → null → byte-identical summary', async () => {
+  const cases = [
+    [undefined, null],                                     // doc absent
+    [{ fillVerification: null }, null],                    // zero-episode run persisted the honest null
+    [{ fillVerification: {} }, null],                      // malformed: no screener key
+    [{ fillVerification: { screener: 'yes' } }, null],     // malformed: non-object
+  ];
+  for (const [doc, expected] of cases) {
+    S.readJSON = async () => (doc === undefined ? null : clone(doc));
+    assert.equal(await SV.readFillVerificationForSummary(), expected);
+  }
+  const good = { fillVerification: { screener: { fillVerified: false, resolved: 1, channel: SV.SCREENER_VERIFY_VERSION } } };
+  S.readJSON = async (key) => (key === SV.FILL_VERIFICATION_DOC ? clone(good) : null);
+  assert.deepEqual(await SV.readFillVerificationForSummary(), good.fillVerification);
+});
+
+test('source pin: op=scoreboard reads the compact doc, never the full rollup', () => {
+  const src = require('node:fs').readFileSync(require.resolve('../lib/apex-routes.js'), 'utf8');
+  assert.match(src, /readFillVerificationForSummary\(\)/);
+  assert.doesNotMatch(src, /readEpisodeRollup/, 'the scoreboard must not download the ever-growing rollup for a few-hundred-byte reduction');
 });
 
 test('op: beyond-window reopening is bounded oldest-first and overflow is COUNTED, never silent (Finding 7)', async () => {

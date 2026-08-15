@@ -11,9 +11,17 @@ export function fmtMoney(n) {
   return n >= 1000 ? '$' + (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : '$' + Math.round(n);
 }
 
-// Relative time from an ISO timestamp: "just now" / "5m ago" / "3h ago" / "2d ago".
+// Relative age of a timestamp (ISO string, epoch ms, or Date): "just now" /
+// "5m ago" / "3h ago" / "2d ago". THE single source of truth for every "…ago"
+// surface — app.js stampText, hcAgeText, and today.js cache banners all delegate
+// here so the same payload age renders identically everywhere. Convention:
+// under 90s = "just now", then ROUNDED minutes/hours/days with cutoffs at
+// 1h/24h. Unparseable/missing input reads "a while ago" — vague but honest,
+// never "NaNm ago" and never epoch-1970 as a real age.
 export function timeAgo(ts) {
-  const s = Math.max(0, (Date.now() - Date.parse(ts)) / 1000);
+  const t = ts instanceof Date ? ts.getTime() : typeof ts === 'number' ? ts : Date.parse(ts);
+  if (!Number.isFinite(t)) return 'a while ago';
+  const s = Math.max(0, (Date.now() - t) / 1000);
   if (s < 90) return 'just now';
   if (s < 3600) return Math.round(s / 60) + 'm ago';
   if (s < 86400) return Math.round(s / 3600) + 'h ago';

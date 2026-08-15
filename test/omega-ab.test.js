@@ -263,6 +263,20 @@ test('isCompletedSessionBar: prior session yes, forming session no, post-16:05 y
   assert.strictEqual(AB.isCompletedSessionBar(null, new Date('2026-08-14T21:00:00Z')), false);
 });
 
+// Review 2026-08-15: the guard used to hardcode 16:05 ET, duplicating the session calendar
+// lib/market-session already encodes — on a 13:00 ET early-close day a COMPLETED bar was
+// refused until 16:05. The threshold is now derived from the calendar's close for the
+// current ET date (+5 min settle), falling closed to 16:05 if the lookup fails.
+test('isCompletedSessionBar: early-close day completes at 13:05 ET (calendar-derived, not hardcoded 16:05)', () => {
+  // 2026-11-27 (day after Thanksgiving) is a 13:00 ET early close; EST = UTC-5.
+  // 18:04Z = 13:04 ET — one minute before close+settle, still forming.
+  assert.strictEqual(AB.isCompletedSessionBar('2026-11-27', new Date('2026-11-27T18:04:00Z')), false);
+  // 18:05Z = 13:05 ET — session complete. The old hardcode refused this until 21:05Z.
+  assert.strictEqual(AB.isCompletedSessionBar('2026-11-27', new Date('2026-11-27T18:05:00Z')), true);
+  // A prior early-close session stays trivially complete.
+  assert.strictEqual(AB.isCompletedSessionBar('2026-11-27', new Date('2026-11-28T14:00:00Z')), true);
+});
+
 test('the tick guards the stamp, retries ALL matured unresolved days oldest-first, and surfaces stuckDates', () => {
   const src = require('node:fs').readFileSync(require.resolve('../lib/omega-ab-routes.js'), 'utf8');
   // Guard runs BEFORE the decision write.

@@ -44,11 +44,15 @@ require.cache[blobId] = {
 };
 const LS = require('../lib/lifecycle-store');
 
-// Serve stored blob bodies back through the reader's fetch path.
+// Serve stored blob bodies back through the reader's fetch path. Every fetched URL is
+// logged so tests can pin what the reader requested (e.g. no cache-buster on shards).
+const fetchLog = [];
 global.fetch = async (url) => {
+  fetchLog.push(String(url));
   const clean = String(url).split('?')[0];
   const hit = state.blobs.find((b) => b.url === clean);
-  if (!hit) return { ok: false, status: 404, json: async () => ({}) };
+  // A blob whose body is null models a non-ok CDN response (listed but unfetchable).
+  if (!hit || hit.body == null) return { ok: false, status: hit ? 503 : 404, json: async () => ({}) };
   return { ok: true, status: 200, json: async () => JSON.parse(hit.body) };
 };
 
@@ -98,4 +102,109 @@ test('loadSnapshots skips an unreadable shard without throwing (reader stays bes
   badShard.body = 'not json{{{';
   const merged = await LS.loadSnapshots('daytrade', DATE);
   assert.deepEqual(merged.map((s) => s.ticker), ['GOOD']);
+});
+
+// ── Loss accounting + fail-closed grading (review 2026-08-15) ────────────────
+// loadSnapshotShards used to drop an unreadable shard SILENTLY (`if (!res.ok) continue`,
+// bare catch) and runLifecycleGrade went straight to saveGrades — a truncated day was
+// graded and PERSISTED (grades/<date>.json is an overwrite) indistinguishably from a
+// complete one. The reader now counts losses via lib/store's withReadStats pattern and the
+// grade op refuses to overwrite an existing grades doc from an incomplete read.
+
+test('loadSnapshots COUNTS an unreadable shard — withReadStats metadata, non-enumerable', async () => {
+  state.blobs = [];
+  await LS.appendSnapshots('daytrade', DATE, [{ ticker: 'GOOD', at: 't1' }]);
+  await LS.appendSnapshots('daytrade', DATE, [{ ticker: 'BAD', at: 't2' }]);
+  await LS.appendSnapshots('daytrade', DATE, [{ ticker: 'GONE', at: 't3' }]);
+  const shards = state.blobs.filter((b) => b.pathname.includes(`${DATE}/`));
+  shards[1].body = 'not json{{{';   // parse failure
+  shards[2].body = null;            // non-ok response — a LOSS, not a skip
+  const merged = await LS.loadSnapshots('daytrade', DATE);
+  assert.deepEqual(merged.map((s) => s.ticker), ['GOOD']);
+  assert.equal(merged.requested, 3);
+  assert.equal(merged.unreadable, 2);
+  assert.equal(merged.complete, false);
+  assert.equal(JSON.stringify(merged), JSON.stringify([{ ticker: 'GOOD', at: 't1' }]),
+    'read stats must be non-enumerable — callers keep seeing a plain array');
+});
+
+test('a clean read reports complete:true with zero unreadable', async () => {
+  state.blobs = [];
+  await LS.appendSnapshots('daytrade', DATE, [{ ticker: 'AAA', at: 't1' }]);
+  const merged = await LS.loadSnapshots('daytrade', DATE);
+  assert.equal(merged.requested, 1);
+  assert.equal(merged.unreadable, 0);
+  assert.equal(merged.complete, true);
+});
+
+test('shard fetches carry NO cache-buster (write-once blobs never change; busting is pure cost)', async () => {
+  state.blobs = [];
+  await LS.appendSnapshots('daytrade', DATE, [{ ticker: 'AAA', at: 't1' }]);
+  fetchLog.length = 0;
+  await LS.loadSnapshots('daytrade', DATE);
+  const shardFetches = fetchLog.filter((u) => u.includes(`/snapshots/${DATE}/`));
+  assert.ok(shardFetches.length >= 1, 'the shard body must be fetched');
+  for (const u of shardFetches) assert.ok(!/[?&]_=/.test(u), `immutable shard fetched with a cache-buster: ${u}`);
+});
+
+// ── op=lifecyclegrade fail-closed persistence ────────────────────────────────
+const { runLifecycleGrade, STRATEGY } = require('../lib/lifecycle-routes');
+
+function resStub() {
+  return {
+    headers: {}, body: null,
+    setHeader(k, v) { this.headers[k] = v; },
+    json(o) { this.body = o; return o; },
+  };
+}
+const gradePath = LS.gradeKey(STRATEGY, DATE);
+const gradeDoc = () => state.blobs.find((b) => b.pathname === gradePath);
+
+test('runLifecycleGrade REFUSES to overwrite an existing grades doc on an incomplete read', async () => {
+  state.blobs = [];
+  await LS.appendSnapshots(STRATEGY, DATE, [{ ticker: 'AAA', at: 't1' }]);
+  await LS.appendSnapshots(STRATEGY, DATE, [{ ticker: 'BBB', at: 't2' }]);
+  state.blobs.filter((b) => b.pathname.includes(`${DATE}/`))[1].body = 'not json{{{';
+  const priorBody = JSON.stringify({ strategy: STRATEGY, date: DATE, grades: { 'AAA|t0': { type: 'entry' } }, updatedAt: 'prior' });
+  state.blobs.push({ pathname: gradePath, url: `https://blob.test/${gradePath}`, body: priorBody });
+
+  const res = resStub();
+  await runLifecycleGrade({ query: { date: DATE } }, res);
+
+  assert.equal(res.body.ok, false);
+  assert.equal(res.body.graded, false);
+  assert.equal(res.body.reason, 'incomplete-snapshot-read');
+  assert.equal(res.body.unreadable, 1);
+  assert.equal(gradeDoc().body, priorBody, 'the prior grades doc must NOT be overwritten');
+});
+
+test('runLifecycleGrade on an incomplete FIRST-TIME read may write, but stamps readIncomplete:true', async () => {
+  state.blobs = [];
+  await LS.appendSnapshots(STRATEGY, DATE, [{ ticker: 'AAA', at: 't1' }]);
+  await LS.appendSnapshots(STRATEGY, DATE, [{ ticker: 'BBB', at: 't2' }]);
+  state.blobs.filter((b) => b.pathname.includes(`${DATE}/`))[1].body = 'not json{{{';
+
+  const res = resStub();
+  await runLifecycleGrade({ query: { date: DATE } }, res);
+
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.readIncomplete, true);
+  const doc = JSON.parse(gradeDoc().body);
+  assert.equal(doc.readIncomplete, true, 'a grade from a truncated day must be marked in the persisted doc');
+});
+
+test('runLifecycleGrade on a CLEAN read writes grades as before (no refusal, no incomplete stamp)', async () => {
+  state.blobs = [];
+  await LS.appendSnapshots(STRATEGY, DATE, [{ ticker: 'AAA', at: 't1' }]);
+  const priorBody = JSON.stringify({ strategy: STRATEGY, date: DATE, grades: {}, updatedAt: 'prior' });
+  state.blobs.push({ pathname: gradePath, url: `https://blob.test/${gradePath}`, body: priorBody });
+
+  const res = resStub();
+  await runLifecycleGrade({ query: { date: DATE } }, res);
+
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.readIncomplete, false);
+  const doc = JSON.parse(gradeDoc().body);
+  assert.notEqual(gradeDoc().body, priorBody, 'a clean re-grade still overwrites (grades are recomputable)');
+  assert.equal(doc.readIncomplete, undefined);
 });

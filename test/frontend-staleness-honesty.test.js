@@ -48,10 +48,14 @@ test('app.js defines stampText and routes the generation stamps through it', () 
 test('stampText behavior: clock-only for a same-day stamp, date + explicit age for an old one', () => {
   // Extract the helper + its constants from source and evaluate it in isolation —
   // app.js itself touches `document` at module scope so it can't be imported here.
-  const consts = APP.match(/const STAMP_MS_PER_HOUR[\s\S]*?const STAMP_NY_DAY = \{[^}]+\};/);
+  // 2026-08-15 consolidation: stampText now delegates its age note to the shared
+  // timeAgo() in format.js (ROUND buckets, 24h day cutoff — was floor + a clamped
+  // "1h ago" minimum), so timeAgo's source is evaluated alongside it.
+  const timeAgoFn = R('format.js').match(/export (function timeAgo\(ts\) \{[\s\S]*?\n\})/);
+  const consts = APP.match(/const STAMP_MS_PER_DAY[\s\S]*?const STAMP_NY_DAY = \{[^}]+\};/);
   const fn = APP.match(/function stampText\(ts\) \{[\s\S]*?\n  \}/);
-  assert.ok(consts && fn, 'could not extract stampText from app.js source');
-  const stampText = new Function(`${consts[0]}\n${fn[0]}\nreturn stampText;`)();
+  assert.ok(timeAgoFn && consts && fn, 'could not extract timeAgo/stampText from source');
+  const stampText = new Function(`${timeAgoFn[1]}\n${consts[0]}\n${fn[0]}\nreturn stampText;`)();
   const fresh = stampText(Date.now());
   assert.match(fresh, /\d{1,2}:\d{2}/, 'same-day stamp should be a clock time');
   assert.ok(!fresh.includes('('), `same-day stamp must not carry an age note: "${fresh}"`);
@@ -75,7 +79,9 @@ test('today.js instant paint reads the cache age, refuses >24h, and labels >30mi
 test('today.js refresh failure over a stale board shows a loud banner, not a silent hint removal', () => {
   assert.match(TODAY, /function markRefreshFailed\(/);
   assert.match(TODAY, /Refresh failed — showing data from /, 'the failure banner must state the data age');
-  assert.match(TODAY, /markRefreshFailed\(container, cacheAgeText\(cachedAt\)\)/,
+  // 2026-08-15 consolidation: the age string comes from the shared timeAgo() in
+  // format.js (was a local cacheAgeText copy with its own inconsistent buckets).
+  assert.match(TODAY, /markRefreshFailed\(container, timeAgo\(cachedAt\)\)/,
     'the failed-refresh branch must render the banner (it used to just drop the refreshing hint)');
 });
 
@@ -134,6 +140,50 @@ test('app.js momentum cards build with a neutral EOD badge; LIVE is flipped by a
 });
 
 // ── #8: reliability fallback uses live horizon keys and labels the one used ─────
+
+// ── #9 (2026-08-15): ONE relative-age formatter — format.js timeAgo() ───────────
+// The frontend once carried four hand-rolled "…ago" rule sets (format.js timeAgo,
+// app.js stampText + hcAgeText, today.js cacheAgeText) with mutually inconsistent
+// buckets (floor vs round, "moments ago" vs "just now", 48h vs 24h day cutoff), so
+// the same payload age rendered differently across surfaces and threshold fixes
+// never propagated. Convention now: timeAgo's — "just now" under 90s, then ROUNDED
+// minutes/hours/days with cutoffs at 1h/24h; unparseable input reads "a while ago".
+
+test('app.js and today.js import the shared timeAgo and keep no local relative-age arithmetic', () => {
+  assert.match(APP, /import \{[^}]*\btimeAgo\b[^}]*\} from '\.\/format\.js'/,
+    'app.js must import timeAgo from format.js');
+  assert.match(TODAY, /import \{[^}]*\btimeAgo\b[^}]*\} from '\.\/format\.js'/,
+    'today.js must import timeAgo from format.js');
+  for (const [name, src] of [['app.js', APP], ['today.js', TODAY]]) {
+    // The deleted formatters and their private bucket constants may not return.
+    assert.ok(!/cacheAgeText/.test(src), `${name}: cacheAgeText resurrected`);
+    assert.ok(!/MINUTE_MS|HOUR_MS|STAMP_MS_PER_HOUR/.test(src),
+      `${name}: local age-bucket constants resurrected`);
+    // No minute/hour bucketing of a Date.now() delta outside the shared helper.
+    assert.ok(!/Date\.now\(\)[^\n]*\/\s*(?:60000|3600000|60 \* 1000|60\s*\*\s*60\s*\*\s*1000)/.test(src),
+      `${name}: hand-rolled minute/hour age arithmetic resurrected`);
+    // Every literal "…m/h/d ago" left must render a SERVER-supplied age field
+    // (ageMins / discoveryAgeMin / narrativeAgeMinutes) — never local bucket math.
+    const agoLines = src.split('\n').filter(l => /[mhd] ago/.test(l) && !/^\s*(\/\/|\*)/.test(l));
+    const rogue = agoLines.filter(l => !/agemin/i.test(l));
+    assert.deepEqual(rogue, [], `${name}: locally built "ago" strings must go through timeAgo()`);
+  }
+});
+
+test('timeAgo convention: just-now under 90s, rounded m/h/d buckets, honest fallback on garbage', () => {
+  const m = R('format.js').match(/export (function timeAgo\(ts\) \{[\s\S]*?\n\})/);
+  assert.ok(m, 'could not extract timeAgo from format.js');
+  const timeAgo = new Function(`${m[1]}\nreturn timeAgo;`)();
+  const MIN = 60 * 1000, HOUR = 60 * MIN, DAY = 24 * HOUR;
+  assert.equal(timeAgo(new Date().toISOString()), 'just now');            // ISO string
+  assert.equal(timeAgo(Date.now() - 5 * MIN), '5m ago');                  // epoch ms (cache stamps)
+  assert.equal(timeAgo(new Date(Date.now() - 3 * HOUR)), '3h ago');       // Date object
+  assert.equal(timeAgo(Date.now() - 30 * HOUR), '1d ago', 'day cutoff is 24h, not 48h');
+  assert.equal(timeAgo(Date.now() - 3 * DAY - 13 * HOUR), '4d ago', 'buckets ROUND, not floor');
+  assert.equal(timeAgo(Date.now() + HOUR), 'just now', 'a future stamp clamps to just now');
+  assert.equal(timeAgo('garbage'), 'a while ago', 'unparseable input must not render NaN');
+  assert.equal(timeAgo(null), 'a while ago', 'missing input must not read as epoch 1970');
+});
 
 test('opportunities.js buildReliability uses live scoreboard horizons and oppTrack labels the real one', () => {
   assert.ok(!OPPS.includes("h['1w']"), "scoreboard horizons are 1d/5d/10d/20d/1m/3m — '1w' does not exist");
