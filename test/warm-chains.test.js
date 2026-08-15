@@ -288,16 +288,23 @@ test('the compile runs strictly AFTER every scan (the parent awaits the nested c
   assert.ok(steps.indexOf('op=secmasterbuild') > compileAt);
 });
 
-test('every scan step advances the SHARED cursor at the 200-name cap', () => {
+test('every scan step targets a DISTINCT deterministic slot at the 200-name cap', () => {
+  // Audit 2026-08-14: the shared Blob cursor this test used to pin was the bug — an
+  // overwritten cursor propagates with a 10-30s+ read-back lag, so back-to-back steps
+  // read the SAME cursor and re-scanned the same slice (halving the claimed coverage).
+  // slot=N is a pure function of (epoch day, slot): nothing stored, nothing to lag.
   const scanChains = ['universescan1', 'universescan2', 'universescan3', 'universescan4'];
+  const slots = [];
   let total = 0;
   for (const c of scanChains) {
     for (const step of WC.CHAINS[c]) {
-      assert.match(step, /^op=universescan&cursor=1&limit=200$/,
-        'cursor=1 keeps the scans sequential over one cursor — without it they would refetch the same slice');
+      const m = step.match(/^op=universescan&slot=(\d+)&limit=200$/);
+      assert.ok(m, `slot mode keeps same-night scans collision-free with no Blob dependency: ${step}`);
+      slots.push(Number(m[1]));
       total += 200;
     }
   }
+  assert.equal(new Set(slots).size, slots.length, 'each step must own its own slot');
   assert.equal(total, 1600, 'nightly coverage: 1,600 names (was 300)');
 });
 
@@ -371,4 +378,71 @@ test('ticks3 forces the challenger eval strictly AFTER the resolve that feeds it
   const evalIdx = t3.indexOf('op=challengereval&force=1');
   assert.ok(resolveIdx >= 0, 'challengerresolve must stay in ticks3');
   assert.ok(evalIdx > resolveIdx, 'challengereval&force=1 must run after challengerresolve');
+});
+
+// 🚨 Audit 2026-08-14: an awaited @child used to claim a FRESH full deadline regardless of
+// how much the parent had already spent — a parent 200s in could await a child entitled
+// to 240s more, blowing the parent's 300s wall mid-await (504, no report persisted).
+// A nested dispatch now hands the child the parent's REMAINING budget.
+test('runChain: a nested @chain inherits the parent\'s REMAINING budget, not a fresh deadline', async () => {
+  const c = clock(0);
+  const call = recorder({ tick: () => c.advance(60000) }); // each step burns 60s
+  await WC.runChain('ledger', { call, now: c.now, deadlineMs: 240000 });
+  const nested = call.calls.filter(p => p.includes('op=warmchain'));
+  assert.ok(nested.length > 0, 'ledger must dispatch at least one nested chain');
+  for (const p of nested) {
+    const m = p.match(/budgetMs=(\d+)/);
+    assert.ok(m, `nested dispatch must carry budgetMs: ${p}`);
+    assert.ok(Number(m[1]) < 240000, `inherited budget must be less than a fresh deadline: ${p}`);
+  }
+});
+
+test('pathFor: budgetMs rides only on nested dispatches, and only when given', () => {
+  assert.ok(!WC.pathFor('@decision').includes('budgetMs'), 'no budget given → no param (root dispatch)');
+  assert.ok(WC.pathFor('@decision', 120000).includes('budgetMs=120000'));
+  assert.ok(!WC.pathFor('op=track', 120000).includes('budgetMs'), 'plain ops never carry it');
+});
+
+// 🚨 Review 2026-08-15: falsy-zero budget hand-off. A parent dispatching at exactly
+// elapsed === deadlineMs sends budgetMs=0 (pathFor clamps at 0), and the child guard
+// `inheritedMs > 0` read 0 as "absent" → granted the FULL fresh 240s — the exact
+// parent-wall blowup the parameter exists to prevent. Any finite budget >= 0 now counts
+// as inherited and clamps to the 15s floor.
+test('inheritedDeadlineMs: budgetMs=0 is INHERITED (15s floor), never a fresh full deadline', () => {
+  const WCR = require('../lib/warm-chains-routes');
+  assert.equal(WCR.inheritedDeadlineMs('0'), WCR.CHILD_DEADLINE_FLOOR_MS, 'zero budget → floor, not full deadline');
+  assert.equal(WCR.inheritedDeadlineMs(0), WCR.CHILD_DEADLINE_FLOOR_MS);
+  assert.equal(WCR.CHILD_DEADLINE_FLOOR_MS, 15000);
+});
+
+test('inheritedDeadlineMs: absent/garbage budget keeps the full deadline; real budgets clamp to [floor, deadline]', () => {
+  const WCR = require('../lib/warm-chains-routes');
+  assert.equal(WCR.inheritedDeadlineMs(undefined), WC.CHAIN_DEADLINE_MS, 'root dispatch (no param) → full deadline');
+  assert.equal(WCR.inheritedDeadlineMs(''), WC.CHAIN_DEADLINE_MS);
+  assert.equal(WCR.inheritedDeadlineMs('nope'), WC.CHAIN_DEADLINE_MS);
+  assert.equal(WCR.inheritedDeadlineMs('-5000'), WC.CHAIN_DEADLINE_MS, 'pathFor never emits a negative — treat as absent');
+  assert.equal(WCR.inheritedDeadlineMs('120000'), 120000, 'a real remaining budget passes through');
+  assert.equal(WCR.inheritedDeadlineMs('7000'), WCR.CHILD_DEADLINE_FLOOR_MS, 'tiny budgets floor at 15s');
+  assert.equal(WCR.inheritedDeadlineMs(String(WC.CHAIN_DEADLINE_MS * 2)), WC.CHAIN_DEADLINE_MS, 'never above a fresh deadline');
+});
+
+test('runWarmChain passes the inherited (floored) deadline into runChain — budgetMs=0 wiring end to end', async () => {
+  // Patch runChain on the shared warm-chains exports BEFORE the routes module loads and
+  // destructures it, then restore. Proves the route actually uses inheritedDeadlineMs.
+  const routesPath = require.resolve('../lib/warm-chains-routes');
+  const realRunChain = WC.runChain;
+  const seen = [];
+  WC.runChain = async (name, opts) => { seen.push(opts.deadlineMs); return { name, complete: true, failed: [], skipped: [], steps: [], elapsedMs: 1 }; };
+  delete require.cache[routesPath];
+  try {
+    const R = require(routesPath);
+    const mkRes = () => ({ headers: {}, code: null, body: null, setHeader() {}, status(c) { this.code = c; return this; }, json(o) { this.body = o; return this; } });
+    await R.runWarmChain({ query: { name: 'pulse', budgetMs: '0' } }, mkRes());
+    await R.runWarmChain({ query: { name: 'pulse' } }, mkRes());
+    assert.equal(seen[0], 15000, 'budgetMs=0 → 15s floor reaches runChain');
+    assert.equal(seen[1], WC.CHAIN_DEADLINE_MS, 'absent budget → full deadline reaches runChain');
+  } finally {
+    WC.runChain = realRunChain;
+    delete require.cache[routesPath];
+  }
 });

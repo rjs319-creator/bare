@@ -83,3 +83,36 @@ test('calibration: perfectly-calibrated scores → low Brier', () => {
   const hi = c.table.find(t => t.band.startsWith('80'));
   assert.ok(Math.abs(hi.predicted - hi.actual) <= 5);
 });
+
+// ── REGRESSION (audit 2026-08-14): dateClusteredIC used the 2dp display fields ──
+// Per-date IC means live at ~0.004-0.05; summarizeDateSeries rounds `avg` to 2dp for
+// display, so a true mean of 0.0036 became ic 0.00 with t 0.00 and `significant` was
+// decided from quantized garbage. The clustered lane must read avgExact/seExact.
+test('dateClusteredIC: a ~0.004 per-date IC mean is reported at full precision with a non-zero t', () => {
+  // Arrange — 12 dates × 20 picks. The outcome ordering is a fixed permutation with a
+  // tiny positive Spearman rho vs score (~0.003), with one adjacent pair swapped per
+  // date so the per-date ICs jitter slightly (sd small but non-zero → finite se).
+  const BASE = [15, 6, 18, 12, 0, 14, 1, 9, 7, 10, 2, 4, 17, 8, 13, 11, 19, 16, 3, 5];
+  const items = [];
+  const perDateICs = [];
+  for (let d = 0; d < 12; d++) {
+    const date = `2026-01-${String(d + 1).padStart(2, '0')}`;
+    const o = BASE.slice();
+    [o[d + 2], o[d + 3]] = [o[d + 3], o[d + 2]];
+    const cross = o.map((outcome, i) => ({ score: i, outcome, won: outcome > 10, date }));
+    items.push(...cross);
+    perDateICs.push(RQ.informationCoefficient(cross).ic); // ground truth, same estimator
+  }
+  const trueMean = perDateICs.reduce((s, x) => s + x, 0) / perDateICs.length;
+  assert.ok(trueMean > 0.001 && trueMean < 0.01, `test premise: mean must be sub-2dp (got ${trueMean})`);
+
+  // Act
+  const r = RQ.dateClusteredIC(items);
+
+  // Assert — the old code reported ic 0 / t 0 here (mean quantized to 0.00 before t).
+  assert.equal(r.dates, 12);
+  assert.notEqual(r.ic, 0, 'a ~0.004 mean must not be reported as exactly 0');
+  assert.ok(Math.abs(r.ic - trueMean) <= 5e-4, `ic ${r.ic} must match the true mean ${trueMean} at 3dp precision, not 2dp`);
+  assert.ok(Number.isFinite(r.t) && r.t !== 0, `t must be computed from full-precision fields (got ${r.t})`);
+  assert.ok(Math.abs(r.t) > 0.3, `t should be ~0.8 for this series, got ${r.t}`);
+});

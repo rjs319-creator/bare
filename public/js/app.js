@@ -23,6 +23,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadPeerLab } from './peer-lab.js';
   import { loadGridlock } from './gridlock.js';
   import { loadCflLab } from './cfl-lab.js';
+  import { loadSiLab } from './si-lab.js';
   import { loadPsrlLab } from './psrl-lab.js';
   import { renderCatalystLab } from './catalyst-lab.js';
   import { renderShell as renderPulse2Shell } from './pulse2-render.js';
@@ -32,6 +33,30 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { mountVerdict, loadGrades } from './evidence-badge.js';
   import { drawPatternChart } from './pattern-chart.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
+
+  // ── Honest payload timestamp ────────────────────────────────────────────────
+  // Every "Updated …" stamp on a payload's generatedAt must go through stampText():
+  // a time-of-day alone ("Updated 4:02 PM") makes a days-old blob indistinguishable
+  // from fresh. Same NY trading day → clock time; older → date + explicit age.
+  // stampText owns ONLY the date-vs-clock decision; the age wording/buckets are
+  // delegated to the shared timeAgo() (format.js) so every surface renders the
+  // same age for the same payload.
+  const STAMP_MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const STAMP_NY_DAY = { timeZone: 'America/New_York', year: 'numeric', month: 'short', day: 'numeric' };
+  function stampText(ts) {
+    const d = new Date(ts);
+    if (!ts || !Number.isFinite(d.getTime())) return '';
+    const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const now = new Date();
+    let sameNyDay;
+    try { sameNyDay = d.toLocaleDateString('en-US', STAMP_NY_DAY) === now.toLocaleDateString('en-US', STAMP_NY_DAY); }
+    catch { sameNyDay = now - d < STAMP_MS_PER_DAY; } // no TZ data → coarse fallback
+    if (sameNyDay && now - d < STAMP_MS_PER_DAY) return time;
+    let dateTxt;
+    try { dateTxt = d.toLocaleDateString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' }); }
+    catch { dateTxt = d.toLocaleDateString(); }
+    return `${dateTxt}, ${time} (${timeAgo(d)})`;
+  }
 
   // Tapping a "💰 flow" badge on any screener card jumps to the Options tab.
   setFlowNav(() => showTab('options'));
@@ -51,7 +76,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     markets:    ['rotation', 'sectors', 'news', 'thesis', 'pulse', 'evolve'],
     predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     proof:      ['scoreboard', 'evidence', 'movermiss', 'intradayval', 'baselines', 'leaderboard', 'coreperf'],
-    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge', 'cfl', 'orbitlab', 'rltlab', 'psrl', 'gridlock', 'catalyst', 'peerlab'],
+    // NOTE: ignition-live-routes.test.js pins 'edge','cfl','orbitlab' + 'rltlab','psrl',
+    // 'gridlock' adjacencies and requires 'peerlab' to close the list — insert new lab
+    // tabs only at the unpinned seams (silab/catalyst sit between gridlock and peerlab).
+    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge', 'cfl', 'orbitlab', 'rltlab', 'psrl', 'gridlock', 'silab', 'catalyst', 'peerlab'],
   };
   // Holding-horizon of each candidate/position sub-tab → drives the horizon dividers
   // in the sub-nav so the app is visibly separated by time horizon (the spec ask).
@@ -73,7 +101,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     movermiss: '🔍 Mover Miss Audit', intradayval: '🧪 Intraday Validation',
     rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', thesis: '🧾 Thesis Changes', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
     pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
-    backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)', rltlab: '🧭 Leadership (shadow)', gridlock: '⚡ GRIDLOCK (shadow)', peerlab: '🕸 Peers (shadow)', cfl: '🔭 Counterfactual Lab', psrl: '🪜 Persistent Trends (shadow)', catalyst: '⚡ Catalyst–Flow (research)',
+    backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)', rltlab: '🧭 Leadership (shadow)', gridlock: '⚡ GRIDLOCK (shadow)', peerlab: '🕸 Peers (shadow)', cfl: '🔭 Counterfactual Lab', silab: '📉 Short Interest (shadow)', psrl: '🪜 Persistent Trends (shadow)', catalyst: '⚡ Catalyst–Flow (research)',
     leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', evidence: '🎖️ Evidence', baselines: '🧪 Baselines', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
   };
   // Plain-English "what is this tab?" hovers for a novice investor — one line per
@@ -114,6 +142,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     peerlab: 'Peer Propagation — shadow engine flagging stocks whose PEERS and historical leaders have moved while their own price has not yet reacted. Early/confirming stages only; zero weight, never a buy signal, no probabilities until out-of-fold calibration is earned.',
     gridlock: 'GRIDLOCK — shadow engine mapping PHYSICAL constraints (AI data-center power demand, plant retirements, turbine orders — PJM first) to companies with VERIFIED exposure. Decomposed research scores only; zero weight, no probabilities, never a buy signal.',
     psrl: 'Persistent Trends — shadow layer ranking stocks by CONTINUITY of their advance (gradual staircase vs one-day jump-and-plateau) and by beta-adjusted leadership vs SPY and their sector. Evidence scores only, zero weight, never a buy signal; probabilities are not trained or calibrated.',
+    silab: 'Short Interest Overlay — a SHADOW experiment testing whether FINRA consolidated short-interest crowding (days-to-cover) adds incremental 5-session alpha to OMEGA selection. Reports the honest verdict, walk-forward evidence and per-ticker crowding context. Weight-0; it does not affect the live OMEGA ranking and is never a buy/sell or squeeze signal.',
     cfl: 'Counterfactual Lab — which big winners the pipeline MISSED (and at exactly which stage: universe, data, screeners, ranking, timing, risk gate, display), which picks became duds and why, and whether each miss was preventable or genuinely unforecastable. Measurement only; never a buy signal.',
     'tech-command': 'One technology universe, three INDEPENDENT conclusions: a day-trade board projected read-only from the frozen Day Trade engine, a swing board that inherits the app\u2019s governed eligibility gate, and a separate long-term investment model. Every candidate states why now, the exact trigger and what invalidates it; an \u201cAround the Corner\u201d timeline covers past, present and scheduled events. Options and social attention are weight-zero annotations that can never originate a trade, and no probability is shown because none is calibrated.',
     rotation: 'Which sectors money is rotating into and out of, week over week.',
@@ -464,6 +493,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'peerlab' && typeof ensurePeerLab === 'function') ensurePeerLab();
     if (sub === 'gridlock' && typeof ensureGridlock === 'function') ensureGridlock();
     if (sub === 'cfl' && typeof ensureCflLab === 'function') ensureCflLab();
+    if (sub === 'silab' && typeof ensureSiLab === 'function') ensureSiLab();
     if (sub === 'psrl' && typeof ensurePsrlLab === 'function') ensurePsrlLab();
     if (sub === 'catalyst' && typeof ensureCatalystLab === 'function') ensureCatalystLab();
     if (sub === 'tech-command' && typeof ensureTechCommand === 'function') ensureTechCommand();
@@ -885,14 +915,46 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
 
   function renderPicks(data) {
-    const { shortTerm = [], longTerm = [], watch = [], generatedAt, sourceCount, articleCount, fundamentalsEnabled } = data;
-    if (generatedAt) picksGenTime.textContent = `Generated ${new Date(generatedAt).toLocaleTimeString()}`;
+    const { shortTerm = [], longTerm = [], watch = [], generatedAt, sourceCount, articleCount, fundamentalsEnabled, degraded, degradedNote, newsFeedsFailed } = data;
+    if (generatedAt) picksGenTime.textContent = `Generated ${stampText(generatedAt)}`;
     if (sourceCount) picksSourceCount.textContent = `· ${articleCount ? articleCount + ' articles · ' : ''}${sourceCount} sources`;
 
     picksContainer.innerHTML = '';
+    // Outage honesty (2026-08-15): /api/picks marks a run `degraded` when any news feed
+    // failed. An empty book from a starved model must NEVER render as the standard
+    // "no picks cleared the screen" abstention — that copy claims a screen that didn't
+    // run. No picks at all ⇒ a loud outage state REPLACES the tracks; picks present ⇒
+    // a warning banner above them (partial coverage, still usable).
+    const hasPicks = shortTerm.length + longTerm.length + watch.length > 0;
+    if (degraded) {
+      picksContainer.appendChild(buildPicksOutageNotice(newsFeedsFailed, degradedNote, hasPicks));
+      if (!hasPicks) return;
+    }
     picksContainer.appendChild(buildPickTrack('short', shortTerm, fundamentalsEnabled));
     picksContainer.appendChild(buildPickTrack('long', longTerm, fundamentalsEnabled));
     if (watch.length) picksContainer.appendChild(buildPickTrack('watch', watch, fundamentalsEnabled));
+  }
+
+  // stocks + macro + earnings + options — the four feeds /api/picks screens from.
+  const PICKS_TOTAL_NEWS_FEEDS = 4;
+  function buildPicksOutageNotice(newsFeedsFailed, degradedNote, hasPicks) {
+    const failedCount = Number.isFinite(+newsFeedsFailed) && +newsFeedsFailed > 0 ? +newsFeedsFailed : null;
+    const feeds = failedCount
+      ? `${failedCount} of ${PICKS_TOTAL_NEWS_FEEDS} news feeds failed`
+      : 'a news feed failed';
+    const note = degradedNote || 'coverage is partial — this is a degraded read, not a full screen';
+    const n = document.createElement('div');
+    if (hasPicks) {
+      // Same convention as the day-trade stale banner: reuse .dt-note + a loud border.
+      n.className = 'dt-note picks-degraded-banner';
+      n.style.borderLeftColor = 'var(--red,#ef4444)';
+      n.textContent = `⚠️ ${feeds} — ${note}. Picks below come from the surviving feeds only.`;
+    } else {
+      n.className = 'picks-status error picks-degraded';
+      n.innerHTML = `<p style="font-size:1rem">⚠️ <b>News provider outage — not an abstention.</b></p>
+        <p>${esc(feeds)}. ${esc(note)}. Nothing was screened, so an empty board here says nothing about the market.</p>`;
+    }
+    return n;
   }
 
   const PICK_TRACK_META = {
@@ -1378,8 +1440,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
 
   function renderOptionsFlowShell(data) {
-    if (optionsGenTime) optionsGenTime.textContent = (of2 && of2.generatedAt) ? `Updated ${new Date(of2.generatedAt).toLocaleTimeString()}`
-      : data.generatedAt ? `Updated ${new Date(data.generatedAt).toLocaleTimeString()}` : '';
+    if (optionsGenTime) optionsGenTime.textContent = (of2 && of2.generatedAt) ? `Updated ${stampText(of2.generatedAt)}`
+      : data.generatedAt ? `Updated ${stampText(data.generatedAt)}` : '';
     if (optionsMeta) optionsMeta.textContent = of2
       ? `· ${(of2.events || []).length} event(s) across ${of2.universe && of2.universe.scanned != null ? of2.universe.scanned : '?'} scanned names · session ${of2.session || '?'}`
       : `· ${data.count} unusual signals across ${data.universe} liquid names`;
@@ -2449,11 +2511,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function hcAgeText() {
     const meta = loadHCMeta(); const ats = HC_SCOPES.map(s => meta[s] && meta[s].at).filter(Boolean);
     if (!ats.length) return 'using defaults';
-    const m = Math.floor((Date.now() - Math.max(...ats)) / 60000);
-    if (m < 1) return 'updated just now';
-    if (m < 60) return 'updated ' + m + 'm ago';
-    const h = Math.floor(m / 60);
-    return h < 24 ? 'updated ' + h + 'h ago' : 'updated ' + Math.floor(h / 24) + 'd ago';
+    return 'updated ' + timeAgo(Math.max(...ats)); // shared age buckets (format.js)
   }
   function updateHCLabel() {
     const lab = { large: 'L', small: 'S', micro: 'M' };
@@ -2860,7 +2918,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const data = await fetchJSON('/api/screener?scope=' + scope + scrFilterQS() + (scope === 'large' ? '&lookback=' + scrLookback : ''));
       if (data.error) { container.innerHTML = `<div class="mom-status error"><p>${esc(data.error)}</p></div>`; return; }
       const { results = [], cap, rotation, scannedCount, breakoutCount, generatedAt, narrativeEnabled } = data;
-      if (isMain && generatedAt) screenerGenTime.textContent = `Updated ${new Date(generatedAt).toLocaleTimeString()}`;
+      if (isMain && generatedAt) screenerGenTime.textContent = `Updated ${stampText(generatedAt)}`;
       if (metaEl) metaEl.textContent = `· ${scannedCount || 0} scanned · ${results.length} passed the 4-filter gate · ${breakoutCount || 0} breaking out${narrativeEnabled ? '' : ' · narrative offline'}`;
       if (cap) scrCaps[scope] = cap;
       if (scope === 'large') { lastRegime = data.regime || null; renderRotation(rotation); renderRotationTrend(data.rotationHistory); renderRegime(lastRegime); renderMomentumRegime(); }
@@ -3736,7 +3794,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       renderApex(apexLast);
       apexCheckNewApex(deduped); // notify on names that just entered the Apex tier
       const gt = document.getElementById('custom-gen-time');
-      if (large.generatedAt) gt.textContent = `Updated ${new Date(large.generatedAt).toLocaleTimeString()}`;
+      if (large.generatedAt) gt.textContent = `Updated ${stampText(large.generatedAt)}`;
       document.getElementById('custom-meta').textContent = `· ${deduped.length} names scored · ${APEX_RG_LABEL[regime]} preset · 4-pillar regime-adaptive`;
     } catch (err) {
       // Surface the real failure instead of swallowing it — a blank "try again"
@@ -4235,7 +4293,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     loadCommandCenter(el.querySelector('#today-cc')).then(() => {
       if (typeof startScreenerLive === 'function') startScreenerLive(el.querySelector('#today-cc')); // live prices on ticker chips
     });
-    const gt = document.getElementById('today-gen-time'); if (gt && ok && tape.generatedAt) gt.textContent = new Date(tape.generatedAt).toLocaleTimeString();
+    const gt = document.getElementById('today-gen-time'); if (gt && ok && tape.generatedAt) gt.textContent = stampText(tape.generatedAt);
     const meta = document.getElementById('today-meta'); if (meta) meta.textContent = `· ${regLbl} · ${clbl} tape`;
   }
   document.getElementById('today-refresh-btn')?.addEventListener('click', runTodayUI);
@@ -4487,6 +4545,19 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (btn) btn.addEventListener('click', () => loadCflLab(document.getElementById('cfl-container')));
     }
     loadCflLab(document.getElementById('cfl-container'));
+  }
+
+  // 📉 Short Interest Overlay (shadow) — read-only Research Lab panel (loadSiLab
+  // renders op=sistatus / siwf / sisnapshot). Weight-0 experiment readout; never
+  // a buy signal, never affects the live OMEGA rank.
+  let siLabLoaded = false;
+  function ensureSiLab() {
+    if (!siLabLoaded) {
+      siLabLoaded = true;
+      const btn = document.getElementById('silab-refresh-btn');
+      if (btn) btn.addEventListener('click', () => loadSiLab(document.getElementById('silab-container')));
+    }
+    loadSiLab(document.getElementById('silab-container'));
   }
 
   // 🪜 Persistent Trends (shadow) — read-only PSRL board (loadPsrlLab renders
@@ -5519,7 +5590,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const caveat = `<div class="fade-caveats" style="margin-top:12px"><p>⚠️ <b>A synthesis, not advice.</b> This blends signals that are themselves weak/unproven — the equity translation is rule-based, not a forecast of returns. Read it as "what the prediction layer is leaning," then confirm with your own work.</p></div>`;
     el.innerHTML = hero + signals + agree + equity + track + trust + caveat;
     el.querySelectorAll('[data-go]').forEach(r => r.addEventListener('click', () => showTab(r.dataset.go)));
-    const gt = document.getElementById('brief-gen-time'); if (gt && b.generatedAt) gt.textContent = new Date(b.generatedAt).toLocaleTimeString();
+    const gt = document.getElementById('brief-gen-time'); if (gt && b.generatedAt) gt.textContent = stampText(b.generatedAt);
   }
   document.getElementById('brief-refresh-btn')?.addEventListener('click', runBriefUI);
 
@@ -5670,7 +5741,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     }
     const caveat = `<div class="fade-caveats" style="margin-top:14px"><p>⚠️ <b>A sentiment radar, not a signal.</b> A volume burst or odds swing usually means the crowd is repricing a <i>known</i> catalyst (often after the news) — it tells you what macro events are in play, not what to trade. Real money, but not a stock edge.</p></div>`;
     el.innerHTML = banner + trust + body + study + caveat;
-    const gt = document.getElementById('crowd-gen-time'); if (gt && d.generatedAt) gt.textContent = new Date(d.generatedAt).toLocaleTimeString();
+    const gt = document.getElementById('crowd-gen-time'); if (gt && d.generatedAt) gt.textContent = stampText(d.generatedAt);
   }
   document.getElementById('crowd-refresh-btn')?.addEventListener('click', runCrowdUI);
 
@@ -5748,7 +5819,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     }
     const caveat = `<div class="fade-caveats" style="margin-top:14px"><p>⚠️ <b>Hallmarks, not proof.</b> This flags statistical fingerprints of informed betting — it does <i>not</i> detect actual insider trading, and most hits are coincidence, hedging, or rumor. A lead to investigate, never a signal to follow. Real money, real markets — but speculative.</p></div>`;
     el.innerHTML = banner + trust + predict + body + history + caveat;
-    const gt = document.getElementById('sharp-gen-time'); if (gt && d.generatedAt) gt.textContent = new Date(d.generatedAt).toLocaleTimeString();
+    const gt = document.getElementById('sharp-gen-time'); if (gt && d.generatedAt) gt.textContent = stampText(d.generatedAt);
   }
   document.getElementById('sharp-refresh-btn')?.addEventListener('click', runSharpUI);
 
@@ -5940,7 +6011,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       ghostLast = { list: deduped, meta: large.ghost || {}, large };
       renderGhost(ghostLast);
       const gt = document.getElementById('ghost-gen-time');
-      if (large.generatedAt) gt.textContent = `Updated ${new Date(large.generatedAt).toLocaleTimeString()}`;
+      if (large.generatedAt) gt.textContent = `Updated ${stampText(large.generatedAt)}`;
       const rg = (large.ghost && large.ghost.regime) || 'neutral';
       document.getElementById('ghost-meta').textContent = `· ${deduped.length} names scored · ${GHOST_RG_LABEL[rg]} weights · 6-pillar quiet-accumulation`;
     } catch {
@@ -6209,7 +6280,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const meta = document.getElementById('edge-meta');
     if (meta) meta.textContent = `· ${aLive.length} conviction · ${bLive.length} forced-flow · paper`;
     const gt = document.getElementById('edge-gen-time');
-    if (gt && book && book.generatedAt) gt.textContent = new Date(book.generatedAt).toLocaleTimeString();
+    if (gt && book && book.generatedAt) gt.textContent = stampText(book.generatedAt);
   }
 
   document.getElementById('edge-refresh-btn')?.addEventListener('click', runEdge);
@@ -6493,7 +6564,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const meta = document.getElementById('fade-meta');
     if (meta) meta.textContent = gated ? '· risk-off — engine standing down' : `· ${picks.length} overheated names · ${sig.actionable} flagged (research)`;
     const gt = document.getElementById('fade-gen-time');
-    if (gt && sig.generatedAt) gt.textContent = new Date(sig.generatedAt).toLocaleTimeString();
+    if (gt && sig.generatedAt) gt.textContent = stampText(sig.generatedAt);
   }
 
   document.getElementById('fade-refresh-btn')?.addEventListener('click', runFade);
@@ -6619,7 +6690,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const meta = document.getElementById('trendr-meta');
     if (meta) meta.textContent = `· light ${lbl} · ${basket.length} names in the ride list`;
     const gt = document.getElementById('trendr-gen-time');
-    if (gt && t.generatedAt) gt.textContent = new Date(t.generatedAt).toLocaleTimeString();
+    if (gt && t.generatedAt) gt.textContent = stampText(t.generatedAt);
   }
 
   document.getElementById('trendr-refresh-btn')?.addEventListener('click', runTrendRider);
@@ -6633,6 +6704,24 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function ensureDaytrade() {
     if (!daytradeLoaded) { daytradeLoaded = true; runDaytradeUI(); }
     if (!dtListTimer) dtListTimer = setInterval(() => runDaytradeUI(true), DT_LIST_REFRESH_MS);
+  }
+  // Silent-refresh failure accounting: after DT_STALE_AFTER_FAILURES consecutive silent
+  // failures the standing cards get a loud stale-data banner ("⚡ Actionable now" plans
+  // must never stand indefinitely on a dead feed); the next success clears it.
+  const DT_STALE_AFTER_FAILURES = 3;
+  let dtSilentFailStreak = 0, dtSilentFailingSince = null;
+  function updateDtStaleBanner(el) {
+    const existing = el.querySelector('#dt-stale-banner');
+    if (dtSilentFailStreak < DT_STALE_AFTER_FAILURES) { if (existing) existing.remove(); return; }
+    const since = dtSilentFailingSince ? stampText(dtSilentFailingSince) : 'a while';
+    const msg = `⚠️ Live refresh failing since ${since} — plans may be stale. Prices, states and "Actionable now" reads below are from the last successful scan.`;
+    if (existing) { existing.textContent = msg; return; }
+    const n = document.createElement('div');
+    n.id = 'dt-stale-banner';
+    n.className = 'dt-note';
+    n.style.borderLeftColor = 'var(--red,#ef4444)';
+    n.textContent = msg;
+    el.prepend(n);
   }
   // silent=true (the 15-min auto-refresh) keeps the current cards on screen until the
   // fresh data arrives, so the list quietly updates instead of flashing a spinner.
@@ -6658,10 +6747,19 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       renderDaytrade._scanHealth = scanHealth && scanHealth.ok !== false ? scanHealth : null;
       renderDaytrade._capture = capture && capture.ok !== false ? capture : null;
       renderDaytrade(t, book, timingBook);
+      dtSilentFailStreak = 0; dtSilentFailingSince = null;   // fresh data landed → clear stale accounting
+      updateDtStaleBanner(el);
       // New Day-Trade transitions land in the shared 🔔 feed — refresh the unread badge and
       // (opt-in) surface browser notifications while the page is open.
       fetchAlerts().then(items => { paintAlertBadge(); maybeNotify(items); }).catch(() => {});
-    } catch { if (!silent) el.innerHTML = `<div class="mom-status error"><p>Could not load Day Trade.</p></div>`; }
+    } catch {
+      if (!silent) { el.innerHTML = `<div class="mom-status error"><p>Could not load Day Trade.</p></div>`; return; }
+      // Silent auto-refresh failed while cards stand — count it, and after the streak
+      // threshold mark the standing board as stale instead of letting it pose as live.
+      dtSilentFailStreak += 1;
+      if (!dtSilentFailingSince) dtSilentFailingSince = Date.now();
+      updateDtStaleBanner(el);
+    }
   }
   // 🟢 Timing-light ACCOUNTABILITY scorecard — the grade's own forward track record.
   function timingScorecard(tb) {
@@ -7205,7 +7303,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const meta = document.getElementById('dt-meta');
     if (meta) meta.textContent = `· ${t.regime} · ${(t.counts ? t.counts.momentumLiquid + t.counts.explosiveSmall + (t.counts.momentumRun || 0) : 0)} movers`;
     const gt = document.getElementById('dt-gen-time');
-    if (gt && t.generatedAt) gt.textContent = new Date(t.generatedAt).toLocaleTimeString();
+    if (gt && t.generatedAt) gt.textContent = stampText(t.generatedAt);
   }
 
   // Live current-price polling for Day Trade cards (pre/after-hours aware).
@@ -7426,7 +7524,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const el = document.getElementById('aligned-container');
     if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Dual Confirmed unavailable.</p></div>`; return; }
     const gt = document.getElementById('aligned-gen-time');
-    if (gt) gt.textContent = t.generatedAt ? new Date(t.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    if (gt) gt.textContent = t.generatedAt ? stampText(t.generatedAt) : '';
     const picks = t.picks || [];
     if (!picks.length) {
       el.innerHTML = `<div class="dt-note">No names are aligned on both horizons right now — that's normal in a mixed or choppy tape, where short-term and long-term signals disagree. This list fills when strong long-term trends also flash a fresh short-term buy. <span class="dt-dim">(${t.scanned || 0} scanned)</span></div>` + alignedBookPanel(book);
@@ -7499,7 +7597,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const el = document.getElementById(elId);
     if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Options Moves unavailable.</p></div>`; return; }
     const gt = document.getElementById('putsell-gen-time');
-    if (gt) gt.textContent = t.generatedAt ? new Date(t.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    if (gt) gt.textContent = t.generatedAt ? stampText(t.generatedAt) : '';
     // Strategy module heading — one of (eventually several) options moves under this section.
     const stratHead = `<div class="scr-subhead">🅿️ Cash-Secured Put Selling <span class="sub-meta">quality uptrend · pullback to support · a REAL listed put (25–45 DTE) below support · full economics</span></div>`;
     const picks = t.picks || [];
@@ -7566,7 +7664,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function renderGapGo(t, book) {
     const el = document.getElementById('gg-container');
     if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Gap &amp; Go unavailable.</p></div>`; return; }
-    document.getElementById('gg-gen-time') && (document.getElementById('gg-gen-time').textContent = t.generatedAt ? new Date(t.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+    document.getElementById('gg-gen-time') && (document.getElementById('gg-gen-time').textContent = t.generatedAt ? stampText(t.generatedAt) : '');
 
     // Evidence + honest caveat panel. Registry: gapgo is an UNPROVEN PROSPECTIVE
     // CHALLENGER (shadow, zero weight) — the header must say so, not "validated".
@@ -7718,7 +7816,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function renderDownDay(t, book) {
     const el = document.getElementById('downday-container');
     if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Down-Day Mode unavailable.</p></div>`; return; }
-    document.getElementById('dd-gen-time') && (document.getElementById('dd-gen-time').textContent = t.generatedAt ? new Date(t.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+    document.getElementById('dd-gen-time') && (document.getElementById('dd-gen-time').textContent = t.generatedAt ? stampText(t.generatedAt) : '');
     const cfg = t.config || {}, rl = t.reality || {}, tape = t.tape || {};
 
     // Tape banner — is the market red / risk-off right now?
@@ -7860,7 +7958,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function renderGapDown(t, book) {
     const el = document.getElementById('gapdown-container');
     if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Gap-Down unavailable.</p></div>`; return; }
-    document.getElementById('gd-gen-time') && (document.getElementById('gd-gen-time').textContent = t.generatedAt ? new Date(t.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+    document.getElementById('gd-gen-time') && (document.getElementById('gd-gen-time').textContent = t.generatedAt ? stampText(t.generatedAt) : '');
     const cfg = t.config || {};
     const evidence = `<div class="rot-panel" style="border-color:#ef444455;background:#ef44440d">
       <div class="rot-head" style="color:#ef4444">🐻 ${esc(cfg.name || 'Gap-Down Continuation')} — validated short edge (mirror of Gap & Go)</div>
@@ -8293,7 +8391,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const meta = document.getElementById('cfl-meta');
     if (meta) meta.textContent = `· ${t.regime} · ${t.count || 0} confluence longs`;
     const gt = document.getElementById('cfl-gen-time');
-    if (gt && t.generatedAt) gt.textContent = new Date(t.generatedAt).toLocaleTimeString();
+    if (gt && t.generatedAt) gt.textContent = stampText(t.generatedAt);
   }
   let cflPriceTimer = null;
   function startConfluencePrices(tickers) {
@@ -8642,7 +8740,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (isSignalDisabled('momentum', 'StrongBuy'))  strongBuys = [];
     if (isSignalDisabled('momentum', 'StrongSell')) strongSells = [];
     renderMomentumRegime(); // show the bearish-regime warning banner if applicable
-    if (generatedAt) momentumGenTime.textContent = `Updated ${new Date(generatedAt).toLocaleTimeString()}`;
+    if (generatedAt) momentumGenTime.textContent = `Updated ${stampText(generatedAt)}`;
     // momentum-v2: the universe is price/volume-discovered (discovery + screeners) — social
     // attention is only an annotation. Same-session read; scores are heuristic ranks.
     momentumMeta.textContent = degraded
@@ -8948,7 +9046,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function renderScoreboard(data) {
     sbBySection = (data.scoreQuality && data.scoreQuality.bySection) || {};
     sbScoreHz = (data.scoreQuality && data.scoreQuality.horizon) || '5d';
-    if (data.generatedAt) scoreboardGenTime.textContent = `Updated ${new Date(data.generatedAt).toLocaleTimeString()}`;
+    if (data.generatedAt) scoreboardGenTime.textContent = `Updated ${stampText(data.generatedAt)}`;
     if (!data.configured) {
       scoreboardMeta.textContent = '· storage not configured';
       scoreboardContainer.innerHTML = `<div class="sb-empty">📦 <b>Pick tracking isn't enabled yet.</b><br>Create a <b>Vercel Blob</b> store for this project (Storage → Blob in the dashboard), then redeploy. Picks log daily and the scoreboard fills in as returns mature — 1 week, then 1 month, then 3 months.</div>`;
@@ -9727,7 +9825,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         </div>
 
         <div class="alert-badges">
-          <div class="alert-live-badge"><div class="alert-live-dot"></div>LIVE</div>
+          <div class="alert-live-badge" data-live-state="eod" style="color:var(--text-dim);border-color:var(--border,#2a2a2a);background:transparent" title="Built from end-of-day/near-live data — flips to LIVE once a live quote actually lands">EOD</div>
           <div class="mom-action-badge ${side}${momTradeEligible ? '' : ' mom-research'}">${momActionLabel(buy)}</div>
           ${whyNowBadge(c)}
           ${c.social ? `<div class="alert-social-badge">👥 ${Number(c.social).toLocaleString()}</div>` : ''}
@@ -9754,6 +9852,29 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
 
   // ── Live price polling (reflects pre/after-hours) ──────────────────────────
+  // The pulsing LIVE badge is EARNED, not assumed: cards build in a neutral "EOD"
+  // state and only flip to LIVE when a /api/price quote actually lands for them.
+  // After LIVE_POLL_FAIL_REVERT consecutive poll failures every badge reverts to
+  // EOD so a dead poll can't keep advertising live prices.
+  const LIVE_POLL_FAIL_REVERT = 3;
+  let livePollFailStreak = 0;
+  function setLiveBadge(card, live) {
+    const badge = card.querySelector('.alert-live-badge');
+    if (!badge || badge.dataset.liveState === (live ? 'live' : 'eod')) return;
+    if (live) {
+      badge.dataset.liveState = 'live';
+      badge.removeAttribute('style');
+      badge.innerHTML = '<div class="alert-live-dot"></div>LIVE';
+      badge.title = 'Live quote polling active (refreshes ~30s)';
+    } else {
+      badge.dataset.liveState = 'eod';
+      badge.style.color = 'var(--text-dim)';
+      badge.style.borderColor = 'var(--border,#2a2a2a)';
+      badge.style.background = 'transparent';
+      badge.textContent = 'EOD';
+      badge.title = 'Live quote polling is failing — price shown is the last known, not live';
+    }
+  }
   let livePriceTimer = null;
   function startLivePrices(tickers) {
     if (livePriceTimer) clearInterval(livePriceTimer);
@@ -9766,9 +9887,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   async function updateLivePrices(tickers) {
     try {
       const data = await fetchJSON('/api/price?tickers=' + encodeURIComponent(tickers.join(',')));
+      livePollFailStreak = 0;
       document.querySelectorAll('.alert-card[data-ticker]').forEach(card => {
         const q = data[card.dataset.ticker];
         if (!q) return;
+        setLiveBadge(card, true);   // a real quote landed for this card → LIVE is earned
         const priceEl  = card.querySelector('[data-price]');
         const changeEl = card.querySelector('[data-change]');
         const ahEl     = card.querySelector('[data-ah]');
@@ -9796,7 +9919,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           }
         }
       });
-    } catch { /* keep last good prices */ }
+    } catch {
+      // Keep the last good prices, but a persistently failing poll must surrender the
+      // LIVE badge — revert every card to the neutral EOD state after the streak.
+      livePollFailStreak += 1;
+      if (livePollFailStreak >= LIVE_POLL_FAIL_REVERT) {
+        document.querySelectorAll('.alert-card[data-ticker]').forEach(card => setLiveBadge(card, false));
+      }
+    }
   }
 
   // ── Live chart + real-time signal panel ────────────────────────────────────

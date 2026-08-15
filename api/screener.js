@@ -524,7 +524,13 @@ async function handleRequest(req, res) {
       exchange: exchangeFilter.toLowerCase() === 'all' ? 'all' : exchangeFilter,
       rotation,
       rotationHistory,
-      regime,
+      // The regime consumed by op=today (lib/decision.js regimeFit) reads `killSwitch`
+      // and macro state off THIS object — the ghost.* copy above never reaches it.
+      // Serializing sel.regime bare silently disconnected the VIX/credit risk-off
+      // lever (the app's one validated lever) from the live board.
+      regime: regime
+        ? { ...regime, killSwitch: !!(regime.bearish) || macroRiskOff, macroRiskOff }
+        : regime,
       lookback,
       candleSource: useCache ? 'cache' : 'live',
       candlesFetched: freshFetched.size,

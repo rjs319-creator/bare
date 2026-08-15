@@ -11,6 +11,7 @@
 
 const SOURCES = {
   screener: {
+    scope: 'large',
     regime: { indexAbove200: true, breadthPct: 69, bearish: false, riskOn: true, condition: 'mixed' },
     results: [
       { ticker: 'AAA', company: 'Alpha', sector: 'Technology', status: 'Setup', price: 100,
@@ -22,6 +23,7 @@ const SOURCES = {
     ],
   },
   screenerSmall: {
+    scope: 'small',
     results: [
       { ticker: 'SML', company: 'Smallco', sector: 'Industrials', status: 'Setup', price: 12,
         levels: { entry: 12.4, stop: 11.2, target: 15.5, rr: 2.6 }, factors: { dollarVol: 3e6, mom63: 22 },

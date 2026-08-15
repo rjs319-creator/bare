@@ -1,0 +1,2437 @@
+{
+  "experimentId": "OMEGA_SCORE_AUTOPSY_5D_TOP10",
+  "studyId": "omega-score-autopsy-2026-08",
+  "version": "score-autopsy-v1",
+  "kit": "experiment-kit-v1",
+  "motivation": "research/90: fixed OMEGA score ranks below RANDOM and far below r10 on its own 5-session net-residual objective. This autopsy locates the damage and tests a frozen family of transparent re-specifications.",
+  "frozenConfig": {
+    "horizon": 5,
+    "topK": 10,
+    "folds": 4,
+    "purgeCohorts": 2,
+    "bootstrap": {
+      "B": 5000,
+      "blockLen": 4,
+      "seed": 20260813
+    },
+    "axis": "SPY step-5 from idx 262",
+    "primaryUniverse": "LIQUID_OPTIONS minus ETFs (62)",
+    "broadUniverse": "LARGE ∪ SMALL_CAPS ∩ cache, ADV>=20M, top 500 (got 306)",
+    "variants": [
+      "V1_noPenalty",
+      "V2_icPruned (train-IC rule)",
+      "V3_momentumTilt {\"relStrength\":0.3,\"momentumPersistence\":0.25,\"volumeQuality\":0.1,\"trendSmoothness\":0.1,\"catalystPersistence\":0.05,\"setupQuality\":0.05,\"regime\":0.05,\"modelResidual\":0.1}",
+      "V4_blendR10",
+      "V5_r10"
+    ],
+    "simplicityOrder": [
+      "V1_noPenalty",
+      "V3_momentumTilt",
+      "V2_icPruned",
+      "V4_blendR10"
+    ],
+    "fdrFamily": "5 variants x 2 universes = 10 one-sided lift tests"
+  },
+  "dataSnapshot": {
+    "primary": {
+      "panelDates": 197,
+      "rows": 11974,
+      "candidateDates": 197,
+      "scoreMismatches": 0,
+      "attrition": {
+        "noDecisionBar": 0,
+        "truncatedHistory": 13,
+        "badPrices": 0,
+        "extremeMove": 5,
+        "noBenchmark": 0,
+        "ineligible": 0
+      }
+    },
+    "broad": {
+      "panelDates": 197,
+      "tickers": 306,
+      "attrition": {
+        "noDecisionBar": 0,
+        "truncatedHistory": 238,
+        "badPrices": 0,
+        "extremeMove": 34,
+        "noBenchmark": 0,
+        "ineligible": 0
+      }
+    }
+  },
+  "autopsy": {
+    "primary": {
+      "finalScore": {
+        "meanIC": 0.0043,
+        "ci95": {
+          "lo": -0.019,
+          "hi": 0.0286
+        },
+        "dates": 197
+      },
+      "prePenaltyBase": {
+        "meanIC": 0.009,
+        "ci95": {
+          "lo": -0.0148,
+          "hi": 0.035
+        },
+        "dates": 197
+      },
+      "penaltyMult": {
+        "meanIC": -0.0102,
+        "ci95": {
+          "lo": -0.0406,
+          "hi": 0.0171
+        },
+        "dates": 197
+      },
+      "r10": {
+        "meanIC": 0.0138,
+        "ci95": {
+          "lo": -0.0171,
+          "hi": 0.0438
+        },
+        "dates": 197
+      },
+      "components": {
+        "relStrength": {
+          "meanIC": -0.0026,
+          "ci95": {
+            "lo": -0.0269,
+            "hi": 0.0223
+          },
+          "dates": 197
+        },
+        "momentumPersistence": {
+          "meanIC": 0.0091,
+          "ci95": {
+            "lo": -0.0138,
+            "hi": 0.0348
+          },
+          "dates": 197
+        },
+        "volumeQuality": {
+          "meanIC": -0.0005,
+          "ci95": {
+            "lo": -0.0254,
+            "hi": 0.0235
+          },
+          "dates": 197
+        },
+        "trendSmoothness": {
+          "meanIC": 0.0204,
+          "ci95": {
+            "lo": 0.0011,
+            "hi": 0.0431
+          },
+          "dates": 197
+        },
+        "catalystPersistence": null,
+        "setupQuality": {
+          "meanIC": 0.0128,
+          "ci95": {
+            "lo": -0.0122,
+            "hi": 0.0378
+          },
+          "dates": 197
+        },
+        "regime": null,
+        "modelResidual": {
+          "meanIC": 0.0134,
+          "ci95": {
+            "lo": -0.0089,
+            "hi": 0.0363
+          },
+          "dates": 197
+        }
+      },
+      "penaltyFlagDeltas": {
+        "risk-off tape": {
+          "n": 4792,
+          "flaggedMeanPct": 0.3711,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 0.1667
+        },
+        "decelerating": {
+          "n": 4219,
+          "flaggedMeanPct": 0.4569,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 0.2525
+        },
+        "move is mostly overnight gaps": {
+          "n": 3558,
+          "flaggedMeanPct": 0.3152,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 0.1108
+        },
+        "high downside volatility": {
+          "n": 718,
+          "flaggedMeanPct": 0.8213,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 0.617
+        },
+        "extended above 20d avg": {
+          "n": 450,
+          "flaggedMeanPct": 1.295,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 1.0907
+        },
+        "parabolic / far above support": {
+          "n": 227,
+          "flaggedMeanPct": 1.0138,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 0.8095
+        },
+        "low price (<$3)": {
+          "n": 194,
+          "flaggedMeanPct": -0.303,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -0.5074
+        },
+        "repeated upper wicks (selling into strength)": {
+          "n": 122,
+          "flaggedMeanPct": 0.6905,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 0.4862
+        },
+        "volume decaying after a run": {
+          "n": 114,
+          "flaggedMeanPct": 2.8478,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 2.6435
+        },
+        "weak closes despite the run": {
+          "n": 84,
+          "flaggedMeanPct": -1.1842,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -1.3885
+        },
+        "thin liquidity": {
+          "n": 58,
+          "flaggedMeanPct": -2.7824,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -2.9867
+        },
+        "sub-$10M ADV": {
+          "n": 54,
+          "flaggedMeanPct": -0.1502,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -0.3546
+        },
+        "extreme single-day spike": {
+          "n": 38,
+          "flaggedMeanPct": 1.996,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 1.7916
+        },
+        "8 straight up days (mean-reversion risk)": {
+          "n": 26,
+          "flaggedMeanPct": -0.0534,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -0.2578
+        },
+        "10 straight up days (mean-reversion risk)": {
+          "n": 7,
+          "flaggedMeanPct": -2.9992,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -3.2036
+        },
+        "9 straight up days (mean-reversion risk)": {
+          "n": 6,
+          "flaggedMeanPct": -4.4603,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -4.6646
+        },
+        "6.56 ATRs above SMA20": {
+          "n": 3,
+          "flaggedMeanPct": -5.126,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -5.3303
+        },
+        "11 straight up days (mean-reversion risk)": {
+          "n": 3,
+          "flaggedMeanPct": -1.0555,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -1.2599
+        },
+        "6.55 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 1.9415,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 1.7371
+        },
+        "6.12 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 6.6684,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 6.4641
+        },
+        "6.77 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 2.8549,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 2.6506
+        },
+        "6.19 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 15.2113,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 15.0069
+        },
+        "6.87 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 3.3507,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 3.1463
+        },
+        "6.79 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 16.5364,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 16.332
+        },
+        "6.11 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 0.4011,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 0.1967
+        },
+        "6.22 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -9.2106,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -9.415
+        },
+        "6.46 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -9.0418,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -9.2462
+        },
+        "6.16 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -1.2512,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -1.4555
+        },
+        "8.59 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -2.0917,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -2.2961
+        },
+        "7.1 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -18.1795,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -18.3839
+        },
+        "6.31 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -30.1709,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -30.3752
+        },
+        "6.72 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -6.7887,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -6.993
+        },
+        "6.9 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -3.6103,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -3.8147
+        },
+        "8.33 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -0.3543,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -0.5587
+        },
+        "7.27 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -4.6181,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -4.8225
+        },
+        "6.76 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 6.459,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 6.2546
+        },
+        "9.34 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 0.5581,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 0.3537
+        },
+        "8.82 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -6.7952,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -6.9995
+        },
+        "6.67 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 0.0408,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -0.1636
+        },
+        "13 straight up days (mean-reversion risk)": {
+          "n": 1,
+          "flaggedMeanPct": 0.0408,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -0.1636
+        },
+        "7.62 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -11.5352,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -11.7395
+        },
+        "6.58 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 8.8379,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 8.6335
+        },
+        "7.34 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -5.618,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -5.8223
+        },
+        "7.4 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -15.4931,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -15.6974
+        },
+        "6.62 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 2.6353,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 2.4309
+        },
+        "7.12 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 0.6822,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 0.4778
+        },
+        "6.27 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 40.5931,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 40.3887
+        },
+        "6.29 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 1.8049,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 1.6005
+        },
+        "10.29 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -19.1285,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -19.3329
+        },
+        "7.09 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 18.7005,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 18.4962
+        },
+        "8.75 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -6.3116,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -6.516
+        },
+        "6.44 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 14.9609,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 14.7565
+        },
+        "7.43 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -5.4565,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -5.6609
+        },
+        "6.57 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 4.8004,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 4.596
+        },
+        "7.39 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -4.5283,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -4.7326
+        },
+        "8.47 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -3.8939,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -4.0982
+        },
+        "7.38 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 1.9064,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 1.7021
+        },
+        "6.48 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -13.4189,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -13.6232
+        },
+        "13.32 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 2.1738,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 1.9694
+        },
+        "7.02 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 21.6593,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 21.4549
+        },
+        "6.78 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 0.3024,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 0.098
+        },
+        "9.44 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -2.0366,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -2.241
+        },
+        "8.7 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 19.8988,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 19.6945
+        },
+        "15 straight up days (mean-reversion risk)": {
+          "n": 1,
+          "flaggedMeanPct": 1.4216,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 1.2173
+        },
+        "20 straight up days (mean-reversion risk)": {
+          "n": 1,
+          "flaggedMeanPct": -7.1437,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -7.3481
+        },
+        "6.89 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -14.4569,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -14.6613
+        },
+        "6.14 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -7.9943,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -8.1986
+        },
+        "7.82 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -13.3918,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -13.5961
+        },
+        "7.19 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 28.4641,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 28.2598
+        },
+        "6.01 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -0.3876,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -0.592
+        },
+        "6.41 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 0.8517,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 0.6474
+        },
+        "8.42 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -5.3768,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -5.5812
+        },
+        "6.96 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -0.1375,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -0.3419
+        },
+        "7.06 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -5.9112,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -6.1155
+        },
+        "7.48 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 21.0017,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 20.7974
+        },
+        "7.14 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 0.1093,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -0.095
+        },
+        "7.31 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -12.96,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -13.1643
+        },
+        "8.05 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 1.1806,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 0.9763
+        },
+        "6.52 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -0.798,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -1.0024
+        },
+        "7.91 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 4.6441,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 4.4398
+        },
+        "12 straight up days (mean-reversion risk)": {
+          "n": 1,
+          "flaggedMeanPct": 4.6441,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 4.4398
+        },
+        "6.04 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 23.5954,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 23.391
+        },
+        "7.15 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 7.1412,
+          "poolMeanPct": 0.2044,
+          "deltaPct": 6.9368
+        },
+        "7.74 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -7.3437,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -7.5481
+        },
+        "6.32 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -4.5867,
+          "poolMeanPct": 0.2044,
+          "deltaPct": -4.791
+        }
+      }
+    },
+    "broad": {
+      "finalScore": {
+        "meanIC": 0.0066,
+        "ci95": {
+          "lo": -0.0105,
+          "hi": 0.0258
+        },
+        "dates": 197
+      },
+      "prePenaltyBase": {
+        "meanIC": 0.0012,
+        "ci95": {
+          "lo": -0.0157,
+          "hi": 0.0202
+        },
+        "dates": 197
+      },
+      "penaltyMult": {
+        "meanIC": -0.0094,
+        "ci95": {
+          "lo": -0.0309,
+          "hi": 0.0105
+        },
+        "dates": 197
+      },
+      "r10": {
+        "meanIC": 0.0004,
+        "ci95": {
+          "lo": -0.0214,
+          "hi": 0.022
+        },
+        "dates": 197
+      },
+      "components": {
+        "relStrength": {
+          "meanIC": -0.0118,
+          "ci95": {
+            "lo": -0.0303,
+            "hi": 0.0071
+          },
+          "dates": 197
+        },
+        "momentumPersistence": {
+          "meanIC": -0.0087,
+          "ci95": {
+            "lo": -0.0256,
+            "hi": 0.0109
+          },
+          "dates": 197
+        },
+        "volumeQuality": {
+          "meanIC": -0.0008,
+          "ci95": {
+            "lo": -0.0148,
+            "hi": 0.0137
+          },
+          "dates": 197
+        },
+        "trendSmoothness": {
+          "meanIC": 0.0131,
+          "ci95": {
+            "lo": 0.0018,
+            "hi": 0.0285
+          },
+          "dates": 197
+        },
+        "catalystPersistence": null,
+        "setupQuality": {
+          "meanIC": 0.0084,
+          "ci95": {
+            "lo": -0.0092,
+            "hi": 0.0276
+          },
+          "dates": 197
+        },
+        "regime": null,
+        "modelResidual": {
+          "meanIC": 0.0018,
+          "ci95": {
+            "lo": -0.0151,
+            "hi": 0.0202
+          },
+          "dates": 197
+        }
+      },
+      "penaltyFlagDeltas": {
+        "risk-off tape": {
+          "n": 23791,
+          "flaggedMeanPct": -0.1212,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.0597
+        },
+        "decelerating": {
+          "n": 19975,
+          "flaggedMeanPct": 0.0717,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.2526
+        },
+        "move is mostly overnight gaps": {
+          "n": 11892,
+          "flaggedMeanPct": -0.0679,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.113
+        },
+        "high downside volatility": {
+          "n": 3330,
+          "flaggedMeanPct": 0.0758,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.2567
+        },
+        "sub-$10M ADV": {
+          "n": 2195,
+          "flaggedMeanPct": -0.216,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -0.0351
+        },
+        "extended above 20d avg": {
+          "n": 1701,
+          "flaggedMeanPct": 0.7661,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.947
+        },
+        "low price (<$3)": {
+          "n": 1679,
+          "flaggedMeanPct": 0.5509,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.7318
+        },
+        "thin liquidity": {
+          "n": 1014,
+          "flaggedMeanPct": -1.1297,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -0.9488
+        },
+        "parabolic / far above support": {
+          "n": 885,
+          "flaggedMeanPct": 0.534,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.7149
+        },
+        "repeated upper wicks (selling into strength)": {
+          "n": 613,
+          "flaggedMeanPct": -0.4125,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -0.2316
+        },
+        "weak closes despite the run": {
+          "n": 486,
+          "flaggedMeanPct": -0.5424,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -0.3614
+        },
+        "volume decaying after a run": {
+          "n": 468,
+          "flaggedMeanPct": 0.8597,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 1.0407
+        },
+        "extreme single-day spike": {
+          "n": 145,
+          "flaggedMeanPct": 1.5956,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 1.7765
+        },
+        "8 straight up days (mean-reversion risk)": {
+          "n": 107,
+          "flaggedMeanPct": -1.0242,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -0.8432
+        },
+        "9 straight up days (mean-reversion risk)": {
+          "n": 40,
+          "flaggedMeanPct": -2.2022,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -2.0212
+        },
+        "10 straight up days (mean-reversion risk)": {
+          "n": 26,
+          "flaggedMeanPct": -0.7159,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -0.5349
+        },
+        "11 straight up days (mean-reversion risk)": {
+          "n": 12,
+          "flaggedMeanPct": -1.7006,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -1.5197
+        },
+        "6.19 ATRs above SMA20": {
+          "n": 5,
+          "flaggedMeanPct": 5.043,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 5.2239
+        },
+        "6.12 ATRs above SMA20": {
+          "n": 4,
+          "flaggedMeanPct": 2.6279,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 2.8088
+        },
+        "6.2 ATRs above SMA20": {
+          "n": 4,
+          "flaggedMeanPct": -0.9178,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -0.7369
+        },
+        "6.23 ATRs above SMA20": {
+          "n": 4,
+          "flaggedMeanPct": -6.7363,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -6.5554
+        },
+        "7.08 ATRs above SMA20": {
+          "n": 4,
+          "flaggedMeanPct": -6.8424,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -6.6615
+        },
+        "6.01 ATRs above SMA20": {
+          "n": 4,
+          "flaggedMeanPct": 17.3496,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 17.5305
+        },
+        "6.47 ATRs above SMA20": {
+          "n": 4,
+          "flaggedMeanPct": 4.9473,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 5.1282
+        },
+        "6.87 ATRs above SMA20": {
+          "n": 4,
+          "flaggedMeanPct": -1.6944,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -1.5135
+        },
+        "6.46 ATRs above SMA20": {
+          "n": 4,
+          "flaggedMeanPct": -5.5903,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -5.4094
+        },
+        "6.11 ATRs above SMA20": {
+          "n": 4,
+          "flaggedMeanPct": -5.9766,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -5.7957
+        },
+        "6.56 ATRs above SMA20": {
+          "n": 3,
+          "flaggedMeanPct": -5.126,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -4.945
+        },
+        "7.15 ATRs above SMA20": {
+          "n": 3,
+          "flaggedMeanPct": 4.1389,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 4.3199
+        },
+        "6.27 ATRs above SMA20": {
+          "n": 3,
+          "flaggedMeanPct": 7.9591,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 8.14
+        },
+        "6.41 ATRs above SMA20": {
+          "n": 3,
+          "flaggedMeanPct": -1.3002,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -1.1193
+        },
+        "7.1 ATRs above SMA20": {
+          "n": 3,
+          "flaggedMeanPct": 6.4384,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 6.6194
+        },
+        "6.31 ATRs above SMA20": {
+          "n": 3,
+          "flaggedMeanPct": -4.9878,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -4.8069
+        },
+        "6.75 ATRs above SMA20": {
+          "n": 3,
+          "flaggedMeanPct": -6.6394,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -6.4585
+        },
+        "6.29 ATRs above SMA20": {
+          "n": 3,
+          "flaggedMeanPct": -3.551,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -3.37
+        },
+        "12 straight up days (mean-reversion risk)": {
+          "n": 3,
+          "flaggedMeanPct": 0.5057,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.6867
+        },
+        "6.22 ATRs above SMA20": {
+          "n": 3,
+          "flaggedMeanPct": -0.3458,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -0.1648
+        },
+        "6.51 ATRs above SMA20": {
+          "n": 3,
+          "flaggedMeanPct": 8.5188,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 8.6997
+        },
+        "7.06 ATRs above SMA20": {
+          "n": 3,
+          "flaggedMeanPct": -6.1762,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -5.9952
+        },
+        "7.38 ATRs above SMA20": {
+          "n": 3,
+          "flaggedMeanPct": -13.0728,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -12.8919
+        },
+        "6.32 ATRs above SMA20": {
+          "n": 3,
+          "flaggedMeanPct": -4.5383,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -4.3573
+        },
+        "6.55 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 1.9415,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 2.1224
+        },
+        "6.09 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 1.8736,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 2.0545
+        },
+        "6.33 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -4.0057,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -3.8248
+        },
+        "6.18 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -0.1189,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.062
+        },
+        "6.17 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -9.8121,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -9.6312
+        },
+        "6.53 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -5.4563,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -5.2753
+        },
+        "6.05 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -8.296,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -8.1151
+        },
+        "7.36 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 2.8422,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 3.0231
+        },
+        "6.72 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -13.1554,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -12.9745
+        },
+        "8.33 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 0.5257,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.7066
+        },
+        "6.79 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 43.753,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 43.9339
+        },
+        "6.26 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -7.3897,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -7.2088
+        },
+        "7.39 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -8.4652,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -8.2843
+        },
+        "6.67 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -2.4891,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -2.3081
+        },
+        "9.09 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -15.9418,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -15.7609
+        },
+        "6.73 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -7.4741,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -7.2932
+        },
+        "6.45 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -11.3092,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -11.1283
+        },
+        "6.02 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -6.4392,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -6.2583
+        },
+        "6.77 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 2.8549,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 3.0359
+        },
+        "8.31 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 12.6107,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 12.7916
+        },
+        "7.22 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -16.5868,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -16.4059
+        },
+        "6.62 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 8.6682,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 8.8492
+        },
+        "7.13 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 2.214,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 2.3949
+        },
+        "8.75 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -0.0381,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.1428
+        },
+        "7.16 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -31.0769,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -30.8959
+        },
+        "7.31 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -6.4695,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -6.2886
+        },
+        "7.41 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -1.479,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -1.298
+        },
+        "8.47 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -10.819,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -10.6381
+        },
+        "7.32 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -1.0045,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -0.8235
+        },
+        "6.54 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 4.2565,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 4.4374
+        },
+        "6.59 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 21.2157,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 21.3966
+        },
+        "8.49 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 8.537,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 8.7179
+        },
+        "9.15 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -5.4861,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -5.3052
+        },
+        "7.78 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -12.3611,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -12.1802
+        },
+        "6.15 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": 14.4862,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 14.6671
+        },
+        "7.91 ATRs above SMA20": {
+          "n": 2,
+          "flaggedMeanPct": -0.5123,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -0.3313
+        },
+        "6.7 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -0.9324,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -0.7514
+        },
+        "6.16 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -1.2512,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -1.0702
+        },
+        "11.46 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 18.5325,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 18.7134
+        },
+        "6.08 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -0.155,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.0259
+        },
+        "8.59 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -2.0917,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -1.9108
+        },
+        "10.15 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -7.3513,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -7.1703
+        },
+        "7.58 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -2.5636,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -2.3826
+        },
+        "6.37 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 6.609,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 6.79
+        },
+        "6.9 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -3.6103,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -3.4294
+        },
+        "6.97 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 0.9069,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 1.0878
+        },
+        "10.34 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 47.9645,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 48.1454
+        },
+        "6.83 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 3.8623,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 4.0433
+        },
+        "7.27 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -4.6181,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -4.4372
+        },
+        "6.76 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 6.459,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 6.6399
+        },
+        "9.34 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 0.5581,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.739
+        },
+        "13 straight up days (mean-reversion risk)": {
+          "n": 1,
+          "flaggedMeanPct": 0.0408,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.2217
+        },
+        "7.62 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -11.5352,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -11.3542
+        },
+        "7.01 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -1.575,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -1.3941
+        },
+        "6.58 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 8.8379,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 9.0188
+        },
+        "7.34 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -5.618,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -5.4371
+        },
+        "6.84 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -12.4625,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -12.2816
+        },
+        "7.84 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -9.3275,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -9.1466
+        },
+        "6.88 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 1.3893,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 1.5703
+        },
+        "6.03 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 1.7106,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 1.8916
+        },
+        "6.49 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 48.4429,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 48.6239
+        },
+        "7.57 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -10.0458,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -9.8649
+        },
+        "6.4 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 6.2969,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 6.4779
+        },
+        "9.61 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -2.9836,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -2.8026
+        },
+        "7.55 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 9.4369,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 9.6179
+        },
+        "7.4 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -15.4931,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -15.3122
+        },
+        "7.63 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -32.7556,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -32.5746
+        },
+        "6.85 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -7.302,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -7.1211
+        },
+        "9.92 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 14.8923,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 15.0732
+        },
+        "7.12 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 0.6822,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.8631
+        },
+        "10.29 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -19.1285,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -18.9476
+        },
+        "9.28 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -3.4742,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -3.2933
+        },
+        "7.3 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -7.1771,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -6.9962
+        },
+        "11.75 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 3.9905,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 4.1714
+        },
+        "6.28 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -2.2253,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -2.0444
+        },
+        "9.71 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -20.3439,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -20.163
+        },
+        "6.5 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -3.2619,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -3.0809
+        },
+        "6.66 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 11.5672,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 11.7481
+        },
+        "7.43 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -5.4565,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -5.2756
+        },
+        "6.42 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -1.1168,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -0.9359
+        },
+        "7.42 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 5.0633,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 5.2442
+        },
+        "6.57 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 4.8004,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 4.9813
+        },
+        "7.67 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 19.4547,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 19.6356
+        },
+        "6.81 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -4.1675,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -3.9865
+        },
+        "6.48 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -13.4189,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -13.238
+        },
+        "13.32 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 2.1738,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 2.3547
+        },
+        "7.02 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 21.6593,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 21.8402
+        },
+        "10.57 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 0.2677,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.4487
+        },
+        "8.55 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -11.7094,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -11.5284
+        },
+        "9.42 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -14.1297,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -13.9487
+        },
+        "6.39 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 0.4779,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.6588
+        },
+        "6.78 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 0.3024,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.4833
+        },
+        "8.61 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -20.1438,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -19.9629
+        },
+        "12.28 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 5.9221,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 6.1031
+        },
+        "7.03 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -13.1782,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -12.9973
+        },
+        "11.49 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 4.5998,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 4.7807
+        },
+        "9.44 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -2.0366,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -1.8557
+        },
+        "8.7 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 19.8988,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 20.0798
+        },
+        "8.5 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 2.154,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 2.3349
+        },
+        "15 straight up days (mean-reversion risk)": {
+          "n": 1,
+          "flaggedMeanPct": 1.4216,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 1.6026
+        },
+        "6.64 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 1.0864,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 1.2673
+        },
+        "11.16 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 25.2278,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 25.4088
+        },
+        "20 straight up days (mean-reversion risk)": {
+          "n": 1,
+          "flaggedMeanPct": -7.1437,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -6.9628
+        },
+        "7.82 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -13.3918,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -13.2108
+        },
+        "6.14 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -7.9943,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -7.8133
+        },
+        "8.14 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -15.2951,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -15.1142
+        },
+        "7.19 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 28.4641,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 28.645
+        },
+        "6.96 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -0.1375,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.0434
+        },
+        "6.61 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 2.5484,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 2.7293
+        },
+        "8.42 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -5.3768,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -5.1959
+        },
+        "7.76 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -1.8156,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -1.6346
+        },
+        "8.08 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -3.8794,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -3.6984
+        },
+        "6.93 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -4.8132,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -4.6323
+        },
+        "11.25 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 4.9294,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 5.1103
+        },
+        "7.93 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -6.5593,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -6.3784
+        },
+        "6.13 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 4.5725,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 4.7535
+        },
+        "6.65 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -12.5585,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -12.3776
+        },
+        "11.42 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 3.0258,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 3.2067
+        },
+        "7.75 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -13.981,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -13.8
+        },
+        "7.79 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -22.4773,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -22.2963
+        },
+        "10.83 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -9.2129,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -9.032
+        },
+        "8.46 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -0.2544,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -0.0735
+        },
+        "11.95 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -16.1676,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -15.9867
+        },
+        "19 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -10.1179,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -9.937
+        },
+        "7.17 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 6.4321,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 6.613
+        },
+        "8.37 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -9.0326,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -8.8517
+        },
+        "7.59 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -10.4178,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -10.2369
+        },
+        "6.71 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 12.1205,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 12.3015
+        },
+        "7.48 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 21.0017,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 21.1827
+        },
+        "7.14 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 0.1093,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 0.2902
+        },
+        "9.82 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -14.8584,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -14.6775
+        },
+        "8.05 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 1.1806,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 1.3615
+        },
+        "9.72 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -22.2296,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -22.0487
+        },
+        "6.36 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 8.1484,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 8.3293
+        },
+        "7.73 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 6.1408,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 6.3218
+        },
+        "8.43 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -19.2695,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -19.0886
+        },
+        "6.44 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -1.2752,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -1.0942
+        },
+        "6.69 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -11.7081,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -11.5272
+        },
+        "8.76 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -0.5004,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -0.3195
+        },
+        "6.43 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -2.684,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -2.503
+        },
+        "9.53 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -6.4211,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -6.2402
+        },
+        "6.04 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 23.5954,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 23.7763
+        },
+        "12.18 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 2.922,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 3.1029
+        },
+        "9.29 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -19.5236,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -19.3426
+        },
+        "7.11 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": -1.71,
+          "poolMeanPct": -0.1809,
+          "deltaPct": -1.5291
+        },
+        "7.86 ATRs above SMA20": {
+          "n": 1,
+          "flaggedMeanPct": 29.0986,
+          "poolMeanPct": -0.1809,
+          "deltaPct": 29.2795
+        }
+      }
+    }
+  },
+  "variants": {
+    "primary": {
+      "label": "primary_62",
+      "oosDates": 158,
+      "armMeans": {
+        "A_current": -0.0033,
+        "V1_noPenalty": 0.5457,
+        "V2_icPruned": -0.2779,
+        "V3_momentumTilt": -0.0144,
+        "V4_blendR10": 0.6591,
+        "V5_r10": 0.9117
+      },
+      "variants": {
+        "V1_noPenalty": {
+          "liftOverCurrent": {
+            "meanPct": 0.549,
+            "medianPct": 0.1899,
+            "winRate": 0.5696,
+            "pOneSided": 0.005339,
+            "ci95": {
+              "lo": 0.1747,
+              "hi": 0.9637
+            },
+            "drop3BestMeanPct": 0.3439
+          },
+          "vsR10MeanPct": -0.3659,
+          "positiveFolds": 4,
+          "usableFolds": 4
+        },
+        "V2_icPruned": {
+          "liftOverCurrent": {
+            "meanPct": -0.2746,
+            "medianPct": -0.0513,
+            "winRate": 0.481,
+            "pOneSided": 0.963702,
+            "ci95": {
+              "lo": -0.5713,
+              "hi": 0.0657
+            },
+            "drop3BestMeanPct": -0.3687
+          },
+          "vsR10MeanPct": -1.1895,
+          "positiveFolds": 1,
+          "usableFolds": 4
+        },
+        "V3_momentumTilt": {
+          "liftOverCurrent": {
+            "meanPct": -0.0111,
+            "medianPct": 0,
+            "winRate": 0.3671,
+            "pOneSided": 0.557002,
+            "ci95": {
+              "lo": -0.1523,
+              "hi": 0.1335
+            },
+            "drop3BestMeanPct": -0.085
+          },
+          "vsR10MeanPct": -0.926,
+          "positiveFolds": 1,
+          "usableFolds": 4
+        },
+        "V4_blendR10": {
+          "liftOverCurrent": {
+            "meanPct": 0.6624,
+            "medianPct": 0.5235,
+            "winRate": 0.6013,
+            "pOneSided": 0.001816,
+            "ci95": {
+              "lo": 0.231,
+              "hi": 1.1301
+            },
+            "drop3BestMeanPct": 0.4782
+          },
+          "vsR10MeanPct": -0.2525,
+          "positiveFolds": 4,
+          "usableFolds": 4
+        },
+        "V5_r10": {
+          "liftOverCurrent": {
+            "meanPct": 0.9149,
+            "medianPct": 0.3261,
+            "winRate": 0.5316,
+            "pOneSided": 0.004942,
+            "ci95": {
+              "lo": 0.2217,
+              "hi": 1.6052
+            },
+            "drop3BestMeanPct": 0.5921
+          },
+          "vsR10MeanPct": 0,
+          "positiveFolds": 4,
+          "usableFolds": 4
+        }
+      },
+      "folds": [
+        {
+          "fold": 1,
+          "usable": true,
+          "testDates": 40,
+          "purgedDates": 2,
+          "trainDates": {
+            "n": 37,
+            "first": "2022-07-21",
+            "last": "2023-04-10"
+          },
+          "v2Kept": [
+            "trendSmoothness",
+            "setupQuality"
+          ],
+          "lifts": {
+            "V1_noPenalty": 0.5729,
+            "V2_icPruned": -0.7402,
+            "V3_momentumTilt": -0.076,
+            "V4_blendR10": 0.7896,
+            "V5_r10": 1.1342
+          }
+        },
+        {
+          "fold": 2,
+          "usable": true,
+          "testDates": 39,
+          "purgedDates": 2,
+          "trainDates": {
+            "n": 77,
+            "first": "2022-07-21",
+            "last": "2024-01-25"
+          },
+          "v2Kept": [
+            "trendSmoothness",
+            "setupQuality",
+            "modelResidual"
+          ],
+          "lifts": {
+            "V1_noPenalty": 0.4213,
+            "V2_icPruned": -0.495,
+            "V3_momentumTilt": -0.0833,
+            "V4_blendR10": 0.4796,
+            "V5_r10": 0.4411
+          }
+        },
+        {
+          "fold": 3,
+          "usable": true,
+          "testDates": 40,
+          "purgedDates": 2,
+          "trainDates": {
+            "n": 116,
+            "first": "2022-07-21",
+            "last": "2024-11-01"
+          },
+          "v2Kept": [
+            "trendSmoothness",
+            "setupQuality",
+            "modelResidual"
+          ],
+          "lifts": {
+            "V1_noPenalty": 0.5011,
+            "V2_icPruned": 0.3575,
+            "V3_momentumTilt": 0.1335,
+            "V4_blendR10": 0.8921,
+            "V5_r10": 1.0389
+          }
+        },
+        {
+          "fold": 4,
+          "usable": true,
+          "testDates": 39,
+          "purgedDates": 2,
+          "trainDates": {
+            "n": 156,
+            "first": "2022-07-21",
+            "last": "2025-08-22"
+          },
+          "v2Kept": [
+            "momentumPersistence",
+            "trendSmoothness",
+            "setupQuality",
+            "modelResidual"
+          ],
+          "lifts": {
+            "V1_noPenalty": 0.7013,
+            "V2_icPruned": -0.2249,
+            "V3_momentumTilt": -0.0205,
+            "V4_blendR10": 0.4793,
+            "V5_r10": 1.0367
+          }
+        }
+      ],
+      "v2Kept": {
+        "1": [
+          "trendSmoothness",
+          "setupQuality"
+        ],
+        "2": [
+          "trendSmoothness",
+          "setupQuality",
+          "modelResidual"
+        ],
+        "3": [
+          "trendSmoothness",
+          "setupQuality",
+          "modelResidual"
+        ],
+        "4": [
+          "momentumPersistence",
+          "trendSmoothness",
+          "setupQuality",
+          "modelResidual"
+        ]
+      }
+    },
+    "broad": {
+      "label": "broad",
+      "oosDates": 158,
+      "armMeans": {
+        "A_current": -0.3324,
+        "V1_noPenalty": 0.2756,
+        "V2_icPruned": -0.3791,
+        "V3_momentumTilt": -0.243,
+        "V4_blendR10": 0.4748,
+        "V5_r10": 0.6851
+      },
+      "variants": {
+        "V1_noPenalty": {
+          "liftOverCurrent": {
+            "meanPct": 0.6081,
+            "medianPct": 0.4592,
+            "winRate": 0.5823,
+            "pOneSided": 0.048176,
+            "ci95": {
+              "lo": -0.0429,
+              "hi": 1.2585
+            },
+            "drop3BestMeanPct": 0.2158
+          },
+          "vsR10MeanPct": -0.4095,
+          "positiveFolds": 4,
+          "usableFolds": 4
+        },
+        "V2_icPruned": {
+          "liftOverCurrent": {
+            "meanPct": -0.0467,
+            "medianPct": -0.0202,
+            "winRate": 0.4937,
+            "pOneSided": 0.630565,
+            "ci95": {
+              "lo": -0.3095,
+              "hi": 0.2168
+            },
+            "drop3BestMeanPct": -0.1411
+          },
+          "vsR10MeanPct": -1.0643,
+          "positiveFolds": 2,
+          "usableFolds": 4
+        },
+        "V3_momentumTilt": {
+          "liftOverCurrent": {
+            "meanPct": 0.0894,
+            "medianPct": 0,
+            "winRate": 0.4684,
+            "pOneSided": 0.138231,
+            "ci95": {
+              "lo": -0.0668,
+              "hi": 0.2313
+            },
+            "drop3BestMeanPct": 0.026
+          },
+          "vsR10MeanPct": -0.9281,
+          "positiveFolds": 3,
+          "usableFolds": 4
+        },
+        "V4_blendR10": {
+          "liftOverCurrent": {
+            "meanPct": 0.8072,
+            "medianPct": 0.3226,
+            "winRate": 0.5253,
+            "pOneSided": 0.041747,
+            "ci95": {
+              "lo": -0.1575,
+              "hi": 1.7294
+            },
+            "drop3BestMeanPct": 0.3645
+          },
+          "vsR10MeanPct": -0.2104,
+          "positiveFolds": 4,
+          "usableFolds": 4
+        },
+        "V5_r10": {
+          "liftOverCurrent": {
+            "meanPct": 1.0176,
+            "medianPct": 0.8297,
+            "winRate": 0.5506,
+            "pOneSided": 0.057388,
+            "ci95": {
+              "lo": -0.1663,
+              "hi": 2.2332
+            },
+            "drop3BestMeanPct": 0.5164
+          },
+          "vsR10MeanPct": 0,
+          "positiveFolds": 4,
+          "usableFolds": 4
+        }
+      },
+      "folds": [
+        {
+          "fold": 1,
+          "usable": true,
+          "testDates": 40,
+          "purgedDates": 2,
+          "trainDates": {
+            "n": 37,
+            "first": "2022-07-21",
+            "last": "2023-04-10"
+          },
+          "v2Kept": [
+            "trendSmoothness",
+            "setupQuality"
+          ],
+          "lifts": {
+            "V1_noPenalty": 0.6164,
+            "V2_icPruned": -0.0727,
+            "V3_momentumTilt": 0.058,
+            "V4_blendR10": 1.4721,
+            "V5_r10": 2.0467
+          }
+        },
+        {
+          "fold": 2,
+          "usable": true,
+          "testDates": 39,
+          "purgedDates": 2,
+          "trainDates": {
+            "n": 77,
+            "first": "2022-07-21",
+            "last": "2024-01-25"
+          },
+          "v2Kept": [
+            "trendSmoothness",
+            "setupQuality",
+            "modelResidual"
+          ],
+          "lifts": {
+            "V1_noPenalty": 0.5544,
+            "V2_icPruned": 0.1062,
+            "V3_momentumTilt": -0.1061,
+            "V4_blendR10": 0.0035,
+            "V5_r10": 0.286
+          }
+        },
+        {
+          "fold": 3,
+          "usable": true,
+          "testDates": 40,
+          "purgedDates": 2,
+          "trainDates": {
+            "n": 116,
+            "first": "2022-07-21",
+            "last": "2024-11-01"
+          },
+          "v2Kept": [
+            "trendSmoothness",
+            "setupQuality"
+          ],
+          "lifts": {
+            "V1_noPenalty": 0.5712,
+            "V2_icPruned": -0.3352,
+            "V3_momentumTilt": 0.2144,
+            "V4_blendR10": 0.6742,
+            "V5_r10": 1.1189
+          }
+        },
+        {
+          "fold": 4,
+          "usable": true,
+          "testDates": 39,
+          "purgedDates": 2,
+          "trainDates": {
+            "n": 156,
+            "first": "2022-07-21",
+            "last": "2025-08-22"
+          },
+          "v2Kept": [
+            "trendSmoothness",
+            "setupQuality"
+          ],
+          "lifts": {
+            "V1_noPenalty": 0.691,
+            "V2_icPruned": 0.1229,
+            "V3_momentumTilt": 0.189,
+            "V4_blendR10": 1.0655,
+            "V5_r10": 0.5896
+          }
+        }
+      ],
+      "v2Kept": {
+        "1": [
+          "trendSmoothness",
+          "setupQuality"
+        ],
+        "2": [
+          "trendSmoothness",
+          "setupQuality",
+          "modelResidual"
+        ],
+        "3": [
+          "trendSmoothness",
+          "setupQuality"
+        ],
+        "4": [
+          "trendSmoothness",
+          "setupQuality"
+        ]
+      }
+    }
+  },
+  "fdr": {
+    "family": [
+      {
+        "id": "primary.V1_noPenalty",
+        "p": 0.005339,
+        "q": 0.017796666666666665,
+        "rank": 3,
+        "index": 0,
+        "survives": true,
+        "alpha": 0.1
+      },
+      {
+        "id": "primary.V2_icPruned",
+        "p": 0.963702,
+        "q": 0.963702,
+        "rank": 10,
+        "index": 1,
+        "survives": false,
+        "alpha": 0.1
+      },
+      {
+        "id": "primary.V3_momentumTilt",
+        "p": 0.557002,
+        "q": 0.6962524999999999,
+        "rank": 8,
+        "index": 2,
+        "survives": false,
+        "alpha": 0.1
+      },
+      {
+        "id": "primary.V4_blendR10",
+        "p": 0.001816,
+        "q": 0.017796666666666665,
+        "rank": 1,
+        "index": 3,
+        "survives": true,
+        "alpha": 0.1
+      },
+      {
+        "id": "primary.V5_r10",
+        "p": 0.004942,
+        "q": 0.017796666666666665,
+        "rank": 2,
+        "index": 4,
+        "survives": true,
+        "alpha": 0.1
+      },
+      {
+        "id": "broad.V1_noPenalty",
+        "p": 0.048176,
+        "q": 0.09564666666666667,
+        "rank": 5,
+        "index": 5,
+        "survives": true,
+        "alpha": 0.1
+      },
+      {
+        "id": "broad.V2_icPruned",
+        "p": 0.630565,
+        "q": 0.7006277777777777,
+        "rank": 9,
+        "index": 6,
+        "survives": false,
+        "alpha": 0.1
+      },
+      {
+        "id": "broad.V3_momentumTilt",
+        "p": 0.138231,
+        "q": 0.19747285714285714,
+        "rank": 7,
+        "index": 7,
+        "survives": false,
+        "alpha": 0.1
+      },
+      {
+        "id": "broad.V4_blendR10",
+        "p": 0.041747,
+        "q": 0.09564666666666667,
+        "rank": 4,
+        "index": 8,
+        "survives": true,
+        "alpha": 0.1
+      },
+      {
+        "id": "broad.V5_r10",
+        "p": 0.057388,
+        "q": 0.09564666666666667,
+        "rank": 6,
+        "index": 9,
+        "survives": true,
+        "alpha": 0.1
+      }
+    ],
+    "alpha": 0.1
+  },
+  "gateReport": {
+    "V1_noPenalty": {
+      "ok": false,
+      "why": [
+        "loses to r10 on primary (-0.3659)",
+        "loses to r10 on broad (-0.4095)"
+      ]
+    },
+    "V3_momentumTilt": {
+      "ok": false,
+      "why": [
+        "primary lift not positive",
+        "primary CI not above zero",
+        "folds 1/4",
+        "q 0.6963",
+        "loses to r10 on primary (-0.926)",
+        "loses to r10 on broad (-0.9281)",
+        "outlier-driven (drop-3-best <= 0)"
+      ]
+    },
+    "V2_icPruned": {
+      "ok": false,
+      "why": [
+        "primary lift not positive",
+        "primary CI not above zero",
+        "folds 1/4",
+        "q 0.9637",
+        "broad lift not positive",
+        "loses to r10 on primary (-1.1895)",
+        "loses to r10 on broad (-1.0643)",
+        "outlier-driven (drop-3-best <= 0)"
+      ]
+    },
+    "V4_blendR10": {
+      "ok": false,
+      "why": [
+        "loses to r10 on primary (-0.2525)",
+        "loses to r10 on broad (-0.2104)"
+      ]
+    }
+  },
+  "fixCandidate": null,
+  "verdict": "NO_INCREMENTAL_ALPHA",
+  "promotable": false,
+  "survivorshipProvenSafe": false,
+  "limitations": [
+    "Same panels/universes as research/89-90; the misranking finding motivated this study, so the primary spec is not fresh data (the broad universe is the quasi-OOS check).",
+    "Present-day universes — apparent momentum strength may deflate on survivorship-complete panels.",
+    "Diagnostic ICs are descriptive; only the ten predeclared lift tests carry q-values.",
+    "A shipped scorer change is a separate versioned step; this study alone authorizes nothing live."
+  ],
+  "runtimeMs": 6976,
+  "generatedAt": "2026-08-14T16:25:19.111Z"
+}

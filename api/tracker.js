@@ -159,6 +159,23 @@ const PRIVILEGED_OPS = new Set([
   //     candle-fetch budget.
   //   swinggrade     — calls STORE.recordResolved, writing resolved outcomes.
   'universecurate', 'researchgrade', 'swinggrade',
+  //   lifecyclegrade — warm capture-chain grader (audit 2026-08-14). Accepts an
+  //     arbitrary ?date= and lifecycle-store.saveGrades UNCONDITIONALLY OVERWRITES
+  //     lifecycle/<strategy>/grades/<date>.json. Once the provider's 5-min bars age
+  //     out, a rerun grades to {} — so an anonymous GET could wipe a historical
+  //     graded day. The capture chain already sends the bearer, so gating costs
+  //     nothing; the read-only op=lifecycle projection stays public.
+  'lifecyclegrade',
+  // SI OVERLAY prospective logger/resolver — writes the frozen-model shadow ledger
+  // (si/v1/prospective/*) + a ~75-name provider fan-out. Cron/manual-with-bearer only.
+  'sitick',
+  // SCREENER intraday fill-verification channel (screener-verify-v1) — writes the
+  // canonical episode shards + rollup (episodes/screener/*) and spends a bounded FMP
+  // 5-min + daily-candle fan-out. Cron/manual-with-bearer only.
+  'swingverify',
+  // OMEGA R10-vs-SCORE shadow A/B logger/resolver — writes the prospective decision
+  // ledger (omegaab/v1/*) + a ~75-name provider fan-out. Cron/manual-with-bearer only.
+  'omegaabtick',
 ]);
 // Expensive ops the BROWSER can trigger (Custom/Backtest/Baselines panel buttons) — we
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
@@ -188,6 +205,9 @@ const EXPENSIVE_OPS = new Set([
   // page traffic coalesces; the throttle stops a cache-busting caller from driving the
   // rebuild at will.
   'techcommand', 'techcommandticker',
+  // SI overlay heavier reads: sisnapshot may refresh the live FINRA cache, siledger can
+  // page Blob prospective docs, siexport streams the full CSV ledger.
+  'sisnapshot', 'siledger', 'siexport',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -206,6 +226,12 @@ const SHARED_FORCE_OPS = new Set([
   'router',
   // routercf: same shape — anonymous reads serve the cached counterfactual report.
   'routercf',
+  // challengereval: the cached shadow evaluation is public, but force=1 bypasses the
+  // cache, recomputes the walk-forward evaluation over every resolved shadow prediction
+  // AND overwrites shadow/eval.json — a recompute + write lever. Trusted callers only
+  // (warm-chains dispatches op=challengereval&force=1 with the bearer); anonymous
+  // callers still get the cached doc, and EXPENSIVE_OPS keeps rate-limiting them.
+  'challengereval',
 ]);
 // Ingest endpoints: POST-only + their own token/secret gate inside the route.
 const INGEST_OPS = new Set(['insideringest', 'alertsingest']);
@@ -364,6 +390,7 @@ async function handleRequest(req, res) {
   if (req.query.op === 'gapgo') return runGapGo(req, res);
   if (req.query.op === 'gapgotick') return runGapGoTick(req, res);
   if (req.query.op === 'gapgoverify') return require('../lib/gapgo-verify').runGapGoVerify(req, res);
+  if (req.query.op === 'swingverify') return require('../lib/screener-verify').runScreenerVerify(req, res);
   if (req.query.op === 'gapgobook') return runGapGoBook(req, res);
   if (req.query.op === 'downday') return runDownDay(req, res);
   if (req.query.op === 'downdaytick') return runDownDayTick(req, res);
@@ -457,6 +484,17 @@ async function handleRequest(req, res) {
   if (req.query.op === 'cflforecast') return require('../lib/cfl-routes').runCflForecast(req, res);
   if (req.query.op === 'cfltick') return require('../lib/cfl-routes').runCflTick(req, res);
   if (req.query.op === 'cflbackfill') return require('../lib/cfl-routes').runCflBackfill(req, res);
+  // SI OVERLAY — Short Interest Overlay shadow research (OMEGA_SI_LEVEL_5D_TOP10, weight-0).
+  // OMEGA R10-vs-SCORE prospective shadow A/B (research/90-91 follow-through, weight-0).
+  if (req.query.op === 'omegaab') return require('../lib/omega-ab-routes').runOmegaAb(req, res);
+  if (req.query.op === 'omegaabtick') return require('../lib/omega-ab-routes').runOmegaAbTick(req, res);
+  if (req.query.op === 'sistatus') return require('../lib/si-overlay-routes').runSiStatus(req, res);
+  if (req.query.op === 'sisnapshot') return require('../lib/si-overlay-routes').runSiSnapshot(req, res);
+  if (req.query.op === 'sihealth') return require('../lib/si-overlay-routes').runSiHealth(req, res);
+  if (req.query.op === 'siwf') return require('../lib/si-overlay-routes').runSiWf(req, res);
+  if (req.query.op === 'siledger') return require('../lib/si-overlay-routes').runSiLedger(req, res);
+  if (req.query.op === 'siexport') return require('../lib/si-overlay-routes').runSiExport(req, res);
+  if (req.query.op === 'sitick') return require('../lib/si-overlay-routes').runSiTick(req, res);
   // PSRL — Persistent Staircase Relative Leadership (shadow, weight-0).
   if (req.query.op === 'psrl') return require('../lib/psrl-routes').runPsrlBoard(req, res);
   if (req.query.op === 'psrldetail') return require('../lib/psrl-routes').runPsrlDetail(req, res);

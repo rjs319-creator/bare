@@ -187,3 +187,39 @@ test('the PRODUCTION dateNet object supports pValueOf — the FDR family is not 
   const out = M.classifyStrategies({ groups: [group], generatedAt: '2026-08-12T00:00:00Z' }, reg);
   assert.equal(out.fdr.tested, 1, 'a strategy with a real date-level record must be counted in the FDR family');
 });
+
+test('the PRODUCTION dateNet forwards FULL-PRECISION avgExact/seExact — p is not computed from display rounding', () => {
+  // THE BUG THIS EXISTS FOR: evidence-stats added avgExact/seExact precisely because a
+  // real ~0.003/cohort mean rounds to avg 0.00 at 2dp, turning the t-statistic into
+  // t(0.00) and p≈1. pValueOf PREFERS the exact fields — but the dateLevelNetExcess
+  // projection (the object lib/maturity feeds into the registry-wide BH demote gate)
+  // forwarded only the ROUNDED summary.avg/summary.se, so the governance gate still
+  // computed p from display values. Three display consumers were fixed; this one was
+  // missed. Runtime-shaped, like the test above — hand-written fixtures cannot see it.
+  const A = require('../lib/apex-routes');
+  const ES = require('../lib/evidence-stats');
+
+  // Small-magnitude but extremely consistent series: mean ≈ 0.0025 (rounds to 0.00),
+  // tiny sd → the exact t is enormous, the rounded t is exactly zero.
+  const rows = [];
+  for (let d = 0; d < 40; d++) {
+    const dt = `2025-${String(1 + (d % 12)).padStart(2, '0')}-${String(10 + Math.floor(d / 12)).padStart(2, '0')}`;
+    rows.push({ date: dt, ret: 0.01, excess: 0.005, netExc: 0.0015 + (d % 3) * 0.001 });
+  }
+  const dn = A.dateLevelNetExcess(rows, { horizonBars: 5 });
+
+  assert.ok(dn, 'fixture must produce a date-level statistic');
+  assert.ok(Number.isFinite(dn.avgExact) && dn.avgExact > 0, 'the projection must carry the exact mean');
+  assert.ok(Number.isFinite(dn.seExact) && dn.seExact > 0, 'the projection must carry the exact standard error');
+  assert.ok(Number.isFinite(dn.effectiveN), 'the projection must carry effectiveN — pValueOf uses it for df');
+  assert.equal(dn.avg, 0, 'the display mean rounds to zero — exactly why the exact copy must ride along');
+
+  const p = ES.pValueOf(dn);
+  assert.ok(Number.isFinite(p) && p < 0.05, `a consistent small-magnitude edge must resolve to a small p, got ${p}`);
+
+  // The counterfactual this fix removes: strip the exact fields (the pre-fix projection)
+  // and the same record scores p≈1 — the BH demote gate would silently exempt it.
+  const { avgExact, seExact, ...rounded } = dn;
+  const pRounded = ES.pValueOf(rounded);
+  assert.ok(pRounded > 0.5, `display-rounded values must degrade to p≈1 (got ${pRounded}) — proving the exact fields are load-bearing`);
+});

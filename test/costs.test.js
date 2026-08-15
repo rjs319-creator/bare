@@ -29,8 +29,21 @@ test('tierForPick reads liquidity from the ledger metadata', () => {
   assert.strictEqual(tierForPick({ section: 'Biotech' }), 'biotech');
   assert.strictEqual(tierForPick({ bench: 'XBI' }), 'biotech');
   assert.strictEqual(tierForPick({ scope: 'large' }), 'liquid');
-  assert.strictEqual(tierForPick({}), 'liquid');
-  assert.strictEqual(tierForPick(null), 'liquid');
+  // These two previously pinned the fail-OPEN defect ({} / null → cheapest 'liquid'
+  // tier). Unknown liquidity must never earn the cheapest tier (audit 2026-08-15):
+  // 'liquid' is only granted by an explicit scope stamp or an explicit map entry.
+  assert.strictEqual(tierForPick({}), 'small');
+  assert.strictEqual(tierForPick(null), 'small');
+});
+
+test('an unmapped/missing/misspelled section fails CLOSED to the small tier, never liquid', () => {
+  assert.strictEqual(tierForPick({ section: 'NoSuchSection' }), 'small');
+  assert.strictEqual(tierForPick({ section: 'Screener' }), 'small'); // case drift ≠ the mapped 'screener'
+  assert.strictEqual(tierForPick({ section: null }), 'small');
+  // An explicit map entry (or a stamped scope) still earns 'liquid' — only the
+  // silent fallback is closed.
+  assert.strictEqual(tierForPick({ section: 'screener' }), 'liquid');
+  assert.strictEqual(tierForPick({ section: 'NoSuchSection', scope: 'large' }), 'liquid');
 });
 
 test('netReturn subtracts the round-trip cost as a positive drag', () => {
@@ -159,4 +172,49 @@ test('costBreakdown totalPct includes the impact term when a size is declared', 
   assert.ok(sized.impactPct > 0);
   assert.ok(Math.abs(sized.totalPct - (plain.totalPct + sized.impactPct)) < 1e-9);
   assert.match(sized.impactBasis, /MODELED/);
+});
+
+// ── section tier defaults (audit 2026-08-14) ────────────────────────────────
+// SECTION_TIER_DEFAULT omitted Fade, momentum, DownDay, GapDown, Ignition and OMEGA, so
+// those sections silently defaulted to the CHEAPEST 'liquid' tier (16bps RT) — flattering
+// exactly the illiquid/short studies this file's own header warns about.
+test('unstamped Fade/momentum/DownDay/GapDown/Ignition/OMEGA picks no longer grade at the cheapest tier', () => {
+  // Fade shorts social-darling names; DownDay/GapDown/Ignition are mixed-universe event
+  // sleeves; momentum is fed by full-market price/volume discovery (api/momentum.js);
+  // the OMEGA section is the OMEGA-SWING ledger whose Stage-1 candidates are the merged
+  // op=today signals (Day Trade, Gap&Go, Breakout, Coil, …) — NOT the 62-name
+  // liquid-options cohort (that universe belongs to the separate omega-ab lane).
+  for (const section of ['Fade', 'momentum', 'DownDay', 'GapDown', 'Ignition', 'OMEGA']) {
+    assert.strictEqual(tierForPick({ section }), 'small', `${section} must not grade at the liquid tier`);
+  }
+  // A stamped scope still always wins.
+  assert.strictEqual(tierForPick({ section: 'Fade', scope: 'large' }), 'liquid');
+  assert.strictEqual(tierForPick({ section: 'OMEGA', scope: 'micro' }), 'micro');
+});
+
+test('every scoreboard section has an EXPLICIT cost-tier decision (a new section cannot silently fall to liquid)', () => {
+  const { SECTION_TO_ID } = require('../lib/strategy-contracts');
+  const { SECTION_TIER_DEFAULT, TIERS } = require('../lib/costs');
+  for (const section of Object.keys(SECTION_TO_ID)) {
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(SECTION_TIER_DEFAULT, section),
+      `section "${section}" has no explicit tier default — it would silently grade at the cheapest 'liquid' tier`,
+    );
+    const tier = SECTION_TIER_DEFAULT[section];
+    assert.ok(TIERS[tier], `section "${section}" maps to unknown tier "${tier}" (roundTripCostPct would silently fall back to liquid)`);
+  }
+  // And the explicit defaults must round-trip through tierForPick unchanged.
+  for (const [section, tier] of Object.entries(SECTION_TIER_DEFAULT)) {
+    assert.strictEqual(tierForPick({ section }), tier, `tierForPick disagrees with the declared default for ${section}`);
+  }
+});
+
+// Follow-up to the fail-closed tierForPick change: challenger-routes must stamp the
+// scope it already knows (capTier), or large-cap picks silently repriced 16→60bps.
+test('challenger-routes stamps scope from capTier — large reclaims liquid, unknown stays conservative', () => {
+  const src = require('node:fs').readFileSync(require.resolve('../lib/challenger-routes.js'), 'utf8');
+  assert.match(src, /p\.capTier === 'large' \? 'large'/, 'large capTier must stamp scope large');
+  const { tierForPick } = require('../lib/costs');
+  assert.equal(tierForPick({ scope: 'large' }), 'liquid');
+  assert.equal(tierForPick({ scope: undefined }), 'small', 'unknown capTier keeps the conservative fallback');
 });

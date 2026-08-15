@@ -104,6 +104,25 @@ test('NET EV: a trade whose costs exceed its target move is excluded', () => {
   assert.ok(/-0.4/.test(p.excluded[0].detail));
 });
 
+// ── VETO BOUNDARY (entry-basis fix, audit 2026-08-14) ───────────────────────
+// A marginal name whose PRINTED-level EV is barely positive but whose fill-adjusted EV
+// is negative must now be vetoed. Small tier: round trip 0.6%, entry-side slip 0.3%.
+// entry 100 → target 100.65: printed net = 0.65 − 0.60 = +0.05% (was admitted);
+// fill = 100.30 → gross (100.65−100.30)/100.30 = 0.35% → net −0.25% (vetoed).
+test('NET EV BOUNDARY: barely-positive printed EV that is negative on the fill basis is vetoed', () => {
+  const DC = require('../lib/decision-costs');
+  const cost = DC.costModel({ source: 'screener', section: 'screener', entry: 100, target: 100.65, liquidity: { dollarVol: 5e6 } });
+  // Sanity on the arithmetic this test claims: printed-basis net would have been +0.05.
+  assert.strictEqual(cost.grossMovePrintedPct, 0.65);
+  assert.strictEqual(+(cost.grossMovePrintedPct - cost.roundTripPct).toFixed(2), 0.05,
+    'the OLD printed-level computation admitted this name');
+  assert.ok(cost.netMovePct < 0, `fill-adjusted net must be negative, got ${cost.netMovePct}`);
+  const ranked = [sig({ ticker: 'MARGINAL', score: 80, liquidity: { dollarVol: 5e6 }, cost })];
+  const p = P.buildPortfolio(ranked, { size: 10 });
+  assert.strictEqual(p.selected.length, 0);
+  assert.strictEqual(p.excluded[0].reason, 'net-ev');
+});
+
 test('NET EV: an UNKNOWN net (no target) is not excluded', () => {
   const ranked = [sig({ ticker: 'LEAD', cost: { known: false, netMovePct: null, penalty: 1 } })];
   const p = P.buildPortfolio(ranked, { size: 10 });

@@ -4,7 +4,7 @@
 // (not a screener-count), lifecycle state, execution-aware ranking, upcoming risk
 // events, and data-freshness. The engine lives in lib/decision.js (server) — this
 // module only renders, so there is no client/server scoring skew.
-import { esc } from './format.js';
+import { esc, timeAgo } from './format.js';
 import { fetchJSON, HEAVY_TIMEOUT_MS, OPTIONAL_TIMEOUT_MS } from './fetch-json.js';
 
 const HORIZONS = [
@@ -412,13 +412,19 @@ export function renderCommandCenter(container, p) {
   const reg = p.regime || {};
   const regCol = reg.bearish ? 'var(--red)' : reg.riskOn ? 'var(--green)' : 'var(--amber,#f59e0b)';
 
-  // Header: regime + leading/weakening sectors.
-  const secChip = (s, dir) => `<span class="td-sec-chip ${dir}">${esc(s.name)} <b>${pct(+(+s.changePct).toFixed(1))}</b></span>`;
+  // Header: regime + leading/weakening sectors. A missing sector change must never
+  // render as "NaN%" — the chip shows the name alone when the number is absent.
+  const secChip = (s, dir) => {
+    const chg = Number.isFinite(+s.changePct) ? +(+s.changePct).toFixed(1) : null;
+    return `<span class="td-sec-chip ${dir}">${esc(s.name)}${chg == null ? '' : ` <b>${pct(chg)}</b>`}</span>`;
+  };
   let html = `<div class="td-cc">`;
   html += opportunityBanner(p.opportunity);
   html += actionSection(); // shadow challenger — first read, clearly labeled, never affects ranks below
+  // `reg` (defaulted {}) — an ok payload without a regime block must degrade, not throw
+  // (renderSafely would otherwise kill the whole board over a header label).
   html += `<div class="td-head" style="border-left-color:${regCol}">`
-    + `<div class="td-regime"><b>${esc(p.regime.label)}</b>${reg.breadthPct != null ? ` · breadth ${reg.breadthPct}%` : ''}${reg.condition ? ` · ${esc(reg.condition)} tape` : ''}</div>`
+    + `<div class="td-regime"><b>${esc(reg.label || 'Regime unknown')}</b>${reg.breadthPct != null ? ` · breadth ${reg.breadthPct}%` : ''}${reg.condition ? ` · ${esc(reg.condition)} tape` : ''}</div>`
     + `<div class="td-sectors"><span class="td-dim">Leading</span> ${(p.sectors?.leading || []).map(s => secChip(s, 'lead')).join('')} `
     + `<span class="td-dim">Weakening</span> ${(p.sectors?.weakening || []).map(s => secChip(s, 'weak')).join('')}</div></div>`;
 
@@ -636,6 +642,15 @@ function renderPairs(host, m) {
 }
 
 const TODAY_CACHE_KEY = 'today.cc.v1';
+// Instant-paint staleness policy: a cached board older than 30 min is labeled with its
+// age; older than 24h it is refused outright (a day-old board presented as current is
+// worse than a spinner).
+const TODAY_CACHE_AGE_NOTE_MS = 30 * 60 * 1000;
+const TODAY_CACHE_MAX_PAINT_MS = 24 * 60 * 60 * 1000;
+// The cached payload's human age comes from the shared timeAgo() (format.js) —
+// the ONE relative-age formatter — so this banner never disagrees with the
+// "Updated …" stamps elsewhere. It also covers the undated-cache case honestly
+// ("a while ago" instead of the old local "an unknown time").
 
 // op=today self-fetches 12 sources in parallel (each bounded server-side at 12s) and measures
 // 11-13s cold — the scoreboard source alone takes ~10.3s, leaving almost nothing under the 20s
@@ -650,23 +665,52 @@ function applyGrades(mat) {
   });
 }
 
-// A subtle "refreshing…" hint shown over a stale (cached) render until the fresh data lands.
-function markUpdating(container, on) {
+// A subtle "refreshing…" hint shown over a stale (cached) render until the fresh data
+// lands. When the cache is old enough to matter (>30 min), the hint says HOW old.
+function markUpdating(container, on, ageText) {
   const cc = container.querySelector('.td-cc');
   if (!cc) return;
   let n = cc.querySelector('.td-refreshing');
-  if (on) { if (!n) { n = document.createElement('div'); n.className = 'td-refreshing'; n.textContent = '🔄 Showing your last scan — refreshing with the latest…'; cc.prepend(n); } }
-  else if (n) n.remove();
+  if (on) {
+    if (!n) { n = document.createElement('div'); n.className = 'td-refreshing'; cc.prepend(n); }
+    n.textContent = ageText
+      ? `🔄 Showing your last scan from ${ageText} — refreshing with the latest…`
+      : '🔄 Showing your last scan — refreshing with the latest…';
+  } else if (n) n.remove();
+}
+
+// The refresh FAILED while a stale cached board is on screen: replace the quiet
+// "refreshing…" hint with a loud banner so stale data is never presented as current.
+function markRefreshFailed(container, ageText) {
+  const cc = container.querySelector('.td-cc');
+  if (!cc) return;
+  const hint = cc.querySelector('.td-refreshing');
+  if (hint) hint.remove();
+  let n = cc.querySelector('.td-refresh-failed');
+  if (!n) {
+    n = document.createElement('div');
+    n.className = 'td-refresh-failed dt-note';
+    n.style.borderLeftColor = 'var(--red,#ef4444)';
+    cc.prepend(n);
+  }
+  n.textContent = `⚠️ Refresh failed — showing data from ${ageText}. Try ⟳ Refresh.`;
 }
 
 export async function loadCommandCenter(container) {
   if (!container) return null;
   // 1) INSTANT PAINT from the last cached payload so there's no long blank spinner while
   //    op=today (which self-fetches 12 sources) computes on a cold hit. Flagged "refreshing".
-  let painted = false;
+  let painted = false, cachedAt = null;
   try {
     const c = JSON.parse(localStorage.getItem(TODAY_CACHE_KEY) || 'null');
-    if (c && c.p && c.p.ok) { applyGrades(c.mat); applyChallenger(c.chal); renderCommandCenter(container, c.p); markUpdating(container, true); painted = true; }
+    // Staleness gate: refuse the instant paint entirely when the cache is >24h old (or
+    // undated); label its age when it is >30 min old. A stale board must never look fresh.
+    const age = c && Number.isFinite(c.at) ? Date.now() - c.at : Infinity;
+    if (c && c.p && c.p.ok && age <= TODAY_CACHE_MAX_PAINT_MS) {
+      applyGrades(c.mat); applyChallenger(c.chal); renderCommandCenter(container, c.p);
+      markUpdating(container, true, age > TODAY_CACHE_AGE_NOTE_MS ? timeAgo(c.at) : null);
+      painted = true; cachedAt = c.at;
+    }
   } catch { /* corrupt cache → ignore */ }
   if (!painted) container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Ranking every screener into one table…</p></div>`;
 
@@ -695,7 +739,9 @@ export async function loadCommandCenter(container) {
   } else if (!painted) {
     renderSafely(p);                            // nothing cached → show the empty/error state
   } else {
-    markUpdating(container, false);             // fresh fetch failed but stale is shown → keep it, drop the hint
+    // Fresh fetch failed but a stale cached board is on screen: keep it, but swap the
+    // "refreshing…" hint for a loud failure banner carrying the data's real age.
+    markRefreshFailed(container, timeAgo(cachedAt));
   }
   return p;
 }

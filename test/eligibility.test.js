@@ -87,8 +87,8 @@ test('a governance record with NO scoring version cannot clear a versioned strat
 
 test('three-class taxonomy: ACTIONABLE (cleared+sizable), QUALIFIED_LEAD (cleared, not sizable), RESEARCH (uncleared)', () => {
   const g = EL.gateSignals([
-    { source: 'screener', ticker: 'AAA', side: 'long', entry: 1, stop: 0.9, target: 1.3, liquidity: { dollarVol: 5e7 } },
-    { source: 'screener', ticker: 'BBB', side: 'long', liquidity: { dollarVol: 5e7 } },   // no plan → lead only
+    { source: 'screener', ticker: 'AAA', side: 'long', tier: 'Early', universeScope: 'large', entry: 1, stop: 0.9, target: 1.3, liquidity: { dollarVol: 5e7 } },
+    { source: 'screener', ticker: 'BBB', side: 'long', tier: 'Early', universeScope: 'large', liquidity: { dollarVol: 5e7 } },   // no plan → lead only
     { source: 'coil', ticker: 'EEE', side: 'long', entry: 1, stop: 0.9, target: 1.3, liquidity: { dollarVol: 5e7 } },
   ], { governance: GOV_PROD, nowMs: NOW });
   assert.equal(g.annotated[0].eligibility.signalClass, 'ACTIONABLE');
@@ -147,7 +147,7 @@ test('SHORT without observed borrow fails closed even when its source is cleared
   // registry where the source IS production so the test isolates its actual subject:
   // the borrow gate, not the maturity gate.
   const REG = [{ ...STRATEGY_REGISTRY.find(e => e.id === 'downday'), maturity: 'production' }];
-  const sig = { source: 'downday', ticker: 'HOT', side: 'short', entry: 205, stop: 216, target: 188, liquidity: { dollarVol: 6e7 } };
+  const sig = { source: 'downday', ticker: 'HOT', side: 'short', tier: 'CONFIRMED', entry: 205, stop: 216, target: 188, liquidity: { dollarVol: 6e7 } };
   const g1 = EL.gateSignals([sig], { registry: REG, governance: GOV_PROD, nowMs: NOW });
   assert.equal(g1.annotated[0].eligibility.tradeEligible, false);
   assert.match(g1.annotated[0].eligibility.reasons.join(' '), /borrow/);
@@ -174,10 +174,10 @@ test('LONGS from the same cleared source are unaffected by the borrow gate', () 
 
 test('sizing discipline: missing plan levels or unknown liquidity ⇒ NOT sizingEligible (unknown never gets full confidence)', () => {
   const gov = GOV_PROD;
-  const noPlan = EL.gateSignals([{ source: 'screener', ticker: 'AAA', side: 'long', liquidity: { dollarVol: 5e7 } }], { governance: gov, nowMs: NOW });
+  const noPlan = EL.gateSignals([{ source: 'screener', ticker: 'AAA', side: 'long', tier: 'Early', universeScope: 'large', liquidity: { dollarVol: 5e7 } }], { governance: gov, nowMs: NOW });
   assert.equal(noPlan.annotated[0].eligibility.tradeEligible, true);
   assert.equal(noPlan.annotated[0].eligibility.sizingEligible, false);
-  const noLiq = EL.gateSignals([{ source: 'screener', ticker: 'AAA', side: 'long', entry: 1, stop: 0.9, target: 1.2, liquidity: { price: 10 } }], { governance: gov, nowMs: NOW });
+  const noLiq = EL.gateSignals([{ source: 'screener', ticker: 'AAA', side: 'long', tier: 'Early', universeScope: 'large', entry: 1, stop: 0.9, target: 1.2, liquidity: { price: 10 } }], { governance: gov, nowMs: NOW });
   assert.equal(noLiq.annotated[0].eligibility.sizingEligible, false);
   assert.equal(noLiq.annotated[0].eligibility.sizingWeight, 0);
 });

@@ -171,7 +171,37 @@ test('governRegistry tallies statuses, sorts strongest-first, sums cleared weigh
 });
 
 test('isWeakening needs BOTH a slip and a sub-50 beat bound (one soft quarter does not cut size)', () => {
-  assert.equal(G.isWeakening({ excessN: 40, avgExcess: 1, beatLo: 48 }, { avgExcess: 4 }), true);
-  assert.equal(G.isWeakening({ excessN: 40, avgExcess: 1, beatLo: 55 }, { avgExcess: 4 }), false); // beat bound still >50
-  assert.equal(G.isWeakening({ excessN: 5, avgExcess: -5, beatLo: 10 }, { avgExcess: 4 }), false); // sample too small
+  // `prev` uses the RUNTIME shape: persisted governance records (governRegistry output,
+  // governance/latest.json) nest the stats under prev.stats — never at the top level.
+  assert.equal(G.isWeakening({ excessN: 40, avgExcess: 1, beatLo: 48 }, { stats: { avgExcess: 4 } }), true);
+  assert.equal(G.isWeakening({ excessN: 40, avgExcess: 1, beatLo: 55 }, { stats: { avgExcess: 4 } }), false); // beat bound still >50
+  assert.equal(G.isWeakening({ excessN: 5, avgExcess: -5, beatLo: 10 }, { stats: { avgExcess: 4 } }), false); // sample too small
+});
+
+// REGRESSION (audit 2026-08-14): isWeakening read prev.avgExcess, but persisted prior
+// governance records carry prev.stats.avgExcess — so prevAvg was ALWAYS null in
+// production and the "slipped >1 point vs prior" decay branch was DEAD (fail-open: a
+// decaying strategy kept full weight as long as its average stayed above zero). The old
+// fixture hand-supplied { avgExcess: 4 } at the top level — a shape runtime never emits —
+// which is exactly why this test could never fail against the production defect.
+test('isWeakening fires on the RUNTIME prev shape (prev.stats.avgExcess) — the decay branch is not dead', () => {
+  const stats = { excessN: 40, avgExcess: 1, beatLo: 48 };
+  // Runtime shape: avg slipped 4 → 1 (>1 point) and beatLo < 50 ⇒ weakening. The old
+  // code read prevAvg = null here, fell to the `avgExcess <= 0` branch, and returned
+  // FALSE — full weight for a decaying strategy.
+  assert.equal(G.isWeakening(stats, { status: 'production', stats: { excessN: 40, avgExcess: 4, beatLo: 60 } }), true);
+  // Backward compat: a legacy top-level avgExcess (if any old doc carried one) still works.
+  assert.equal(G.isWeakening(stats, { avgExcess: 4 }), true);
+  // No prior record at all: falls back to "average has gone non-positive".
+  assert.equal(G.isWeakening(stats, null), false);
+  assert.equal(G.isWeakening({ excessN: 40, avgExcess: -0.5, beatLo: 48 }, null), true);
+});
+
+test('governStrategy: a production strategy whose persisted (runtime-shaped) record shows a >1pt slip lands Reduced', () => {
+  const prev = { status: 'production', version: 'x-v1', stats: { excessN: 40, avgExcess: 4, beatLo: 60 } };
+  const now = graded({ grade: 'validated', version: 'x-v1', stats: { excessN: 40, avgExcess: 1, beatMktRate: 48, beatLo: 42 } });
+  const r = G.governStrategy(now, prev, FULL_ARTIFACT, { nowMs: NOW });
+  // Old code: prevAvg null → avgExcess 1 > 0 → NOT weakening → production at full weight.
+  assert.equal(r.status, 'reduced');
+  assert.equal(r.weight, 0.5);
 });
