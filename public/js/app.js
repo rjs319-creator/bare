@@ -163,7 +163,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     brief: 'A concise market brief — the current stance and why.',
     forecast: 'Falsifiable market predictions, auto-graded against real prices.',
     crowd: 'Prediction-market odds on macro events.',
-    sharp: 'Signs of “smart money” positioning worth a look.',
+    sharp: 'Large prediction-market positioning that diverges from the crowd — real bets, not a verified edge.',
     alerts: 'Auto-caught events — sharp-money flags and stance flips.',
     backtest: 'Test the models against history: does the edge hold up over time?',
     events: 'Forced-selling events — when someone had to sell regardless of price (index changes, IPO lock-ups, fund fire-sales), and whether the bounce actually pays.',
@@ -256,7 +256,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     },
     ghost: {
       what: `QUIET stocks that look like they're being <b>accumulated before</b> a breakout — the opposite of chasing a move that already happened. Scored /100 across six clues, including real insider buying.`,
-      read: `Tier <b>GHOST &gt; STALKING &gt; WATCH</b>. The pillar chips show which clues fired (relative strength, accumulation, smart-money flow, insider buys, catalyst).`,
+      read: `Tier <b>GHOST &gt; STALKING &gt; WATCH</b>. The pillar chips show which clues fired (relative strength, accumulation, up/down-volume flow (a proxy), insider buys, catalyst).`,
       act: `Use it as an <b>early</b> watchlist. These are "getting ready," not "going now" — set an alert and wait for the actual breakout to confirm before buying.`,
       catch: `"Quiet accumulation" is a guess about intent, and many names never break out. Insider buying is rare in big caps. A lead to watch, not a buy signal.`,
     },
@@ -370,7 +370,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     },
     sharp: {
       what: `A read on where the "<b>sharp</b>" / informed money appears to be positioned, versus the general crowd.`,
-      read: `It highlights where smart money <b>diverges</b> from the crowd — the divergence is the interesting part.`,
+      read: `It highlights where large-stake bettors <b>diverge</b> from the crowd — the divergence is the interesting part.`,
       act: `Context and confirmation — sharp-money agreement can add conviction to a setup you found elsewhere.`,
       catch: `"Sharp money" is inferred, not certain, and is often already reflected in the price. A hint, not a trade.`,
     },
@@ -3373,13 +3373,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     RISK_OFF: { p1: 20, p2: 25, p3: 35, p4: 20 },
   };
   const APEX_RG_LABEL = { RISK_ON: 'Risk-On', NEUTRAL: 'Neutral', RISK_OFF: 'Risk-Off' };
-  const APEX_PILLAR_LABEL = { p1: 'Momentum / RS', p2: 'Technical structure', p3: 'Fundamental acceleration', p4: 'Supply / smart money' };
+  const APEX_PILLAR_LABEL = { p1: 'Momentum / RS', p2: 'Technical structure', p3: 'Fundamental acceleration', p4: 'Supply / accumulation (proxy)' };
   // Plain-English hovers for each scoring pillar (novice investor). w## = its weight.
   const APEX_PILLAR_HELP = {
     p1: 'Momentum / Relative Strength — is the stock outrunning the market lately? Higher = stronger recent trend. (w## is how much this counts toward the score.)',
     p2: 'Technical structure — how clean the chart setup is (above key moving averages, orderly base). Higher = healthier chart.',
     p3: 'Fundamental acceleration — are revenue and earnings growth speeding up, not just positive? Higher = improving business.',
-    p4: 'Supply / smart money — accumulation and buying pressure vs selling. Higher = big money leaning in.',
+    p4: 'Supply / accumulation (proxy) — buying vs selling pressure inferred from volume patterns. A price/volume proxy, not verified institutional flow.',
   };
   const APEX_KEYS = ['p1', 'p2', 'p3', 'p4'];
 
@@ -4003,7 +4003,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         ${pill('p1', '① Momentum/RS')}
         ${pill('p2', '② Structure')}
         ${pill('p3', '③ Fundamental')}
-        ${pill('p4', '④ Smart money')}
+        ${pill('p4', '④ Accumulation')}
       </div>
       ${weak}
       ${levelsHtml}
@@ -4016,7 +4016,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function renderApexModelPanel(regime, preset, large) {
     const body = document.getElementById('cx-model-body');
     const cols = ['RISK_ON', 'NEUTRAL', 'RISK_OFF'];
-    const rows = [['p1', '① Momentum / RS'], ['p2', '② Technical structure'], ['p3', '③ Fundamental acceleration'], ['p4', '④ Supply / smart money']];
+    const rows = [['p1', '① Momentum / RS'], ['p2', '② Technical structure'], ['p3', '③ Fundamental acceleration'], ['p4', '④ Supply / accumulation (proxy)']];
     const table = `<table class="cx-preset-table"><thead><tr><th>Pillar</th>${cols.map(c => `<th class="${c === regime ? 'active' : ''}">${APEX_RG_LABEL[c]}</th>`).join('')}</tr></thead><tbody>${rows.map(([k, lb]) => `<tr><td>${lb}</td>${cols.map(c => `<td class="${c === regime ? 'active' : ''}">${APEX_PRESETS[c][k]}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
 
     const rg = large.regime || {};
@@ -4032,7 +4032,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       <div class="cx-mp-sec">
         <h4>How the Apex model scores</h4>
         <p class="cx-mp-p">Every breakout candidate from the screener is graded 0–100 on four independent pillars, then blended into one composite by the active regime's weight preset. <b>Apex</b> = top composite with balanced strength across all pillars and a confirmed setup; <b>Loaded</b> = strong composite, one pillar may lag; <b>Watch</b> = building, not yet confirmed.</p>
-        <p class="cx-mp-p"><b>① Momentum / RS</b> — relative strength &amp; multi-window price momentum vs peers. <b>② Technical structure</b> — trend template, base quality, proximity to pivot. <b>③ Fundamental acceleration</b> — narrative/thematic strength plus real revenue &amp; EPS growth where available. <b>④ Supply / smart money</b> — volume surge &amp; volatility-adjusted accumulation.</p>
+        <p class="cx-mp-p"><b>① Momentum / RS</b> — relative strength &amp; multi-window price momentum vs peers. <b>② Technical structure</b> — trend template, base quality, proximity to pivot. <b>③ Fundamental acceleration</b> — narrative/thematic strength plus real revenue &amp; EPS growth where available. <b>④ Supply / accumulation (proxy)</b> — volume surge &amp; volatility-adjusted accumulation, inferred from price/volume, not verified institutional flow.</p>
       </div>
       <div class="cx-mp-sec">
         <h4>Regime-dependent weight presets</h4>
@@ -6399,23 +6399,36 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const col = x => x == null ? '' : `color:${x >= 0 ? 'var(--green,#10d98a)' : 'var(--red,#ef4444)'}`;
     const intro = `<div class="cx-strip" style="margin-bottom:10px">
       <b>What this is.</b> The track record of the <b>Core Momentum</b> sleeve (registry: shadow, zero weight) — each quarterly cohort logged at rebalance, scored on its forward outcomes (+target / −stop / ~63-session time exit) vs <b>IWM</b> (Russell 2000, the small-cap benchmark).
-      <span style="color:#8a93a6">The headline table shows resolved trades; the MTM row below marks open positions at the latest close and nets one small-cap round-trip cost per trade, so open risk and friction are in the record. Entries are logged reference prices, not verified fills (basis disclosed by the API). No forward return is promised.</span></div>`;
+      <span style="color:#8a93a6">The headline is the <b>daily mark-to-market portfolio NAV</b> — cash + every open position marked at each day's close + realized exits, net of per-side costs — and it <b>fails closed</b> (shows a coverage gap instead of a number) when any required mark is missing. The resolved-only compound and per-quarter table are diagnostics: they ignore open positions. Entries are logged reference prices, not verified fills (basis disclosed by the API). No forward return is promised.</span></div>`;
     if (d.empty || !d.quarters || !d.quarters.length) {
       cont.innerHTML = intro + `<div class="mom-status"><p>${esc(d.note || 'No cohorts logged yet — the track record begins at the first quarterly rebalance.')}</p></div>`;
       return;
     }
     const c = d.cumulative || {}, t = d.totals || {};
-    const summary = `<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px;font-size:0.8rem">
-      <div><div style="color:#8a93a6;font-size:0.62rem">SINCE INCEPTION (realized)</div><b style="${col(c.strategyReturn)};font-size:1.1rem">${pct(c.strategyReturn)}</b></div>
-      <div><div style="color:#8a93a6;font-size:0.62rem">IWM (same windows)</div><b style="${col(c.benchReturn)};font-size:1.1rem">${pct(c.benchReturn)}</b></div>
-      <div><div style="color:#8a93a6;font-size:0.62rem">EXCESS vs IWM</div><b style="${col(c.excess)};font-size:1.1rem">${pct(c.excess)}</b></div>
-      <div><div style="color:#8a93a6;font-size:0.62rem">WIN RATE</div><b>${t.winRate == null ? '—' : (t.winRate * 100).toFixed(0) + '%'}</b></div>
+    // PORTFOLIO NAV lane — the only number allowed to headline "since inception".
+    // It marks every open position daily and fails closed on missing marks; the old
+    // resolved-only compound is kept below strictly as a relabeled diagnostic.
+    const nav = d.nav || null;
+    const navHead = (nav && nav.available)
+      ? `<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px;font-size:0.8rem">
+        <div><div style="color:#8a93a6;font-size:0.62rem">SINCE INCEPTION — PORTFOLIO NAV (marked daily, cost-net)</div><b style="${col(nav.totals.navReturnNetPendingExit)};font-size:1.1rem">${pct(nav.totals.navReturnNetPendingExit)}</b></div>
+        <div><div style="color:#8a93a6;font-size:0.62rem">IWM NAV (same days)</div><b style="${col(nav.totals.benchReturn)};font-size:1.1rem">${pct(nav.totals.benchReturn)}</b></div>
+        <div><div style="color:#8a93a6;font-size:0.62rem">EXCESS vs IWM</div><b style="${col(nav.totals.excess)};font-size:1.1rem">${pct(nav.totals.excess)}</b></div>
+        <div><div style="color:#8a93a6;font-size:0.62rem">MAX DRAWDOWN</div><b style="color:var(--red,#ef4444)">${pct(nav.totals.maxDrawdown)}</b></div>
+        <div><div style="color:#8a93a6;font-size:0.62rem">OPEN / CLOSED</div><b>${nav.totals.openPositions} / ${nav.totals.closedPositions}</b></div></div>`
+        + (!nav.complete ? `<div class="cx-strip" style="margin-bottom:10px;font-size:0.72rem;border-color:var(--amber,#f59e0b)"><b>⚠️ NAV coverage gap (fail-closed):</b> marked only through <b>${esc(nav.throughDate || '—')}</b> — ${(nav.coverage?.gaps || []).slice(0, 4).map(g => `${esc(g.ticker)} (${esc(g.why || 'missing mark')})`).join('; ')}${(nav.coverage?.gaps || []).length > 4 ? ` +${nav.coverage.gaps.length - 4} more` : ''}. Days after the gap are withheld, never guessed.</div>` : '')
+      : `<div class="cx-strip" style="margin-bottom:10px;font-size:0.74rem;border-color:var(--red,#ef4444)"><b>⛔ Portfolio NAV unavailable (fail-closed):</b> ${esc(nav && nav.reason || 'NAV ledger not computed')}${nav && nav.coverage && nav.coverage.gaps && nav.coverage.gaps.length ? ` — ${nav.coverage.gaps.slice(0, 4).map(g => `${esc(g.ticker)}: ${esc(g.why || 'missing mark')}`).join('; ')}` : ''}. No since-inception portfolio return is shown without full daily marks.</div>`;
+    const summary = navHead
+      + `<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px;font-size:0.8rem">
+      <div><div style="color:#8a93a6;font-size:0.62rem">RESOLVED-ONLY COMPOUND (diagnostic — ignores open positions)</div><b style="${col(c.strategyReturn)}">${pct(c.strategyReturn)}</b></div>
+      <div><div style="color:#8a93a6;font-size:0.62rem">IWM (same windows)</div><b style="${col(c.benchReturn)}">${pct(c.benchReturn)}</b></div>
+      <div><div style="color:#8a93a6;font-size:0.62rem">WIN RATE (resolved)</div><b>${t.winRate == null ? '—' : (t.winRate * 100).toFixed(0) + '%'}</b></div>
       <div><div style="color:#8a93a6;font-size:0.62rem">RESOLVED / OPEN</div><b>${t.resolved} / ${t.open}</b></div>
       <div><div style="color:#8a93a6;font-size:0.62rem">REALIZED QTRS</div><b>${c.realizedQuarters || 0}</b></div></div>`
-      + (d.mtm ? `<div class="cx-strip" style="margin-bottom:10px;font-size:0.74rem"><b>Mark-to-market (all positions, cost-net):</b>
-      combined avg/trade <b style="${col(d.mtm.combinedAvgNet)}">${pct(d.mtm.combinedAvgNet)}</b>
-      · open marked ${d.mtm.openMarked}/${d.mtm.openN} at avg <b style="${col(d.mtm.openAvgNet)}">${pct(d.mtm.openAvgNet)}</b>
-      · resolved avg net <b style="${col(t.meanReturnNet)}">${pct(t.meanReturnNet)}</b>
+      + (d.mtm ? `<div class="cx-strip" style="margin-bottom:10px;font-size:0.74rem"><b>Three lanes, kept separate:</b>
+      ① resolved-trade avg (net) <b style="${col(t.meanReturnNet)}">${pct(t.meanReturnNet)}</b>
+      · ② open-position MTM avg (net) <b style="${col(d.mtm.openAvgNet)}">${pct(d.mtm.openAvgNet)}</b> (${d.mtm.openMarked}/${d.mtm.openN} marked)
+      · ③ portfolio NAV return <b style="${nav && nav.available ? col(nav.totals.navReturnNetPendingExit) : ''}">${nav && nav.available ? pct(nav.totals.navReturnNetPendingExit) : 'unavailable'}</b>
       <span style="color:#8a93a6">(one ${t.costPct != null ? t.costPct.toFixed(2) + '%' : ''} round trip per trade${d.mtm.openUnmarked ? `; ${d.mtm.openUnmarked} open names unmarked — counted, not dropped` : ''})</span></div>` : '');
     const STAT = { open: '<span style="color:#8a93a6">○ open</span>', partial: '<span style="color:#f0a832">◐ partial</span>', closed: '<span style="color:#10d98a">● closed</span>' };
     const rows = d.quarters.slice().reverse().map(q => `<tr>
@@ -6431,7 +6444,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     cont.innerHTML = intro + summary + coreperfChart(d.quarters) + `<div style="overflow-x:auto"><table class="data-table" style="width:100%;font-size:0.74rem">
       <thead><tr><th>Quarter</th><th style="text-align:right">#</th><th style="text-align:right">res/open</th><th style="text-align:right">win</th><th style="text-align:right">return</th><th style="text-align:right">IWM</th><th style="text-align:right">excess</th><th style="text-align:right">status</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
-      <p style="font-size:0.62rem;color:#8a93a6;margin-top:8px">Return = equal-weight realized return of that quarter's <i>resolved</i> picks. A quarter stays "open/partial" until its ~63-session windows elapse. Cumulative compounds realized quarters only.</p>`;
+      <p style="font-size:0.62rem;color:#8a93a6;margin-top:8px">Quarter rows = equal-weight realized return of that quarter's <i>resolved</i> picks (a diagnostic view — a quarter stays "open/partial" until its ~63-session windows elapse). The since-inception headline above is the daily-marked portfolio NAV, never a compound of partial-quarter resolved-only averages.</p>`;
   }
   // Responsive SVG: per-quarter realized return (Core) vs IWM, around a zero baseline.
   function coreperfChart(quarters) {
@@ -7275,7 +7288,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <div class="dt-best-grid">${[...missedRows.slice(0, 8).map(laneCard), ...revivedRows.slice(0, 8).map((o, i) => bestCard(o, i))].join('')}</div>
       </div>` : '';
     el.innerHTML = banner + healthStrip + tapeBadge + pacedBanner + bestSection + armedSection + managingSection + discSection + diagSection + extSection + alertsSection + prefsPanel + retroSection + retiredSection + missedSection + priorSection + configBanner + howto + ml + es + runSection + expList + track + timingScorecard(timingBook) +
-      `<div class="fade-caveats"><b>How to use.</b> Today's relative-volume + momentum movers (the EOD version of the Finviz day-trade scans), regime-gated and self-learning. <b>Honest validation</b> (5y, forward 3-session excess vs SPY): large-cap momentum-chasing does <b>not</b> beat the market (it mean-reverts, −1.3% out-of-sample); explosive small-caps carry a <b>positive average excess</b> (~+1.7–2.3% in risk-on/neutral) but a <b>sub-50% hit-rate</b> — a few big runners carry it, and it dies in risk-off. So treat these as a <b>ranked movers watchlist</b>, not a win-rate edge; the per-stock learner tilts toward names whose momentum actually continues and drops the rest. <b>The 🧪 experimental config above</b> (opening-range-breakout entry + 2.5×ATR stop + top-half selection) is the one variant that tested out-of-sample positive on <b>real intraday execution</b> — but it <b>failed formal deflation</b> (deflated Sharpe 0.59), so it's a paper-trading lead to confirm forward, not a proven edge. Confirm entries in TradingView (MACD / RSI / Smart-Money). Research, not advice.</div>`;
+      `<div class="fade-caveats"><b>How to use.</b> Today's relative-volume + momentum movers (the EOD version of the Finviz day-trade scans), regime-gated and self-learning. <b>Honest validation</b> (5y, forward 3-session excess vs SPY): large-cap momentum-chasing does <b>not</b> beat the market (it mean-reverts, −1.3% out-of-sample); explosive small-caps carry a <b>positive average excess</b> (~+1.7–2.3% in risk-on/neutral) but a <b>sub-50% hit-rate</b> — a few big runners carry it, and it dies in risk-off. So treat these as a <b>ranked movers watchlist</b>, not a win-rate edge; the per-stock learner tilts toward names whose momentum actually continues and drops the rest. <b>The 🧪 experimental config above</b> (opening-range-breakout entry + 2.5×ATR stop + top-half selection) is the one variant that tested out-of-sample positive on <b>real intraday execution</b> — but it <b>failed formal deflation</b> (deflated Sharpe 0.59), so it's a paper-trading lead to confirm forward, not a proven edge. Confirm entries in TradingView (MACD / RSI). Research, not advice.</div>`;
     // Wire each card's chart toggle (reuses the shared /api/chart canvas renderer)
     // and start live-price polling for the recommended names.
     const dtTickers = [];

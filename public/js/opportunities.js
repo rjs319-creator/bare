@@ -81,14 +81,16 @@ export function rankOpportunities(results, reliability = {}, healthFactor = 1, l
       const tMom = themeMom[theme], myMom = c.factors?.mom63;
       let rsTheme = null;
       if (tMom != null && myMom != null && inLeadingTheme) rsTheme = myMom >= tMom * 1.1 ? 'leads' : myMom <= tMom * 0.6 ? 'lags' : null;
-      const badges = [...ss.badges, ...sm.badges].slice(0, 5);         // institutional + smart-money, capped for a clean card
+      const badges = [...ss.badges, ...sm.badges].slice(0, 5);         // setup + fundamental/insider signals, capped for a clean card
       return { ...c, opp, rec, theme: c.theme, canonTheme: theme, inLeadingTheme, laggard, smBadges: badges, rsTheme };
     })
     .sort((a, b) => b.opp - a.opp);
 }
 
-// Smart-money + fundamental-acceleration signals (the Python screener's growth
+// Fundamental-acceleration + insider signals (the Python screener's growth
 // filters, done with 2nd-derivative accel + insider flow + catalyst proximity).
+// Insider buys are real Form-4 data; everything else is a proxy, and none of it
+// may be presented as verified institutional ("smart money") flow.
 function smartMoney(c) {
   const f = c.fundamentals || {}, ins = c.insider || {};
   const out = { boost: 0, badges: [] };
@@ -121,10 +123,13 @@ function setupSignals(c) {
   return out;
 }
 
+// RESEARCH RANK, not conviction. This score has no validated track record (the
+// Evidence tab is the authority), so the tier label must say "unvalidated" and the
+// glyphs must read as a rank meter, never a star rating on a buy recommendation.
 export function conviction(opp) {
-  if (opp >= 80) return { label: 'High conviction', col: 'var(--green)', stars: '⭐⭐⭐' };
-  if (opp >= 68) return { label: 'Solid setup', col: 'var(--amber,#f59e0b)', stars: '⭐⭐' };
-  return { label: 'On watch', col: 'var(--text-dim)', stars: '⭐' };
+  if (opp >= 80) return { label: 'High research rank — unvalidated', col: 'var(--green)', stars: '▲▲▲' };
+  if (opp >= 68) return { label: 'Mid research rank — unvalidated', col: 'var(--amber,#f59e0b)', stars: '▲▲' };
+  return { label: 'Low research rank — watch only', col: 'var(--text-dim)', stars: '▲' };
 }
 
 function thesis(c) {
@@ -135,7 +140,7 @@ function thesis(c) {
   const mom = (c.quant?.score ?? 0) >= 85 ? 'top-tier momentum quality'
     : (c.quant?.score ?? 0) >= 70 ? 'strong momentum quality' : 'building momentum';
   const lag = c.laggard ? ` <b style="color:#f0a832">🔥 Laggard play:</b> its theme is running hard while this name hasn't — a potential catch-up.` : '';
-  return `Smart money is showing ${L('accumulation', acc)} while price holds ${stage} — a name being bought ${L('ghost', 'before the obvious move')}. ${mom} (${c.quant?.score ?? '—'}/100).${lag}`;
+  return `Price/volume patterns show ${L('accumulation', acc)} — an unverified proxy, not confirmed institutional buying — while price holds ${stage}. ${mom} (${c.quant?.score ?? '—'}/100).${lag}`;
 }
 
 // How close is it to the buy trigger? The crux of "get in BEFORE it runs."
@@ -239,7 +244,7 @@ function oppCard(c) {
   return `<div class="opp-card" data-go="screener" data-opp="${esc(c.ticker)}">`
     + `<div class="opp-head">`
     + `<div class="opp-id"><span class="opp-tk" data-live="${esc(c.ticker)}">${esc(c.ticker)}</span> <span class="opp-co">${esc(c.company || '')}</span></div>`
-    + `<div class="opp-conv" style="color:${cv.col}" title="${cv.label}">${cv.stars}</div></div>`
+    + `<div class="opp-conv" style="color:${cv.col}" title="${cv.label}">${cv.stars}<div style="font-size:0.52rem;color:#8a93a6;font-weight:400">research rank — unvalidated</div></div></div>`
     + oppCardInner(c)
     + `</div>`;
 }
