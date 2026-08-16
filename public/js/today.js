@@ -202,7 +202,12 @@ function failureLine(sig) {
 function bearLine(sig) {
   const bc = BEARCASES && BEARCASES.cases && BEARCASES.cases[sig.ticker];
   if (!bc || !bc.bearCase) return '';
-  const title = `Model-generated adversarial read (${esc(BEARCASES.model || 'LLM')}) of this card's own evidence. It does NOT affect this rank or any selection, and it carries no measured track record.`;
+  // Side is part of a row's identity: a case argued against the LONG must never render
+  // on the SHORT card of the same ticker (there it would be a bullish endorsement).
+  const rowSide = sig.side === 'short' ? 'short' : 'long';
+  if ((bc.side || 'long') !== rowSide) return '';
+  const when = BEARCASES.arguedAgainst ? ` against the ${esc(BEARCASES.arguedAgainst)} close board` : '';
+  const title = `Model-generated adversarial read (${esc(BEARCASES.model || 'LLM')})${when}, from this card's own evidence. It does NOT affect this rank or any selection, and it carries no measured track record.`;
   return `<div class="td-remain re-part td-bear" title="${title}">🐻 <b>bear case</b> (model view, not a rank input): ${esc(bc.bearCase)}`
     + (bc.invalidation ? ` <span class="td-dim">· wrong if: ${esc(bc.invalidation)}</span>` : '') + `</div>`;
 }

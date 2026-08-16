@@ -204,6 +204,9 @@ const PRIVILEGED_OPS = new Set([
 const EXPENSIVE_OPS = new Set([
   'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'leadtime2', 'failuremodel', 'complab', 'challengereval', 'router', 'routercf', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward', 'rltwalkforward', 'evidencediag', 'datasetsurvival',
   'peerprop', 'peerpropwf', 'underreaction', 'targetcompare', 'expgap', 'psrlresearch',
+  // bearcase: the empty state is deliberately no-store (pre-first-tick CDN trap), so an
+  // anonymous cache-busting loop would otherwise drive an unthrottled Blob list() per hit.
+  'bearcase',
   // discover: the Day Trade page fires it every 60s (CDN-coalesced at 45s), but unthrottled
   // anonymous callers could drive a ~2,500-name provider fan-out + Blob writes at will.
   'discover',

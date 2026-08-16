@@ -58,23 +58,55 @@ test('parseBearCases whitelists tickers, clips fields, drops junk', () => {
   assert.strictEqual(out.NVDA.invalidation, 'reclaims 10');
 });
 
-test('tick semantics: idempotent per day, honest-empty on an abstained board, 502 when op=today is down', () => {
+test('tick semantics: trading-days only, idempotent per day, degraded-vs-abstained distinguished, failures loud', () => {
   const src = read('lib/bearcase-routes.js');
+  assert.match(src, /if \(!si\.isTradingDay\)/, 'no weekend/holiday LLM spend against a carried-over board');
   assert.match(src, /alreadyGenerated: true/, 'a re-dispatch is a no-op');
-  assert.match(src, /board served no actionable\/lead rows/, 'abstained board → explicit empty doc, never a fabricated case');
+  assert.match(src, /boardHadRows/, 'gated-lanes-empty + board-has-rows = degraded read');
+  assert.match(src, /degraded op=today read, nothing persisted/, 'a degraded read must never stick a false empty doc for the day');
+  assert.match(src, /board abstained — no rows served/, 'a genuine abstention persists an honest empty');
   assert.match(src, /op=today unavailable — nothing generated/);
-  assert.match(src, /nothing persisted \(retried next dispatch\)/, 'a failed LLM call persists nothing');
+  assert.match(src, /status\(502\)\.json\(\{ ok: false, error: 'bear-case LLM call failed/, 'LLM failure is a 502 so the warm chain records it (a 200 would render the chain permanently healthy while the feature is dead)');
+  assert.doesNotMatch(src, /retried next dispatch/, 'no false retry promise — there is no same-day retry mechanism');
+  assert.match(src, /logWarn\('bearcase\.tick'/, 'failures are logged, never silently swallowed');
   assert.match(src, /if \(doc\) cached\(res\); else noStore\(res\);/, 'never CDN-cache the empty state');
-  assert.match(src, /sessionInfoAt\(new Date\(\)\)\.etDate/, 'day keys live on the ET calendar');
+  assert.match(src, /boardHash: payload\.boardHash && payload\.boardHash\.hash/, 'the argued-against board is stamped for audit (authenticated origin read is deliberate — atlasx writer rule)');
 });
 
-test('WEIGHT-0 WIRING: the side-map attaches AFTER the board hash and mutates no row', () => {
+test('SERVING KEY: cases key to the last COMPLETED session so they stay visible through premarket/RTH', () => {
+  const src = read('lib/bearcase-routes.js');
+  assert.match(src, /lastCompletedRegularSession/, 'read key = last completed session, not the raw calendar date');
+  assert.match(src, /servingDate = \(\) => lastCompletedRegularSession/);
+  assert.match(src, /arguedAgainst: date/, 'the public read labels WHICH close board was argued against');
+  // The public read picks fields explicitly — spreading the stored doc would auto-leak
+  // any future writer-side field onto the anonymous endpoint.
+  assert.doesNotMatch(src, /\.\.\.\(doc \|\|/, 'no doc spread on the public read');
+});
+
+test('SIDE IDENTITY: each case is stamped with the argued side; the UI refuses a cross-side render', () => {
+  const src = read('lib/bearcase-routes.js');
+  assert.match(src, /sideByTicker/, 'the tick stamps the side of the signal it argued against');
+  const ui = read('public/js/today.js');
+  assert.match(ui, /\(bc\.side \|\| 'long'\) !== rowSide/, 'a LONG-argued case never renders on the SHORT card of the same ticker');
+});
+
+test('WEIGHT-0 WIRING: the side-map attaches AFTER the board hash, mutates no row, adds no wall time', () => {
   const src = read('lib/decision-routes.js');
   const hashIdx = src.indexOf('payload.boardHash = ');
   const bcIdx = src.indexOf('payload.bearCases');
   assert.ok(hashIdx > 0 && bcIdx > hashIdx, 'bearCases must attach after the hash is computed');
   assert.match(src, /SIDE-MAP — no row is mutated/);
   assert.match(src, /payload\.bearCases = null/, 'absent doc degrades to null, never blocks the board');
+  const startIdx = src.indexOf('const bearcasePromise');
+  const prevIdx = src.indexOf('const prev = await STORE.readJSON(SNAP_PATH');
+  assert.ok(startIdx > 0 && startIdx < prevIdx, 'the read STARTS with the pre-reads and is awaited only after the hash — zero added latency on the hot path');
+});
+
+test('rate-limit hardening: the public read is in EXPENSIVE_OPS (its empty state is deliberately no-store)', () => {
+  const tracker = read('api/tracker.js');
+  const start = tracker.indexOf('const EXPENSIVE_OPS');
+  const expensive = tracker.slice(start, tracker.indexOf(']);', start));
+  assert.match(expensive, /'bearcase'/);
 });
 
 test('UI: the bear line is labeled model-generated, shows the invalidation, and is never a rank input', () => {
