@@ -194,3 +194,51 @@ test('sessions behind counts TRADING sessions, skipping the weekend', () => {
   assert.strictEqual(countSessionsBetween('2026-08-17', '2026-08-17'), 0);
   assert.strictEqual(countSessionsBetween('2026-08-18', '2026-08-17'), 0, 'never negative');
 });
+
+// ── A HOLE IN THE MIDDLE IS AS STALE AS A SHORT TAIL ────────────────────────
+// Later on 2026-08-18 the SPY axis read ...08-13, 08-14, 08-18: Monday absent, today's
+// partial bar present. The NEWEST bar was therefore today and every day-based freshness
+// check went green — while the session the rankings were actually computed on was still
+// Friday. Judging staleness by the newest bar calls that healthy.
+const AXIS_WITH_HOLE = ['2026-08-12', '2026-08-13', '2026-08-14', '2026-08-18'];
+const TUE_OPEN = new Date('2026-08-18T14:02:00Z');   // 10:02 ET, regular session
+
+test('a missing mid-series session is caught even though the newest bar is today', () => {
+  const ctx = resolveDecisionSession({ benchmarkDates: AXIS_WITH_HOLE, now: TUE_OPEN });
+  assert.strictEqual(ctx.latest, '2026-08-18', 'newest bar looks perfectly fresh');
+  assert.strictEqual(ctx.session, '2026-08-14', 'but the decision session is still Friday');
+  assert.strictEqual(ctx.benchmarkStale, true, 'judged on the SESSION, not the newest bar');
+  assert.strictEqual(ctx.sessionsBehind, 1);
+});
+
+test('a lagging benchmark never blanks the app: an all-ahead cohort fails open with a flag', () => {
+  // Shape of a warm rebuild that picked up the new session for the constituents but not
+  // the index. Excluding every name would leave the user staring at an empty screener.
+  const rows = ['A', 'B', 'C'].map(t => ({ ticker: t, lastBarDate: '2026-08-18' }));
+  const gate = gateCohort(rows, { benchmarkDates: AXIS_WITH_HOLE, now: TUE_OPEN });
+  assert.strictEqual(gate.admitted.length, 3, 'admitted rather than collapsed to nothing');
+  assert.strictEqual(gate.cohortAheadOfBenchmark, true);
+  assert.strictEqual(gate.sessionSource, 'cohort-ahead-of-benchmark');
+  assert.strictEqual(gate.benchmarkStale, true, 'still honestly flagged as behind');
+  assert.deepStrictEqual(gate.excluded, [], 'nothing left excluded once we fail open');
+});
+
+test('a MINORITY ahead of a lagging benchmark is still excluded, not admitted wholesale', () => {
+  const rows = [
+    { ticker: 'MAJ1', lastBarDate: '2026-08-14' },
+    { ticker: 'MAJ2', lastBarDate: '2026-08-14' },
+    { ticker: 'AHEAD', lastBarDate: '2026-08-18' },
+  ];
+  const gate = gateCohort(rows, { benchmarkDates: AXIS_WITH_HOLE, now: TUE_OPEN });
+  assert.deepStrictEqual(gate.admitted.map(r => r.ticker), ['MAJ1', 'MAJ2'], 'same-vintage cohort preserved');
+  assert.strictEqual(gate.cohortAheadOfBenchmark, false);
+  assert.strictEqual(gate.excluded.length, 1);
+  assert.strictEqual(gate.excluded[0].reason, 'ahead-of-benchmark');
+});
+
+test('a healthy open market is untouched by the lag logic', () => {
+  const ctx = resolveDecisionSession({ benchmarkDates: ['2026-07-24', '2026-07-27', '2026-07-28'], now: new Date('2026-07-28T14:30:00Z') });
+  assert.strictEqual(ctx.session, '2026-07-27');
+  assert.strictEqual(ctx.benchmarkStale, false, 'an in-progress bar is not a missing session');
+  assert.strictEqual(ctx.sessionsBehind, 0);
+});

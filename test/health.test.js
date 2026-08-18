@@ -301,3 +301,25 @@ test('buildHealthResponse: a long holiday weekend is NOT stale even past the cal
   assert.strictEqual(r.data.stale, false, 'the old calendar-day bound (>4) would have false-alarmed here');
   assert.strictEqual(r.healthy, true);
 });
+
+test('buildHealthResponse: a hole where Monday should be is stale even with today\'s bar present', () => {
+  // Prod, later on 2026-08-18: ...08-13, 08-14, 08-18. Newest bar is TODAY, so every
+  // day-based check went green while rankings still ran on Friday.
+  const axis = ['2026-08-12', '2026-08-13', '2026-08-14', '2026-08-18'];
+  const r = buildHealthResponse([{ at: 'x', ok: true }],
+    { spyDate: '2026-08-18', spyDates: axis, ageDays: 0.6, now: Date.parse('2026-08-18T14:02:00Z') });
+  assert.strictEqual(r.data.lastSettledSession, '2026-08-14', 'today\'s partial bar does not count as a settled session');
+  assert.strictEqual(r.data.sessionsBehind, 1);
+  assert.strictEqual(r.data.stale, true);
+  assert.strictEqual(r.healthy, false);
+});
+
+test('buildHealthResponse: a complete series with today\'s partial bar is fresh', () => {
+  const axis = ['2026-08-13', '2026-08-14', '2026-08-17', '2026-08-18'];
+  const r = buildHealthResponse([{ at: 'x', ok: true }],
+    { spyDate: '2026-08-18', spyDates: axis, ageDays: 0.6, now: Date.parse('2026-08-18T14:02:00Z') });
+  assert.strictEqual(r.data.lastSettledSession, '2026-08-17');
+  assert.strictEqual(r.data.sessionsBehind, 0);
+  assert.strictEqual(r.data.stale, false);
+  assert.strictEqual(r.healthy, true);
+});
