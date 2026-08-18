@@ -651,7 +651,16 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     let d; try { d = await fetchJSON('/api/tracker?op=health'); } catch { return; }
     if (!d || !d.ok) return;
     const warns = [];
-    if (d.data && d.data.stale) warns.push(`⚠️ Market data is ${d.data.ageDays}d stale (last EOD ${esc(d.data.spyDate || '—')}) — prices may be behind.`);
+    // Say it in SESSIONS, not calendar days: "3d stale" on a Tuesday after a Monday
+    // holiday is normal, while one MISSING session mid-week is the real fault. The
+    // server now reports sessionsBehind against the exchange calendar.
+    if (d.data && d.data.stale) {
+      const n = d.data.sessionsBehind;
+      const behind = n != null
+        ? `${n} completed session${n === 1 ? '' : 's'} behind${d.data.calendarSession ? ' (' + esc(d.data.calendarSession) + ')' : ''}`
+        : `${d.data.ageDays}d stale`;
+      warns.push(`⚠️ Market data is ${behind} — last EOD bar ${esc(d.data.spyDate || '—')}. Screens and rankings are computed on that session, not today.`);
+    }
     // Only warn on REAL failures. Budget-deferred ticks (steps skipped because the cron
     // hit its time budget) are best-effort work that self-heals on the next run — they
     // are NOT errors, so exclude them from the count and the list. Real failures = stages
