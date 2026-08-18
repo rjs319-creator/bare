@@ -8,7 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { mergeShards } = require('../lib/universe-routes');
 const { encode, decodeEntry } = require('../lib/candle-cache');
-const { gateCohort, classifyBarDate, resolveDecisionSession, FRESHNESS_CLASS } = require('../lib/cohort-freshness');
+const { gateCohort, classifyBarDate, resolveDecisionSession, countSessionsBetween, FRESHNESS_CLASS } = require('../lib/cohort-freshness');
 
 // Synthetic candle helper: n bars ending at endDate (ISO date strings, ~daily).
 function bars(endDate, n = 5) {
@@ -88,7 +88,7 @@ test('mixed-date rows cannot enter one percentile cohort: only session-matching 
   ];
   const gate = gateCohort(rows, { benchmarkDates: SPY_DATES, now: NOW });
   assert.deepStrictEqual(gate.admitted.map(r => r.ticker), ['CUR']);
-  assert.deepStrictEqual(gate.counts, { current: 1, 'prior-session': 1, stale: 1, 'future-dated': 1, missing: 1 });
+  assert.deepStrictEqual(gate.counts, { current: 1, 'prior-session': 1, stale: 1, 'ahead-of-benchmark': 0, 'future-dated': 1, missing: 1 });
   const reasons = Object.fromEntries(gate.excluded.map(e => [e.ticker, e.reason]));
   assert.strictEqual(reasons.PRI, 'prior-session');
   assert.strictEqual(reasons.STA, 'stale');
@@ -126,4 +126,71 @@ test('cohort admission is invariant to input order', () => {
   const g2 = gateCohort([...rows].reverse(), { benchmarkDates: SPY_DATES, now: NOW });
   assert.deepStrictEqual(new Set(g1.admitted.map(r => r.ticker)), new Set(g2.admitted.map(r => r.ticker)));
   assert.deepStrictEqual(g1.counts, g2.counts);
+});
+
+// ── A LAGGING BENCHMARK MUST NOT REDEFINE "TODAY" ───────────────────────────
+// Reproduces prod on 2026-08-18: the provider had no 2026-08-17 SPY bar, so the gate
+// adjudicated all 514 names to 2026-08-14 and discarded the only two names that DID
+// carry Monday's bar as `future-dated` — the freshest data in the scan, thrown out as
+// bogus, with nothing on the response to say the scan was a session behind.
+const LAGGING_SPY = ['2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14'];
+const TUE_PREMARKET = new Date('2026-08-18T13:22:00Z');   // 09:22 ET Tuesday
+
+test('a benchmark behind the exchange calendar is DECLARED stale, not silently authoritative', () => {
+  const ctx = resolveDecisionSession({ benchmarkDates: LAGGING_SPY, now: TUE_PREMARKET });
+  assert.strictEqual(ctx.calendarSession, '2026-08-17', 'the calendar knows Monday completed');
+  assert.strictEqual(ctx.benchmarkStale, true);
+  assert.strictEqual(ctx.sessionsBehind, 1);
+  assert.strictEqual(ctx.source, 'benchmark-stale');
+});
+
+test('a real session the lagging benchmark has not reached is NOT condemned as future-dated', () => {
+  const ctx = resolveDecisionSession({ benchmarkDates: LAGGING_SPY, now: TUE_PREMARKET });
+  // Monday's bar is real data the benchmark simply lacks — excluded from a 08-14 cohort
+  // (admitting it would re-mix vintages) but never labelled bogus.
+  assert.strictEqual(classifyBarDate('2026-08-17', ctx), FRESHNESS_CLASS.AHEAD_OF_BENCHMARK);
+  // A date the exchange calendar cannot justify at all is still bogus.
+  assert.strictEqual(classifyBarDate('2026-08-25', ctx), FRESHNESS_CLASS.FUTURE_DATED);
+  assert.strictEqual(classifyBarDate('2026-08-14', ctx), FRESHNESS_CLASS.CURRENT);
+});
+
+test('the stale verdict travels on the gate so a scan can report how far behind it is', () => {
+  const rows = [
+    { ticker: 'STALE_MAJORITY', lastBarDate: '2026-08-14' },
+    { ticker: 'HUBB', lastBarDate: '2026-08-17' },
+    { ticker: 'MNST', lastBarDate: '2026-08-17' },
+  ];
+  const gate = gateCohort(rows, { benchmarkDates: LAGGING_SPY, now: TUE_PREMARKET });
+  assert.strictEqual(gate.benchmarkStale, true);
+  assert.strictEqual(gate.sessionsBehind, 1);
+  assert.strictEqual(gate.calendarSession, '2026-08-17');
+  assert.strictEqual(gate.counts['ahead-of-benchmark'], 2);
+  assert.strictEqual(gate.counts['future-dated'], 0, 'no longer misfiled as corrupt data');
+  const reasons = Object.fromEntries(gate.excluded.map(e => [e.ticker, e.reason]));
+  assert.strictEqual(reasons.HUBB, 'ahead-of-benchmark');
+});
+
+test('a healthy benchmark is unchanged: no lag flag, and a genuinely bogus date still fails', () => {
+  const ctx = resolveDecisionSession({ benchmarkDates: SPY_DATES, now: NOW });
+  assert.strictEqual(ctx.benchmarkStale, false);
+  assert.strictEqual(ctx.sessionsBehind, 0);
+  assert.strictEqual(ctx.source, 'benchmark-latest');
+  assert.strictEqual(classifyBarDate('2026-08-05', ctx), FRESHNESS_CLASS.FUTURE_DATED);
+  assert.strictEqual(classifyBarDate('2026-07-31', ctx), FRESHNESS_CLASS.CURRENT);
+});
+
+test('an in-progress partial bar stays CURRENT and is never reclassified by the lag logic', () => {
+  // Tuesday 10:30 ET, benchmark carries the in-progress bar — the healthy open-market case.
+  const nowOpen = new Date('2026-07-28T14:30:00Z');
+  const ctx = resolveDecisionSession({ benchmarkDates: ['2026-07-24', '2026-07-27', '2026-07-28'], now: nowOpen });
+  assert.strictEqual(ctx.benchmarkStale, false, 'a benchmark at the live session is not behind');
+  assert.strictEqual(classifyBarDate('2026-07-28', ctx), FRESHNESS_CLASS.CURRENT);
+});
+
+test('sessions behind counts TRADING sessions, skipping the weekend', () => {
+  // Fri 08-14 → Tue 08-18: Mon 08-17 and Tue 08-18 are sessions; Sat/Sun are not.
+  assert.strictEqual(countSessionsBetween('2026-08-14', '2026-08-17'), 1);
+  assert.strictEqual(countSessionsBetween('2026-08-14', '2026-08-18'), 2);
+  assert.strictEqual(countSessionsBetween('2026-08-17', '2026-08-17'), 0);
+  assert.strictEqual(countSessionsBetween('2026-08-18', '2026-08-17'), 0, 'never negative');
 });

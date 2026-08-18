@@ -269,7 +269,23 @@ const INGEST_OPS = new Set(['insideringest', 'alertsingest']);
 const { withLogContext } = require('../lib/log');
 
 module.exports = async function handler(req, res) {
-  return withLogContext({ op: String(req.query.op || 'scoreboard'), route: '/api/tracker' }, () => handleRequest(req, res));
+  const op = String(req.query.op || 'scoreboard');
+  try {
+    return await withLogContext({ op, route: '/api/tracker' }, () => handleRequest(req, res));
+  } catch (e) {
+    // WHY THIS EXISTS. An unhandled throw used to become the PLATFORM's 500 — an HTML
+    // error page with no machine-readable reason. The nightly chain runner records a
+    // failed step's status but could only report `error: null`, so the 2026-08-17 cron's
+    // five separate 500s (patternlog, pulserefine, swingsearchgrade, universecompile, and
+    // the whole capture chain) were indistinguishable from one another and diagnosable
+    // only by reading Vercel logs by hand. Returning the message as JSON puts the reason
+    // into the chain report, so the NEXT run says what broke instead of just that it did.
+    const error = String((e && e.message) || e).slice(0, 300);
+    console.error('[tracker] unhandled', op, error, (e && e.stack) || '');
+    if (res.headersSent) return;             // a handler that already streamed owns its response
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(500).json({ ok: false, op, error });
+  }
 };
 
 async function handleRequest(req, res) {

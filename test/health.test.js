@@ -269,3 +269,35 @@ test('compactChainReport: health-shaped, bounded, and pure', () => {
   assert.equal(rep.at, '2026-08-06T22:02:30Z');
   assert.equal(result.failDetail.length, 20, 'input not mutated');
 });
+
+// ── STALENESS IS MEASURED IN SESSIONS, NOT CALENDAR DAYS ────────────────────
+// The old bound was raw calendar days despite its "excl. weekends" comment, so it
+// false-alarmed after a long weekend and stayed quiet through a genuine missing bar.
+const TUE_0922_ET = Date.parse('2026-08-18T13:22:00Z');
+
+test('buildHealthResponse: a missing weekday session is stale and reported in sessions', () => {
+  // Prod 2026-08-18: provider had no 2026-08-17 SPY bar.
+  const r = buildHealthResponse([{ at: 'x', ok: true }], { spyDate: '2026-08-14', ageDays: 4.5, now: TUE_0922_ET });
+  assert.strictEqual(r.data.sessionsBehind, 1);
+  assert.strictEqual(r.data.calendarSession, '2026-08-17');
+  assert.strictEqual(r.data.stale, true);
+  assert.strictEqual(r.healthy, false, 'a session behind is not healthy');
+});
+
+test('buildHealthResponse: a benchmark at the last completed session is fresh', () => {
+  const r = buildHealthResponse([{ at: 'x', ok: true }], { spyDate: '2026-08-17', ageDays: 1.5, now: TUE_0922_ET });
+  assert.strictEqual(r.data.sessionsBehind, 0);
+  assert.strictEqual(r.data.stale, false);
+  assert.strictEqual(r.healthy, true);
+});
+
+test('buildHealthResponse: a long holiday weekend is NOT stale even past the calendar-day bound', () => {
+  // Labor Day 2026-09-07 (Monday). Tuesday morning, the newest completed session is
+  // still Friday 09-04 — 4.4 CALENDAR days old, but zero sessions behind.
+  const tueAfterLaborDay = Date.parse('2026-09-08T13:22:00Z');
+  const r = buildHealthResponse([{ at: 'x', ok: true }], { spyDate: '2026-09-04', ageDays: 4.4, now: tueAfterLaborDay });
+  assert.strictEqual(r.data.calendarSession, '2026-09-04');
+  assert.strictEqual(r.data.sessionsBehind, 0);
+  assert.strictEqual(r.data.stale, false, 'the old calendar-day bound (>4) would have false-alarmed here');
+  assert.strictEqual(r.healthy, true);
+});
