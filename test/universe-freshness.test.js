@@ -211,16 +211,28 @@ test('a missing mid-series session is caught even though the newest bar is today
   assert.strictEqual(ctx.sessionsBehind, 1);
 });
 
-test('a lagging benchmark never blanks the app: an all-ahead cohort fails open with a flag', () => {
+test('an all-ahead cohort is rescued by the session the rows support, when the benchmark has that bar', () => {
   // Shape of a warm rebuild that picked up the new session for the constituents but not
-  // the index. Excluding every name would leave the user staring at an empty screener.
+  // the index. The benchmark DOES carry 08-18 (its partial bar), so that session can be
+  // priced and simply becomes the decision session — no need to fail open at all.
   const rows = ['A', 'B', 'C'].map(t => ({ ticker: t, lastBarDate: '2026-08-18' }));
   const gate = gateCohort(rows, { benchmarkDates: AXIS_WITH_HOLE, now: TUE_OPEN });
   assert.strictEqual(gate.admitted.length, 3, 'admitted rather than collapsed to nothing');
-  assert.strictEqual(gate.cohortAheadOfBenchmark, true);
+  assert.strictEqual(gate.decisionSession, '2026-08-18');
+  assert.strictEqual(gate.sessionSource, 'cohort-supported');
+  assert.deepStrictEqual(gate.excluded, []);
+});
+
+test('an all-ahead cohort the benchmark CANNOT price still fails open rather than blanking', () => {
+  // Benchmark axis stops at 08-14 and has no bar at 08-17, so cohort-supported cannot
+  // help — the last line of defence has to hold.
+  const rows = ['A', 'B', 'C'].map(t => ({ ticker: t, lastBarDate: '2026-08-17' }));
+  const gate = gateCohort(rows, { benchmarkDates: ['2026-08-12', '2026-08-13', '2026-08-14'], now: TUE_OPEN });
+  assert.strictEqual(gate.admitted.length, 3, 'never an empty scan');
   assert.strictEqual(gate.sessionSource, 'cohort-ahead-of-benchmark');
+  assert.strictEqual(gate.cohortAheadOfBenchmark, true);
   assert.strictEqual(gate.benchmarkStale, true, 'still honestly flagged as behind');
-  assert.deepStrictEqual(gate.excluded, [], 'nothing left excluded once we fail open');
+  assert.deepStrictEqual(gate.excluded, []);
 });
 
 test('a MINORITY ahead of a lagging benchmark is still excluded, not admitted wholesale', () => {
@@ -241,4 +253,59 @@ test('a healthy open market is untouched by the lag logic', () => {
   assert.strictEqual(ctx.session, '2026-07-27');
   assert.strictEqual(ctx.benchmarkStale, false, 'an in-progress bar is not a missing session');
   assert.strictEqual(ctx.sessionsBehind, 0);
+});
+
+// ── THE DECISION SESSION MUST BE ONE THE COHORT CAN SUPPORT ─────────────────
+// Anchoring it to the benchmark alone blanks the app in BOTH directions. On 2026-08-18
+// the fallback provider recovered SPY's missing 08-17 bar while the constituents still
+// sat on the nightly cache at 08-14: the session advanced to 08-17, 514 of 516 names
+// were excluded as prior-session, and the screener returned ONE result.
+const bulk = (n, date, prefix = 'T') => Array.from({ length: n }, (_, i) => ({ ticker: prefix + i, lastBarDate: date }));
+
+test('a benchmark ahead of a stale cohort does not empty the scan', () => {
+  const gate = gateCohort([...bulk(514, '2026-08-14'), ...bulk(2, '2026-08-17', 'F')], {
+    benchmarkDates: ['2026-08-12', '2026-08-13', '2026-08-14', '2026-08-17', '2026-08-18'],
+    now: new Date('2026-08-18T15:45:00Z'),
+  });
+  assert.strictEqual(gate.admitted.length, 514, 'the cross-section survives (was 2)');
+  assert.strictEqual(gate.decisionSession, '2026-08-14', 'dated at the session the rows actually support');
+  assert.strictEqual(gate.sessionSource, 'cohort-supported');
+  assert.strictEqual(gate.cohortSupported, true);
+  // Still honest: the published cross-section IS a session behind the calendar.
+  assert.strictEqual(gate.benchmarkStale, true);
+  assert.strictEqual(gate.sessionsBehind, 1);
+});
+
+test('the fallback session must be one the BENCHMARK can price', () => {
+  // Rows sit on a date SPY has no bar for — RS and the regime read need one, so that
+  // date can never become the decision session.
+  const gate = gateCohort(bulk(100, '2026-08-16'), {
+    benchmarkDates: ['2026-08-13', '2026-08-14', '2026-08-17', '2026-08-18'],
+    now: new Date('2026-08-18T15:45:00Z'),
+  });
+  assert.notStrictEqual(gate.decisionSession, '2026-08-16', 'never a session the benchmark cannot price');
+  assert.strictEqual(gate.cohortSupported, false);
+});
+
+test('a healthy aligned market is completely untouched by the cohort-supported path', () => {
+  const gate = gateCohort(bulk(500, '2026-08-17'), {
+    benchmarkDates: ['2026-08-13', '2026-08-14', '2026-08-17', '2026-08-18'],
+    now: new Date('2026-08-18T15:45:00Z'),
+  });
+  assert.strictEqual(gate.decisionSession, '2026-08-17');
+  assert.strictEqual(gate.sessionSource, 'benchmark-completed');
+  assert.strictEqual(gate.cohortSupported, false);
+  assert.strictEqual(gate.admitted.length, 500);
+  assert.strictEqual(gate.benchmarkStale, false);
+});
+
+test('a healthy majority is never dragged back by a stale minority', () => {
+  // 480 current, 20 stragglers: the cohort is fine, so the session must not move.
+  const gate = gateCohort([...bulk(480, '2026-08-17'), ...bulk(20, '2026-08-14', 'S')], {
+    benchmarkDates: ['2026-08-13', '2026-08-14', '2026-08-17', '2026-08-18'],
+    now: new Date('2026-08-18T15:45:00Z'),
+  });
+  assert.strictEqual(gate.decisionSession, '2026-08-17');
+  assert.strictEqual(gate.cohortSupported, false);
+  assert.strictEqual(gate.admitted.length, 480);
 });
