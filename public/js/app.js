@@ -7032,7 +7032,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // client never re-derives health, and zero anomalies is NOT interpreted as unhealthy).
     // Novices see the one-line `explain`; the expert <details> exposes the full contract.
     const sh = renderDaytrade._scanHealth;
-    const HEALTH_DOT = { healthy: '#22c55e', degraded: '#f59e0b', stale: '#ef4444', idle: '#64748b', unavailable: '#ef4444' };
+    const HEALTH_DOT = { healthy: '#22c55e', lagging: '#eab308', degraded: '#f59e0b', stale: '#ef4444', idle: '#64748b', unavailable: '#ef4444' };
     let healthStrip = '';
     if (sh && sh.state) {
       const h = sh.health || {};

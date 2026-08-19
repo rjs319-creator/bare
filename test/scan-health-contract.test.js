@@ -233,3 +233,53 @@ test('history is capped at the newest HISTORY_MAX_ENTRIES and loads back per dat
   const empty = await SR.loadScanHealthHistory('not-a-date', store);
   assert.deepEqual(empty.scans, [], 'malformed date input fails safe with an empty history');
 });
+
+// ── A THROTTLED SCHEDULER IS NOT A STOPPED ONE ─────────────────────────────
+// The workflow asks GitHub for */5, but GitHub coalesces scheduled runs hard. Measured on
+// this repo 2026-08-19: 08:40, 09:16, 09:53, 10:26, 10:56, 11:31, 11:55 — real gaps of
+// 24–37 min, every run succeeding, consecutiveErrors 0. Judged against 3×5min that read
+// "Discovery is stale — the scheduler may not be running" for most of every trading day,
+// which is both false and the fastest way to teach someone to ignore a health light.
+{
+  const SR = require('../lib/daytrade-scan-runner');
+  const NOW = Date.parse('2026-08-19T12:54:00Z');   // 08:54 ET — premarket, in-session
+  const at = (minsAgo, consecutiveErrors = 0) => ({
+    lastSuccessAt: new Date(NOW - minsAgo * 60000).toISOString(),
+    consecutiveErrors, targetIntervalMs: 300000,
+  });
+
+  test('a real throttled gap with no errors is LAGGING, not stale', () => {
+    // The exact live prod reading that produced the false alarm.
+    assert.strictEqual(SR.healthStateOf(at(45), NOW).status, 'lagging');
+    // The worst gap the scheduler has actually produced.
+    assert.strictEqual(SR.healthStateOf(at(37), NOW).status, 'lagging');
+    assert.match(SR.healthStateOf(at(45), NOW).reason, /throttled, not stopped/);
+  });
+
+  test('lagging never claims the scheduler may be down', () => {
+    assert.doesNotMatch(SR.STATE_EXPLAIN.lagging, /not be running|stopped/i);
+    assert.match(SR.STATE_EXPLAIN.lagging, /succeeding/i);
+  });
+
+  test('on-cadence stays healthy — the normal case is untouched', () => {
+    assert.strictEqual(SR.healthStateOf(at(4), NOW).status, 'healthy');
+    assert.strictEqual(SR.healthStateOf(at(14), NOW).status, 'healthy');
+  });
+
+  test('a genuinely stopped scheduler still reads STALE', () => {
+    assert.strictEqual(SR.healthStateOf(at(120), NOW).status, 'stale');
+    assert.strictEqual(SR.healthStateOf(at(600), NOW).status, 'stale');
+  });
+
+  test('a lagging gap WITH scan errors escalates to stale, not lagging', () => {
+    // Throttling explains a gap; it does not explain failures behind it.
+    assert.strictEqual(SR.healthStateOf(at(20, 2), NOW).status, 'stale');
+    assert.match(SR.healthStateOf(at(20, 2), NOW).reason, /2 consecutive error/);
+  });
+
+  test('every state the server can emit has a novice-readable explain line', () => {
+    for (const s of ['healthy', 'lagging', 'degraded', 'stale', 'idle', 'unavailable']) {
+      assert.ok(SR.STATE_EXPLAIN[s], `missing explain for ${s}`);
+    }
+  });
+}
