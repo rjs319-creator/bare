@@ -394,9 +394,15 @@ test('the scheduler wires the low-float tick and the post-close chain', () => {
   }
   // Every scheduled call must carry the bearer, or the writer ops 401.
   assert.ok(/op=lowfloattick[\s\S]{0,200}?/.test(wf));
-  const tickBlock = wf.slice(wf.indexOf('Low-float ignition tick'), wf.indexOf('postclose:'));
-  assert.ok(tickBlock.includes('Authorization: Bearer $CRON_SECRET'));
-  assert.ok(tickBlock.includes('CRON_SECRET repo secret not set'), 'missing the unset-secret guard');
+  // The scheduler polls in a loop through one shared authenticated `call` helper, so this
+  // anchors on the scan job rather than a per-step title.
+  const scanJob = wf.slice(wf.indexOf('  scan:'), wf.indexOf('  postclose:'));
+  assert.ok(scanJob.includes('Authorization: Bearer $CRON_SECRET'));
+  assert.ok(scanJob.includes('CRON_SECRET repo secret not set'), 'missing the unset-secret guard');
+  // The low-float pipeline costs ~24 bulk-quote requests a pass, so it must stay at HALF
+  // the scan cadence. Inside a loop the wall-clock minute drifts, so the gate is on the
+  // iteration counter — a clock-minute modulo would silently skip or double-run it.
+  assert.ok(/iter % 2/.test(scanJob), 'low-float tick is gated to half cadence by iteration');
 });
 
 test('a volume-capable provider is preferred over the price-only fallback', async () => {

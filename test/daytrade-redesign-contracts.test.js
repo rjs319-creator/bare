@@ -202,11 +202,18 @@ test('28/30. board-tick failure is VISIBLE: non-200 on persistence/alert failure
   assert.ok(tickSrc.includes('boardtick-health'), 'a per-tick health record is written');
   // Scheduler: the board tick is authenticated, its failures are not swallowed.
   const yml = fs.readFileSync(path.join(ROOT, '.github/workflows/daytrade-scan.yml'), 'utf8');
-  const tickStep = yml.slice(yml.indexOf('Board tick'), yml.indexOf('postclose:'));
-  assert.ok(tickStep.includes('op=daytradeboardtick'), 'scheduler drives the authenticated tick');
-  assert.ok(tickStep.includes('Authorization: Bearer $CRON_SECRET'), 'tick is authenticated');
-  assert.ok(!tickStep.includes('|| true'), 'failures are no longer swallowed');
-  assert.ok(tickStep.includes('exit 1'), 'a bad status fails the workflow visibly');
+  // Anchored on the scan JOB rather than a step title: the scheduler now polls in a loop
+  // and shares one authenticated `call` helper, so the per-step slice no longer exists.
+  // The guarantees are unchanged and still asserted here.
+  const scanJob = yml.slice(yml.indexOf('  scan:'), yml.indexOf('  postclose:'));
+  assert.ok(scanJob.includes('op=daytradeboardtick'), 'scheduler drives the authenticated tick');
+  assert.ok(scanJob.includes('Authorization: Bearer $CRON_SECRET'), 'tick is authenticated');
+  assert.ok(!scanJob.includes('|| true'), 'failures are no longer swallowed');
+  assert.ok(scanJob.includes('exit 1'), 'a failed iteration fails the workflow visibly');
+  // A transient 5xx must not cost the rest of the polling window, so the loop continues —
+  // but the failure is counted and surfaced, never dropped.
+  assert.ok(/failures=\$\(\(failures\+1\)\)/.test(scanJob), 'iteration failures are counted');
+  assert.ok(scanJob.includes('::error::'), 'each failure is annotated');
 });
 
 test('31. end-to-end: discovery evidence → Stage-2 features → lifecycle → alert → capture → strictly-after label', () => {

@@ -92,7 +92,8 @@ jobs:
           # One tick's worth of work. Never aborts the loop: a transient 5xx must not cost
           # the remaining 50 minutes of coverage. Failures are COUNTED and the job exits
           # non-zero at the end, so they stay as visible as when each was its own step —
-          # this workflow has been bitten before by `|| true` swallowing real errors.
+          # this workflow has been bitten before by an unconditional-success suffix on a
+          # curl swallowing exactly these.
           call() {   # call <label> <url> <max-time>
             local label="$1" url="$2" maxtime="$3" code
             code=$(curl -sS -o "/tmp/$label.json" -w '%{http_code}' --max-time "$maxtime" \
@@ -110,13 +111,25 @@ jobs:
             return 0
           }
 
+          # Pretty-print a response without any unconditional-success suffix. The contract
+          # tests assert that no such suffix appears anywhere in this job, because that is
+          # exactly how real failures were swallowed here before — and a logging
+          # convenience must never blunt that signal.
+          summarize() {   # summarize <label> <jq-filter>
+            if command -v jq >/dev/null 2>&1; then
+              jq -c "$2" "/tmp/$1.json" 2>/dev/null
+            fi
+            return 0
+          }
+
           while :; do
             iter=$((iter+1))
             echo "── iteration $iter · $(date -u +%H:%M:%S)Z ──"
 
             # Stage-A discovery + PIT capture + health bookkeeping.
-            call daytradescan "$APP_URL/api/tracker?op=daytradescan" 90 && \
-              { command -v jq >/dev/null 2>&1 && jq -c '{ok, skipped, outcome, scanned, anomalies}' /tmp/daytradescan.json 2>/dev/null || true; }
+            if call daytradescan "$APP_URL/api/tracker?op=daytradescan" 90; then
+              summarize daytradescan '{ok, skipped, outcome, scanned, anomalies}'
+            fi
 
             # The ONE authenticated lifecycle mutator (Stage-2 validation, lifecycle
             # advance, alert emission, persistence). The public op=daytrade is read-only.
@@ -127,8 +140,9 @@ jobs:
             # hit a provider plan limit before. Gated on the ITERATION, not the wall clock:
             # inside a loop the clock minute drifts and would silently skip or double up.
             if [ $((iter % 2)) -eq 1 ]; then
-              call lowfloattick "$APP_URL/api/tracker?op=lowfloattick" 120 && \
-                { command -v jq >/dev/null 2>&1 && jq -c '{ok, skipped, reason, candidatesRanked, alertsEmitted, elapsedMs}' /tmp/lowfloattick.json 2>/dev/null || true; }
+              if call lowfloattick "$APP_URL/api/tracker?op=lowfloattick" 120; then
+                summarize lowfloattick '{ok, skipped, reason, candidatesRanked, alertsEmitted, elapsedMs}'
+              fi
             fi
 
             now=$(date -u +%s)
