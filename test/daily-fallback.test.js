@@ -214,3 +214,111 @@ test('a success resets the failure count so transient blips never open the break
     assert.strictEqual(calls, FAILURE_LIMIT * 4, 'breaker never opened — every call reached the network');
   } finally { global.fetch = real; _resetBreaker(); }
 });
+
+// ── A HOLE IN THE SERIES MUST TRIGGER THE FALLBACK ─────────────────────────
+// Once the market opened on 2026-08-18 the SPY axis read ...08-13, 08-14, 08-18: Monday
+// absent, today's partial bar present. A newest-bar test sees 08-18 >= the due 08-17 and
+// concludes the feed is current — so the fallback never fires and every ranking keeps
+// running on Friday. Only the last SETTLED bar distinguishes the two.
+function yahooFromDates(dates) {
+  const ts = [], open = [], high = [], low = [], close = [], volume = [];
+  for (const d of dates) {
+    ts.push(Math.floor(Date.parse(d + 'T13:30:00Z') / 1000));
+    open.push(10); high.push(11); low.push(9); close.push(10); volume.push(1000);
+  }
+  return { chart: { result: [{ timestamp: ts, indicators: { quote: [{ open, high, low, close, volume }], adjclose: [{ adjclose: close }] }, meta: {} }] } };
+}
+function tradingDates(endDate, n) {
+  const out = [];
+  let t = Date.parse(endDate + 'T00:00:00Z');
+  while (out.length < n) {
+    const d = new Date(t);
+    const wd = d.getUTCDay();
+    if (wd !== 0 && wd !== 6) out.unshift(d.toISOString().slice(0, 10));
+    t -= 86400000;
+  }
+  return out;
+}
+const TUE_OPEN = new Date('2026-08-18T15:36:00Z');   // 11:36 ET, regular session; due = 08-17
+
+test('a missing due session triggers the fallback even when today\'s bar is present', async () => {
+  delete require.cache[require.resolve('../lib/screener')];
+  const { fetchDailyHistory } = require('../lib/screener');
+  const { _resetBreaker } = require('../lib/daily-fallback');
+  _resetBreaker();
+  const holed = [...tradingDates('2026-08-14', 90), '2026-08-18'];
+  await withStubbedFetch([
+    ['finance.yahoo.com', jsonRes(yahooFromDates(holed))],
+    ['stooq.com', textRes(seriesCsv('2026-08-17', 90))],
+  ], async (calls) => {
+    const d = await fetchDailyHistory('SPY', '1y', { now: TUE_OPEN });
+    assert.ok(calls.some(u => u.includes('stooq')), 'the hole must be noticed, not hidden by the partial bar');
+    assert.strictEqual(d.provider, 'stooq');
+    assert.ok(d.candles.some(c => c.date === '2026-08-17'), 'the due session is now present');
+  });
+});
+
+test('a series that REACHES the due session never calls the fallback', async () => {
+  delete require.cache[require.resolve('../lib/screener')];
+  const { fetchDailyHistory } = require('../lib/screener');
+  const { _resetBreaker } = require('../lib/daily-fallback');
+  _resetBreaker();
+  const complete = [...tradingDates('2026-08-17', 90), '2026-08-18'];
+  await withStubbedFetch([['finance.yahoo.com', jsonRes(yahooFromDates(complete))]], async (calls) => {
+    const d = await fetchDailyHistory('SPY', '1y', { now: TUE_OPEN });
+    assert.strictEqual(d.provider, 'yahoo');
+    assert.ok(!calls.some(u => u.includes('stooq')), 'no cost on the healthy path');
+  });
+});
+
+test('a fallback that is ALSO missing the due session is not preferred', async () => {
+  delete require.cache[require.resolve('../lib/screener')];
+  const { fetchDailyHistory } = require('../lib/screener');
+  const { _resetBreaker } = require('../lib/daily-fallback');
+  _resetBreaker();
+  const holed = [...tradingDates('2026-08-14', 90), '2026-08-18'];
+  await withStubbedFetch([
+    ['finance.yahoo.com', jsonRes(yahooFromDates(holed))],
+    ['stooq.com', textRes(seriesCsv('2026-08-14', 90))],
+  ], async () => {
+    const d = await fetchDailyHistory('SPY', '1y', { now: TUE_OPEN });
+    assert.strictEqual(d.provider, 'yahoo', 'keeps the primary and its adjClose leg');
+  });
+});
+
+// ── THE INTERACTION THAT CAUSED THE REVERT ─────────────────────────────────
+// This is the test that did not exist the first time. Recovering the benchmark's missing
+// bar advances the decision session ahead of the constituents, which sit on the nightly
+// candle cache — and the gate then excluded all 514 of them as `prior-session`, leaving
+// the screener with ONE result. The fallback is only safe to re-land because the gate now
+// resolves the session the COHORT can support. Pin the two together: if either side
+// regresses, this fails.
+const { gateCohort } = require('../lib/cohort-freshness');
+
+test('a fallback-recovered benchmark running ahead of a stale cache does NOT empty the scan', async () => {
+  delete require.cache[require.resolve('../lib/screener')];
+  const { fetchDailyHistory } = require('../lib/screener');
+  const { _resetBreaker } = require('../lib/daily-fallback');
+  _resetBreaker();
+
+  // 1. The benchmark recovers its missing 08-17 bar through the fallback.
+  const holed = [...tradingDates('2026-08-14', 90), '2026-08-18'];
+  let spy;
+  await withStubbedFetch([
+    ['finance.yahoo.com', jsonRes(yahooFromDates(holed))],
+    ['stooq.com', textRes(seriesCsv('2026-08-17', 90))],
+  ], async () => { spy = await fetchDailyHistory('SPY', '1y', { now: TUE_OPEN }); });
+  assert.strictEqual(spy.provider, 'stooq');
+  assert.ok(spy.candles.some(c => c.date === '2026-08-17'), 'benchmark advanced to the due session');
+
+  // 2. The constituents are still on the nightly cache, a session behind.
+  const rows = Array.from({ length: 514 }, (_, i) => ({ ticker: 'T' + i, lastBarDate: '2026-08-14' }));
+  const gate = gateCohort(rows, { benchmarkDates: spy.candles.map(c => c.date), now: TUE_OPEN });
+
+  // 3. The scan must survive. Before the gate fix this admitted 0 and the screener
+  //    returned a single result on prod.
+  assert.strictEqual(gate.admitted.length, 514, 'the cross-section survives a benchmark that ran ahead');
+  assert.strictEqual(gate.decisionSession, '2026-08-14', 'dated at the session the rows support');
+  assert.strictEqual(gate.sessionSource, 'cohort-supported');
+  assert.strictEqual(gate.benchmarkStale, true, 'and still honestly reported as behind');
+});
