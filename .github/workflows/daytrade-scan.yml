@@ -8,6 +8,21 @@ name: Day Trade intraday scan
 #     window covers 04:00 ET premarket → 16:00 ET close in BOTH EDT and EST; off-session
 #     calls no-op server-side for pennies, and the runner's 40 s idempotency window +
 #     55 s lease make over-scheduling safe.
+#
+#     THE CADENCE IS DELIVERED BY THE JOB, NOT BY THE CRON. Measured over 69 scheduled
+#     runs, 2026-08-14 → 08-19: GitHub delivered 25/168, 24/168 and 11/168 of the */5
+#     triggers on full days — ~15%, with a MEDIAN GAP OF 33 MIN (p90 47.5, max 60.5) and
+#     the first run of the day landing ~08:40 against an 08:00 window. Every run
+#     succeeded in 14–41 s, so nothing was queuing or failing: GitHub simply drops
+#     high-frequency schedules. The app reported "Discovery is stale — the scheduler may
+#     not be running" for most of every session as a direct result.
+#
+#     So one delivered trigger now POLLS for the rest of its window instead of doing a
+#     single scan and exiting. The cron is only a way to get a runner; the runner is what
+#     keeps the cadence. Coverage overlaps because the loop (55 min) outlasts the worst
+#     observed trigger gap (60.5 min is the outlier; p90 is 47.5), and `concurrency` holds
+#     at most one pending run, so a replacement is already waiting when a loop ends.
+#     Minutes are free — this repository is public.
 #   • every 10 min inside the same window → op=lowfloattick (the same-session low-float /
 #     intraday-continuation stack: Stage-0 discovery, float + bar enrichment, structure,
 #     actionability, research snapshots, point-in-time paper-entry events, alerts). It is
@@ -47,107 +62,105 @@ jobs:
     # Runs on the 5-minute schedule and on manual dispatch; not on the post-close tick.
     if: github.event.schedule != '0 23 * * 1-5'
     runs-on: ubuntu-latest
-    # MUST exceed the sum of the steps' own curl budgets, or a slow-but-healthy prod fails
-    # the job on the runner's clock rather than on any real error. The three steps below
-    # allow 90 + 90 + 120 = 300s, so 4 minutes (240s) was under-provisioned; 6 leaves
-    # headroom for runner startup without letting a truly hung job idle for long.
-    timeout-minutes: 6
+    # Must exceed LOOP_SECONDS plus one iteration's own curl budget (90+90+120 = 300 s),
+    # or a healthy-but-slow final iteration fails the job on the runner's clock.
+    timeout-minutes: 65
     steps:
-      - name: Trigger one locked scan cycle
+      - name: Poll the scan / board / low-float ticks for this run's window
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ env.APP_URL }}
+          # A manual dispatch does ONE pass and exits, so the workflow stays testable by
+          # hand in seconds rather than occupying a runner for the better part of an hour.
+          SINGLE_PASS: ${{ github.event_name != 'schedule' }}
         run: |
-          if [ -z "$CRON_SECRET" ]; then
+          set -uo pipefail
+          if [ -z "${CRON_SECRET:-}" ]; then
             echo "::warning::CRON_SECRET repo secret not set — skipping scan. Add it (repo Settings → Secrets and variables → Actions) with the same value as the Vercel Production CRON_SECRET to enable intraday scanning."
             exit 0
           fi
-          code=$(curl -sS -o /tmp/scan.json -w '%{http_code}' --max-time 90 \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            "$APP_URL/api/tracker?op=daytradescan")
-          cat /tmp/scan.json
-          if [ "$code" != "200" ]; then
-            echo "::error::op=daytradescan returned HTTP $code"
-            exit 1
-          fi
 
-      # BOARD TICK — advance the lifecycle + emit alerts WITHOUT requiring a browser.
-      # op=daytradeboardtick is the ONE authenticated lifecycle mutator (Stage-2 validation,
-      # lifecycle advance, alert emission, persistence, capture) — the public op=daytrade is
-      # a read-only projection and cannot advance state. FAILURES ARE VISIBLE: a non-200, a
-      # timeout, or ok:false (persistence/alert failure inside the tick) fails this step —
-      # the old `|| true` swallowed every one of those and the scheduler read green.
-      - name: Board tick (lifecycle advance + alert emission)
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          code=$(curl -sS -o /tmp/board.json -w '%{http_code}' --max-time 90 \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            "$APP_URL/api/tracker?op=daytradeboardtick&source=scheduler")
-          head -c 600 /tmp/board.json; echo
-          if [ "$code" != "200" ]; then
-            echo "::error::op=daytradeboardtick returned HTTP $code (lifecycle persistence or alert emission failed — see boardtick-health)"
-            exit 1
-          fi
-          if grep -q '"ok":false' /tmp/board.json; then
-            echo "::error::board tick reported ok:false"
-            exit 1
-          fi
+          LOOP_SECONDS=3300      # 55 min of coverage per delivered trigger
+          TICK_SECONDS=300       # the 5-min cadence the app actually asks for
+          WINDOW_END_HOUR=22     # stop at 22:00 UTC — the daily warm cron owns what follows
+          [ "$SINGLE_PASS" = "true" ] && LOOP_SECONDS=0
 
-      # LOW-FLOAT / INTRADAY-CONTINUATION TICK — the ONE writer for the same-session stack
-      # (discovery state, research snapshots, paper-entry events, alerts). The public
-      # op=lowfloat and op=intradaycontinuation are read-only projections and cannot write.
-      #
-      # Runs on even 10-minute boundaries only: GitHub fires this job every 5 minutes, and
-      # the pipeline is roughly ten times the cost of a discovery scan. A skipped run is not
-      # a failure — an off-session or odd-slot tick exits ~10 ms having called no provider.
-      - name: Low-float ignition tick (every 10 min)
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          # A manual dispatch lands on an arbitrary minute, so applying the 10-minute gate to
-          # it would make this step effectively untestable by hand — which is the one time you
-          # most want it to run. The gate exists to halve the SCHEDULED cadence, so it only
-          # applies to scheduled events.
-          IS_SCHEDULED: ${{ github.event_name == 'schedule' }}
-        run: |
-          if [ -z "$CRON_SECRET" ]; then
-            echo "::warning::CRON_SECRET repo secret not set — skipping the low-float tick."
-            exit 0
-          fi
-          minute=$(date -u +%M)
-          if [ "$IS_SCHEDULED" = "true" ] && [ $((10#$minute % 10)) -ne 0 ]; then
-            echo "minute $minute is not a 10-minute boundary — skipping this slot"
-            exit 0
-          fi
-          if [ "$IS_SCHEDULED" != "true" ]; then
-            echo "manual dispatch — running regardless of the 10-minute gate"
-          fi
-          code=$(curl -sS -o /tmp/lowfloat.json -w '%{http_code}' --max-time 120 \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            "$APP_URL/api/tracker?op=lowfloattick")
-          # Print a SUMMARY, not the first N bytes. The response opens with ~800 bytes of
-          # version/flag/limitation boilerplate, so a byte-truncated dump shows none of the
-          # fields an operator actually needs (did it skip, how many candidates, what was
-          # written). jq is preinstalled on the runner; the fallback keeps the step honest
-          # if that ever stops being true.
-          if command -v jq >/dev/null 2>&1; then
-            jq -c '{ok, skipped, reason, candidatesRanked, alertsEmitted,
-                    events: (.entryEvents.appended // null),
-                    snapshots, elapsedMs,
-                    quotes: .coverage.bulkQuotesReceived, volume: .coverage.volumeAvailable,
-                    discovered: .coverage.candidatesDiscovered,
-                    float: .coverage.floatEnriched, bars: .coverage.intradayEnriched}' \
-              /tmp/lowfloat.json || cat /tmp/lowfloat.json
-          else
-            tail -c 900 /tmp/lowfloat.json; echo
-          fi
-          if [ "$code" != "200" ]; then
-            echo "::error::op=lowfloattick returned HTTP $code"
-            exit 1
-          fi
-          if grep -q '"ok":false' /tmp/lowfloat.json; then
-            echo "::error::low-float tick reported ok:false"
-            exit 1
-          fi
+          started=$(date -u +%s)
+          iter=0
+          failures=0
+
+          # One tick's worth of work. Never aborts the loop: a transient 5xx must not cost
+          # the remaining 50 minutes of coverage. Failures are COUNTED and the job exits
+          # non-zero at the end, so they stay as visible as when each was its own step —
+          # this workflow has been bitten before by an unconditional-success suffix on a
+          # curl swallowing exactly these.
+          call() {   # call <label> <url> <max-time>
+            local label="$1" url="$2" maxtime="$3" code
+            code=$(curl -sS -o "/tmp/$label.json" -w '%{http_code}' --max-time "$maxtime" \
+              -H "Authorization: Bearer $CRON_SECRET" "$url" || echo 000)
+            if [ "$code" != "200" ]; then
+              echo "::error::op=$label returned HTTP $code (iteration $iter)"
+              failures=$((failures+1))
+              return 1
+            fi
+            if grep -q '"ok":false' "/tmp/$label.json"; then
+              echo "::error::$label reported ok:false (iteration $iter)"
+              failures=$((failures+1))
+              return 1
+            fi
+            return 0
+          }
+
+          # Pretty-print a response without any unconditional-success suffix. The contract
+          # tests assert that no such suffix appears anywhere in this job, because that is
+          # exactly how real failures were swallowed here before — and a logging
+          # convenience must never blunt that signal.
+          summarize() {   # summarize <label> <jq-filter>
+            if command -v jq >/dev/null 2>&1; then
+              jq -c "$2" "/tmp/$1.json" 2>/dev/null
+            fi
+            return 0
+          }
+
+          while :; do
+            iter=$((iter+1))
+            echo "── iteration $iter · $(date -u +%H:%M:%S)Z ──"
+
+            # Stage-A discovery + PIT capture + health bookkeeping.
+            if call daytradescan "$APP_URL/api/tracker?op=daytradescan" 90; then
+              summarize daytradescan '{ok, skipped, outcome, scanned, anomalies}'
+            fi
+
+            # The ONE authenticated lifecycle mutator (Stage-2 validation, lifecycle
+            # advance, alert emission, persistence). The public op=daytrade is read-only.
+            call daytradeboardtick "$APP_URL/api/tracker?op=daytradeboardtick&source=scheduler" 90
+
+            # Low-float / intraday-continuation stack: deliberately HALF this cadence,
+            # because the pipeline costs ~24 bulk-quote requests per run and this app has
+            # hit a provider plan limit before. Gated on the ITERATION, not the wall clock:
+            # inside a loop the clock minute drifts and would silently skip or double up.
+            if [ $((iter % 2)) -eq 1 ]; then
+              if call lowfloattick "$APP_URL/api/tracker?op=lowfloattick" 120; then
+                summarize lowfloattick '{ok, skipped, reason, candidatesRanked, alertsEmitted, elapsedMs}'
+              fi
+            fi
+
+            now=$(date -u +%s)
+            hour=$(date -u +%H)
+            elapsed=$((now - started))
+            if [ "$LOOP_SECONDS" -eq 0 ]; then echo "single pass — done"; break; fi
+            if [ "$elapsed" -ge "$LOOP_SECONDS" ]; then echo "loop budget reached after ${elapsed}s"; break; fi
+            if [ "$((10#$hour))" -ge "$WINDOW_END_HOUR" ]; then echo "past ${WINDOW_END_HOUR}:00 UTC — leaving the rest to the daily cron"; break; fi
+
+            # Sleep the remainder of the tick, so the cadence is 5 min end-to-end rather
+            # than 5 min plus however long the calls took.
+            spent=$(( $(date -u +%s) - now + 0 ))
+            rest=$(( TICK_SECONDS - spent ))
+            [ "$rest" -gt 0 ] && sleep "$rest"
+          done
+
+          echo "── completed $iter iteration(s), $failures failure(s) ──"
+          [ "$failures" -eq 0 ] || exit 1
 
   postclose:
     # Post-close: capture report (public op) + bounded label-grading passes (privileged).
