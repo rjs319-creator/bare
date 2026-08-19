@@ -22,7 +22,7 @@ test('classifyStatus maps HTTP outcomes to categories', () => {
   assert.equal(classifyStatus(resp(401)), 'auth');
   assert.equal(classifyStatus(resp(403)), 'auth');
   assert.equal(classifyStatus(resp(503)), 'unavailable');
-  assert.equal(classifyStatus(resp(404)), 'empty');
+  assert.equal(classifyStatus(resp(404)), 'not_found');   // a retired symbol, not an empty payload
   assert.equal(classifyStatus(resp(418)), 'bad_response');
   assert.equal(classifyStatus(null), 'unavailable');
 });
