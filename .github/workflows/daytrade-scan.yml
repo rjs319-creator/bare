@@ -74,6 +74,17 @@ jobs:
           # hand in seconds rather than occupying a runner for the better part of an hour.
           SINGLE_PASS: ${{ github.event_name != 'schedule' }}
         run: |
+          # GitHub invokes this as `bash -e {0}` — errexit is ON before the script starts,
+          # and `set -uo pipefail` does not turn it off. Under errexit the FIRST failing
+          # call aborts the whole run, which destroys the one property this loop exists
+          # for: a transient 5xx must not cost the remaining 50 minutes of coverage.
+          # Verified against the real runner, then reproduced locally — with `bash -e` a
+          # single failing board tick ended the loop at iteration 1 instead of 7.
+          #
+          # Error handling here is explicit and centralised in `call`: every response is
+          # status-checked and body-checked, failures are counted, and the job exits
+          # non-zero at the end. `set -u` stays on to catch unset variables.
+          set +e
           set -uo pipefail
           if [ -z "${CRON_SECRET:-}" ]; then
             echo "::warning::CRON_SECRET repo secret not set — skipping scan. Add it (repo Settings → Secrets and variables → Actions) with the same value as the Vercel Production CRON_SECRET to enable intraday scanning."
@@ -94,19 +105,22 @@ jobs:
           # non-zero at the end, so they stay as visible as when each was its own step —
           # this workflow has been bitten before by an unconditional-success suffix on a
           # curl swallowing exactly these.
+          # Always returns 0 and reports through LAST_OK, so no call site can abort the
+          # loop even if errexit is ever re-enabled above this line.
+          LAST_OK=1
           call() {   # call <label> <url> <max-time>
             local label="$1" url="$2" maxtime="$3" code
+            LAST_OK=1
             code=$(curl -sS -o "/tmp/$label.json" -w '%{http_code}' --max-time "$maxtime" \
-              -H "Authorization: Bearer $CRON_SECRET" "$url" || echo 000)
+              -H "Authorization: Bearer $CRON_SECRET" "$url")
+            [ -n "$code" ] || code=000
             if [ "$code" != "200" ]; then
               echo "::error::op=$label returned HTTP $code (iteration $iter)"
-              failures=$((failures+1))
-              return 1
+              failures=$((failures+1)); LAST_OK=0; return 0
             fi
             if grep -q '"ok":false' "/tmp/$label.json"; then
               echo "::error::$label reported ok:false (iteration $iter)"
-              failures=$((failures+1))
-              return 1
+              failures=$((failures+1)); LAST_OK=0; return 0
             fi
             return 0
           }
@@ -127,7 +141,8 @@ jobs:
             echo "── iteration $iter · $(date -u +%H:%M:%S)Z ──"
 
             # Stage-A discovery + PIT capture + health bookkeeping.
-            if call daytradescan "$APP_URL/api/tracker?op=daytradescan" 90; then
+            call daytradescan "$APP_URL/api/tracker?op=daytradescan" 90
+            if [ "$LAST_OK" = 1 ]; then
               summarize daytradescan '{ok, skipped, outcome, scanned, anomalies}'
             fi
 
@@ -140,7 +155,8 @@ jobs:
             # hit a provider plan limit before. Gated on the ITERATION, not the wall clock:
             # inside a loop the clock minute drifts and would silently skip or double up.
             if [ $((iter % 2)) -eq 1 ]; then
-              if call lowfloattick "$APP_URL/api/tracker?op=lowfloattick" 120; then
+              call lowfloattick "$APP_URL/api/tracker?op=lowfloattick" 120
+              if [ "$LAST_OK" = 1 ]; then
                 summarize lowfloattick '{ok, skipped, reason, candidatesRanked, alertsEmitted, elapsedMs}'
               fi
             fi
@@ -156,7 +172,7 @@ jobs:
             # than 5 min plus however long the calls took.
             spent=$(( $(date -u +%s) - now + 0 ))
             rest=$(( TICK_SECONDS - spent ))
-            [ "$rest" -gt 0 ] && sleep "$rest"
+            if [ "$rest" -gt 0 ]; then sleep "$rest"; fi
           done
 
           echo "── completed $iter iteration(s), $failures failure(s) ──"
