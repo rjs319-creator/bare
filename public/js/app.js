@@ -661,20 +661,24 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         : `${d.data.ageDays}d stale`;
       warns.push(`⚠️ Market data is ${behind} — last EOD bar ${esc(d.data.spyDate || '—')}. Screens and rankings are computed on that session, not today.`);
     }
-    // Only warn on REAL failures. Budget-deferred ticks (steps skipped because the cron
-    // hit its time budget) are best-effort work that self-heals on the next run — they
-    // are NOT errors, so exclude them from the count and the list. Real failures = stages
-    // that errored (not merely deferred) plus any cache-warm fetch failures.
-    if (d.lastRun && !d.lastRun.ok) {
-      const deferred = new Set(d.lastRun.budgetSkipped || []);
-      const realFailed = (d.lastRun.failed || []).filter(s => !deferred.has(s));
-      const warmFailPaths = (d.lastRun.warmFails || []).map(w => (w && w.path) || '').filter(Boolean);
-      const nReal = realFailed.length + warmFailPaths.length;
-      if (nReal > 0) {
-        const names = realFailed.concat(warmFailPaths).slice(0, 4).join(', ');
-        warns.push(`⚠️ Last data refresh had ${nReal} failed step${nReal === 1 ? '' : 's'}${d.failStreak > 1 ? ` (${d.failStreak} runs in a row)` : ''}: ${esc(names || 'cache warms')}.`);
-      }
-      // else: only budget-deferred steps — nothing broke; suppressed.
+    // Only warn on REAL failures — the SERVER decides which those are (lib/health.js
+    // runProblems), because it is the only side that knows every failure shape.
+    //
+    // This block used to re-derive the list from the run's failed + warm-fail arrays. The
+    // chain refactor moved ordered work into warmchain roots, so a chain that 500s lands
+    // in chainDispatchFails and one that never reports lands in lateChainFails — neither
+    // of which this looked at. On 2026-08-18 the server reported failCount:5 (atlasx,
+    // ticks3, swing OOM-killed; swingsearch 504'd) while failed and warmFails were both
+    // empty, so this computed zero real failures and suppressed the banner. Seven
+    // consecutive failed nightly runs showed the user nothing at all.
+    //
+    // Budget-deferred steps are still excluded server-side: best-effort work that
+    // genuinely self-heals is not an error.
+    const problems = d.problems || [];
+    if (problems.length) {
+      const shown = problems.slice(0, 4).join(', ');
+      const more = problems.length > 4 ? ` +${problems.length - 4} more` : '';
+      warns.push(`⚠️ Last data refresh had ${problems.length} failed step${problems.length === 1 ? '' : 's'}${d.failStreak > 1 ? ` (${d.failStreak} runs in a row)` : ''}: ${esc(shown)}${more}.`);
     }
     if (!warns.length) return;
     const page = document.querySelector('.page'); if (!page) return;
