@@ -678,7 +678,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (problems.length) {
       const shown = problems.slice(0, 4).join(', ');
       const more = problems.length > 4 ? ` +${problems.length - 4} more` : '';
-      warns.push(`⚠️ Last data refresh had ${problems.length} failed step${problems.length === 1 ? '' : 's'}${d.failStreak > 1 ? ` (${d.failStreak} runs in a row)` : ''}: ${esc(shown)}${more}.`);
+      // SAY WHEN. The refresh is NIGHTLY, so this record can be up to ~24h old — and with
+      // no time on it, "6 failed steps (7 runs in a row)" reads as something happening
+      // right now. On 2026-08-19 every failure it listed came from the 22:05Z run the
+      // night before, four hours BEFORE the fixes for those exact failures deployed; the
+      // banner gave no way to tell an already-fixed record from a live outage. The next
+      // run is what clears it, so the timestamp is the difference between "still broken"
+      // and "fixed, awaiting tonight's run".
+      const at = d.lastRun && d.lastRun.at ? new Date(d.lastRun.at) : null;
+      const when = at && !isNaN(at.getTime())
+        ? ` (${at.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })})`
+        : '';
+      warns.push(`⚠️ Last nightly data refresh${when} had ${problems.length} failed step${problems.length === 1 ? '' : 's'}${d.failStreak > 1 ? ` (${d.failStreak} runs in a row)` : ''}: ${esc(shown)}${more}. Clears after the next run.`);
     }
     if (!warns.length) return;
     const page = document.querySelector('.page'); if (!page) return;
