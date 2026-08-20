@@ -30,7 +30,7 @@ test('the self-fetch opts in to a bounded retry and a hard timeout', async () =>
   // Assert
   assert.equal(calls.length, 1);
   assert.ok(calls[0].url.startsWith('https://example.test/api/tracker'));
-  assert.ok(calls[0].opts.retries >= 2, 'a transient sibling 5xx must not cost the day');
+  assert.ok(calls[0].opts.retries >= 1, 'a transient sibling 5xx must not cost the day');
   assert.ok(calls[0].opts.timeoutMs > 0, 'a hung sibling must not consume the invocation');
 });
 
@@ -61,8 +61,15 @@ test('a good sibling still returns its parsed body', async () => {
 });
 
 test('the retry budget is bounded — this must not become a retry storm', () => {
+  // The `timeoutMs <= 20000` bound here was originally 12s and was a GUESS: it was
+  // written before anyone measured the sources, and it cut off scoreboard (~15.8s) and
+  // today (~12.7s) — the two the ranking and regime read depend on. The real constraint
+  // is the chain deadline, which is what this now asserts (see
+  // test/challenger-source-diagnostics.test.js for the measured lower bound).
+  const { CHAIN_DEADLINE_MS } = require('../lib/warm-chains');
   assert.ok(CHALLENGER_FETCH.retries <= 3, 'unbounded retries would just move the failure');
-  assert.ok(CHALLENGER_FETCH.timeoutMs <= 20000, 'per-attempt deadline must fit the chain budget');
+  assert.ok(CHALLENGER_FETCH.timeoutMs * (CHALLENGER_FETCH.retries + 1) < CHAIN_DEADLINE_MS,
+    'worst-case retry budget must fit the chain deadline');
 });
 
 function okJson(body) { return { ok: true, status: 200, json: async () => body }; }

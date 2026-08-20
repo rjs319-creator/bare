@@ -15,6 +15,17 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { runProblems, buildHealthResponse } = require('../lib/health');
 
+// A PINNED clock plus a benchmark series that reaches the session due at that instant.
+// Without this the fixtures inherited Date.now(), so whether `healthy` could ever be true
+// depended on the day the suite ran — latent flakiness these tests should not carry,
+// especially now that staleness is judged by decision session rather than bar age.
+const FRESH_DATA = {
+  now: Date.parse('2026-08-19T23:00:00Z'),   // Wednesday, after the US close
+  spyDate: '2026-08-19',
+  spyDates: ['2026-08-17', '2026-08-18', '2026-08-19'],
+  ageDays: 0.2,
+};
+
 test('runProblems surfaces chain dispatch failures — the case the banner missed', () => {
   // Arrange — the exact shape of the 2026-08-18 run
   const run = { ok: false, failed: [], warmFails: [], budgetSkipped: [],
@@ -60,7 +71,7 @@ test('buildHealthResponse exposes problems so the client renders instead of re-d
     budgetSkipped: [], chainDispatchFails: ['atlasx'], chainSkips: [] }];
 
   // Act
-  const res = buildHealthResponse(runs, { spyDate: '2026-08-18', ageDays: 1,
+  const res = buildHealthResponse(runs, { ...FRESH_DATA,
     auth: { ok: true, production: true, secretConfigured: true, warnings: [] } });
 
   // Assert
@@ -72,7 +83,7 @@ test('buildHealthResponse exposes problems so the client renders instead of re-d
 test('a clean run yields no problems and healthy true', () => {
   const runs = [{ at: '2026-08-18T22:05:45.910Z', ok: true, failed: [], warmFails: [],
     budgetSkipped: [], chainDispatchFails: [], chainSkips: [] }];
-  const res = buildHealthResponse(runs, { spyDate: '2026-08-18', ageDays: 1,
+  const res = buildHealthResponse(runs, { ...FRESH_DATA,
     auth: { ok: true, production: true, secretConfigured: true, warnings: [] } });
   assert.deepStrictEqual(res.problems, []);
   assert.equal(res.healthy, true);
