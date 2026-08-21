@@ -115,3 +115,54 @@ test('the banner renders the server list and no longer re-derives it', () => {
   assert.ok(!/lastRun\.warmFails/.test(health),
     'warmFails is only one of several failure shapes; the server already folds them together');
 });
+
+// ── PROPORTIONALITY: a shadow ledger is not a market-data outage ────────────
+// Every problem rendered as one red alert with a "N runs in a row" streak, so a weight-0
+// research stream skipping a night looked identical to the feed being days behind. The
+// user sat in front of that red banner for three days while `data` read stale:false /
+// sessionsBehind:0 throughout.
+{
+  const { classifyProblems, BACKGROUND_CHAINS } = require('../lib/health');
+
+  test('verified shadow/research chains are reported as background, not alarmed', () => {
+    const c = classifyProblems(['chain:challenger', 'chain:alphacal']);
+    assert.deepStrictEqual(c.data, []);
+    assert.deepStrictEqual(c.background, ['chain:challenger', 'chain:alphacal']);
+  });
+
+  test('an UNLISTED chain still alarms — the default must stay loud', () => {
+    // Downgrading something the user actually reads is far worse than over-alarming, so
+    // anything not verified as shadow (including chains added later) counts as data.
+    const c = classifyProblems(['chain:universe', 'chain:somethingAddedLater']);
+    assert.deepStrictEqual(c.background, []);
+    assert.deepStrictEqual(c.data, ['chain:universe', 'chain:somethingAddedLater']);
+  });
+
+  test('a mixed run separates the two rather than flattening to the loudest', () => {
+    const c = classifyProblems(['chain:universe', 'chain:challenger']);
+    assert.deepStrictEqual(c.data, ['chain:universe']);
+    assert.deepStrictEqual(c.background, ['chain:challenger']);
+  });
+
+  test('a STALE feed outranks the classification — everything becomes a data problem', () => {
+    // If the market data itself is behind, the banner is about the data whatever the
+    // failing steps are called.
+    const c = classifyProblems(['chain:challenger'], { dataStale: true });
+    assert.deepStrictEqual(c.data, ['chain:challenger']);
+    assert.deepStrictEqual(c.background, []);
+  });
+
+  test('the background list is justified from source, not assumed', () => {
+    // Each entry must be traceable to a source comment declaring it shadow/research.
+    assert.ok(BACKGROUND_CHAINS.has('challenger'), 'challenger-routes.js: "SHADOW ONLY"');
+    assert.ok(BACKGROUND_CHAINS.has('alphacal'), 'warm-chains.js: archive-first collection');
+    assert.strictEqual(BACKGROUND_CHAINS.size, 2, 'keep this list verified — do not pad it');
+  });
+
+  test('buildHealthResponse exposes the split for the client to render', () => {
+    const run = { at: 'x', ok: false, failed: [], warmFails: [], chainDispatchFails: ['challenger'] };
+    const r = buildHealthResponse([run], { spyDate: '2026-08-20', spyDates: ['2026-08-20'], now: Date.parse('2026-08-20T23:00:00Z') });
+    assert.deepStrictEqual(r.problemsBySeverity.background, ['chain:challenger']);
+    assert.deepStrictEqual(r.problemsBySeverity.data, []);
+  });
+}
