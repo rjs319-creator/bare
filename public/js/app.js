@@ -651,6 +651,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     let d; try { d = await fetchJSON('/api/tracker?op=health'); } catch { return; }
     if (!d || !d.ok) return;
     const warns = [];
+    const notes = [];   // reported, but not an emergency — rendered muted below
     // Say it in SESSIONS, not calendar days: "3d stale" on a Tuesday after a Monday
     // holiday is normal, while one MISSING session mid-week is the real fault. The
     // server now reports sessionsBehind against the exchange calendar.
@@ -674,28 +675,44 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     //
     // Budget-deferred steps are still excluded server-side: best-effort work that
     // genuinely self-heals is not an error.
-    const problems = d.problems || [];
-    if (problems.length) {
-      const shown = problems.slice(0, 4).join(', ');
-      const more = problems.length > 4 ? ` +${problems.length - 4} more` : '';
-      // SAY WHEN. The refresh is NIGHTLY, so this record can be up to ~24h old — and with
-      // no time on it, "6 failed steps (7 runs in a row)" reads as something happening
-      // right now. On 2026-08-19 every failure it listed came from the 22:05Z run the
-      // night before, four hours BEFORE the fixes for those exact failures deployed; the
-      // banner gave no way to tell an already-fixed record from a live outage. The next
-      // run is what clears it, so the timestamp is the difference between "still broken"
-      // and "fixed, awaiting tonight's run".
-      const at = d.lastRun && d.lastRun.at ? new Date(d.lastRun.at) : null;
-      const when = at && !isNaN(at.getTime())
-        ? ` (${at.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })})`
-        : '';
-      warns.push(`⚠️ Last nightly data refresh${when} had ${problems.length} failed step${problems.length === 1 ? '' : 's'}${d.failStreak > 1 ? ` (${d.failStreak} runs in a row)` : ''}: ${esc(shown)}${more}. Clears after the next run.`);
+    // SIZE THE ALARM TO THE IMPACT. The server splits the problem list (lib/health
+    // classifyProblems) into what affects the data you read and what does not. Everything
+    // used to render as one red alert with a "N runs in a row" streak, so a weight-0
+    // shadow ledger declining to log a night looked exactly like a market-data outage —
+    // and the user sat in front of a red banner for three days while the feed itself read
+    // stale:false / sessionsBehind:0 the whole time. Both are still REPORTED; only one is
+    // an emergency.
+    //
+    // SAY WHEN, too. The refresh is nightly, so this record can be ~24h old, and without a
+    // timestamp it reads as something happening right now. On 2026-08-19 every failure it
+    // listed came from the run four hours BEFORE the fixes for those exact failures
+    // deployed. The next run is what clears it.
+    const sev = d.problemsBySeverity || { data: d.problems || [], background: [] };
+    const at = d.lastRun && d.lastRun.at ? new Date(d.lastRun.at) : null;
+    const when = at && !isNaN(at.getTime())
+      ? ` (${at.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })})`
+      : '';
+    const list = (arr) => esc(arr.slice(0, 4).join(', ')) + (arr.length > 4 ? ` +${arr.length - 4} more` : '');
+
+    if (sev.data.length) {
+      // The streak is only meaningful next to a real failure; it counts consecutive runs
+      // that were not clean, NOT consecutive occurrences of these particular steps.
+      warns.push(`⚠️ Last nightly data refresh${when} had ${sev.data.length} failed step${sev.data.length === 1 ? '' : 's'}${d.failStreak > 1 ? ` (${d.failStreak} runs not clean)` : ''}: ${list(sev.data)}. Clears after the next run.`);
     }
-    if (!warns.length) return;
+    if (sev.background.length) {
+      // Reported, not alarmed: these do not touch prices, screens or picks.
+      notes.push(`Background research steps didn't complete in the last nightly refresh${when}: ${list(sev.background)}. Market data is current; this doesn't affect prices, screens or picks.`);
+    }
+    if (!warns.length && !notes.length) return;
     const page = document.querySelector('.page'); if (!page) return;
     const bar = document.createElement('div');
-    bar.className = 'health-banner';
-    bar.innerHTML = warns.join('<br>') + ` <button class="health-x" aria-label="dismiss">✕</button>`;
+    // A banner carrying ONLY background notes is informational: muted, no warning colour,
+    // no ⚠️. It still says exactly what did not run.
+    const infoOnly = !warns.length;
+    bar.className = infoOnly ? 'health-banner health-banner-info' : 'health-banner';
+    if (infoOnly) bar.setAttribute('style', 'background:transparent;border-left:3px solid #64748b;color:#94a3b8;font-weight:400');
+    const body = warns.concat(notes.map(n => `<span style="opacity:.85">ℹ️ ${n}</span>`)).join('<br>');
+    bar.innerHTML = body + ` <button class="health-x" aria-label="dismiss">✕</button>`;
     bar.querySelector('.health-x').addEventListener('click', () => bar.remove());
     page.insertBefore(bar, page.firstChild);
   }

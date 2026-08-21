@@ -137,7 +137,7 @@ test('reprime: the reprime chain re-fetches today BEFORE priming the ensemble', 
   const call = recorder();
   await WC.runChain('reprime', { call, now: clock().now });
   const real = call.calls.filter(p => !p.includes('warmchain'));
-  assert.deepStrictEqual(real, ['/api/tracker?op=today', '/api/tracker?op=ensemble', '/api/tracker?op=challengerlog', '/api/tracker?op=orbitlog', '/api/tracker?op=orbitmltick']);
+  assert.deepStrictEqual(real, ['/api/tracker?op=today', '/api/tracker?op=ensemble', '/api/tracker?op=orbitlog', '/api/tracker?op=orbitmltick']);
   // invariant this test protects: today is re-fetched BEFORE the ensemble projection
   assert.ok(real.indexOf('/api/tracker?op=today') < real.indexOf('/api/tracker?op=ensemble'));
 });
@@ -445,4 +445,39 @@ test('runWarmChain passes the inherited (floored) deadline into runChain — bud
     WC.runChain = realRunChain;
     delete require.cache[routesPath];
   }
+});
+
+
+// ── op=challengerlog MUST be dispatched shallow ─────────────────────────────
+// It ran at `ledger → @decision → @reprime → op=challengerlog`, three hops deep, and
+// self-fetches 18 endpoints (including op=today, which fans out further). Every night it
+// returned 503 "no ranked signals gathered (0/18 answered, 0 barren)" in ~2s — 0 of 18, at
+// ~110ms each. Not a timeout (the budget is 25s with a retry) and not a data problem:
+// every one of those sources returns 200 with a real payload when called directly. Same
+// shallow-works/deep-fails signature `evolve` showed at the same depth, and the same fix.
+test('op=challengerlog is a ROOT step, never nested behind warmchain hops', () => {
+  // Depth of the chain each op is reachable at: roots are depth 1.
+  const depth = new Map();
+  const walk = (name, d) => {
+    if (depth.has(name) && depth.get(name) <= d) return;
+    depth.set(name, d);
+    for (const step of WC.CHAINS[name] || []) if (step.startsWith('@')) walk(step.slice(1), d + 1);
+  };
+  WC.ROOT_CHAINS.forEach(r => walk(r, 1));
+
+  const owners = Object.entries(WC.CHAINS)
+    .filter(([, steps]) => steps.some(s => s === 'op=challengerlog'))
+    .map(([name]) => name);
+  assert.deepStrictEqual(owners, ['challenger'], 'exactly one chain runs it');
+  assert.strictEqual(depth.get('challenger'), 1, 'and that chain is dispatched as a root');
+  assert.ok(WC.ROOT_CHAINS.includes('challenger'));
+});
+
+test('the challenger root is dispatched in the LAST wave, after the decision spine', () => {
+  // As a root it races the spine, so it must gather as late as possible: op=today should
+  // have been re-primed by then. `ledger` stays first for the opposite reason.
+  const i = WC.ROOT_CHAINS.indexOf('challenger');
+  assert.strictEqual(i, WC.ROOT_CHAINS.length - 1, 'last root');
+  assert.ok(WC.dispatchDelayMs(i) >= WC.dispatchDelayMs(WC.ROOT_CHAINS.indexOf('ledger')) + 60000,
+    'gathers at least a minute after the spine starts');
 });
