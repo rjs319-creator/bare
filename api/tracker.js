@@ -236,6 +236,11 @@ const EXPENSIVE_OPS = new Set([
   // detail read fans across per-source series docs). CDN-cached when populated; the throttle
   // stops a cache-busting anonymous loop from driving repeated multi-doc Blob reads.
   'techev', 'techevdetail',
+  // forecastrank: builds a point-in-time panel, cross-fits base models and trains the
+  // meta-ranker on every call — by far the heaviest read in this file. CDN-cached at ~5min so
+  // page traffic coalesces; the throttle stops a cache-busting caller from driving repeated
+  // full retrains. (forecastcaps and forecastboard are cheap: a probe and a file read.)
+  'forecastrank',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
@@ -331,6 +336,13 @@ async function handleRequest(req, res) {
   if (req.query.op === 'universescan') return require('../lib/universe-routes').runUniverseScan(req, res);
   if (req.query.op === 'universecompile') return require('../lib/universe-routes').runUniverseCompile(req, res);
   if (req.query.op === 'universecurate') return require('../lib/universe-routes').runUniverseCurate(req, res);
+  // CFR — cross-sectional forecast & ranking (lib/forecast/*). All three are READ-ONLY:
+  // capability report, the persisted walk-forward scoreboard, and a live ranking. None of them
+  // writes state, places an order or promotes anything; forecastrank needs the local research
+  // cache and says so plainly when it is absent (as it is in a serverless deployment).
+  if (req.query.op === 'forecastcaps') return require('../lib/forecast-routes').runForecastCaps(req, res);
+  if (req.query.op === 'forecastboard') return require('../lib/forecast-routes').runForecastBoard(req, res);
+  if (req.query.op === 'forecastrank') return require('../lib/forecast-routes').runForecastRank(req, res);
   if (req.query.op === 'aligned') return require('../lib/aligned-routes').runAligned(req, res);
   if (req.query.op === 'alignedlog') return require('../lib/aligned-routes').runAlignedLog(req, res);
   if (req.query.op === 'alignedbook') return require('../lib/aligned-routes').runAlignedBook(req, res);

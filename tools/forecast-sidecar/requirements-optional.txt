@@ -1,0 +1,25 @@
+# CFR optional heavyweight dependencies — NOT required for the baseline system.
+#
+# The Ridge/AR baseline, the purged walk-forward, the cost-aware backtest and the 0-100 score
+# all run with no Python at all. Everything below only raises the fallback tier
+# (lib/forecast/capabilities.js).
+#
+# Install into a repo-local venv, which is gitignored:
+#     python3 -m venv tools/forecast-sidecar/.venv
+#     tools/forecast-sidecar/.venv/bin/pip install -r tools/forecast-sidecar/requirements-optional.txt
+#
+# Or point FORECAST_PYTHON at any interpreter that already has them.
+
+# ── Tier 4: LightGBM meta-ranker (works on Python 3.9+; ~3 MB wheel, no checkpoint) ──────────
+numpy>=1.24,<2
+lightgbm>=4.0
+
+# ── Tiers 1-3: the foundation models. REQUIRE PYTHON >= 3.10 and download large checkpoints. ─
+# Do NOT uncomment casually: torch plus the two checkpoints is on the order of 1-3 GB.
+# chronos-forecasting 1.x is Chronos-1/Bolt, a DIFFERENT model generation — the adapter refuses
+# it rather than substituting it, so >=2.0 is mandatory for the Chronos-2 path.
+#
+# torch>=2.2
+# chronos-forecasting>=2.0        # Chronos-2   (primary)   — needs Python >= 3.10
+# uni2ts>=1.2                     # Moirai-2    (challenger) — needs Python >= 3.10; must expose uni2ts.model.moirai2
+# gluonts>=0.15                    # required by the uni2ts predictor path

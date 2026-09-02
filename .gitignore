@@ -20,3 +20,7 @@ scratch-*
 
 # agent working dir (local, not committed)
 .agents/
+
+# CFR optional python sidecar venv (large, machine-local; recreate from
+# tools/forecast-sidecar/requirements-optional.txt)
+tools/forecast-sidecar/.venv/
