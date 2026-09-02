@@ -186,6 +186,11 @@ const PRIVILEGED_OPS = new Set([
   // fan-out. Cron/manual-with-bearer only; op=stbull (read) stays public.
   'stbulltick',
   'stbullresolve',
+  // CFR PROSPECTIVE SHADOW logger/resolver — writes the write-once prospective ledger
+  // (forecastshadow/v1/*) and spends a ~530-name Yahoo candle fan-out plus a ridge
+  // inference pass. Cron/manual-with-bearer only; op=forecastshadow (read) stays public.
+  'forecastshadowtick',
+  'forecastshadowresolve',
   // STRUCTURED BEAR CASE generator — one bounded Haiku call over the day's top board
   // rows, persisted to bearcase/<date>.json. Cron/manual-with-bearer only; op=bearcase
   // (read) stays public.
@@ -343,6 +348,12 @@ async function handleRequest(req, res) {
   if (req.query.op === 'forecastcaps') return require('../lib/forecast-routes').runForecastCaps(req, res);
   if (req.query.op === 'forecastboard') return require('../lib/forecast-routes').runForecastBoard(req, res);
   if (req.query.op === 'forecastrank') return require('../lib/forecast-routes').runForecastRank(req, res);
+  // CFR PROSPECTIVE SHADOW (weight-0). The tick scores the closed session with the live
+  // pipeline and appends a write-once ledger day; the resolve scores matured days with
+  // FROZEN decision-time betas. op=forecastshadow (read) stays public.
+  if (req.query.op === 'forecastshadow') return require('../lib/forecast-shadow-routes').runForecastShadow(req, res);
+  if (req.query.op === 'forecastshadowtick') return require('../lib/forecast-shadow-routes').runForecastShadowTick(req, res);
+  if (req.query.op === 'forecastshadowresolve') return require('../lib/forecast-shadow-routes').runForecastShadowResolve(req, res);
   if (req.query.op === 'aligned') return require('../lib/aligned-routes').runAligned(req, res);
   if (req.query.op === 'alignedlog') return require('../lib/aligned-routes').runAlignedLog(req, res);
   if (req.query.op === 'alignedbook') return require('../lib/aligned-routes').runAlignedBook(req, res);
