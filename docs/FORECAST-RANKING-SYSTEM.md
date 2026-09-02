@@ -492,6 +492,42 @@ disables it and reproduces the sell-and-rebuy behaviour.
 
 `costs` reports `meanTurnover`, `meanTradedWeight`, `annualizedCostDrag` and the band in force, so
 the friction is a number you can read rather than infer.
+
+### 12.3 The switch-cost test
+
+The principled form of the band: replace an incumbent only when the challenger's **expected edge**
+clears the cost of the switch. Selling *i* and buying *j* is half a round trip each, so the hurdle
+is `0.5 × (RT_i + RT_j)` — and a rank improvement worth less than that is a worse trade than doing
+nothing, however much better it looks on the scoreboard.
+
+That comparison has to be in **dollars, not ranks**, and only `ridge` emits a score already in
+return units (`ridge-rank` emits a z-score, the meta-ranker an arbitrary ranker output). Rather
+than restrict the test to one arm, every arm's score is calibrated to an expected-return scale
+through its own within-date percentile: `fitExpectedReturnMap` bins **training** rows by
+percentile, takes the mean realized residual per bin, and PAVA-monotonizes so a noisy bin cannot
+invert the map. Too thin a sample returns **no map** rather than one fitted on noise, and the band
+is used instead.
+
+### 12.4 Portfolio parameters are selected on the training window
+
+`topK`, `noTradeBand` and `switchCostTest` all move the result, and the edge here is about a
+percent a year short of break-even — precisely the scale a lucky grid cell can fabricate. So they
+are **chosen per fold from the training window's own out-of-fold predictions**, which cross-fitting
+already produces for free, and then applied to the test block. Sweeping the grid on the test block
+and reporting the best cell would be test-set tuning wearing a lab coat.
+
+Selection metric is **tranche mean residual-net Sharpe**: *residual* because that is what the
+system predicts, *after-cost* because that is the question, *tranche* because those sleeves do not
+overlap. The full grid and the winning cell are recorded per fold per arm as `portfolioSelection`
+in the artifact, and the search itself as `contract.portfolioSearch`.
+
+**A known asymmetry, stated because it affects how the results read.** Only arms with a
+training-window score receive a selection — `ridge`, `ridge-rank`, `static-ensemble`,
+`dynamic-ensemble`. The negative controls are defined only on test frames and therefore keep the
+configured defaults, and the LightGBM meta-ranker currently has no training-window score plumbed
+either. So a tuned arm is being compared against untuned controls: **some of any improvement is
+the levers and some is the handicap**, and a positive cell is promising rather than established
+until the controls are put on equal footing. That is the highest-value outstanding check.
 - **Overlapping holding periods are handled explicitly.** A horizon-`h` strategy rebalanced every
   `stride` sessions holds `ceil(h/stride)` overlapping sleeves. The backtest builds that many
   **non-overlapping tranches**, compounds each into its own equity curve, and reports the

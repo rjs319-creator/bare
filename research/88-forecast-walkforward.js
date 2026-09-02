@@ -150,6 +150,9 @@ function main() {
       // Per-fold meta-ranker fit detail: the objective inner validation chose, the number of
       // rounds early stopping kept, and the in-sample vs out-of-sample rank IC gap.
       metaFit: res.foldReports.filter((f) => !f.skipped && f.diagnostics.metaFit).map((f) => ({ fold: f.fold, ...f.diagnostics.metaFit })),
+      // Portfolio parameters each arm's TRAINING window selected, per fold. Recorded so the
+      // reader can see the search was chronological and what it actually chose.
+      portfolioSelection: res.foldReports.filter((f) => !f.skipped && f.diagnostics.portfolio).map((f) => ({ fold: f.fold, ...f.diagnostics.portfolio })),
       holdout: res.holdout, development: res.development,
       comparison: F.scoreboard.compare(sb),
       scoreboardRows: res.scoreboardRows,
@@ -176,6 +179,7 @@ function main() {
     contract: {
       execution: cfg.execution, target: cfg.target, horizons: cfg.horizons,
       universePolicy: cfg.universe, walkforward: cfg.walkforward,
+      portfolioSearch: { selectParameters: cfg.portfolio.selectParameters, grid: cfg.portfolio.parameterGrid, metric: 'tranche mean residual-net Sharpe on training-window out-of-fold predictions' },
       features: { version: cfg.features.version, crossSectionScope: cfg.features.crossSectionScope, includeDateConstant: cfg.features.includeDateConstant },
       costs: cfg.costs, portfolio: cfg.portfolio, metaRanker: cfg.metaRanker,
     },

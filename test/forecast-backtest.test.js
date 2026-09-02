@@ -163,6 +163,65 @@ test('turnover is zero for an identical sleeve and one for a disjoint one', () =
   assert.equal(BT.turnoverBetween(null, a), 1, 'the first sleeve is a full buy');
 });
 
+test('the expected-return map is fitted on TRAIN rows and is monotone in the score', () => {
+  const rnd = FX.rng(53);
+  const rows = [];
+  for (let d = 0; d < 120; d++) {
+    const date = `D${String(d).padStart(4, '0')}`;
+    for (let i = 0; i < 60; i++) {
+      const score = rnd();
+      rows.push({ decisionDate: date, ticker: `T${i}`, score, label: { residualReturn: 0.02 * (score - 0.5) + (rnd() - 0.5) * 0.04 } });
+    }
+  }
+  const map = BT.fitExpectedReturnMap(rows);
+  assert.ok(map, 'a 7200-row training sample should support a map');
+  assert.equal(map.values.length, map.bins);
+  for (let i = 1; i < map.values.length; i++) {
+    assert.ok(map.values[i] >= map.values[i - 1] - 1e-12, 'the map must not invert — a higher score cannot mean a lower expected return');
+  }
+  assert.ok(BT.expectedReturnAt(map, 0.95) > BT.expectedReturnAt(map, 0.05), 'the planted signal must be recovered');
+  assert.equal(BT.fitExpectedReturnMap(rows.slice(0, 200)), null, 'too thin a sample yields NO map rather than a fitted-on-noise one');
+});
+
+test('the SWITCH-COST TEST refuses a swap whose edge does not clear the round trip', () => {
+  const c = FX.testConfig({ portfolio: { switchCostTest: true, noTradeBand: 1, topK: 2, weighting: 'equal', maxWeightPerName: 1, maxWeightPerSector: 1, longOnly: true, quantiles: 5, overlappingSleeves: true } });
+  const row = (ticker, score) => ({ decisionDate: 'D1', ticker, sector: 'Technology', score, adv: 1e6, price: 50, label: { rawReturn: 0.01, residualReturn: 0.005 } });
+  const previous = [{ ...row('A', 0.9), weight: 0.5 }, { ...row('B', 0.8), weight: 0.5 }];
+
+  // micro tier: 1.5% round trip, so the hurdle to swap is ~1.5% of expected edge.
+  const tiny = { bins: 10, values: [0, 0.0001, 0.0002, 0.0003, 0.0004, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009], rows: 1e6, dates: 100 };
+  const keep = BT.selectSleeve([row('C', 0.99), row('A', 0.9), row('B', 0.8)], c, { topK: 2, weighting: 'equal', previous, expectedMap: tiny });
+  assert.deepEqual(keep.members.map((m) => m.ticker).sort(), ['A', 'B'], 'a 0.09% edge cannot justify a 1.5% round trip');
+
+  // A large edge clears it and the swap happens.
+  const big = { bins: 10, values: [0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09], rows: 1e6, dates: 100 };
+  const swap = BT.selectSleeve([row('C', 0.99), row('A', 0.9), row('B', 0.8)], c, { topK: 2, weighting: 'equal', previous, expectedMap: big });
+  assert.ok(swap.members.some((m) => m.ticker === 'C'), 'an edge far above the round trip must be taken');
+});
+
+test('portfolio parameters are selected on TRAINING rows, and the grid is reported', () => {
+  const rnd = FX.rng(59);
+  const persistent = Array.from({ length: 60 }, () => rnd());
+  const rows = [];
+  for (let d = 0; d < 150; d++) {
+    const date = `D${String(d).padStart(4, '0')}`;
+    for (let i = 0; i < 60; i++) {
+      const sig = 0.8 * persistent[i] + 0.2 * rnd();
+      const raw = 0.02 * (sig - 0.5) + (rnd() - 0.5) * 0.04;
+      rows.push({ decisionDate: date, ticker: `T${i}`, sector: ['Technology', 'Energy'][i % 2], score: sig, adv: 3e7, price: 50, label: { rawReturn: raw, residualReturn: raw - 0.0005, labelEnd: date } });
+    }
+  }
+  const c = FX.testConfig({ portfolio: { selectParameters: true, topK: 20, noTradeBand: 2, switchCostTest: true, weighting: 'equal', maxWeightPerName: 0.2, maxWeightPerSector: 0.6, longOnly: true, quantiles: 5, overlappingSleeves: true, parameterGrid: { topK: [10, 20], noTradeBand: [1, 4], switchCostTest: [false, true] } } });
+  const map = BT.fitExpectedReturnMap(rows);
+  const sel = BT.selectPortfolioParameters(rows, c, { horizon: 5, stride: 1, expectedMap: map });
+  assert.ok(sel.tried.length >= 4, 'every grid cell is reported, not just the winner');
+  assert.ok([10, 20].includes(sel.selected.topK));
+  assert.ok([1, 4].includes(sel.selected.noTradeBand));
+  assert.match(sel.metric, /training-window out-of-fold/);
+  for (const cell of sel.tried) assert.ok('residualNetSharpe' in cell && 'turnover' in cell);
+  assert.ok(sel.best.residualNetSharpe >= Math.max(...sel.tried.map((t) => (Number.isFinite(t.residualNetSharpe) ? t.residualNetSharpe : -Infinity))) - 1e-12);
+});
+
 test('equityStats compounds and reports a real drawdown', () => {
   const s = BT.equityStats([0.1, -0.5, 0.1], 252);
   assert.ok(Math.abs(s.totalReturn - (1.1 * 0.5 * 1.1 - 1)) < 1e-12);

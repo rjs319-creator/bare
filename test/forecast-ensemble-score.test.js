@@ -153,7 +153,7 @@ const scoreRows = (n, seed = 3) => {
     rowKey: `r${i}`, rankerScore: rnd(), expectedResidualReturn: (rnd() - 0.5) * 0.05,
     probabilities: { 0: rnd(), drawdown: rnd() * 0.5 },
     intervalWidth80: 0.02 + rnd() * 0.05, agreement: rnd(), reliability: 0.5,
-    estimatedCostPct: 0.001 + rnd() * 0.002,
+    estimatedCostFraction: 0.001 + rnd() * 0.002,
     quality: { featureCoverage: 0.9 + rnd() * 0.1, staleSessions: 0 },
   }));
 };
@@ -188,7 +188,7 @@ test('the score mapping refuses to be fitted on a thin history', () => {
 });
 
 test('the score is monotone in the ranker when everything else is held constant', () => {
-  const base = { probabilities: { 0: 0.5, drawdown: 0.3 }, intervalWidth80: 0.03, agreement: 0.7, reliability: 0.5, estimatedCostPct: 0.001, quality: { featureCoverage: 1, staleSessions: 0 }, expectedResidualReturn: 0.01 };
+  const base = { probabilities: { 0: 0.5, drawdown: 0.3 }, intervalWidth80: 0.03, agreement: 0.7, reliability: 0.5, estimatedCostFraction: 0.001, quality: { featureCoverage: 1, staleSessions: 0 }, expectedResidualReturn: 0.01 };
   const rows = Array.from({ length: 30 }, (_, i) => ({ rowKey: `r${i}`, rankerScore: i / 30, ...base }));
   const out = S.scoreDate(rows, cfg);
   for (let i = 1; i < out.length; i++) {
@@ -197,14 +197,14 @@ test('the score is monotone in the ranker when everything else is held constant'
 });
 
 test('tied inputs produce tied scores', () => {
-  const same = { rankerScore: 0.5, expectedResidualReturn: 0.01, probabilities: { 0: 0.6, drawdown: 0.2 }, intervalWidth80: 0.03, agreement: 0.8, reliability: 0.5, estimatedCostPct: 0.001, quality: { featureCoverage: 1, staleSessions: 0 } };
+  const same = { rankerScore: 0.5, expectedResidualReturn: 0.01, probabilities: { 0: 0.6, drawdown: 0.2 }, intervalWidth80: 0.03, agreement: 0.8, reliability: 0.5, estimatedCostFraction: 0.001, quality: { featureCoverage: 1, staleSessions: 0 } };
   const rows = [{ rowKey: 'a', ...same }, { rowKey: 'b', ...same }, { rowKey: 'c', ...same }];
   const out = S.scoreDate(rows, cfg);
   assert.equal(new Set(out.map((r) => r.opportunityScore)).size, 1, 'identical inputs must score identically');
 });
 
 test('a row with no usable components gets NO score and an explicit status', () => {
-  const out = S.scoreDate([{ rowKey: 'x', rankerScore: null, expectedResidualReturn: null, probabilities: {}, intervalWidth80: null, agreement: null, reliability: null, estimatedCostPct: null, quality: null }], cfg);
+  const out = S.scoreDate([{ rowKey: 'x', rankerScore: null, expectedResidualReturn: null, probabilities: {}, intervalWidth80: null, agreement: null, reliability: null, estimatedCostFraction: null, quality: null }], cfg);
   assert.equal(out[0].opportunityScore, null);
   assert.equal(out[0].scoreStatus, S.STATUS.INSUFFICIENT);
 });

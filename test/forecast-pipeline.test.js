@@ -253,7 +253,7 @@ test('inference produces ranked, bounded, fully-stamped scored rows for the late
     assert.equal(r.targetDefinition, cfg.target.definition);
     assert.ok(r.quality.survivorshipSafe === false);
     assert.ok('ridge' in r.componentAvailability);
-    assert.ok(Number.isFinite(r.estimatedCostPct));
+    assert.ok(Number.isFinite(r.estimatedCostFraction));
     assert.ok(r.rank >= 1 && r.rank <= h.rows.length);
     assert.ok(r.lineage.manifestHash, 'every served row carries its lineage');
     prevScore = r.opportunityScore ?? prevScore;
@@ -263,6 +263,47 @@ test('inference produces ranked, bounded, fully-stamped scored rows for the late
     || h.rankerBackend !== 'dynamic-ensemble-fallback', 'the top row should not be the worst forecast');
   assert.ok(out.manifest.manifestHash);
   assert.ok(Array.isArray(out.capabilities.degraded));
+});
+
+test('SERVING scores the LATEST session; training still refuses an unfillable row', () => {
+  // REGRESSION. universe.eligibilityAt demanded the next session's open unconditionally, so on
+  // the newest date — where the entry bar is TOMORROW and has not happened — every name was
+  // excluded and op=forecastrank could never score the current session. The earlier pipeline
+  // test missed it because its decision dates stopped 15 sessions short of the panel's end.
+  const U = require('../lib/forecast/universe');
+  const last = panel.sessions[panel.sessions.length - 1];
+
+  assert.equal(U.buildUniverseSnapshot(panel, last, cfg, { requireEntryBar: true }).size, 0,
+    'training must still refuse a row whose fill never happened — it cannot be labelled');
+  assert.ok(U.buildUniverseSnapshot(panel, last, cfg, { requireEntryBar: false }).size > 0,
+    'serving must admit the latest session: a pending fill is the normal state of a live prediction');
+
+  // And the two paths must stay byte-identical wherever the entry bar DOES exist.
+  const mid = panel.sessions[panel.sessions.length - 40];
+  const a = U.buildUniverseSnapshot(panel, mid, cfg, { requireEntryBar: true });
+  const b = U.buildUniverseSnapshot(panel, mid, cfg, { requireEntryBar: false });
+  assert.deepEqual(a.members.map((m) => m.ticker), b.members.map((m) => m.ticker));
+
+  // End to end: the dataset builder in serving mode yields rows for the newest session.
+  const served = F.dataset.buildPanelRows({ panel, dates: [last], cfg, requireLabel: false });
+  assert.ok((served.rowsByHorizon.get(5) || []).length > 0, 'serving mode must produce rows at the newest session');
+  const trained = F.dataset.buildPanelRows({ panel, dates: [last], cfg, requireLabel: true });
+  assert.equal((trained.rowsByHorizon.get(5) || []).length, 0, 'training mode must not');
+});
+
+test('a panel too short to cross-fit says WHICH constraint bound, with numbers', () => {
+  const short = FX.buildPanel({ sessions: 340, names: 30, seed: 77 });
+  const out = F.infer.runInference({
+    panel: short, cfg, caps, asOf: short.sessions[short.sessions.length - 1],
+    horizons: [5], trainSessions: 500, dateStride: 5,
+  });
+  assert.equal(out.ok, true);
+  const h = out.horizons[5];
+  assert.equal(h.ok, false);
+  assert.ok(h.detail, 'a refusal must carry the arithmetic, not just a sentence');
+  assert.ok(Number.isFinite(h.detail.labelledTrainingDates));
+  assert.equal(h.detail.minHistorySessions, cfg.universe.minHistorySessions);
+  assert.match(h.detail.hint, /lengthen the panel|lower universe.minHistorySessions|lower walkforward.innerFolds/);
 });
 
 test('inference refuses rather than guesses when the as-of date is not on the axis', () => {
