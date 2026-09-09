@@ -198,3 +198,11 @@ test('real tool schemas in the migrated modules survive strict derivation', () =
     walk(s.input_schema);
   }
 });
+
+test('callFableTool: request validation failures are values, not throws (callers dropped their try/catch)', async () => {
+  const F = require('../lib/fable-call');
+  const client = { beta: { messages: { create: async () => { throw new Error('should not be reached'); } } } };
+  const r = await F.callFableTool({ tool: { name: 't', input_schema: { type: 'object', properties: {} } }, messages: [{ role: 'user', content: 'x' }], maxTokens: 'nope', client, label: 'validation' });
+  assert.equal(r.input, null);
+  assert.match(r.error, /maxTokens/);
+});

@@ -6308,7 +6308,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <div class="bt-eff-sub">Regime: <b>${esc(regime)}</b> — long gate is <b>${canLong ? 'OPEN ✓' : 'CLOSED ✗ (risk-off: no new longs)'}</b>.</div>
       </div>
       <div class="bt-eff">
-        <div class="bt-eff-head">🅰 Sleeve A · Conviction longs <span style="color:var(--text-dim);font-weight:400">(top quintile, live)</span></div>
+        <div class="bt-eff-head">🅰 Sleeve A · Conviction longs <span style="color:var(--text-dim);font-weight:400">(top quintile · registry shadow, zero weight)</span></div>
         ${aCards}
       </div>
       <div class="bt-eff">

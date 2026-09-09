@@ -352,7 +352,7 @@ const RETAINED_TEXT = {
 // lib/decision.js NEGATIVE_TILT) used to render like any other card, plan and all, with
 // the reason buried in the expert lane. Say it on the card.
 function negativeChip(sig) {
-  if (!(Number.isFinite(sig.expectancyTilt) && sig.expectancyTilt <= 0.1)) return '';
+  if (sig.expectancyTiltNegative !== true) return '';
   return `<span class="td-neg" style="color:var(--red);border:1px solid var(--red);border-radius:4px;padding:0 4px" title="${esc(sig.expectancyTiltWhy || 'realized record is significantly negative')}">⛔ evidence negative — ranked out</span>`;
 }
 
