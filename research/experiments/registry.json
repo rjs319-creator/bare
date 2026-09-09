@@ -27146,6 +27146,439 @@
       "immutable": true
     },
     {
+      "recordedAt": "2026-09-09T17:03:11.973Z",
+      "id": "insider-cluster-residual-2026-09",
+      "hypothesis": "Open-market cluster purchases by ≥2 distinct insiders (14-day window, ≥$50k combined; event date = latest filing date) in small/micro-cap names carry positive 21-session COST-NET forward return in excess of matched non-event controls (same decision date, same as-of ADV tier, same 6-1 momentum quintile).",
+      "family": "alt-signals",
+      "frozenConfig": {
+        "id": "insider-cluster-residual-2026-09",
+        "family": "alt-signals",
+        "hypothesisId": "insider-cluster-residual",
+        "declaredBeforeReadingResults": true,
+        "eventFrom": "2022-01-03",
+        "eventTo": "2026-03-20",
+        "holds": [
+          5,
+          21,
+          63
+        ],
+        "primaryCell": "RES_21",
+        "cells": [
+          "RES_5",
+          "RES_21",
+          "RES_63"
+        ],
+        "momLookback": 126,
+        "momSkip": 5,
+        "advLookback": 60,
+        "minAdv": 500000,
+        "maxAdv": 20000000,
+        "minPrice": 1,
+        "minHistoryBars": 126,
+        "cooldownSessions": 21,
+        "controlsPerEvent": 20,
+        "minControls": 5,
+        "poolSize": 3000,
+        "seed": 20260909,
+        "placeboShift": 126,
+        "minEvents": 200,
+        "minDates": 60,
+        "fdrAlpha": 0.1,
+        "blocks": 4,
+        "quintiles": 5,
+        "drawdownFrac": 0.7,
+        "drawdownLookback": 252,
+        "maxPricePerShare": 100000,
+        "maxTxValue": 1000000000,
+        "entry": "next session OPEN after the decision bar (last bar ≤ filing date); exit close at +H",
+        "outcome": "event cost-net return − mean matched-control cost-net return (pct); SPY-excess fallback below minControls, flagged",
+        "multipleTesting": "Benjamini-Hochberg across the 3 cells at q ≤ 0.10",
+        "promisingGate": "RES_21 mean > 0 AND q ≤ 0.10 AND ≥3/4 blocks positive AND placebo |mean| < ½ event mean with CI spanning zero",
+        "insufficient": "primary events < 200 or distinct decision dates < 60"
+      },
+      "dataSnapshot": {
+        "buyNames": 5789,
+        "clustersRaw": 10133,
+        "scored": 3396,
+        "primary": 2369,
+        "attrition": {
+          "noPrice": 4009,
+          "noDecisionBar": 267,
+          "beforeWindow": 667,
+          "afterWindow": 264,
+          "tooLittleHistory": 145,
+          "subDollar": 58,
+          "illiquid": 784,
+          "liquidTier": 987,
+          "tenB51": 62,
+          "cooled": 543,
+          "noDecisionBarFwd": 0,
+          "truncatedHistory": 66,
+          "badPrices": 0,
+          "extremeMove": 151,
+          "noBenchmark": 0,
+          "ineligible": 0
+        },
+        "matchedShare": 0.9992
+      },
+      "trialCount": 3,
+      "results": {
+        "primary": {
+          "RES_5": {
+            "events": 2361,
+            "dates": 833,
+            "avg": 0.64,
+            "ci95": {
+              "lo": 0.2,
+              "hi": 1.09
+            },
+            "t": 2.8777,
+            "p": 0.0042,
+            "effN": 794,
+            "blocks": "4+/4"
+          },
+          "RES_21": {
+            "events": 2350,
+            "dates": 832,
+            "avg": 1.36,
+            "ci95": {
+              "lo": 0.25,
+              "hi": 2.58
+            },
+            "t": 2.4139,
+            "p": 0.0163,
+            "effN": 721,
+            "blocks": "3+/4"
+          },
+          "RES_63": {
+            "events": 2317,
+            "dates": 827,
+            "avg": 1.85,
+            "ci95": {
+              "lo": 0.35,
+              "hi": 3.59
+            },
+            "t": 2.4148,
+            "p": 0.0161,
+            "effN": 739,
+            "blocks": "4+/4"
+          }
+        },
+        "matchedOnly": {
+          "RES_5": {
+            "events": 2359,
+            "dates": 833,
+            "avg": 0.64,
+            "ci95": {
+              "lo": 0.21,
+              "hi": 1.09
+            },
+            "t": 2.879,
+            "p": 0.004,
+            "effN": 793,
+            "blocks": "4+/4"
+          },
+          "RES_21": {
+            "events": 2348,
+            "dates": 832,
+            "avg": 1.35,
+            "ci95": {
+              "lo": 0.25,
+              "hi": 2.57
+            },
+            "t": 2.3983,
+            "p": 0.0164,
+            "effN": 721,
+            "blocks": "3+/4"
+          },
+          "RES_63": {
+            "events": 2315,
+            "dates": 827,
+            "avg": 1.86,
+            "ci95": {
+              "lo": 0.36,
+              "hi": 3.59
+            },
+            "t": 2.4291,
+            "p": 0.0152,
+            "effN": 740,
+            "blocks": "4+/4"
+          }
+        },
+        "placebo": {
+          "RES_5": {
+            "events": 1968,
+            "dates": 723,
+            "avg": -0.12,
+            "ci95": {
+              "lo": -0.58,
+              "hi": 0.39
+            },
+            "t": -0.508,
+            "p": 0.6261,
+            "effN": 621,
+            "blocks": "1+/4"
+          },
+          "RES_21": {
+            "events": 1963,
+            "dates": 723,
+            "avg": -0.21,
+            "ci95": {
+              "lo": -1.09,
+              "hi": 0.68
+            },
+            "t": -0.4671,
+            "p": 0.6386,
+            "effN": 682,
+            "blocks": "2+/4"
+          },
+          "RES_63": {
+            "events": 1939,
+            "dates": 721,
+            "avg": -0.96,
+            "ci95": {
+              "lo": -2.65,
+              "hi": 0.84
+            },
+            "t": -1.1154,
+            "p": 0.2636,
+            "effN": 721,
+            "blocks": "2+/4"
+          }
+        },
+        "fdr": [
+          {
+            "id": "RES_5",
+            "p": 0.004169256454912215,
+            "q": 0.012507769364736646,
+            "rank": 1,
+            "index": 0,
+            "survives": true,
+            "alpha": 0.1
+          },
+          {
+            "id": "RES_21",
+            "p": 0.01626864476096744,
+            "q": 0.01626864476096744,
+            "rank": 3,
+            "index": 1,
+            "survives": true,
+            "alpha": 0.1
+          },
+          {
+            "id": "RES_63",
+            "p": 0.016120471535552124,
+            "q": 0.01626864476096744,
+            "rank": 2,
+            "index": 2,
+            "survives": true,
+            "alpha": 0.1
+          }
+        ],
+        "verdict": "research-promising",
+        "cohorts": {
+          "singleBuyer": {
+            "events": 4944,
+            "RES_21": {
+              "events": 4928,
+              "dates": 921,
+              "avg": 0.99,
+              "ci95": {
+                "lo": 0.01,
+                "hi": 2.11
+              },
+              "t": 1.9725,
+              "p": 0.0491,
+              "effN": 433,
+              "blocks": "4+/4"
+            }
+          },
+          "tenB51": {
+            "events": 40,
+            "RES_21": {
+              "events": 39,
+              "dates": 35,
+              "avg": 3.72,
+              "ci95": {
+                "lo": -0.21,
+                "hi": 7.66
+              },
+              "t": 1.8524,
+              "p": 0.0728,
+              "effN": 34,
+              "blocks": "4+/4"
+            }
+          },
+          "liquidTier": {
+            "events": 965,
+            "RES_21": {
+              "events": 962,
+              "dates": 536,
+              "avg": 0.06,
+              "ci95": {
+                "lo": -0.95,
+                "hi": 1.22
+              },
+              "t": 0.1161,
+              "p": 0.9041,
+              "effN": 536,
+              "blocks": "3+/4"
+            }
+          },
+          "officerDirectorOnly": {
+            "events": 1473,
+            "RES_21": {
+              "events": 1466,
+              "dates": 637,
+              "avg": 1.66,
+              "ci95": {
+                "lo": 0.58,
+                "hi": 2.8
+              },
+              "t": 3.0215,
+              "p": 0.0026,
+              "effN": 556,
+              "blocks": "3+/4"
+            }
+          },
+          "owners3plus": {
+            "events": 1355,
+            "RES_21": {
+              "events": 1346,
+              "dates": 667,
+              "avg": 1.24,
+              "ci95": {
+                "lo": 0.02,
+                "hi": 2.48
+              },
+              "t": 1.9971,
+              "p": 0.0471,
+              "effN": 667,
+              "blocks": "3+/4"
+            }
+          },
+          "value250k": {
+            "events": 1462,
+            "RES_21": {
+              "events": 1445,
+              "dates": 705,
+              "avg": 1.16,
+              "ci95": {
+                "lo": -0.04,
+                "hi": 2.4
+              },
+              "t": 1.8868,
+              "p": 0.0586,
+              "effN": 705,
+              "blocks": "4+/4"
+            }
+          },
+          "drawdown": {
+            "events": 1075,
+            "RES_21": {
+              "events": 1068,
+              "dates": 528,
+              "avg": 2.19,
+              "ci95": {
+                "lo": 0.54,
+                "hi": 3.91
+              },
+              "t": 2.6131,
+              "p": 0.0094,
+              "effN": 528,
+              "blocks": "3+/4"
+            }
+          },
+          "noDrawdown": {
+            "events": 894,
+            "RES_21": {
+              "events": 883,
+              "dates": 522,
+              "avg": 0.78,
+              "ci95": {
+                "lo": -0.39,
+                "hi": 1.88
+              },
+              "t": 1.3778,
+              "p": 0.1718,
+              "effN": 349,
+              "blocks": "2+/4"
+            }
+          },
+          "tierSmall": {
+            "events": 881,
+            "RES_21": {
+              "events": 879,
+              "dates": 500,
+              "avg": 1.18,
+              "ci95": {
+                "lo": -0.39,
+                "hi": 2.99
+              },
+              "t": 1.4767,
+              "p": 0.1413,
+              "effN": 500,
+              "blocks": "3+/4"
+            }
+          },
+          "tierMicro": {
+            "events": 1488,
+            "RES_21": {
+              "events": 1471,
+              "dates": 713,
+              "avg": 1.06,
+              "ci95": {
+                "lo": 0.06,
+                "hi": 2.11
+              },
+              "t": 2.0695,
+              "p": 0.0382,
+              "effN": 656,
+              "blocks": "4+/4"
+            }
+          },
+          "legacyUniverse": {
+            "events": 104,
+            "RES_21": {
+              "events": 102,
+              "dates": 96,
+              "avg": 2.43,
+              "ci95": {
+                "lo": -2.59,
+                "hi": 7.45
+              },
+              "t": 0.949,
+              "p": 0.3459,
+              "effN": 77,
+              "blocks": "3+/4"
+            }
+          },
+          "exLegacy": {
+            "events": 2265,
+            "RES_21": {
+              "events": 2248,
+              "dates": 818,
+              "avg": 1.28,
+              "ci95": {
+                "lo": 0.16,
+                "hi": 2.51
+              },
+              "t": 2.23,
+              "p": 0.0261,
+              "effN": 605,
+              "blocks": "3+/4"
+            }
+          }
+        }
+      },
+      "artifact": {
+        "file": "/Users/ravishah/mna-alpha/research/data/insider-cluster-residual/insider-cluster-residual-result.json",
+        "sha256": "3478bd75412ab17fd76e983cd1d84c0a74b1c27298b97cb97700e4315c139c39",
+        "bytes": 902045
+      },
+      "immutable": true
+    },
+    {
       "recordedAt": "2026-08-13T22:53:08.997Z",
       "id": "intraday-window-timing-2026-08",
       "hypothesis": "Long entries during 10:00-11:00 or 14:00-15:00 ET earn higher same-holding-period returns than entries at other times of day.",
