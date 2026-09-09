@@ -237,7 +237,7 @@ function signalCard(sig, legend) {
     + `<span class="td-tk" data-live="${esc(sig.ticker)}">${esc(sig.ticker)}</span>`
     + `<span class="td-co">${esc(sig.company || sig.setup || '')}</span>`
     + `<span class="td-score" title="Composite: confidence × regime-fit × execution × resolved-expectancy × independent-evidence">${sig.score}</span></div>`
-    + `<div class="td-chips">` + classChip(sig) + retainedChip(sig) + `<span class="td-state ${scls}">${si} ${slbl}</span>` + ageChip(sig)
+    + `<div class="td-chips">` + classChip(sig) + negativeChip(sig) + retainedChip(sig) + `<span class="td-state ${scls}">${si} ${slbl}</span>` + ageChip(sig)
     + (sig.side === 'short' ? `<span class="td-short" title="A short setup — profits if it falls (favored in risk-off)">🔻 SHORT</span>` : '')
     + familyChip(sig)
     + `<span class="td-setup">${esc(sig.setup || sig.source)}</span>`
@@ -284,6 +284,8 @@ function expertDetails(sig) {
   if (d) {
     body += row('Comparable score', `${d.comparableConfidence} (${d.normalizationBasis})`)
       + row('Formula', d.formula)
+      + row('Score informativeness', d.scoreInformativeness ? `× ${d.scoreInformativeness.w} — ${d.scoreInformativeness.verdict}${d.scoreInformativeness.ic != null ? ` (IC ${d.scoreInformativeness.ic}, n ${d.scoreInformativeness.n})` : ''}` : null)
+      + row('Informed confidence', d.informedConfidence)
       + row('confidence', d.confidence) + row('× regime fit', d.regimeFit) + row('× execution', d.execution)
       + row('× realized tilt', d.expectancyTilt) + row('× evidence breadth', d.evidenceMult)
       + row('× cost penalty', d.costPenalty) + row('× remaining edge', d.remainingMult);
@@ -346,6 +348,14 @@ const RETAINED_TEXT = {
   INVALIDATED: ['🚫 INVALIDATED', 'The original plan is broken (stop hit or expired) — not a trade.'],
   DATA_STALE: ['🕓 DATA STALE', 'Required data is stale or incomplete — no fresh judgement is offered today.'],
 };
+// A row the realized record has RANKED OUT (date-level cost-net CI entirely below zero,
+// lib/decision.js NEGATIVE_TILT) used to render like any other card, plan and all, with
+// the reason buried in the expert lane. Say it on the card.
+function negativeChip(sig) {
+  if (!(Number.isFinite(sig.expectancyTilt) && sig.expectancyTilt <= 0.1)) return '';
+  return `<span class="td-neg" style="color:var(--red);border:1px solid var(--red);border-radius:4px;padding:0 4px" title="${esc(sig.expectancyTiltWhy || 'realized record is significantly negative')}">⛔ evidence negative — ranked out</span>`;
+}
+
 function retainedChip(sig) {
   const t = RETAINED_TEXT[sig.retainedLabel];
   if (!t || sig.evidenceClass === 'ACTIONABLE') return '';

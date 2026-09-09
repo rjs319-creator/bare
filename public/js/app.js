@@ -1395,7 +1395,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const gt = c.ghost?.tier;
       if (gt === 'GHOST' || gt === 'STALKING')
         add(tk, { icon: '👻', label: gt === 'GHOST' ? 'Ghost' : 'Stalking', route: 'ghost', color: '#a78bfa', title: 'Showing quiet accumulation in the Ghost Accumulation screener' });
-      if (c.conviction && (c.conviction.sleeveA || c.conviction.pctile >= 80))
+      // 🎯 lights only while the conviction sleeve holds registry clearance (server stamps
+      // `eligible`; it is a zero-weight shadow strategy today, so the badge stays dark).
+      if (c.conviction && c.conviction.eligible === true && (c.conviction.sleeveA || c.conviction.pctile >= 80))
         add(tk, { icon: '🎯', label: 'Top conviction', route: 'custom', color: '#06c4d4', title: 'Top-quintile conviction in the Adaptive Momentum model' });
     });
     // Day-trade movers, enriched with each name's relative volume (RVOL) — the

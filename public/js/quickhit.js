@@ -9,7 +9,7 @@ import { fetchPrices } from './live-price.js';
 import { rankThemes, leadingThemeSet } from './themes.js';
 import {
   rankOpportunities, modelHealth, buildReliability, conviction,
-  oppCardInner, collectAiSignals, AI_SRC,
+  oppCardInner, collectAiSignals, AI_SRC, splitEvidenceNegative, evidenceNegativeNote,
 } from './opportunities.js';
 
 const TOP_N = 5;
@@ -253,11 +253,14 @@ export async function loadQuickHit(container, bindNav) {
 
   const reliability = buildReliability(sb && sb.groups);
   const health = modelHealth(drift);
-  const pool = [
+  // Evidence-negative lanes (op=scoreboard `negativeLanes`) never take a Top-5 or
+  // best-by-cap slot: a lane whose own realized record is CI-negative at its contract
+  // is an excluded control, shown below as such rather than as a plan.
+  const { kept: pool, excluded: heldOut } = splitEvidenceNegative([
     ...rankScope(large, 'large', reliability, health.factor),
     ...rankScope(small, 'small', reliability, health.factor),
     ...rankScope(micro, 'micro', reliability, health.factor),
-  ];
+  ], sb && sb.negativeLanes);
 
   // Cross-confirm with the 5 AI screeners: a name independently flagged by an AI angle
   // gets a BADGE only. The AI screeners are registry-shadow strategies, so their
@@ -322,6 +325,7 @@ export async function loadQuickHit(container, bindNav) {
     const labels = erroredCaps.map(cap => CAP_META[cap].label).join(', ');
     html += `<div class="dt-note" style="border-left-color:var(--amber,#f59e0b)">⚠️ <b>${esc(labels)} screen${erroredCaps.length > 1 ? 's' : ''} unavailable</b> — the fetch failed, so ${erroredCaps.length > 1 ? 'those tiers are' : 'that tier is'} missing from this shortlist (not screened empty). Try Refresh in a moment.</div>`;
   }
+  html += evidenceNegativeNote(heldOut);
   // The "across any cap size" abstention is only honest when EVERY scope actually answered.
   html += top.length
     ? top.map((c, i) => qhCard(c, i + 1)).join('')

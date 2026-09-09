@@ -493,6 +493,10 @@ async function handleRequest(req, res) {
     //    off this whole-cohort distribution.
     const convRegime = ghostResult.regime;
     const convCanLong = longOk(convRegime);
+    // The conviction sleeve is a registry SHADOW strategy ("no user-facing badge may
+    // consume it"). Its eligibility rides on every candidate so the client's 🎯 badge
+    // (app.js cross-tab join) gates on the registry, not on the percentile alone.
+    const convEligible = (() => { try { return require('../lib/strategy-gate').isTradeEligible('conviction'); } catch { return false; } })();
     const convAll = [];
     for (const g of ghostResult.longs) {
       const score = convictionScore(g.pillars, convRegime);
@@ -504,7 +508,7 @@ async function handleRequest(req, res) {
       const score = c.ghost ? convictionScore(c.ghost.pillars, convRegime) : null;
       if (score == null) { c.conviction = null; return; }
       const pctile = convPctile(score);
-      c.conviction = { score, pctile, sleeveA: convCanLong && pctile >= 80 };   // top quintile of the full cohort, long-eligible
+      c.conviction = { score, pctile, sleeveA: convCanLong && pctile >= 80, eligible: convEligible };   // top quintile of the full cohort, long-eligible
     });
     // Attach the WHY NOW verdict now that ghost + conviction are on each candidate.
     candidates.forEach(c => { c.whynow = whyNowFor(c, c.ghost, c.conviction); });

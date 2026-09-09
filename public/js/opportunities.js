@@ -39,6 +39,46 @@ export function buildReliability(groups) {
   return map;
 }
 
+// ── Evidence-negative lanes (2026-09-09) ────────────────────────────────────
+// op=scoreboard ships `negativeLanes`: section:tier:scope lanes whose date-level cost-net
+// record at their OWN contract horizon is CI-negative, well sampled and corroborated by an
+// adjacent horizon (server: lib/negative-lanes.js — derived from the ledger, never a
+// list). A candidate in such a lane is split out of the ranked list and shown as an
+// excluded control instead of a plan. Key contract mirrors lib/negative-lanes laneKey:
+// `${section}:${tier}:${scope||''}`; a screener candidate's tier is its `status` and
+// its scope the screen it came from. Pure; input untouched.
+// A /api/screener candidate names its universe as `capTier` ('Large'|'Small'|'Micro');
+// Quick Hit re-tags it with the lower-case scope. Scoreboard groups are keyed by the
+// lower-case scope, so every scope-keyed join must resolve through this one helper.
+export function candidateScope(c) {
+  return String((c && (c.scope || c.capTier)) || '').toLowerCase();
+}
+
+export function splitEvidenceNegative(list, lanes, section = 'screener') {
+  const arr = Array.isArray(lanes) ? lanes.filter(l => l && l.key) : [];
+  const items = Array.isArray(list) ? list : [];
+  if (!arr.length) return { kept: items, excluded: [] };
+  const byKey = new Map(arr.map(l => [l.key, l]));
+  const kept = [], excluded = [];
+  items.forEach(c => {
+    const lane = byKey.get(`${section}:${c.status || ''}:${candidateScope(c)}`);
+    if (lane) excluded.push({ ...c, evidenceNegative: lane }); else kept.push(c);
+  });
+  return { kept, excluded };
+}
+
+// One honest line for the excluded controls: which lanes, the record, how many names.
+export function evidenceNegativeNote(excluded) {
+  if (!Array.isArray(excluded) || !excluded.length) return '';
+  const byLane = new Map();
+  excluded.forEach(c => { const l = c.evidenceNegative; const e = byLane.get(l.key) || { lane: l, tickers: [] }; e.tickers.push(c.ticker); byLane.set(l.key, e); });
+  const parts = [...byLane.values()].map(({ lane, tickers }) => {
+    const rec = `${lane.avgNetExcess != null ? (lane.avgNetExcess > 0 ? '+' : '') + lane.avgNetExcess + '%' : 'n/a'} net @${lane.metric}, CI95 [${lane.ci95.lo}, ${lane.ci95.hi}], ${lane.effectiveDates} dates`;
+    return `<span class="opp-neg-lane" title="${esc(lane.reason || '')}"><b>${esc(lane.section)} · ${esc(lane.tier)}${lane.scope ? ' · ' + esc(lane.scope) : ''}</b> (${esc(rec)}): ${tickers.map(esc).join(', ')}</span>`;
+  });
+  return `<div class="dt-note opp-neg" style="border-left-color:var(--red)">⛔ <b>${excluded.length} candidate${excluded.length > 1 ? 's' : ''} held out — evidence-negative lane${byLane.size > 1 ? 's' : ''}.</b> Their own realized cost-net record is below zero with the date-level CI clear of it, so they are shown as excluded controls, not plays. ${parts.join(' · ')}</div>`;
+}
+
 // Model health from the apex model's ALREADY-RESOLVED picks (op=drift). This is the
 // loop operating NOW: the app grades its own recent picks and tilts accordingly.
 export function modelHealth(drift) {
@@ -75,7 +115,10 @@ export function rankOpportunities(results, reliability = {}, healthFactor = 1, l
       const ss = setupSignals(c);                                      // O'Neil/Minervini pre-breakout signals
       // Weights renormalized from the pre-RT-01 non-shadow terms (0.28q/0.18stage/0.12narr).
       const base = 0.48 * q + 0.31 * stage + 0.21 * narr + themeBoost + sm.boost + ss.boost;
-      const rec = c.ghost ? reliability[relKey('Ghost', c.ghost.tier, c.scope)] : null;   // display-only track record, scope-matched
+      // display-only track record, scope-matched. Candidates carry `capTier` ('Small'),
+      // not `scope` — the old `c.scope` read was always undefined, so this join never
+      // found a scoped group (silently unscoped since RT-07). candidateScope resolves it.
+      const rec = c.ghost ? reliability[relKey('Ghost', c.ghost.tier, candidateScope(c))] : null;
       const opp = Math.round(base);
       // Relative strength vs its OWN theme — leader or catch-up laggard.
       const tMom = themeMom[theme], myMom = c.factors?.mom63;
@@ -288,7 +331,8 @@ export async function loadOpportunities(container, scope = 'large', limit = 6) {
   const themesRanked = rankThemes(d.results);
   const { set: leadSet, list: leadingThemes } = leadingThemeSet(themesRanked, 4);
   const themeMom = Object.fromEntries(themesRanked.map(t => [t.theme, t.mom63]));
-  const ranked = rankOpportunities(d.results, reliability, health.factor, leadSet, themeMom);
+  const rankedAll = rankOpportunities(d.results, reliability, health.factor, leadSet, themeMom);
+  const { kept: ranked, excluded: heldOut } = splitEvidenceNegative(rankedAll, sb && sb.negativeLanes);
   const top = ranked.slice(0, limit);
 
   // Model-health line — DIAGNOSTIC ONLY. The Apex drift read comes from a registry-
@@ -323,6 +367,7 @@ export async function loadOpportunities(container, scope = 'large', limit = 6) {
       + `<span class="dt-dim opp-themes-hint">· ⭐ below favors early names <b>in</b> these themes that haven't run yet</span></div>`;
   }
   html += `<div class="dt-note" style="border-left-color:${trackCol}">${trackLine}</div>`;
+  html += evidenceNegativeNote(heldOut);
   html += top.length ? top.map(oppCard).join('') : `<div class="dt-note">No clean pre-breakout setups passed the screen today — that's normal on some days. Check back, or browse the full ${L('breakout', 'candidate screens')}.</div>`;
 
   // 🤖 AI Screeners strip — the actionable picks from the 5 AI-reasoning screeners (each a
