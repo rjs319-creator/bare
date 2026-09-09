@@ -26,6 +26,10 @@ Open-market cluster purchases by ≥2 distinct insiders in small/micro-cap names
 - **Comparison cohorts (descriptive only):** single-buyer events (≥ $25k, not inside any cluster window — study 69's frozen definition), 10b5-1 clusters, liquid-tier clusters, officer/director-only clusters, ≥3-owner clusters, ≥ $250k clusters, drawdown (≤ 0.70 × trailing-252 max) vs not, by ADV tier, by year, with vs without the 2026-08 universe names.
 - **Verdict (frozen):** `insufficient-data` if primary events < 200 or distinct decision dates < 60 — no claim either way. `research-promising` iff RES_21 mean > 0 AND BH q ≤ 0.10 AND ≥ 3/4 chronological blocks positive AND the placebo condition holds. Otherwise `not-confirmed`. A promising verdict earns only a **shadow prospective ledger** (registry `shadow`, weight 0); promotion follows the standard contract (≥50 episodes / ≥20 dates / CI clear / fill verification) on FUTURE filings.
 
+## §2a Data-quality amendment (declared 2026-09-09 after the bulk build's consistency check, BEFORE any event was constructed or any outcome computed)
+
+The bulk build reported 140 of 194,396 buy rows with absurd per-share prices (filers keyed transaction totals into the price field: REEMF, ASTI, GOBI…). Rows with price ≥ $100,000/share or value ≥ $1B are excluded as data errors and counted (`insaneRows`). This is a sanity filter on impossible inputs, not a parameter; it was fixed at these two round numbers without looking at any event or outcome.
+
 ## §3 Prohibitions
 
 No threshold tuning (window, owner count, dollar floors, tiers, momentum lookback, control count, cooldown, horizons, shift are frozen above). No subgroup becomes a claim. No added horizons or alternative benchmarks after reading results. One pass; the 2022-2026 window is then spent for this hypothesis; any confirmatory claim requires a NEW preregistration on future filings.

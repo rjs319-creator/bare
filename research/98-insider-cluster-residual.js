@@ -34,6 +34,7 @@ const FROZEN = Object.freeze({
   controlsPerEvent: 20, minControls: 5, poolSize: 3000, seed: 20260909,
   placeboShift: 126, minEvents: 200, minDates: 60, fdrAlpha: 0.10, blocks: 4,
   quintiles: 5, drawdownFrac: 0.70, drawdownLookback: 252,
+  maxPricePerShare: 1e5, maxTxValue: 1e9,   // §2a data-quality sanity (keyed-in totals), counted as insaneRows
   entry: 'next session OPEN after the decision bar (last bar ≤ filing date); exit close at +H',
   outcome: 'event cost-net return − mean matched-control cost-net return (pct); SPY-excess fallback below minControls, flagged',
   multipleTesting: 'Benjamini-Hochberg across the 3 cells at q ≤ 0.10',
@@ -162,9 +163,12 @@ async function study() {
 
   // 1) events per name (frozen cluster definition), split 10b5-1 at the cluster level
   const rawByName = new Map();
-  let namesWithBuys = 0, clustersRaw = 0;
+  let namesWithBuys = 0, clustersRaw = 0, insaneRows = 0;
   for (const [sym, txs] of buys) {
-    const clean = txs.filter(t => t && t.code === 'P' && t.shares > 0 && t.price > 0 && t.owner && t.date && t.filingDate);
+    // DATA-QUALITY SANITY (declared in preregistration §2a before the run, counted): a
+    // handful of bulk rows carry totals keyed into the per-share price field.
+    const clean = txs.filter(t => t && t.code === 'P' && t.shares > 0 && t.price > 0 && t.owner && t.date && t.filingDate)
+      .filter(t => { const ok = t.price < FROZEN.maxPricePerShare && (t.value || t.shares * t.price) < FROZEN.maxTxValue; if (!ok) insaneRows++; return ok; });
     if (!clean.length) continue;
     namesWithBuys++;
     const clusters = clusterEvents(clean).map(ev => {
@@ -323,7 +327,7 @@ async function study() {
   const brief = (c) => c && { events: c.events, dates: c.dates, avg: r4(c.avg), ci95: c.ci95, t: c.se ? r4(c.avg / c.se) : null, p: r4(c.p), effN: c.effectiveN, blocks: c.blockStability && `${c.blockStability.positive}+/${c.blockStability.blocks}` };
   const out = {
     frozen: FROZEN, generatedAt: new Date().toISOString(), runSeconds: +((Date.now() - t0) / 1000).toFixed(0),
-    data: { buyNames: buys.size, namesWithBuys, clustersRaw, eventNamesPriced: eventNames.size, pool: pool.size, attrition, scored: scored.length, primary: primaryRows.length, matchedShare: r4(primaryRows.filter(r => r.outcome.basis === 'matched').length / Math.max(1, primaryRows.length)) },
+    data: { buyNames: buys.size, namesWithBuys, insaneRows, clustersRaw, eventNamesPriced: eventNames.size, pool: pool.size, attrition, scored: scored.length, primary: primaryRows.length, matchedShare: r4(primaryRows.filter(r => r.outcome.basis === 'matched').length / Math.max(1, primaryRows.length)) },
     results, matchedOnly, placebo, fdr: fdrOut, verdict, cohorts,
   };
   const art = K.writeArtifact(OUT_DIR, 'insider-cluster-residual-result.json', out);
