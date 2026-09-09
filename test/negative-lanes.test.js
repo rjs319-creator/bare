@@ -96,3 +96,21 @@ test('negativeLanes: input is not mutated', () => {
   NL.negativeLanes(SUMMARY);
   assert.equal(JSON.stringify(SUMMARY), before);
 });
+
+test('adjacency: 20d and 1m are twins — a 1m-contract lane needs 10d or 3m to corroborate', () => {
+  assert.deepEqual(NL.adjacentKeys('1m'), ['10d', '3m']);
+  assert.deepEqual(NL.adjacentKeys('20d'), ['10d', '3m']);
+  assert.deepEqual(NL.adjacentKeys('5d'), ['3d', '10d']);
+  // CrossAsset contract is 1m, long side. Negative at 1m + 20d ONLY → not a lane.
+  const twinOnly = { section: 'CrossAsset', tier: 'Inline', scope: null, horizons: {
+    '10d': h(-0.5, dn(-2.0, 1.0, 20, 2), 20),
+    '20d': h(-3.0, dn(-5.0, -1.0, 20, 0), 20),
+    '1m': h(-3.1, dn(-5.1, -1.1, 20, 0), 20),
+  } };
+  assert.equal(NL.negativeLanes({ groups: [twinOnly] }).length, 0);
+  const withTenDay = { ...twinOnly, horizons: { ...twinOnly.horizons, '10d': h(-2.0, dn(-3.5, -0.5, 20, 0), 20) } };
+  const lanes = NL.negativeLanes({ groups: [withTenDay] });
+  assert.equal(lanes.length, 1);
+  assert.equal(lanes[0].metric, '1m');
+  assert.deepEqual(lanes[0].adjacentNegative, ['10d']);
+});

@@ -99,3 +99,26 @@ test('rankSignals: with the spread collapsed, the realized lane record still ord
   assert.equal(ranked[0].ticker, 'ERL', 'the lane with a CI clear of zero must out-rank the ranked-out lane regardless of raw score');
   assert.ok(ranked[0].score > ranked[1].score);
 });
+
+test('scoreInformativeness: a MERGED row is floored at the unmeasured spread, never flattened on its base section', () => {
+  assert.equal(D.scoreInformativeness(DECILE, 'screener', { mergedFrom: 3 }).w, D.MERGED_FLOOR_W);
+  assert.match(D.scoreInformativeness(DECILE, 'screener', { mergedFrom: 3 }).basis, /corroborated by 3 sources/);
+  assert.equal(D.scoreInformativeness(DECILE, 'screener', { mergedFrom: 1 }).w, 0);
+  assert.equal(D.scoreInformativeness(DECILE, 'Fade', { mergedFrom: 2 }).w, 1, 'a predictive verdict is not reduced by merging');
+  assert.equal(D.scoreInformativeness(null, 'screener', { mergedFrom: 3 }).w, 1, 'feature-off stays feature-off');
+});
+
+test('rankSignals: a corroborated screener row keeps half its spread; the ranked-out flag is explicit', () => {
+  const merged = { ...mk('MRG', 'screener', 88), mergedFrom: 3, sources: ['screener', 'ghost', 'rt'] };
+  const lone = mk('ONE', 'screener', 88);
+  const [a, b] = D.rankSignals([merged, lone], { regime, scoreboard: { groups: [], sectionDecile: DECILE } });
+  assert.equal(a.ticker, 'MRG');
+  assert.equal(a.scoreDecomposition.informedConfidence, 69);
+  assert.equal(b.scoreDecomposition.informedConfidence, 50);
+  assert.equal(a.expectancyTiltNegative, false);
+  const summary = { groups: [{ section: 'screener', tier: 'Breakout', horizons: { '5d': { avgExcess: -2, avgNetExcess: -2.1, netExcessN: 94, winRate: 40, n: 94,
+    dateNet: { n: 36, effectiveN: 30, avg: -1.9, se: 0.5, ci95: { lo: -4.25, hi: -0.32 } } } } }], sectionDecile: DECILE };
+  const [out] = D.rankSignals([mk('BRK', 'screener', 60, { tier: 'Breakout' })], { regime, scoreboard: summary });
+  assert.equal(out.expectancyTilt, D.NEGATIVE_TILT);
+  assert.equal(out.expectancyTiltNegative, true);
+});

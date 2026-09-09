@@ -4,6 +4,7 @@ const { LARGE, SMALL_CAPS, MICRO_CAPS, SECTOR_OF } = require('../lib/universe');
 const { fetchFundamentals, fetchInsiders } = require('../lib/fundamentals');
 const { runGhostAccumulationIndex, REGIME_WEIGHTS: GHOST_WEIGHTS, PILLAR_LABEL: GHOST_PILLAR_LABEL } = require('../lib/ghost');
 const { convictionScore, convictionWeights, longOk } = require('../lib/conviction');
+const { isTradeEligible } = require('../lib/strategy-gate');
 const apex = require('../lib/apex');
 const { composeWhyNow } = require('../lib/whynow');
 const { fetchMacro } = require('../lib/macro');
@@ -437,7 +438,7 @@ async function handleRequest(req, res) {
       // zero-weight frozen shadow benchmark (2026-08-12): a shadow model may not
       // light a user-facing badge any more than the conviction sleeve may. The badge
       // returns via a registry re-promotion, never a code edit here.
-      const apexBadgeEligible = (() => { try { return require('../lib/strategy-gate').isTradeEligible('custom'); } catch { return false; } })();
+      const apexBadgeEligible = isTradeEligible('custom');
       const standout = !!(apexBadgeEligible && apexHit && apexHit.tier === 'apex');
       return { level: r.verdict.level, headline: r.verdict.headline, forCount: r.forCase.length, standout };
     };
@@ -496,7 +497,7 @@ async function handleRequest(req, res) {
     // The conviction sleeve is a registry SHADOW strategy ("no user-facing badge may
     // consume it"). Its eligibility rides on every candidate so the client's 🎯 badge
     // (app.js cross-tab join) gates on the registry, not on the percentile alone.
-    const convEligible = (() => { try { return require('../lib/strategy-gate').isTradeEligible('conviction'); } catch { return false; } })();
+    const convEligible = isTradeEligible('conviction');
     const convAll = [];
     for (const g of ghostResult.longs) {
       const score = convictionScore(g.pillars, convRegime);
