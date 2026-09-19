@@ -28943,6 +28943,233 @@
       "immutable": true
     },
     {
+      "recordedAt": "2026-09-19T02:15:54.577Z",
+      "id": "ledger-conditional-structure-2026-09",
+      "hypothesis": "The app's own Scoreboard ledger carries conditional structure prior passes did not test: (A) a proven-negative long lane is a positive SHORT book net of round trip and borrow; (C1) entry weekday moves cost-net excess; (C2) a lane's realized excess persists or mean-reverts over its prior 10 dates.",
+      "family": "ledger-conditional",
+      "frozenConfig": {
+        "source": "public op=scoreboard persisted payload (date-level dateNet.values per section:tier:scope group at its lib/strategy-contracts metric)",
+        "A": {
+          "minDates": 15,
+          "shortNet": "-(net_t + rt) - rt - borrow(tier, H)",
+          "borrow": "lib/costs tier prior; sensitivity liquid 0.5% / small 6% / micro 25% / biotech 15% per yr",
+          "stat": "evidence-stats summarizeDateSeries (Newey-West floored IID + moving-block bootstrap), BH q<=0.10 over all tested lanes",
+          "promotable": "q<=0.10 & >=20 dates & >=3/4 positive blocks & conservative CI95 lo>0 & long-contract lane"
+        },
+        "C1": {
+          "cells": [
+            "Mon",
+            "Tue",
+            "Wed",
+            "Thu",
+            "Fri"
+          ],
+          "pooling": "lane-demeaned, one observation per calendar date",
+          "fdr": "BH q<=0.10"
+        },
+        "C2": {
+          "minDates": 25,
+          "lookback": 10,
+          "cells": [
+            "prior10-mean",
+            "prior10-hitrate"
+          ],
+          "se": "date-clustered OLS",
+          "nullCalibration": "400 within-lane iid permutations (same demeaning bias, no time structure)",
+          "followUp": "triggered only by |t|>=2.5 and 4/4 same-sign blocks: long a lane date only when prior-10 mean < expanding prior mean, no fitted parameter"
+        },
+        "infeasibleFromPublicData": [
+          "per-pick feature splits (gap/ATR/score decile/dollar volume/regime at log)",
+          "daytrade exit structure on logged bars",
+          "grading archive/insarchive/predmkt/cstudy rows"
+        ]
+      },
+      "dataSnapshot": {
+        "scoreboardAt": "2026-09-19T02:06:45.282Z",
+        "totalPicks": 7072,
+        "loggedRows": 18668,
+        "groups": 82,
+        "lanesWithSeries": 72,
+        "lanesTestedA": 51,
+        "datesPooledC1": 96,
+        "lanesC2": 21,
+        "dateClustersC2": 73
+      },
+      "codeVersion": "research/95-ledger-conditional-structure.js v1",
+      "variationsAttempted": 58,
+      "result": {
+        "verdict": "NO_CONDITIONAL_EDGE",
+        "A": {
+          "tested": 51,
+          "fdrSurvivors": 0,
+          "promotable": [],
+          "nominal": [
+            {
+              "id": "CrossAsset:Lead:",
+              "metric": "1m",
+              "dates": 20,
+              "longNetAvg": 3.39,
+              "shortNetAvg": -4.76,
+              "ci95": {
+                "lo": -8.42,
+                "hi": -1.1
+              },
+              "t": -2.86,
+              "q": 0.6544,
+              "positiveBlocks": 0,
+              "conservativeShortNetAvg": -5.09
+            },
+            {
+              "id": "screener:Early:small",
+              "metric": "5d",
+              "dates": 31,
+              "longNetAvg": -3.6,
+              "shortNetAvg": 2.36,
+              "ci95": {
+                "lo": 0.09,
+                "hi": 5.23
+              },
+              "t": 2.18,
+              "q": 0.6544,
+              "positiveBlocks": 3,
+              "conservativeShortNetAvg": 2.28
+            },
+            {
+              "id": "SecondWave:Primed:",
+              "metric": "1m",
+              "dates": 18,
+              "longNetAvg": -8.37,
+              "shortNetAvg": 7,
+              "ci95": {
+                "lo": 0.12,
+                "hi": 13.89
+              },
+              "t": 2.3,
+              "q": 0.6544,
+              "positiveBlocks": 4,
+              "conservativeShortNetAvg": 6.67
+            }
+          ]
+        },
+        "C1": {
+          "spreadMaxMin": 0.99,
+          "cells": [
+            {
+              "wd": "Mon",
+              "n": 18,
+              "avg": -1.11,
+              "t": -0.89,
+              "q": 0.8407
+            },
+            {
+              "wd": "Tue",
+              "n": 17,
+              "avg": -0.69,
+              "t": -0.41,
+              "q": 0.8407
+            },
+            {
+              "wd": "Wed",
+              "n": 16,
+              "avg": -1.14,
+              "t": -0.49,
+              "q": 0.8407
+            },
+            {
+              "wd": "Thu",
+              "n": 14,
+              "avg": -0.15,
+              "t": -0.21,
+              "q": 0.8407
+            },
+            {
+              "wd": "Fri",
+              "n": 13,
+              "avg": -0.89,
+              "t": -0.95,
+              "q": 0.8407
+            }
+          ]
+        },
+        "C2": {
+          "cells": [
+            {
+              "id": "prior10-mean",
+              "slope": -0.8535,
+              "t": -3.51,
+              "q": 0.0016,
+              "blockSlopes": [
+                -0.3987,
+                -1.1892,
+                -0.865,
+                -0.6398
+              ],
+              "permutationNull": {
+                "permutations": 400,
+                "nullMean": -0.522,
+                "null05": -1.2563,
+                "null95": 0.1351,
+                "pOneSided": 0.212,
+                "biasAdjustedSlope": -0.3315
+              }
+            },
+            {
+              "id": "prior10-hitrate",
+              "slope": 0.657,
+              "t": 0.12,
+              "q": 0.9086,
+              "blockSlopes": [
+                -3.5156,
+                10.4714,
+                -3.3406,
+                -1.7911
+              ],
+              "permutationNull": null
+            }
+          ],
+          "followUp": {
+            "rule": "long a lane date only when prior-10 mean net excess < the lane expanding prior mean",
+            "selected": {
+              "dates": 46,
+              "avg": -0.98,
+              "ci95": {
+                "lo": -1.94,
+                "hi": -0.02
+              },
+              "t": -2,
+              "positiveBlocks": 0,
+              "laneDates": 127
+            },
+            "unselected": {
+              "dates": 53,
+              "avg": 1.61,
+              "ci95": {
+                "lo": -1.39,
+                "hi": 4.61
+              },
+              "t": 1.05,
+              "positiveBlocks": 3,
+              "laneDates": 238
+            },
+            "pairedDiff": {
+              "dates": 38,
+              "avg": -1.56,
+              "ci95": {
+                "lo": -5.59,
+                "hi": 1.73
+              },
+              "t": -0.93,
+              "p": 0.3593417943051994,
+              "positiveBlocks": 1
+            }
+          },
+          "reading": "the naive date-clustered t of -3.51 on prior10-mean is mostly the full-sample demeaning (Nickell) bias: permutation null mean -0.52, one-sided p 0.21, bias-adjusted slope -0.33; the parameter-free follow-up rule does not help (paired diff -1.56, t -0.93)"
+        }
+      },
+      "decision": "nothing promotable; no live change; records the demeaning-bias false positive so it is not re-found",
+      "immutable": true
+    },
+    {
       "recordedAt": "2026-08-15T20:36:57.782Z",
       "id": "negative-overlay-2026-08",
       "hypothesis": "The app's robust NEGATIVE findings pay as subtraction (exclusion overlays on a top-10 event book) or inversion (shorting the forced book) net of realistic frictions.",
