@@ -1,0 +1,199 @@
+{
+  "ok": true,
+  "version": "session-board-v1",
+  "generatedAt": "2026-09-21T12:14:05.000Z",
+  "elapsedMs": 2310,
+  "sources": [
+    { "source": "today", "ok": true, "ms": 640, "reason": null },
+    { "source": "quotes", "ok": true, "ms": 910, "reason": null },
+    { "source": "intraday", "ok": false, "ms": 30, "reason": "premarket — no regular-session bars yet" }
+  ],
+  "session": {
+    "phase": "premarket",
+    "label": "Premarket",
+    "etTime": "08:14:05",
+    "etDate": "2026-09-21",
+    "minutesToOpen": 76,
+    "minutesToClose": null,
+    "nextTransition": { "phase": "regular", "at": "2026-09-21T13:30:00.000Z" },
+    "isTradingDay": true
+  },
+  "regime": { "label": "Risk-off", "riskOn": false, "bearish": true, "condition": "riskoff" },
+  "market": {
+    "mode": "TWO_WAY_CHOP",
+    "spyChangePct": -0.12,
+    "leading": [{ "name": "Technology", "changePct": 0.82 }, { "name": "Industrials", "changePct": 0.44 }],
+    "weakening": [{ "name": "Utilities", "changePct": -1.42 }, { "name": "Materials", "changePct": -1.42 }]
+  },
+  "items": [
+    {
+      "id": "gapgo:intraday:ABCD",
+      "ticker": "ABCD",
+      "company": "Alpha Beta Corp",
+      "sector": "Technology",
+      "source": "gapgo",
+      "section": "GapGo",
+      "tier": "STRONG",
+      "side": "long",
+      "horizon": "intraday",
+      "timeframe": { "key": "intraday", "label": "Intraday (today)", "holdWindow": "same session" },
+      "grade": {
+        "letter": "B",
+        "score": 71,
+        "components": { "evidence": 0.55, "setup": 0.8, "live": 0.7, "regime": 0.4 },
+        "caps": [{ "rule": "no validated lane", "appliedMax": "B" }],
+        "why": ["gap +6.2% on a fresh catalyst", "premarket volume 3.1× normal"]
+      },
+      "levels": { "prevClose": 20.1, "entry": 21.4, "stop": 20.3, "target": 23.6, "rr": 2.0, "atrPct": 4.1 },
+      "live": {
+        "status": "not-triggered",
+        "pct": { "toEntry": 1.2, "toStop": -4.0, "toTarget": 11.6 },
+        "vwap": null,
+        "orb": null,
+        "relVol": 3.1,
+        "dayRangePct": null,
+        "note": "waiting for the open"
+      },
+      "premarket": { "gapPct": 6.2, "preRelVol": 3.1, "preMarketPrice": 21.35 },
+      "checks": [
+        { "key": "catalyst", "label": "Fresh catalyst", "value": "8-K contract award, 06:40 ET", "ok": true },
+        { "key": "relvol", "label": "Relative volume", "value": "3.1×", "ok": true },
+        { "key": "spread", "label": "Quoted spread", "value": null, "ok": null },
+        { "key": "dilution", "label": "Dilution filing", "value": "none in 91d", "ok": true },
+        { "key": "earnings", "label": "Earnings within 5 sessions", "value": "no", "ok": true }
+      ],
+      "flags": { "heldOut": false, "negativeLane": false, "dilution": false, "shortInterest": false, "lowFloat": true },
+      "why": ["Gap-and-go setup on a real filing, not a rumour.", "Regime is risk-off: size down, this lane is paper."]
+    },
+    {
+      "id": "screener:swing:EFGH",
+      "ticker": "EFGH",
+      "company": "Efgh Holdings",
+      "sector": "Industrials",
+      "source": "screener",
+      "section": "screener",
+      "tier": "Setup",
+      "side": "long",
+      "horizon": "swing",
+      "timeframe": { "key": "swing", "label": "Days to weeks", "holdWindow": "5–20 sessions" },
+      "grade": {
+        "letter": "C",
+        "score": 58,
+        "components": { "evidence": 0.4, "setup": 0.6, "live": 0.5, "regime": 0.4 },
+        "caps": [],
+        "why": ["tight base, above the 50-day", "lane record is flat vs SPY"]
+      },
+      "levels": { "prevClose": 44.2, "entry": 45.0, "stop": 42.1, "target": 51.0, "rr": 2.1, "atrPct": 2.9 },
+      "live": {
+        "status": "in-zone",
+        "pct": { "toEntry": 0.3, "toStop": -6.2, "toTarget": 13.1 },
+        "vwap": { "value": 44.9, "above": true },
+        "orb": { "high": 45.2, "low": 44.4, "state": "inside" },
+        "relVol": 1.1,
+        "dayRangePct": 1.8,
+        "note": null
+      },
+      "premarket": null,
+      "checks": [
+        { "key": "trend", "label": "Above 50-day", "value": "yes", "ok": true },
+        { "key": "relvol", "label": "Relative volume", "value": "1.1×", "ok": false },
+        { "key": "earnings", "label": "Earnings within 5 sessions", "value": "in 3 sessions", "ok": false }
+      ],
+      "flags": { "heldOut": false, "negativeLane": false, "dilution": false, "shortInterest": true, "lowFloat": false },
+      "why": ["Breakout setup with a defined stop.", "Earnings in three sessions is event risk, not a catalyst."]
+    },
+    {
+      "id": "coremo:portfolio:IJKL",
+      "ticker": "IJKL",
+      "company": "Ijkl Energy",
+      "sector": "Energy",
+      "source": "coremo",
+      "section": "CoreMomentum",
+      "tier": "Core",
+      "side": "long",
+      "horizon": "portfolio",
+      "timeframe": { "key": "portfolio", "label": "Long term", "holdWindow": "quarterly rebalance" },
+      "grade": {
+        "letter": "A",
+        "score": 84,
+        "components": { "evidence": 0.9, "setup": 0.8, "live": 0.8, "regime": 0.7 },
+        "caps": [],
+        "why": ["12-month momentum leader", "lane beats SPY over 40 resolved picks"]
+      },
+      "levels": { "prevClose": 88.0, "entry": 88.0, "stop": 79.0, "target": 105.0, "rr": 1.9, "atrPct": 2.2 },
+      "live": null,
+      "premarket": { "gapPct": 0.4, "preRelVol": null, "preMarketPrice": 88.35 },
+      "checks": [{ "key": "trend", "label": "Above 200-day", "value": "yes", "ok": true }],
+      "flags": { "heldOut": false, "negativeLane": false, "dilution": false, "shortInterest": false, "lowFloat": false },
+      "why": ["Core momentum sleeve — hold through noise."]
+    },
+    {
+      "id": "crossasset:position:MNOP",
+      "ticker": "MNOP",
+      "company": null,
+      "sector": "Financials",
+      "source": "crossasset",
+      "section": "CrossAsset",
+      "tier": "LEAD",
+      "side": "long",
+      "horizon": "position",
+      "timeframe": { "key": "position", "label": "Weeks to months", "holdWindow": "1–6 months" },
+      "grade": { "letter": "D", "score": 38, "components": { "evidence": 0.2, "setup": 0.5, "live": 0.3, "regime": 0.4 }, "caps": [], "why": ["beats SPY but not its own sector"] },
+      "levels": { "prevClose": 12.5, "entry": 12.8, "stop": 11.6, "target": 15.0, "rr": 1.8, "atrPct": 3.5 },
+      "live": { "status": "extended", "pct": { "toEntry": -5.1, "toStop": -13.0, "toTarget": 4.2 }, "vwap": null, "orb": null, "relVol": null, "dayRangePct": null, "note": "already ran past entry" },
+      "premarket": null,
+      "checks": [],
+      "flags": { "heldOut": false, "negativeLane": false, "dilution": true, "shortInterest": false, "lowFloat": false },
+      "why": ["Sector beta, not selection."]
+    },
+    {
+      "id": "downday:swing:QRST",
+      "ticker": "QRST",
+      "company": "Qrst Retail",
+      "sector": "Consumer Discretionary",
+      "side": "short",
+      "source": "downday",
+      "section": "DownDay",
+      "tier": "CONFIRMED",
+      "horizon": "swing",
+      "timeframe": { "key": "swing", "label": "Days to weeks", "holdWindow": "3 sessions" },
+      "grade": { "letter": "F", "score": 12, "components": { "evidence": 0.0, "setup": 0.4, "live": 0.2, "regime": 0.4 }, "caps": [{ "rule": "negative lane", "appliedMax": "F" }], "why": ["lane is a proven negative at its contract horizon"] },
+      "levels": { "prevClose": 30.0, "entry": 29.5, "stop": 31.2, "target": 26.8, "rr": 1.6, "atrPct": 3.0 },
+      "live": { "status": "stopped", "pct": { "toEntry": 2.0, "toStop": 0.5, "toTarget": -9.0 }, "vwap": null, "orb": null, "relVol": 0.9, "dayRangePct": 2.4, "note": "through the stop" },
+      "premarket": null,
+      "checks": [],
+      "flags": { "heldOut": true, "negativeLane": true, "dilution": false, "shortInterest": false, "lowFloat": false },
+      "why": ["Held out: this lane loses money at its own horizon."]
+    }
+  ],
+  "heldOut": [
+    {
+      "id": "downday:swing:QRST",
+      "ticker": "QRST",
+      "company": "Qrst Retail",
+      "sector": "Consumer Discretionary",
+      "side": "short",
+      "source": "downday",
+      "section": "DownDay",
+      "tier": "CONFIRMED",
+      "horizon": "swing",
+      "timeframe": { "key": "swing", "label": "Days to weeks", "holdWindow": "3 sessions" },
+      "grade": { "letter": "F", "score": 12, "components": { "evidence": 0.0, "setup": 0.4, "live": 0.2, "regime": 0.4 }, "caps": [{ "rule": "negative lane", "appliedMax": "F" }], "why": ["lane is a proven negative at its contract horizon"] },
+      "levels": { "prevClose": 30.0, "entry": 29.5, "stop": 31.2, "target": 26.8, "rr": 1.6, "atrPct": 3.0 },
+      "live": { "status": "stopped", "pct": { "toEntry": 2.0, "toStop": 0.5, "toTarget": -9.0 }, "vwap": null, "orb": null, "relVol": 0.9, "dayRangePct": 2.4, "note": "through the stop" },
+      "premarket": null,
+      "checks": [],
+      "flags": { "heldOut": true, "negativeLane": true, "dilution": false, "shortInterest": false, "lowFloat": false },
+      "why": ["Held out: this lane loses money at its own horizon."]
+    }
+  ],
+  "byTimeframe": {
+    "intraday": ["gapgo:intraday:ABCD"],
+    "swing": ["screener:swing:EFGH"],
+    "position": ["crossasset:position:MNOP"],
+    "portfolio": ["coremo:portfolio:IJKL"]
+  },
+  "counts": { "items": 4, "heldOut": 1, "byGrade": { "A": 1, "B": 1, "C": 1, "D": 1, "F": 0 } },
+  "disclosure": "Grades are snapshot-quality reads of today's candidates. No lane on this board has cleared the app's promotion gate; every position is paper until it does.",
+  "empty": false
+}

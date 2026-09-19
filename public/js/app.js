@@ -10,6 +10,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadOpportunities, mountOpportunitiesTab, whyNowBadge } from './opportunities.js';
   import { loadQuickHit } from './quickhit.js';
   import { loadCommandCenter } from './today.js';
+  import { loadSessionBoard } from './session-board.js';
   import { loadEvolve } from './evolve.js';
   import { loadEnsemble } from './omega-ensemble.js';
   import { loadIgnition } from './ignition.js';
@@ -68,7 +69,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // horizon (see SUB_HZ dividers). Markets = macro/context; Predict = the forecast &
     // prediction-market read. Unproven overlays live in the Research Lab; the honest
     // report cards live in Evidence.
-    home:       ['today', 'ensemble', 'start', 'quickhit'],
+    home:       ['today', 'session', 'ensemble', 'start', 'quickhit'],
     candidates: ['swingsup', 'premove', 'daytrade', 'lowfloat', 'ignitionlive', 'breakoutradar', 'gapgo', 'ignition', 'gapdown', 'opportunities', 'omega', 'atlas', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'patternradar', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
     // Technology Command Center — its own top-level destination. One sector, three
     // INDEPENDENT horizon conclusions; it consumes the other engines read-only.
@@ -96,7 +97,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const TOP_TABS = Object.keys(TAB_GROUPS);
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
   const SUB_LABEL = {
-    today: '🏠 Today', ensemble: '🎯 OMEGA Ensemble', start: '📘 Guide',
+    today: '🏠 Today', session: '🎯 Session', ensemble: '🎯 OMEGA Ensemble', start: '📘 Guide',
     quickhit: '⚡ Quick Hit', swingsup: '📋 Swing Supervisor', premove: '📡 Pre-Move', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', atlas: '🛰 ATLAS-X', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', lowfloat: '🧨 Low-Float Ignition', ignitionlive: '🚀 Ignition Live', breakoutradar: '📉 Breakout Radar', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', patternradar: '📐 Pattern Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
     'tech-command': '🖥 Technology Command Center',
     movermiss: '🔍 Mover Miss Audit', intradayval: '🧪 Intraday Validation',
@@ -109,6 +110,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // sub-tab, shown when you hover the tab button.
   const SECTION_HELP = {
     today: 'Your daily home base: the market mood and where to start.',
+    session: 'Session Board — what is worth looking at RIGHT NOW, graded on today\'s snapshot with the time frame spelled out (intraday / days to weeks / weeks to months / long term). Premarket it reads gaps and pre-volume; during the session it tracks each name against its frozen entry, stop and target; it tells you what changed since you last looked. Grades are snapshot reads, not proven edge.',
     ensemble: 'Every screener combined into ONE portfolio-aware book. Correlated screeners are counted once (not seven times), trading costs are charged against each target, and names are dropped when they add duplicate risk — with the reason shown. It composes the existing engines and computes no score of its own, so it is allowed to hand you fewer than 10 names, or none.',
     start: 'A beginner’s guide to what everything in this app means.',
     quickhit: 'The Top 5 plays across large, small AND micro caps — one fast shortlist with links to where each lives.',
@@ -207,6 +209,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // (tabs that already have their own inline guide — trendrider/daytrade/coil/
   // confluence/gapgo/gapdown/fade/aligned/putsell — are deliberately omitted).
   const HOWTO = {
+    session: {
+      what: `The <b>Session Board</b>: one ranked list of what is worth looking at <i>right now</i>, graded <b>A–F</b> on today's snapshot and labelled with its <b>time frame</b> — intraday (today), days to weeks, weeks to months, or long term. The same board reads differently before the open (premarket gap and pre-volume), during the session (where price sits against the frozen entry / stop / target, VWAP and the opening range) and after the close (what is setting up for tomorrow).`,
+      read: `Start at the <b>phase strip</b> (premarket / regular / after hours, the countdown, regime and which sectors lead). Then each card: the <b>grade</b> with its four inputs (evidence, setup, live, regime), the <b>live status</b> pill (not triggered / in zone / triggered / extended / stopped), the levels row, and the <b>Expert checklist</b> — the things a trader checks before touching a name (catalyst, relative volume, spread, dilution, earnings risk). "Since you last looked" tells you what is new, upgraded, downgraded or changed status.`,
+      act: `A high grade means the snapshot looks clean and the lane's own record does not argue against it — it is <b>not</b> a probability and not a buy signal. Use the time-frame pills to match your own horizon, confirm on a real chart, and size by the stop. <b>Held-out</b> names are the app's proven-negative lanes: read them as what to avoid.`,
+      catch: `No lane on this board has cleared the promotion gate — every position is paper until it does, and the grade is capped accordingly. Quotes are delayed; there is no bid/ask, no halt feed and no futures read. The board refreshes every minute while it is open during premarket and the session, every five minutes otherwise.`,
+    },
     'tech-command': {
       what: `<b>One technology universe, three separate answers.</b> The same stock is judged independently as a <b>day trade</b>, a <b>swing trade</b> and a <b>long-term investment</b> — because those are different questions with different holding periods, features, risks and benchmarks. A name can be a poor day trade, a promising swing setup and an attractive long-term holding <i>at the same time</i>, and the page will say exactly that.`,
       read: `Start at the <b>regime header</b> (is technology leading, and is the move broad or narrow?). Then each board gives you: the <b>action</b>, <b>why now</b>, the <b>exact trigger</b>, and <b>what invalidates it</b>. "<b>Around the Corner</b>" lists what already happened, what is happening now, and what is scheduled next — with the source and timestamp on every item. Turn on <b>Expert view</b> for score decompositions, evidence quality, and every timestamp.`,
@@ -502,6 +510,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'thesis' && typeof ensureThesis === 'function') ensureThesis();
     if (sub === 'baselines' && typeof ensureBaselines === 'function') ensureBaselines();
     if (sub === 'today' && typeof ensureToday === 'function') ensureToday();
+    if (sub === 'session' && typeof ensureSessionBoard === 'function') ensureSessionBoard();
     if (sub === 'rotation' && typeof ensureRotationDW === 'function') ensureRotationDW();
     if (sub === 'fade' && typeof ensureFade === 'function') ensureFade();
     if (sub === 'trendrider' && typeof ensureTrendRider === 'function') ensureTrendRider();
@@ -4462,6 +4471,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     };
   }
   const LOWFLOAT_AUTO_REFRESH_MS = 60 * 1000; // op=lowfloat CDN cache is 45 s, so each poll is fresh
+  // Session Board: one-minute host tick; the loader itself throttles to 5 min outside premarket / regular hours.
+  const SESSION_BOARD_REFRESH_MS = 60 * 1000;
   // Declared as hoisted FUNCTIONS, not consts. showTab's guard is
   // `typeof ensureX === 'function'`, and a `const` in its temporal dead zone makes that guard
   // THROW a ReferenceError instead of evaluating to 'undefined' — which would break tab
@@ -4472,12 +4483,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     breakoutradar: lazySection('breakoutradar', loadBreakoutRadar),
     movermiss: lazySection('movermiss', loadMoverAudit),
     intradayval: lazySection('intradayval', loadIntradayValidation),
+    session: lazySection('session', loadSessionBoard, SESSION_BOARD_REFRESH_MS),
   };
   function ensureLowFloat() { _lowFloatLoaders.lowfloat(); }
   function ensureIgnitionLive() { _lowFloatLoaders.ignitionlive(); }
   function ensureBreakoutRadar() { _lowFloatLoaders.breakoutradar(); }
   function ensureMoverMiss() { _lowFloatLoaders.movermiss(); }
   function ensureIntradayVal() { _lowFloatLoaders.intradayval(); }
+  function ensureSessionBoard() { _lowFloatLoaders.session(); }
 
   // 💠 OMEGA-SWING — 5–10 day momentum continuation (loadOmega renders op=omega).
   let omegaLoaded = false;
