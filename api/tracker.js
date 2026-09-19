@@ -238,6 +238,10 @@ const EXPENSIVE_OPS = new Set([
   // page traffic coalesces; the throttle stops a cache-busting caller from driving the
   // rebuild at will.
   'techcommand', 'techcommandticker',
+  // sessionboard: an empty or degraded board is deliberately no-store (the bearcase trap), so
+  // a cache-busting anonymous loop would otherwise drive the Blob reads + quote fan-out per
+  // hit. The page polls once a minute; the throttle is ample for that.
+  'sessionboard',
   // SI overlay heavier reads: sisnapshot may refresh the live FINRA cache, siledger can
   // page Blob prospective docs, siexport streams the full CSV ledger.
   'sisnapshot', 'siledger', 'siexport',
@@ -676,6 +680,9 @@ async function handleRequest(req, res) {
   // NOVEL SIGNAL LAB — shadow-only research surface (never touches prod recs; kill-switch NSL_DISABLED).
   if (req.query.op === 'nsl') return require('../lib/nsl-routes').runNsl(req, res);
   if (req.query.op === 'today') return require('../lib/decision-routes').runToday(req, res);
+  // SESSION BOARD — session-aware "what is worth looking at right now" over the Today rows,
+  // the day-trade lifecycle and the premarket gap lane (public read; lib/session-board-routes).
+  if (req.query.op === 'sessionboard') return require('../lib/session-board-routes').runSessionBoard(req, res);
   // EVOLVE — Adaptive Pre-Move Discovery Engine (composition + calibration over the
   // existing engines-as-specialists). Live reads are public + cached; the writers
   // (evolvescore&log, evolveresolve) are cron-only via PRIVILEGED_OPS.
