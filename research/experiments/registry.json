@@ -63,6 +63,1232 @@
       "immutable": true
     },
     {
+      "recordedAt": "2026-09-19T02:28:11.654Z",
+      "id": "activist-13d-initial-2026-09",
+      "family": "external-events-2026-09",
+      "seal": "b43f45a",
+      "hypothesis": "An initial Schedule 13D filing (activist ≥5% stake, amendments excluded) is followed by positive cost-net SPY-excess return over the next 21 sessions from the next open.",
+      "frozenConfig": {
+        "shared": {
+          "family": "external-events-2026-09",
+          "seal": "b43f45a",
+          "horizons": [
+            5,
+            21,
+            63
+          ],
+          "universe": {
+            "minAdv": 2000000,
+            "maxNames": 12000
+          },
+          "eligibility": {
+            "minPriorBars": 60,
+            "minClose": 2,
+            "minAdv": 2000000
+          },
+          "cooldownSessions": 63,
+          "placeboShift": 126,
+          "dev": {
+            "from": "2021-08-02",
+            "to": "2024-12-31"
+          },
+          "holdout": {
+            "from": "2025-01-02",
+            "to": "2026-03-31"
+          },
+          "fdrAlpha": 0.1,
+          "gates": {
+            "minEvents": 50,
+            "minDates": 20,
+            "minT": 2,
+            "minPositiveBlocks": 3,
+            "maxTop1Share": 0.5
+          },
+          "dividend": {
+            "gapDays": 1095
+          },
+          "upgrade": {
+            "windowSessions": 3,
+            "minBrokersA": 2,
+            "minBrokersB": 3
+          },
+          "smallMicroAdvMax": 20000000
+        },
+        "own": {
+          "variants": [
+            "A",
+            "B"
+          ],
+          "primary": {
+            "variant": "A",
+            "H": 21
+          }
+        }
+      },
+      "dataSnapshot": {
+        "attrition": {
+          "raw": 2526,
+          "notCached": 1790,
+          "noDecisionDate": 0,
+          "noDecisionBar": 5,
+          "tooFewBars": 176,
+          "priceFloor": 21,
+          "advFloor": 136,
+          "cooldown": 79,
+          "scored": 319,
+          "outsideWindows": 0
+        },
+        "events": 319
+      },
+      "trialCount": 21,
+      "results": {
+        "primary": "activist-13d-initial:A@21",
+        "dev": {
+          "activist-13d-initial:A@5": {
+            "n": 316,
+            "dates": 249,
+            "avg": -0.345,
+            "t": -0.66,
+            "p": 0.5119,
+            "median": -0.5698,
+            "top1": null,
+            "blocks": 1,
+            "q": 0.6143,
+            "survives": false,
+            "placebo": {
+              "n": 251,
+              "dates": 208,
+              "avg": -1.5378,
+              "t": -3.29,
+              "p": 0.0012,
+              "median": -1.1668,
+              "top1": null,
+              "blocks": 0
+            }
+          },
+          "activist-13d-initial:A@21": {
+            "n": 313,
+            "dates": 247,
+            "avg": -1.435,
+            "t": -1.32,
+            "p": 0.1889,
+            "median": -2.7916,
+            "top1": null,
+            "blocks": 1,
+            "q": 0.3401,
+            "survives": false,
+            "placebo": {
+              "n": 250,
+              "dates": 207,
+              "avg": -2.9514,
+              "t": -2.47,
+              "p": 0.0149,
+              "median": -1.8218,
+              "top1": null,
+              "blocks": 0
+            }
+          },
+          "activist-13d-initial:A@63": {
+            "n": 308,
+            "dates": 242,
+            "avg": -5.3841,
+            "t": -3.47,
+            "p": 0.0006,
+            "median": -5.5351,
+            "top1": null,
+            "blocks": 1,
+            "q": 0.0109,
+            "survives": true,
+            "placebo": {
+              "n": 248,
+              "dates": 206,
+              "avg": -5.4463,
+              "t": -3.17,
+              "p": 0.0018,
+              "median": -6.5316,
+              "top1": null,
+              "blocks": 0
+            }
+          },
+          "activist-13d-initial:B@5": {
+            "n": 183,
+            "dates": 158,
+            "avg": -0.2215,
+            "t": -0.28,
+            "p": 0.7814,
+            "median": -0.6497,
+            "top1": null,
+            "blocks": 2,
+            "q": 0.7814,
+            "survives": false,
+            "placebo": {
+              "n": 149,
+              "dates": 132,
+              "avg": -1.8512,
+              "t": -3.11,
+              "p": 0.0023,
+              "median": -1.7793,
+              "top1": null,
+              "blocks": 0
+            }
+          },
+          "activist-13d-initial:B@21": {
+            "n": 181,
+            "dates": 157,
+            "avg": -1.7271,
+            "t": -1.16,
+            "p": 0.2495,
+            "median": -3.1847,
+            "top1": null,
+            "blocks": 2,
+            "q": 0.3848,
+            "survives": false,
+            "placebo": {
+              "n": 148,
+              "dates": 131,
+              "avg": -2.9005,
+              "t": -1.78,
+              "p": 0.077,
+              "median": -1.7265,
+              "top1": null,
+              "blocks": 1
+            }
+          },
+          "activist-13d-initial:B@63": {
+            "n": 178,
+            "dates": 154,
+            "avg": -5.5933,
+            "t": -2.25,
+            "p": 0.0258,
+            "median": -7.5249,
+            "top1": null,
+            "blocks": 1,
+            "q": 0.1019,
+            "survives": false,
+            "placebo": {
+              "n": 146,
+              "dates": 130,
+              "avg": -4.8052,
+              "t": -1.82,
+              "p": 0.0728,
+              "median": -6.5707,
+              "top1": null,
+              "blocks": 1
+            }
+          }
+        },
+        "holdout": {
+          "activist-13d-initial:A@5": {
+            "doubledAvg": null,
+            "placebo": null
+          },
+          "activist-13d-initial:A@21": {
+            "doubledAvg": null,
+            "placebo": null
+          },
+          "activist-13d-initial:A@63": {
+            "doubledAvg": null,
+            "placebo": null
+          },
+          "activist-13d-initial:B@5": {
+            "doubledAvg": null,
+            "placebo": null
+          },
+          "activist-13d-initial:B@21": {
+            "doubledAvg": null,
+            "placebo": null
+          },
+          "activist-13d-initial:B@63": {
+            "doubledAvg": null,
+            "placebo": null
+          }
+        },
+        "verdict": {
+          "status": "no-edge",
+          "primaryCell": "activist-13d-initial:A@21",
+          "reason": "development cell failed: avg -1.435% t -1.32 q 0.3401 blocks+ 1/4",
+          "devPass": false
+        }
+      },
+      "artifact": {
+        "file": "/Users/ravishah/worktrees/alpha-external/research/data/evidence/external-events/external-events-result.json",
+        "sha256": "7488f860bbb9ea0f46fbfcc9ea949d2cb13c7563de58e3cb23096fe5de2a1c0b",
+        "bytes": 69571
+      },
+      "immutable": true
+    },
+    {
+      "recordedAt": "2026-09-19T02:33:26.984Z",
+      "id": "activist-13d-initial-2026-09.r2",
+      "family": "external-events-2026-09",
+      "seal": "b43f45a",
+      "hypothesis": "An initial Schedule 13D filing (activist ≥5% stake, amendments excluded) is followed by positive cost-net SPY-excess return over the next 21 sessions from the next open.",
+      "frozenConfig": {
+        "shared": {
+          "family": "external-events-2026-09",
+          "seal": "b43f45a",
+          "horizons": [
+            5,
+            21,
+            63
+          ],
+          "universe": {
+            "minAdv": 2000000,
+            "maxNames": 12000
+          },
+          "eligibility": {
+            "minPriorBars": 60,
+            "minClose": 2,
+            "minAdv": 2000000
+          },
+          "cooldownSessions": 63,
+          "placeboShift": 126,
+          "dev": {
+            "from": "2021-08-02",
+            "to": "2024-12-31"
+          },
+          "holdout": {
+            "from": "2025-01-02",
+            "to": "2026-03-31"
+          },
+          "fdrAlpha": 0.1,
+          "gates": {
+            "minEvents": 50,
+            "minDates": 20,
+            "minT": 2,
+            "minPositiveBlocks": 3,
+            "maxTop1Share": 0.5
+          },
+          "dividend": {
+            "gapDays": 1095
+          },
+          "upgrade": {
+            "windowSessions": 3,
+            "minBrokersA": 2,
+            "minBrokersB": 3
+          },
+          "smallMicroAdvMax": 20000000
+        },
+        "own": {
+          "variants": [
+            "A",
+            "B"
+          ],
+          "primary": {
+            "variant": "A",
+            "H": 21
+          }
+        }
+      },
+      "dataSnapshot": {
+        "attrition": {
+          "raw": 3560,
+          "notCached": 2554,
+          "noDecisionDate": 0,
+          "noDecisionBar": 7,
+          "tooFewBars": 190,
+          "priceFloor": 40,
+          "advFloor": 164,
+          "cooldown": 96,
+          "scored": 509,
+          "outsideWindows": 0
+        },
+        "events": 509
+      },
+      "trialCount": 21,
+      "results": {
+        "primary": "activist-13d-initial:A@21",
+        "dev": {
+          "activist-13d-initial:A@5": {
+            "n": 327,
+            "dates": 254,
+            "avg": -0.4422,
+            "t": -0.87,
+            "p": 0.3841,
+            "median": -0.5774,
+            "top1": null,
+            "blocks": 1,
+            "q": 0.4481,
+            "survives": false,
+            "placebo": {
+              "n": 259,
+              "dates": 213,
+              "avg": -1.5768,
+              "t": -3.39,
+              "p": 0.0009,
+              "median": -1.2389,
+              "top1": null,
+              "blocks": 0
+            }
+          },
+          "activist-13d-initial:A@21": {
+            "n": 324,
+            "dates": 252,
+            "avg": -1.212,
+            "t": -1.12,
+            "p": 0.2623,
+            "median": -2.547,
+            "top1": null,
+            "blocks": 1,
+            "q": 0.3935,
+            "survives": false,
+            "placebo": {
+              "n": 258,
+              "dates": 212,
+              "avg": -2.6321,
+              "t": -2.14,
+              "p": 0.0346,
+              "median": -1.7221,
+              "top1": null,
+              "blocks": 0
+            }
+          },
+          "activist-13d-initial:A@63": {
+            "n": 319,
+            "dates": 247,
+            "avg": -5.22,
+            "t": -3.16,
+            "p": 0.0018,
+            "median": -5.4358,
+            "top1": null,
+            "blocks": 1,
+            "q": 0.0378,
+            "survives": true,
+            "placebo": {
+              "n": 256,
+              "dates": 211,
+              "avg": -4.199,
+              "t": -2.34,
+              "p": 0.0207,
+              "median": -5.0971,
+              "top1": null,
+              "blocks": 0
+            }
+          },
+          "activist-13d-initial:B@5": {
+            "n": 189,
+            "dates": 163,
+            "avg": -0.4173,
+            "t": -0.55,
+            "p": 0.5838,
+            "median": -0.8794,
+            "top1": null,
+            "blocks": 2,
+            "q": 0.613,
+            "survives": false,
+            "placebo": {
+              "n": 154,
+              "dates": 137,
+              "avg": -1.9583,
+              "t": -3.39,
+              "p": 0.0009,
+              "median": -1.8835,
+              "top1": null,
+              "blocks": 0
+            }
+          },
+          "activist-13d-initial:B@21": {
+            "n": 187,
+            "dates": 162,
+            "avg": -1.4235,
+            "t": -0.93,
+            "p": 0.356,
+            "median": -3.117,
+            "top1": null,
+            "blocks": 2,
+            "q": 0.4398,
+            "survives": false,
+            "placebo": {
+              "n": 153,
+              "dates": 136,
+              "avg": -2.538,
+              "t": -1.6,
+              "p": 0.1113,
+              "median": -1.6501,
+              "top1": null,
+              "blocks": 1
+            }
+          },
+          "activist-13d-initial:B@63": {
+            "n": 184,
+            "dates": 159,
+            "avg": -5.4093,
+            "t": -2.13,
+            "p": 0.035,
+            "median": -7.1598,
+            "top1": null,
+            "blocks": 1,
+            "q": 0.1051,
+            "survives": false,
+            "placebo": {
+              "n": 151,
+              "dates": 135,
+              "avg": -3.2832,
+              "t": -1.18,
+              "p": 0.2416,
+              "median": -4.6198,
+              "top1": null,
+              "blocks": 2
+            }
+          }
+        },
+        "holdout": {
+          "activist-13d-initial:A@5": {
+            "n": 175,
+            "dates": 127,
+            "avg": -1.1329,
+            "t": -1.17,
+            "p": 0.244,
+            "median": -0.8959,
+            "top1": null,
+            "blocks": 2,
+            "doubledAvg": -1.7943,
+            "placebo": {
+              "n": 176,
+              "dates": 127,
+              "avg": -1.2214,
+              "t": -1.45,
+              "p": 0.1493,
+              "median": -1.2797,
+              "top1": null,
+              "blocks": 0
+            }
+          },
+          "activist-13d-initial:A@21": {
+            "n": 173,
+            "dates": 126,
+            "avg": -3.4135,
+            "t": -2.14,
+            "p": 0.0345,
+            "median": -1.5793,
+            "top1": null,
+            "blocks": 1,
+            "doubledAvg": -4.0753,
+            "placebo": {
+              "n": 175,
+              "dates": 126,
+              "avg": -2.5608,
+              "t": -1.79,
+              "p": 0.0755,
+              "median": -3.1793,
+              "top1": null,
+              "blocks": 0
+            }
+          },
+          "activist-13d-initial:A@63": {
+            "n": 155,
+            "dates": 115,
+            "avg": -6.6307,
+            "t": -3.12,
+            "p": 0.0023,
+            "median": -7.6979,
+            "top1": null,
+            "blocks": 0,
+            "doubledAvg": -7.303,
+            "placebo": {
+              "n": 170,
+              "dates": 124,
+              "avg": -5.3741,
+              "t": -2.96,
+              "p": 0.0037,
+              "median": -7.1367,
+              "top1": null,
+              "blocks": 0
+            }
+          },
+          "activist-13d-initial:B@5": {
+            "n": 110,
+            "dates": 87,
+            "avg": 0.1529,
+            "t": 0.16,
+            "p": 0.8765,
+            "median": -0.7467,
+            "top1": 10.6097,
+            "blocks": 2,
+            "doubledAvg": -0.8419,
+            "placebo": {
+              "n": 111,
+              "dates": 87,
+              "avg": -2.2331,
+              "t": -2.89,
+              "p": 0.0048,
+              "median": -1.9017,
+              "top1": null,
+              "blocks": 0
+            }
+          },
+          "activist-13d-initial:B@21": {
+            "n": 109,
+            "dates": 86,
+            "avg": -1.2884,
+            "t": -0.68,
+            "p": 0.5003,
+            "median": -0.7089,
+            "top1": null,
+            "blocks": 1,
+            "doubledAvg": -2.2878,
+            "placebo": {
+              "n": 110,
+              "dates": 86,
+              "avg": -1.4317,
+              "t": -0.63,
+              "p": 0.5307,
+              "median": -2.9071,
+              "top1": null,
+              "blocks": 2
+            }
+          },
+          "activist-13d-initial:B@63": {
+            "n": 97,
+            "dates": 78,
+            "avg": -5.1042,
+            "t": -2.11,
+            "p": 0.038,
+            "median": -5.3639,
+            "top1": null,
+            "blocks": 0,
+            "doubledAvg": -6.1234,
+            "placebo": {
+              "n": 107,
+              "dates": 86,
+              "avg": -4.8557,
+              "t": -1.83,
+              "p": 0.0732,
+              "median": -6.1278,
+              "top1": null,
+              "blocks": 1
+            }
+          }
+        },
+        "verdict": {
+          "status": "no-edge",
+          "primaryCell": "activist-13d-initial:A@21",
+          "reason": "development cell failed: avg -1.212% t -1.12 q 0.3935 blocks+ 1/4",
+          "devPass": false
+        }
+      },
+      "artifact": {
+        "file": "/Users/ravishah/worktrees/alpha-external/research/data/evidence/external-events/external-events-result.json",
+        "sha256": "fe6a7674852033da98c7805241dfdd2f4f39d64b6d8b569ead693ab2d1798b51",
+        "bytes": 90150
+      },
+      "immutable": true,
+      "parentExperimentId": "activist-13d-initial-2026-09"
+    },
+    {
+      "recordedAt": "2026-09-19T02:28:11.668Z",
+      "id": "analyst-upgrade-cluster-2026-09",
+      "family": "external-events-2026-09",
+      "seal": "b43f45a",
+      "hypothesis": "Two or more distinct brokers upgrading the same name within 3 sessions is followed by positive cost-net SPY-excess return over the next 5 sessions from the next open.",
+      "frozenConfig": {
+        "shared": {
+          "family": "external-events-2026-09",
+          "seal": "b43f45a",
+          "horizons": [
+            5,
+            21,
+            63
+          ],
+          "universe": {
+            "minAdv": 2000000,
+            "maxNames": 12000
+          },
+          "eligibility": {
+            "minPriorBars": 60,
+            "minClose": 2,
+            "minAdv": 2000000
+          },
+          "cooldownSessions": 63,
+          "placeboShift": 126,
+          "dev": {
+            "from": "2021-08-02",
+            "to": "2024-12-31"
+          },
+          "holdout": {
+            "from": "2025-01-02",
+            "to": "2026-03-31"
+          },
+          "fdrAlpha": 0.1,
+          "gates": {
+            "minEvents": 50,
+            "minDates": 20,
+            "minT": 2,
+            "minPositiveBlocks": 3,
+            "maxTop1Share": 0.5
+          },
+          "dividend": {
+            "gapDays": 1095
+          },
+          "upgrade": {
+            "windowSessions": 3,
+            "minBrokersA": 2,
+            "minBrokersB": 3
+          },
+          "smallMicroAdvMax": 20000000
+        },
+        "own": {
+          "variants": [
+            "A",
+            "B"
+          ],
+          "primary": {
+            "variant": "A",
+            "H": 5
+          }
+        }
+      },
+      "dataSnapshot": {
+        "attrition": {
+          "raw": 627,
+          "notCached": 0,
+          "noDecisionDate": 0,
+          "noDecisionBar": 59,
+          "tooFewBars": 23,
+          "priceFloor": 1,
+          "advFloor": 3,
+          "cooldown": 134,
+          "scored": 389,
+          "outsideWindows": 18
+        },
+        "events": 389
+      },
+      "trialCount": 21,
+      "results": {
+        "primary": "analyst-upgrade-cluster:A@5",
+        "dev": {
+          "analyst-upgrade-cluster:A@5": {
+            "n": 260,
+            "dates": 215,
+            "avg": -0.2712,
+            "t": -0.59,
+            "p": 0.553,
+            "median": -0.3194,
+            "top1": null,
+            "blocks": 1,
+            "q": 0.6221,
+            "survives": false,
+            "placebo": {
+              "n": 207,
+              "dates": 170,
+              "avg": -0.2319,
+              "t": -0.37,
+              "p": 0.7119,
+              "median": -0.3972,
+              "top1": null,
+              "blocks": 2
+            }
+          },
+          "analyst-upgrade-cluster:A@21": {
+            "n": 260,
+            "dates": 215,
+            "avg": -0.9178,
+            "t": -1.14,
+            "p": 0.2565,
+            "median": 0.0896,
+            "top1": null,
+            "blocks": 1,
+            "q": 0.3848,
+            "survives": false,
+            "placebo": {
+              "n": 207,
+              "dates": 170,
+              "avg": -0.0477,
+              "t": -0.05,
+              "p": 0.9629,
+              "median": -0.8274,
+              "top1": 1.9153,
+              "blocks": 1
+            }
+          },
+          "analyst-upgrade-cluster:A@63": {
+            "n": 260,
+            "dates": 215,
+            "avg": -1.9488,
+            "t": -1.49,
+            "p": 0.1377,
+            "median": -1.5435,
+            "top1": null,
+            "blocks": 0,
+            "q": 0.2753,
+            "survives": false,
+            "placebo": {
+              "n": 206,
+              "dates": 169,
+              "avg": 0.9613,
+              "t": 0.56,
+              "p": 0.5769,
+              "median": -2.2186,
+              "top1": 1.3319,
+              "blocks": 2
+            }
+          },
+          "analyst-upgrade-cluster:B@5": {
+            "q": null,
+            "survives": false,
+            "placebo": null
+          },
+          "analyst-upgrade-cluster:B@21": {
+            "q": null,
+            "survives": false,
+            "placebo": null
+          },
+          "analyst-upgrade-cluster:B@63": {
+            "q": null,
+            "survives": false,
+            "placebo": null
+          }
+        },
+        "holdout": {
+          "analyst-upgrade-cluster:A@5": {
+            "n": 129,
+            "dates": 104,
+            "avg": -0.5295,
+            "t": -0.66,
+            "p": 0.5142,
+            "median": -0.7431,
+            "top1": null,
+            "blocks": 1,
+            "doubledAvg": -0.775,
+            "placebo": {
+              "n": 129,
+              "dates": 104,
+              "avg": -1.2186,
+              "t": -2.13,
+              "p": 0.0356,
+              "median": -0.7441,
+              "top1": null,
+              "blocks": 1
+            }
+          },
+          "analyst-upgrade-cluster:A@21": {
+            "n": 129,
+            "dates": 104,
+            "avg": 0.3367,
+            "t": 0.22,
+            "p": 0.8241,
+            "median": 0.336,
+            "top1": 0.8975,
+            "blocks": 3,
+            "doubledAvg": 0.0912,
+            "placebo": {
+              "n": 129,
+              "dates": 104,
+              "avg": 0.7947,
+              "t": 0.54,
+              "p": 0.592,
+              "median": 1.2713,
+              "top1": 0.8147,
+              "blocks": 2
+            }
+          },
+          "analyst-upgrade-cluster:A@63": {
+            "n": 127,
+            "dates": 103,
+            "avg": 2.9394,
+            "t": 0.82,
+            "p": 0.4158,
+            "median": -1.6227,
+            "top1": 1.1828,
+            "blocks": 3,
+            "doubledAvg": 2.6931,
+            "placebo": {
+              "n": 128,
+              "dates": 103,
+              "avg": 3.8416,
+              "t": 1.38,
+              "p": 0.1712,
+              "median": -3.05,
+              "top1": 0.5501,
+              "blocks": 3
+            }
+          },
+          "analyst-upgrade-cluster:B@5": {
+            "doubledAvg": null,
+            "placebo": null
+          },
+          "analyst-upgrade-cluster:B@21": {
+            "doubledAvg": null,
+            "placebo": null
+          },
+          "analyst-upgrade-cluster:B@63": {
+            "doubledAvg": null,
+            "placebo": null
+          }
+        },
+        "verdict": {
+          "status": "no-edge",
+          "primaryCell": "analyst-upgrade-cluster:A@5",
+          "reason": "development cell failed: avg -0.2712% t -0.59 q 0.6221 blocks+ 1/4",
+          "devPass": false
+        }
+      },
+      "artifact": {
+        "file": "/Users/ravishah/worktrees/alpha-external/research/data/evidence/external-events/external-events-result.json",
+        "sha256": "7488f860bbb9ea0f46fbfcc9ea949d2cb13c7563de58e3cb23096fe5de2a1c0b",
+        "bytes": 69571
+      },
+      "immutable": true
+    },
+    {
+      "recordedAt": "2026-09-19T02:33:26.999Z",
+      "id": "analyst-upgrade-cluster-2026-09.r2",
+      "family": "external-events-2026-09",
+      "seal": "b43f45a",
+      "hypothesis": "Two or more distinct brokers upgrading the same name within 3 sessions is followed by positive cost-net SPY-excess return over the next 5 sessions from the next open.",
+      "frozenConfig": {
+        "shared": {
+          "family": "external-events-2026-09",
+          "seal": "b43f45a",
+          "horizons": [
+            5,
+            21,
+            63
+          ],
+          "universe": {
+            "minAdv": 2000000,
+            "maxNames": 12000
+          },
+          "eligibility": {
+            "minPriorBars": 60,
+            "minClose": 2,
+            "minAdv": 2000000
+          },
+          "cooldownSessions": 63,
+          "placeboShift": 126,
+          "dev": {
+            "from": "2021-08-02",
+            "to": "2024-12-31"
+          },
+          "holdout": {
+            "from": "2025-01-02",
+            "to": "2026-03-31"
+          },
+          "fdrAlpha": 0.1,
+          "gates": {
+            "minEvents": 50,
+            "minDates": 20,
+            "minT": 2,
+            "minPositiveBlocks": 3,
+            "maxTop1Share": 0.5
+          },
+          "dividend": {
+            "gapDays": 1095
+          },
+          "upgrade": {
+            "windowSessions": 3,
+            "minBrokersA": 2,
+            "minBrokersB": 3
+          },
+          "smallMicroAdvMax": 20000000
+        },
+        "own": {
+          "variants": [
+            "A",
+            "B"
+          ],
+          "primary": {
+            "variant": "A",
+            "H": 5
+          }
+        }
+      },
+      "dataSnapshot": {
+        "attrition": {
+          "raw": 561,
+          "notCached": 0,
+          "noDecisionDate": 0,
+          "noDecisionBar": 46,
+          "tooFewBars": 20,
+          "priceFloor": 1,
+          "advFloor": 3,
+          "cooldown": 85,
+          "scored": 388,
+          "outsideWindows": 18
+        },
+        "events": 388
+      },
+      "trialCount": 21,
+      "results": {
+        "primary": "analyst-upgrade-cluster:A@5",
+        "dev": {
+          "analyst-upgrade-cluster:A@5": {
+            "n": 260,
+            "dates": 215,
+            "avg": -0.2652,
+            "t": -0.58,
+            "p": 0.5618,
+            "median": -0.3194,
+            "top1": null,
+            "blocks": 1,
+            "q": 0.613,
+            "survives": false,
+            "placebo": {
+              "n": 207,
+              "dates": 170,
+              "avg": -0.2319,
+              "t": -0.37,
+              "p": 0.7119,
+              "median": -0.3972,
+              "top1": null,
+              "blocks": 2
+            }
+          },
+          "analyst-upgrade-cluster:A@21": {
+            "n": 260,
+            "dates": 215,
+            "avg": -0.9234,
+            "t": -1.15,
+            "p": 0.2527,
+            "median": 0.0896,
+            "top1": null,
+            "blocks": 1,
+            "q": 0.3935,
+            "survives": false,
+            "placebo": {
+              "n": 207,
+              "dates": 170,
+              "avg": -0.0477,
+              "t": -0.05,
+              "p": 0.9629,
+              "median": -0.8274,
+              "top1": 1.9153,
+              "blocks": 1
+            }
+          },
+          "analyst-upgrade-cluster:A@63": {
+            "n": 260,
+            "dates": 215,
+            "avg": -1.9945,
+            "t": -1.53,
+            "p": 0.1279,
+            "median": -1.5435,
+            "top1": null,
+            "blocks": 0,
+            "q": 0.2238,
+            "survives": false,
+            "placebo": {
+              "n": 206,
+              "dates": 169,
+              "avg": 0.9613,
+              "t": 0.56,
+              "p": 0.5769,
+              "median": -2.2186,
+              "top1": 1.3319,
+              "blocks": 2
+            }
+          },
+          "analyst-upgrade-cluster:B@5": {
+            "n": 15,
+            "dates": 15,
+            "avg": -6.0525,
+            "t": -2.63,
+            "p": 0.0221,
+            "median": -4.7414,
+            "top1": null,
+            "blocks": 0,
+            "q": 0.1051,
+            "survives": false,
+            "placebo": {
+              "n": 14,
+              "dates": 14,
+              "avg": -2.3583,
+              "t": -0.77,
+              "p": 0.453,
+              "median": -0.2448,
+              "top1": null,
+              "blocks": 1
+            }
+          },
+          "analyst-upgrade-cluster:B@21": {
+            "n": 15,
+            "dates": 15,
+            "avg": -7.4643,
+            "t": -2.36,
+            "p": 0.0331,
+            "median": -7.4226,
+            "top1": null,
+            "blocks": 1,
+            "q": 0.1051,
+            "survives": false,
+            "placebo": {
+              "n": 14,
+              "dates": 14,
+              "avg": -2.9936,
+              "t": -0.7,
+              "p": 0.498,
+              "median": -2.1246,
+              "top1": null,
+              "blocks": 1
+            }
+          },
+          "analyst-upgrade-cluster:B@63": {
+            "n": 15,
+            "dates": 15,
+            "avg": -13.8966,
+            "t": -2.13,
+            "p": 0.0513,
+            "median": -7.8942,
+            "top1": null,
+            "blocks": 1,
+            "q": 0.1347,
+            "survives": false,
+            "placebo": {
+              "n": 14,
+              "dates": 14,
+              "avg": -1.0546,
+              "t": -0.13,
+              "p": 0.8955,
+              "median": -4.8084,
+              "top1": null,
+              "blocks": 2
+            }
+          }
+        },
+        "holdout": {
+          "analyst-upgrade-cluster:A@5": {
+            "n": 128,
+            "dates": 103,
+            "avg": -0.5672,
+            "t": -0.7,
+            "p": 0.4877,
+            "median": -0.792,
+            "top1": null,
+            "blocks": 1,
+            "doubledAvg": -0.8135,
+            "placebo": {
+              "n": 128,
+              "dates": 103,
+              "avg": -1.2158,
+              "t": -2.1,
+              "p": 0.0379,
+              "median": -0.62,
+              "top1": null,
+              "blocks": 1
+            }
+          },
+          "analyst-upgrade-cluster:A@21": {
+            "n": 128,
+            "dates": 103,
+            "avg": 0.3026,
+            "t": 0.2,
+            "p": 0.8447,
+            "median": 0.3278,
+            "top1": 0.9316,
+            "blocks": 3,
+            "doubledAvg": 0.0563,
+            "placebo": {
+              "n": 128,
+              "dates": 103,
+              "avg": 0.7401,
+              "t": 0.49,
+              "p": 0.6248,
+              "median": 1.0933,
+              "top1": 0.8831,
+              "blocks": 2
+            }
+          },
+          "analyst-upgrade-cluster:A@63": {
+            "n": 126,
+            "dates": 102,
+            "avg": 3.138,
+            "t": 0.89,
+            "p": 0.377,
+            "median": -1.4088,
+            "top1": 1.1056,
+            "blocks": 3,
+            "doubledAvg": 2.8909,
+            "placebo": {
+              "n": 127,
+              "dates": 102,
+              "avg": 3.7782,
+              "t": 1.34,
+              "p": 0.1825,
+              "median": -3.0933,
+              "top1": 0.5626,
+              "blocks": 3
+            }
+          },
+          "analyst-upgrade-cluster:B@5": {
+            "n": 8,
+            "dates": 8,
+            "avg": 0.4665,
+            "t": 0.23,
+            "p": 0.8246,
+            "median": 0.9135,
+            "top1": 2.5784,
+            "blocks": 2,
+            "doubledAvg": 0.3065,
+            "placebo": {
+              "n": 8,
+              "dates": 8,
+              "avg": 0.5125,
+              "t": 0.31,
+              "p": 0.7842,
+              "median": 0.4544,
+              "top1": 1.5253,
+              "blocks": 2
+            }
+          },
+          "analyst-upgrade-cluster:B@21": {
+            "n": 8,
+            "dates": 8,
+            "avg": -0.6772,
+            "t": -0.13,
+            "p": 0.8983,
+            "median": -0.4976,
+            "top1": null,
+            "blocks": 3,
+            "doubledAvg": -0.8372,
+            "placebo": {
+              "n": 8,
+              "dates": 8,
+              "avg": 2.9859,
+              "t": 0.57,
+              "p": 0.5888,
+              "median": 2.5987,
+              "top1": 1.3824,
+              "blocks": 1
+            }
+          },
+          "analyst-upgrade-cluster:B@63": {
+            "n": 8,
+            "dates": 8,
+            "avg": 23.4757,
+            "t": 0.95,
+            "p": 0.3727,
+            "median": 5.4949,
+            "top1": 1.006,
+            "blocks": 2,
+            "doubledAvg": 23.3157,
+            "placebo": {
+              "n": 7,
+              "dates": 7,
+              "avg": -2.0043,
+              "t": -0.17,
+              "p": 0.869,
+              "median": -7.1036,
+              "top1": null,
+              "blocks": 0
+            }
+          }
+        },
+        "verdict": {
+          "status": "no-edge",
+          "primaryCell": "analyst-upgrade-cluster:A@5",
+          "reason": "development cell failed: avg -0.2652% t -0.58 q 0.613 blocks+ 1/4",
+          "devPass": false
+        }
+      },
+      "artifact": {
+        "file": "/Users/ravishah/worktrees/alpha-external/research/data/evidence/external-events/external-events-result.json",
+        "sha256": "fe6a7674852033da98c7805241dfdd2f4f39d64b6d8b569ead693ab2d1798b51",
+        "bytes": 90150
+      },
+      "immutable": true,
+      "parentExperimentId": "analyst-upgrade-cluster-2026-09"
+    },
+    {
       "recordedAt": "2026-08-05T04:40:22.897Z",
       "id": "B-gapgo-orb-v2-2026-08",
       "hypothesis": "An EOD gap-up decision entered on the NEXT session 30-minute ORB produces positive cost-net R in the TAKE cohort and beats the CONTROL cohort, with honest no-fill/gap-through accounting.",
@@ -95,6 +1321,721 @@
         "bytes": 2538
       },
       "immutable": true
+    },
+    {
+      "recordedAt": "2026-09-19T02:28:11.659Z",
+      "id": "buyback-authorization-8k-2026-09",
+      "family": "external-events-2026-09",
+      "seal": "b43f45a",
+      "hypothesis": "A stand-alone 8-K announcing a share/stock repurchase program (item 8.01, not an earnings release) is followed by positive cost-net SPY-excess return over the next 21 sessions from the next open.",
+      "frozenConfig": {
+        "shared": {
+          "family": "external-events-2026-09",
+          "seal": "b43f45a",
+          "horizons": [
+            5,
+            21,
+            63
+          ],
+          "universe": {
+            "minAdv": 2000000,
+            "maxNames": 12000
+          },
+          "eligibility": {
+            "minPriorBars": 60,
+            "minClose": 2,
+            "minAdv": 2000000
+          },
+          "cooldownSessions": 63,
+          "placeboShift": 126,
+          "dev": {
+            "from": "2021-08-02",
+            "to": "2024-12-31"
+          },
+          "holdout": {
+            "from": "2025-01-02",
+            "to": "2026-03-31"
+          },
+          "fdrAlpha": 0.1,
+          "gates": {
+            "minEvents": 50,
+            "minDates": 20,
+            "minT": 2,
+            "minPositiveBlocks": 3,
+            "maxTop1Share": 0.5
+          },
+          "dividend": {
+            "gapDays": 1095
+          },
+          "upgrade": {
+            "windowSessions": 3,
+            "minBrokersA": 2,
+            "minBrokersB": 3
+          },
+          "smallMicroAdvMax": 20000000
+        },
+        "own": {
+          "variants": [
+            "A",
+            "B"
+          ],
+          "primary": {
+            "variant": "B",
+            "H": 21
+          }
+        }
+      },
+      "dataSnapshot": {
+        "attrition": {
+          "raw": 12776,
+          "notCached": 4395,
+          "noDecisionDate": 1,
+          "noDecisionBar": 26,
+          "tooFewBars": 304,
+          "priceFloor": 42,
+          "advFloor": 706,
+          "cooldown": 2308,
+          "scored": 4994,
+          "outsideWindows": 0
+        },
+        "events": 4994
+      },
+      "trialCount": 21,
+      "results": {
+        "primary": "buyback-authorization-8k:B@21",
+        "dev": {
+          "buyback-authorization-8k:A@5": {
+            "n": 3371,
+            "dates": 685,
+            "avg": -0.5176,
+            "t": -2.59,
+            "p": 0.0099,
+            "median": -0.6062,
+            "top1": null,
+            "blocks": 0,
+            "q": 0.0593,
+            "survives": true,
+            "placebo": {
+              "n": 2771,
+              "dates": 576,
+              "avg": -0.5097,
+              "t": -2.31,
+              "p": 0.0214,
+              "median": -0.766,
+              "top1": null,
+              "blocks": 0
+            }
+          },
+          "buyback-authorization-8k:A@21": {
+            "n": 3370,
+            "dates": 685,
+            "avg": -0.8464,
+            "t": -1.77,
+            "p": 0.0774,
+            "median": -1.3932,
+            "top1": null,
+            "blocks": 0,
+            "q": 0.2322,
+            "survives": false,
+            "placebo": {
+              "n": 2770,
+              "dates": 576,
+              "avg": -0.4146,
+              "t": -0.69,
+              "p": 0.4905,
+              "median": -1.2688,
+              "top1": null,
+              "blocks": 1
+            }
+          },
+          "buyback-authorization-8k:A@63": {
+            "n": 3365,
+            "dates": 685,
+            "avg": -1.7427,
+            "t": -1.63,
+            "p": 0.1049,
+            "median": -2.4638,
+            "top1": null,
+            "blocks": 0,
+            "q": 0.2412,
+            "survives": false,
+            "placebo": {
+              "n": 2769,
+              "dates": 576,
+              "avg": -0.6017,
+              "t": -0.65,
+              "p": 0.5179,
+              "median": -2.4363,
+              "top1": null,
+              "blocks": 1
+            }
+          },
+          "buyback-authorization-8k:B@5": {
+            "n": 564,
+            "dates": 386,
+            "avg": -0.7518,
+            "t": -2.21,
+            "p": 0.0283,
+            "median": -0.4944,
+            "top1": null,
+            "blocks": 0,
+            "q": 0.1019,
+            "survives": false,
+            "placebo": {
+              "n": 434,
+              "dates": 309,
+              "avg": -0.1028,
+              "t": -0.29,
+              "p": 0.7757,
+              "median": -0.6738,
+              "top1": null,
+              "blocks": 2
+            }
+          },
+          "buyback-authorization-8k:B@21": {
+            "n": 564,
+            "dates": 386,
+            "avg": -1.6062,
+            "t": -2.88,
+            "p": 0.0044,
+            "median": -1.5307,
+            "top1": null,
+            "blocks": 0,
+            "q": 0.0399,
+            "survives": true,
+            "placebo": {
+              "n": 434,
+              "dates": 309,
+              "avg": -0.2108,
+              "t": -0.25,
+              "p": 0.8014,
+              "median": -0.7006,
+              "top1": null,
+              "blocks": 2
+            }
+          },
+          "buyback-authorization-8k:B@63": {
+            "n": 564,
+            "dates": 386,
+            "avg": -2.1577,
+            "t": -1.62,
+            "p": 0.1072,
+            "median": -3.4692,
+            "top1": null,
+            "blocks": 1,
+            "q": 0.2412,
+            "survives": false,
+            "placebo": {
+              "n": 434,
+              "dates": 309,
+              "avg": -0.0009,
+              "t": 0,
+              "p": 0.9994,
+              "median": -3.104,
+              "top1": null,
+              "blocks": 2
+            }
+          }
+        },
+        "holdout": {
+          "buyback-authorization-8k:A@5": {
+            "n": 1616,
+            "dates": 262,
+            "avg": -0.4251,
+            "t": -1.49,
+            "p": 0.1382,
+            "median": -0.7765,
+            "top1": null,
+            "blocks": 1,
+            "doubledAvg": -0.87,
+            "placebo": {
+              "n": 1614,
+              "dates": 262,
+              "avg": -0.6162,
+              "t": -2.29,
+              "p": 0.0234,
+              "median": -0.3627,
+              "top1": null,
+              "blocks": 1
+            }
+          },
+          "buyback-authorization-8k:A@21": {
+            "n": 1612,
+            "dates": 262,
+            "avg": -1.1203,
+            "t": -2.24,
+            "p": 0.0257,
+            "median": -0.8502,
+            "top1": null,
+            "blocks": 0,
+            "doubledAvg": -1.5664,
+            "placebo": {
+              "n": 1614,
+              "dates": 262,
+              "avg": -1.0045,
+              "t": -1.5,
+              "p": 0.1346,
+              "median": -1.7234,
+              "top1": null,
+              "blocks": 0
+            }
+          },
+          "buyback-authorization-8k:A@63": {
+            "n": 1584,
+            "dates": 258,
+            "avg": -1.7775,
+            "t": -1.69,
+            "p": 0.092,
+            "median": -4.9886,
+            "top1": null,
+            "blocks": 1,
+            "doubledAvg": -2.2263,
+            "placebo": {
+              "n": 1605,
+              "dates": 262,
+              "avg": -2.4835,
+              "t": -1.86,
+              "p": 0.0662,
+              "median": -5.7787,
+              "top1": null,
+              "blocks": 1
+            }
+          },
+          "buyback-authorization-8k:B@5": {
+            "n": 227,
+            "dates": 137,
+            "avg": -1.2326,
+            "t": -2.32,
+            "p": 0.022,
+            "median": -1.0197,
+            "top1": null,
+            "blocks": 1,
+            "doubledAvg": -1.6717,
+            "placebo": {
+              "n": 225,
+              "dates": 136,
+              "avg": -0.2036,
+              "t": -0.43,
+              "p": 0.6709,
+              "median": -0.6949,
+              "top1": null,
+              "blocks": 1
+            }
+          },
+          "buyback-authorization-8k:B@21": {
+            "n": 225,
+            "dates": 136,
+            "avg": -2.314,
+            "t": -2.08,
+            "p": 0.0395,
+            "median": -0.8882,
+            "top1": null,
+            "blocks": 1,
+            "doubledAvg": -2.7536,
+            "placebo": {
+              "n": 225,
+              "dates": 136,
+              "avg": -0.4079,
+              "t": -0.32,
+              "p": 0.7471,
+              "median": -1.3165,
+              "top1": null,
+              "blocks": 1
+            }
+          },
+          "buyback-authorization-8k:B@63": {
+            "n": 221,
+            "dates": 133,
+            "avg": -1.983,
+            "t": -1,
+            "p": 0.3187,
+            "median": -2.5098,
+            "top1": null,
+            "blocks": 1,
+            "doubledAvg": -2.4181,
+            "placebo": {
+              "n": 223,
+              "dates": 135,
+              "avg": -1.4474,
+              "t": -0.44,
+              "p": 0.6573,
+              "median": -4.3916,
+              "top1": null,
+              "blocks": 1
+            }
+          }
+        },
+        "verdict": {
+          "status": "no-edge",
+          "primaryCell": "buyback-authorization-8k:B@21",
+          "reason": "development cell failed: avg -1.6062% t -2.88 q 0.0399 blocks+ 0/4",
+          "devPass": false
+        }
+      },
+      "artifact": {
+        "file": "/Users/ravishah/worktrees/alpha-external/research/data/evidence/external-events/external-events-result.json",
+        "sha256": "7488f860bbb9ea0f46fbfcc9ea949d2cb13c7563de58e3cb23096fe5de2a1c0b",
+        "bytes": 69571
+      },
+      "immutable": true
+    },
+    {
+      "recordedAt": "2026-09-19T02:33:26.989Z",
+      "id": "buyback-authorization-8k-2026-09.r2",
+      "family": "external-events-2026-09",
+      "seal": "b43f45a",
+      "hypothesis": "A stand-alone 8-K announcing a share/stock repurchase program (item 8.01, not an earnings release) is followed by positive cost-net SPY-excess return over the next 21 sessions from the next open.",
+      "frozenConfig": {
+        "shared": {
+          "family": "external-events-2026-09",
+          "seal": "b43f45a",
+          "horizons": [
+            5,
+            21,
+            63
+          ],
+          "universe": {
+            "minAdv": 2000000,
+            "maxNames": 12000
+          },
+          "eligibility": {
+            "minPriorBars": 60,
+            "minClose": 2,
+            "minAdv": 2000000
+          },
+          "cooldownSessions": 63,
+          "placeboShift": 126,
+          "dev": {
+            "from": "2021-08-02",
+            "to": "2024-12-31"
+          },
+          "holdout": {
+            "from": "2025-01-02",
+            "to": "2026-03-31"
+          },
+          "fdrAlpha": 0.1,
+          "gates": {
+            "minEvents": 50,
+            "minDates": 20,
+            "minT": 2,
+            "minPositiveBlocks": 3,
+            "maxTop1Share": 0.5
+          },
+          "dividend": {
+            "gapDays": 1095
+          },
+          "upgrade": {
+            "windowSessions": 3,
+            "minBrokersA": 2,
+            "minBrokersB": 3
+          },
+          "smallMicroAdvMax": 20000000
+        },
+        "own": {
+          "variants": [
+            "A",
+            "B"
+          ],
+          "primary": {
+            "variant": "B",
+            "H": 21
+          }
+        }
+      },
+      "dataSnapshot": {
+        "attrition": {
+          "raw": 12776,
+          "notCached": 4395,
+          "noDecisionDate": 1,
+          "noDecisionBar": 26,
+          "tooFewBars": 304,
+          "priceFloor": 42,
+          "advFloor": 706,
+          "cooldown": 2308,
+          "scored": 4994,
+          "outsideWindows": 0
+        },
+        "events": 4994
+      },
+      "trialCount": 21,
+      "results": {
+        "primary": "buyback-authorization-8k:B@21",
+        "dev": {
+          "buyback-authorization-8k:A@5": {
+            "n": 3371,
+            "dates": 685,
+            "avg": -0.5176,
+            "t": -2.59,
+            "p": 0.0099,
+            "median": -0.6062,
+            "top1": null,
+            "blocks": 0,
+            "q": 0.0692,
+            "survives": true,
+            "placebo": {
+              "n": 2771,
+              "dates": 576,
+              "avg": -0.5097,
+              "t": -2.31,
+              "p": 0.0214,
+              "median": -0.766,
+              "top1": null,
+              "blocks": 0
+            }
+          },
+          "buyback-authorization-8k:A@21": {
+            "n": 3370,
+            "dates": 685,
+            "avg": -0.8464,
+            "t": -1.77,
+            "p": 0.0774,
+            "median": -1.3932,
+            "top1": null,
+            "blocks": 0,
+            "q": 0.1806,
+            "survives": false,
+            "placebo": {
+              "n": 2770,
+              "dates": 576,
+              "avg": -0.4146,
+              "t": -0.69,
+              "p": 0.4905,
+              "median": -1.2688,
+              "top1": null,
+              "blocks": 1
+            }
+          },
+          "buyback-authorization-8k:A@63": {
+            "n": 3365,
+            "dates": 685,
+            "avg": -1.7427,
+            "t": -1.63,
+            "p": 0.1049,
+            "median": -2.4638,
+            "top1": null,
+            "blocks": 0,
+            "q": 0.2047,
+            "survives": false,
+            "placebo": {
+              "n": 2769,
+              "dates": 576,
+              "avg": -0.6017,
+              "t": -0.65,
+              "p": 0.5179,
+              "median": -2.4363,
+              "top1": null,
+              "blocks": 1
+            }
+          },
+          "buyback-authorization-8k:B@5": {
+            "n": 564,
+            "dates": 386,
+            "avg": -0.7518,
+            "t": -2.21,
+            "p": 0.0283,
+            "median": -0.4944,
+            "top1": null,
+            "blocks": 0,
+            "q": 0.1051,
+            "survives": false,
+            "placebo": {
+              "n": 434,
+              "dates": 309,
+              "avg": -0.1028,
+              "t": -0.29,
+              "p": 0.7757,
+              "median": -0.6738,
+              "top1": null,
+              "blocks": 2
+            }
+          },
+          "buyback-authorization-8k:B@21": {
+            "n": 564,
+            "dates": 386,
+            "avg": -1.6062,
+            "t": -2.88,
+            "p": 0.0044,
+            "median": -1.5307,
+            "top1": null,
+            "blocks": 0,
+            "q": 0.0465,
+            "survives": true,
+            "placebo": {
+              "n": 434,
+              "dates": 309,
+              "avg": -0.2108,
+              "t": -0.25,
+              "p": 0.8014,
+              "median": -0.7006,
+              "top1": null,
+              "blocks": 2
+            }
+          },
+          "buyback-authorization-8k:B@63": {
+            "n": 564,
+            "dates": 386,
+            "avg": -2.1577,
+            "t": -1.62,
+            "p": 0.1072,
+            "median": -3.4692,
+            "top1": null,
+            "blocks": 1,
+            "q": 0.2047,
+            "survives": false,
+            "placebo": {
+              "n": 434,
+              "dates": 309,
+              "avg": -0.0009,
+              "t": 0,
+              "p": 0.9994,
+              "median": -3.104,
+              "top1": null,
+              "blocks": 2
+            }
+          }
+        },
+        "holdout": {
+          "buyback-authorization-8k:A@5": {
+            "n": 1616,
+            "dates": 262,
+            "avg": -0.4251,
+            "t": -1.49,
+            "p": 0.1382,
+            "median": -0.7765,
+            "top1": null,
+            "blocks": 1,
+            "doubledAvg": -0.87,
+            "placebo": {
+              "n": 1614,
+              "dates": 262,
+              "avg": -0.6162,
+              "t": -2.29,
+              "p": 0.0234,
+              "median": -0.3627,
+              "top1": null,
+              "blocks": 1
+            }
+          },
+          "buyback-authorization-8k:A@21": {
+            "n": 1612,
+            "dates": 262,
+            "avg": -1.1203,
+            "t": -2.24,
+            "p": 0.0257,
+            "median": -0.8502,
+            "top1": null,
+            "blocks": 0,
+            "doubledAvg": -1.5664,
+            "placebo": {
+              "n": 1614,
+              "dates": 262,
+              "avg": -1.0045,
+              "t": -1.5,
+              "p": 0.1346,
+              "median": -1.7234,
+              "top1": null,
+              "blocks": 0
+            }
+          },
+          "buyback-authorization-8k:A@63": {
+            "n": 1584,
+            "dates": 258,
+            "avg": -1.7775,
+            "t": -1.69,
+            "p": 0.092,
+            "median": -4.9886,
+            "top1": null,
+            "blocks": 1,
+            "doubledAvg": -2.2263,
+            "placebo": {
+              "n": 1605,
+              "dates": 262,
+              "avg": -2.4835,
+              "t": -1.86,
+              "p": 0.0662,
+              "median": -5.7787,
+              "top1": null,
+              "blocks": 1
+            }
+          },
+          "buyback-authorization-8k:B@5": {
+            "n": 227,
+            "dates": 137,
+            "avg": -1.2326,
+            "t": -2.32,
+            "p": 0.022,
+            "median": -1.0197,
+            "top1": null,
+            "blocks": 1,
+            "doubledAvg": -1.6717,
+            "placebo": {
+              "n": 225,
+              "dates": 136,
+              "avg": -0.2036,
+              "t": -0.43,
+              "p": 0.6709,
+              "median": -0.6949,
+              "top1": null,
+              "blocks": 1
+            }
+          },
+          "buyback-authorization-8k:B@21": {
+            "n": 225,
+            "dates": 136,
+            "avg": -2.314,
+            "t": -2.08,
+            "p": 0.0395,
+            "median": -0.8882,
+            "top1": null,
+            "blocks": 1,
+            "doubledAvg": -2.7536,
+            "placebo": {
+              "n": 225,
+              "dates": 136,
+              "avg": -0.4079,
+              "t": -0.32,
+              "p": 0.7471,
+              "median": -1.3165,
+              "top1": null,
+              "blocks": 1
+            }
+          },
+          "buyback-authorization-8k:B@63": {
+            "n": 221,
+            "dates": 133,
+            "avg": -1.983,
+            "t": -1,
+            "p": 0.3187,
+            "median": -2.5098,
+            "top1": null,
+            "blocks": 1,
+            "doubledAvg": -2.4181,
+            "placebo": {
+              "n": 223,
+              "dates": 135,
+              "avg": -1.4474,
+              "t": -0.44,
+              "p": 0.6573,
+              "median": -4.3916,
+              "top1": null,
+              "blocks": 1
+            }
+          }
+        },
+        "verdict": {
+          "status": "no-edge",
+          "primaryCell": "buyback-authorization-8k:B@21",
+          "reason": "development cell failed: avg -1.6062% t -2.88 q 0.0465 blocks+ 0/4",
+          "devPass": false
+        }
+      },
+      "artifact": {
+        "file": "/Users/ravishah/worktrees/alpha-external/research/data/evidence/external-events/external-events-result.json",
+        "sha256": "fe6a7674852033da98c7805241dfdd2f4f39d64b6d8b569ead693ab2d1798b51",
+        "bytes": 90150
+      },
+      "immutable": true,
+      "parentExperimentId": "buyback-authorization-8k-2026-09"
     },
     {
       "recordedAt": "2026-08-05T04:40:36.794Z",
@@ -15710,6 +17651,461 @@
       },
       "immutable": true,
       "parentExperimentId": "dilution-events-2026-08"
+    },
+    {
+      "recordedAt": "2026-09-19T02:28:11.663Z",
+      "id": "dividend-initiation-2026-09",
+      "family": "external-events-2026-09",
+      "seal": "b43f45a",
+      "hypothesis": "The declaration of a first cash dividend after ≥3 years without one is followed by positive cost-net SPY-excess drift over the next 63 sessions from the next open.",
+      "frozenConfig": {
+        "shared": {
+          "family": "external-events-2026-09",
+          "seal": "b43f45a",
+          "horizons": [
+            5,
+            21,
+            63
+          ],
+          "universe": {
+            "minAdv": 2000000,
+            "maxNames": 12000
+          },
+          "eligibility": {
+            "minPriorBars": 60,
+            "minClose": 2,
+            "minAdv": 2000000
+          },
+          "cooldownSessions": 63,
+          "placeboShift": 126,
+          "dev": {
+            "from": "2021-08-02",
+            "to": "2024-12-31"
+          },
+          "holdout": {
+            "from": "2025-01-02",
+            "to": "2026-03-31"
+          },
+          "fdrAlpha": 0.1,
+          "gates": {
+            "minEvents": 50,
+            "minDates": 20,
+            "minT": 2,
+            "minPositiveBlocks": 3,
+            "maxTop1Share": 0.5
+          },
+          "dividend": {
+            "gapDays": 1095
+          },
+          "upgrade": {
+            "windowSessions": 3,
+            "minBrokersA": 2,
+            "minBrokersB": 3
+          },
+          "smallMicroAdvMax": 20000000
+        },
+        "own": {
+          "variants": [
+            "A"
+          ],
+          "primary": {
+            "variant": "A",
+            "H": 63
+          }
+        }
+      },
+      "dataSnapshot": {
+        "attrition": {
+          "raw": 1540,
+          "notCached": 342,
+          "noDecisionDate": 1013,
+          "noDecisionBar": 5,
+          "tooFewBars": 42,
+          "priceFloor": 0,
+          "advFloor": 25,
+          "cooldown": 0,
+          "scored": 108,
+          "outsideWindows": 5
+        },
+        "events": 108
+      },
+      "trialCount": 21,
+      "results": {
+        "primary": "dividend-initiation:A@63",
+        "dev": {
+          "dividend-initiation:A@5": {
+            "n": 86,
+            "dates": 76,
+            "avg": -0.2304,
+            "t": -0.34,
+            "p": 0.7331,
+            "median": 0.4446,
+            "top1": null,
+            "blocks": 1,
+            "q": 0.7762,
+            "survives": false,
+            "placebo": {
+              "n": 54,
+              "dates": 48,
+              "avg": -0.095,
+              "t": -0.11,
+              "p": 0.9145,
+              "median": -1.4615,
+              "top1": 2.0896,
+              "blocks": 2
+            }
+          },
+          "dividend-initiation:A@21": {
+            "n": 84,
+            "dates": 74,
+            "avg": -1.4639,
+            "t": -0.99,
+            "p": 0.3266,
+            "median": -0.7609,
+            "top1": null,
+            "blocks": 2,
+            "q": 0.4199,
+            "survives": false,
+            "placebo": {
+              "n": 54,
+              "dates": 48,
+              "avg": 3.6663,
+              "t": 1.93,
+              "p": 0.0594,
+              "median": 0.6113,
+              "top1": 0.2278,
+              "blocks": 4
+            }
+          },
+          "dividend-initiation:A@63": {
+            "n": 83,
+            "dates": 74,
+            "avg": -2.1469,
+            "t": -1,
+            "p": 0.3205,
+            "median": 0.8262,
+            "top1": null,
+            "blocks": 2,
+            "q": 0.4199,
+            "survives": false,
+            "placebo": {
+              "n": 54,
+              "dates": 48,
+              "avg": 5.7175,
+              "t": 1.57,
+              "p": 0.1227,
+              "median": -1.408,
+              "top1": 0.2939,
+              "blocks": 3
+            }
+          }
+        },
+        "holdout": {
+          "dividend-initiation:A@5": {
+            "n": 22,
+            "dates": 19,
+            "avg": 0.9491,
+            "t": 0.65,
+            "p": 0.5243,
+            "median": 0.2754,
+            "top1": 0.3296,
+            "blocks": 1,
+            "doubledAvg": 0.4386,
+            "placebo": {
+              "n": 19,
+              "dates": 16,
+              "avg": -0.0864,
+              "t": -0.06,
+              "p": 0.9503,
+              "median": 0.3104,
+              "top1": null,
+              "blocks": 2
+            }
+          },
+          "dividend-initiation:A@21": {
+            "n": 21,
+            "dates": 18,
+            "avg": -0.883,
+            "t": -0.27,
+            "p": 0.7911,
+            "median": 1.3663,
+            "top1": null,
+            "blocks": 2,
+            "doubledAvg": -1.413,
+            "placebo": {
+              "n": 19,
+              "dates": 16,
+              "avg": 3.4346,
+              "t": 0.77,
+              "p": 0.452,
+              "median": 3.1058,
+              "top1": 6.7945,
+              "blocks": 3
+            }
+          },
+          "dividend-initiation:A@63": {
+            "n": 20,
+            "dates": 17,
+            "avg": -0.3205,
+            "t": -0.06,
+            "p": 0.954,
+            "median": -4.7661,
+            "top1": null,
+            "blocks": 2,
+            "doubledAvg": -0.8463,
+            "placebo": {
+              "n": 19,
+              "dates": 16,
+              "avg": 5.0244,
+              "t": 0.79,
+              "p": 0.4436,
+              "median": -1.0249,
+              "top1": 7.5746,
+              "blocks": 3
+            }
+          }
+        },
+        "verdict": {
+          "status": "no-edge",
+          "primaryCell": "dividend-initiation:A@63",
+          "reason": "development cell failed: avg -2.1469% t -1 q 0.4199 blocks+ 2/4",
+          "devPass": false
+        }
+      },
+      "artifact": {
+        "file": "/Users/ravishah/worktrees/alpha-external/research/data/evidence/external-events/external-events-result.json",
+        "sha256": "7488f860bbb9ea0f46fbfcc9ea949d2cb13c7563de58e3cb23096fe5de2a1c0b",
+        "bytes": 69571
+      },
+      "immutable": true
+    },
+    {
+      "recordedAt": "2026-09-19T02:33:26.994Z",
+      "id": "dividend-initiation-2026-09.r2",
+      "family": "external-events-2026-09",
+      "seal": "b43f45a",
+      "hypothesis": "The declaration of a first cash dividend after ≥3 years without one is followed by positive cost-net SPY-excess drift over the next 63 sessions from the next open.",
+      "frozenConfig": {
+        "shared": {
+          "family": "external-events-2026-09",
+          "seal": "b43f45a",
+          "horizons": [
+            5,
+            21,
+            63
+          ],
+          "universe": {
+            "minAdv": 2000000,
+            "maxNames": 12000
+          },
+          "eligibility": {
+            "minPriorBars": 60,
+            "minClose": 2,
+            "minAdv": 2000000
+          },
+          "cooldownSessions": 63,
+          "placeboShift": 126,
+          "dev": {
+            "from": "2021-08-02",
+            "to": "2024-12-31"
+          },
+          "holdout": {
+            "from": "2025-01-02",
+            "to": "2026-03-31"
+          },
+          "fdrAlpha": 0.1,
+          "gates": {
+            "minEvents": 50,
+            "minDates": 20,
+            "minT": 2,
+            "minPositiveBlocks": 3,
+            "maxTop1Share": 0.5
+          },
+          "dividend": {
+            "gapDays": 1095
+          },
+          "upgrade": {
+            "windowSessions": 3,
+            "minBrokersA": 2,
+            "minBrokersB": 3
+          },
+          "smallMicroAdvMax": 20000000
+        },
+        "own": {
+          "variants": [
+            "A"
+          ],
+          "primary": {
+            "variant": "A",
+            "H": 63
+          }
+        }
+      },
+      "dataSnapshot": {
+        "attrition": {
+          "raw": 1540,
+          "notCached": 342,
+          "noDecisionDate": 1013,
+          "noDecisionBar": 5,
+          "tooFewBars": 42,
+          "priceFloor": 0,
+          "advFloor": 25,
+          "cooldown": 0,
+          "scored": 108,
+          "outsideWindows": 5
+        },
+        "events": 108
+      },
+      "trialCount": 21,
+      "results": {
+        "primary": "dividend-initiation:A@63",
+        "dev": {
+          "dividend-initiation:A@5": {
+            "n": 86,
+            "dates": 76,
+            "avg": -0.2304,
+            "t": -0.34,
+            "p": 0.7331,
+            "median": 0.4446,
+            "top1": null,
+            "blocks": 1,
+            "q": 0.7331,
+            "survives": false,
+            "placebo": {
+              "n": 54,
+              "dates": 48,
+              "avg": -0.095,
+              "t": -0.11,
+              "p": 0.9145,
+              "median": -1.4615,
+              "top1": 2.0896,
+              "blocks": 2
+            }
+          },
+          "dividend-initiation:A@21": {
+            "n": 84,
+            "dates": 74,
+            "avg": -1.4639,
+            "t": -0.99,
+            "p": 0.3266,
+            "median": -0.7609,
+            "top1": null,
+            "blocks": 2,
+            "q": 0.4286,
+            "survives": false,
+            "placebo": {
+              "n": 54,
+              "dates": 48,
+              "avg": 3.6663,
+              "t": 1.93,
+              "p": 0.0594,
+              "median": 0.6113,
+              "top1": 0.2278,
+              "blocks": 4
+            }
+          },
+          "dividend-initiation:A@63": {
+            "n": 83,
+            "dates": 74,
+            "avg": -2.1469,
+            "t": -1,
+            "p": 0.3205,
+            "median": 0.8262,
+            "top1": null,
+            "blocks": 2,
+            "q": 0.4286,
+            "survives": false,
+            "placebo": {
+              "n": 54,
+              "dates": 48,
+              "avg": 5.7175,
+              "t": 1.57,
+              "p": 0.1227,
+              "median": -1.408,
+              "top1": 0.2939,
+              "blocks": 3
+            }
+          }
+        },
+        "holdout": {
+          "dividend-initiation:A@5": {
+            "n": 22,
+            "dates": 19,
+            "avg": 0.9491,
+            "t": 0.65,
+            "p": 0.5243,
+            "median": 0.2754,
+            "top1": 0.3296,
+            "blocks": 1,
+            "doubledAvg": 0.4386,
+            "placebo": {
+              "n": 19,
+              "dates": 16,
+              "avg": -0.0864,
+              "t": -0.06,
+              "p": 0.9503,
+              "median": 0.3104,
+              "top1": null,
+              "blocks": 2
+            }
+          },
+          "dividend-initiation:A@21": {
+            "n": 21,
+            "dates": 18,
+            "avg": -0.883,
+            "t": -0.27,
+            "p": 0.7911,
+            "median": 1.3663,
+            "top1": null,
+            "blocks": 2,
+            "doubledAvg": -1.413,
+            "placebo": {
+              "n": 19,
+              "dates": 16,
+              "avg": 3.4346,
+              "t": 0.77,
+              "p": 0.452,
+              "median": 3.1058,
+              "top1": 6.7945,
+              "blocks": 3
+            }
+          },
+          "dividend-initiation:A@63": {
+            "n": 20,
+            "dates": 17,
+            "avg": -0.3205,
+            "t": -0.06,
+            "p": 0.954,
+            "median": -4.7661,
+            "top1": null,
+            "blocks": 2,
+            "doubledAvg": -0.8463,
+            "placebo": {
+              "n": 19,
+              "dates": 16,
+              "avg": 5.0244,
+              "t": 0.79,
+              "p": 0.4436,
+              "median": -1.0249,
+              "top1": 7.5746,
+              "blocks": 3
+            }
+          }
+        },
+        "verdict": {
+          "status": "no-edge",
+          "primaryCell": "dividend-initiation:A@63",
+          "reason": "development cell failed: avg -2.1469% t -1 q 0.4286 blocks+ 2/4",
+          "devPass": false
+        }
+      },
+      "artifact": {
+        "file": "/Users/ravishah/worktrees/alpha-external/research/data/evidence/external-events/external-events-result.json",
+        "sha256": "fe6a7674852033da98c7805241dfdd2f4f39d64b6d8b569ead693ab2d1798b51",
+        "bytes": 90150
+      },
+      "immutable": true,
+      "parentExperimentId": "dividend-initiation-2026-09"
     },
     {
       "recordedAt": "2026-08-13T22:47:21.039Z",
