@@ -181,6 +181,10 @@ const PRIVILEGED_OPS = new Set([
   // fan-out. Cron/manual-with-bearer only; op=dilution (read) stays public.
   'dilutiontick',
   'dilutionresolve',
+  // INSIDER CLUSTER BUYS shadow logger — EDGAR daily index + ≤~200 ownership XML fetches,
+  // writes write-once tx shards + ledger day (insidercluster/*). Cron/manual-with-bearer
+  // only; op=insidercluster (read) stays public.
+  'insiderclustertick',
   // STOCKTWITS BULL-RATIO FLAG shadow logger/resolver — writes the snapshot + write-once
   // prospective ledger (stbull/v1/*) and spends a StockTwits fan-out / a ≤60-name candle
   // fan-out. Cron/manual-with-bearer only; op=stbull (read) stays public.
@@ -567,6 +571,9 @@ async function handleRequest(req, res) {
   if (req.query.op === 'dilution') return require('../lib/dilution-routes').runDilution(req, res);
   if (req.query.op === 'dilutiontick') return require('../lib/dilution-routes').runDilutionTick(req, res);
   if (req.query.op === 'dilutionresolve') return require('../lib/dilution-routes').runDilutionResolve(req, res);
+  // INSIDER CLUSTER BUYS — shadow prospective ledger (weight-0; research/98 finding).
+  if (req.query.op === 'insidercluster') return require('../lib/insider-cluster-routes').runInsiderCluster(req, res);
+  if (req.query.op === 'insiderclustertick') return require('../lib/insider-cluster-routes').runInsiderClusterTick(req, res);
   if (req.query.op === 'stbull') return require('../lib/stbull-routes').runStbull(req, res);
   if (req.query.op === 'stbulltick') return require('../lib/stbull-routes').runStbullTick(req, res);
   if (req.query.op === 'stbullresolve') return require('../lib/stbull-routes').runStbullResolve(req, res);

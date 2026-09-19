@@ -37,6 +37,13 @@ Matched-only cohort identical (RES_21 +1.35%). All three cells survive BH at q �
   (n 965, nothing — consistent with limits-to-arbitrage) · micro +1.06% t 2.1 / small +1.18% t 1.5 · legacy
   2026-08 universe +2.43% t 0.95 / ex-legacy +1.28% t 2.23.
 
+## Post-hoc diagnostic (2026-09-09, after the pass; not a gate, not a re-cut)
+The bulk build emits one row per reporting owner on an accession, so a **joint filing** (a fund, its GP and its
+managing member on one Form 4) counted as several "distinct insiders". Checked on the primary events: 252 of
+2,349 (10.7%) were clusters made of a single accession; they behaved like the rest (event-level mean +1.24% vs
++0.83%, medians −0.68% vs −0.52%), so this artefact did not drive the result. The prospective ledger collapses a
+joint filing to ONE insider (`lib/insider-cluster.js dedupeJointFilings`) — a tightening, declared here.
+
 ## What this earns, per the sealed protocol
 The frozen gates passed, so the hypothesis is `provisional` and earns exactly a **weight-0 shadow prospective
 ledger** — nothing user-facing, no weight, no promotion. It is a *relative-to-peers, lottery-skewed* effect, not

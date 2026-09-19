@@ -156,7 +156,8 @@ test('the banner renders the server list and no longer re-derives it', () => {
     // Each entry must be traceable to a source comment declaring it shadow/research.
     assert.ok(BACKGROUND_CHAINS.has('challenger'), 'challenger-routes.js: "SHADOW ONLY"');
     assert.ok(BACKGROUND_CHAINS.has('alphacal'), 'warm-chains.js: archive-first collection');
-    assert.strictEqual(BACKGROUND_CHAINS.size, 2, 'keep this list verified — do not pad it');
+    assert.ok(BACKGROUND_CHAINS.has('insidercluster'), 'insider-cluster-routes.js: "shadow route handlers (weight 0; prospective ledger only)"');
+    assert.strictEqual(BACKGROUND_CHAINS.size, 3, 'keep this list verified — do not pad it');
   });
 
   test('buildHealthResponse exposes the split for the client to render', () => {
