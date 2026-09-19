@@ -3577,6 +3577,9 @@
 #session .sb-heldout { margin-top:.8rem; font-size:.78rem; } #session .sb-heldout summary { cursor:pointer; font-weight:700; color:var(--text-dim); }
 #session .sb-heldout .sb-card { opacity:.75; margin-top:.5rem; }
 #session .sb-heldout-note { margin:.3rem 0 .2rem; }
+#session .sb-lowgrade { margin-top:.8rem; font-size:.78rem; } #session .sb-lowgrade summary { cursor:pointer; font-weight:700; color:var(--text-dim); }
+#session .sb-lowgrade .sb-card { opacity:.8; margin-top:.5rem; }
+#session .sb-lowgrade-note { margin:.3rem 0 .2rem; }
 #session .sb-foot { margin-top:.9rem; padding-top:.5rem; border-top:1px solid var(--border); }
 @media (max-width:600px) {
   #session .sb-list { grid-template-columns:1fr; }
