@@ -79,7 +79,8 @@ test('needsResidualRepair flags exactly the null-residual done records', () => {
 
 test('wiring: the resolver passes exposures + sector candles into the label engine, and the log persists exposures', () => {
   const SRC = read('lib/orbit-routes.js');
-  const resolveFn = SRC.slice(SRC.indexOf('async function runOrbitResolve'), SRC.indexOf('runOrbitWalkForward'));
+  // The labelling loop lives in resolveOpenPredictions (the injectable core op=orbitresolve calls).
+  const resolveFn = SRC.slice(SRC.indexOf('async function resolveOpenPredictions'), SRC.indexOf('runOrbitWalkForward'));
   assert.match(resolveFn, /exposuresFor\(p, hist, factorBundle, sectorCandles\)/);
   assert.match(resolveFn, /orbitLabels\([^)]*exposures/s, 'labels must receive the exposures');
   const logFn = SRC.slice(SRC.indexOf('async function runOrbitLog'), SRC.indexOf('runOrbitResolve'));
@@ -88,7 +89,8 @@ test('wiring: the resolver passes exposures + sector candles into the label engi
 
 test('resolved records carry per-horizon scores so the monitor can compute IC and brier', () => {
   const SRC = read('lib/orbit-routes.js');
-  const resolveFn = SRC.slice(SRC.indexOf('async function runOrbitResolve'), SRC.indexOf('runOrbitWalkForward'));
+  // The labelling loop lives in resolveOpenPredictions (the injectable core op=orbitresolve calls).
+  const resolveFn = SRC.slice(SRC.indexOf('async function resolveOpenPredictions'), SRC.indexOf('runOrbitWalkForward'));
   assert.match(resolveFn, /probs: p\.horizonProbabilities \|\| null/, 'the resolver must persist the prediction probabilities');
   const flat = SRC.slice(SRC.indexOf('function flattenResolved'), SRC.indexOf('function orbitRouterWeight'));
   assert.match(flat, /pb\.uncalibratedRankScore/, 'flattenResolved must read the field decideCandidate actually publishes');
