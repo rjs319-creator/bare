@@ -76,31 +76,11 @@ async function pull() {
 // overlapping windows collapsed: each P-buy belongs to at most one event, built
 // greedily in transaction-date order; per-name session cooldown applied later
 // (needs the bar axis).
-function clusterEvents(txs, {
-  windowDays = CLUSTER_WINDOW_DAYS, minOwners = MIN_OWNERS, minValue = MIN_COMBINED_VALUE,
-} = {}) {
-  const buys = (txs || [])
-    .filter((t) => t && t.code === 'P' && t.shares > 0 && t.price > 0 && t.owner && t.date && t.filingDate)
-    .sort((a, b) => (a.date < b.date ? -1 : 1));
-  const events = [];
-  let i = 0;
-  while (i < buys.length) {
-    const start = Date.parse(buys[i].date);
-    const members = [];
-    let j = i;
-    while (j < buys.length && Date.parse(buys[j].date) - start <= windowDays * DAY) { members.push(buys[j]); j++; }
-    const owners = new Set(members.map((m) => m.owner.trim().toUpperCase()));
-    const combinedValue = members.reduce((s, m) => s + (m.value || Math.round(m.shares * m.price)), 0);
-    if (owners.size >= minOwners && combinedValue >= minValue) {
-      const eventDate = members.map((m) => String(m.filingDate).slice(0, 10)).sort().pop();
-      events.push({ eventDate, owners: owners.size, combinedValue, txDates: [members[0].date, members[members.length - 1].date] });
-      i = j;                                    // consume the window — no overlapping events
-    } else {
-      i++;
-    }
-  }
-  return events;
-}
+// FROZEN constructor now lives in lib/insider-cluster.js (shared with the prospective
+// feed); this study's parameters are passed explicitly so the seal stays byte-for-byte.
+const clusterEvents = (txs, opts = {}) => require('../lib/insider-cluster').clusterEvents(txs, {
+  windowDays: CLUSTER_WINDOW_DAYS, minOwners: MIN_OWNERS, minValue: MIN_COMBINED_VALUE, ...opts,
+});
 
 // Single-buyer comparison events: P-buys ≥ $25k that are NOT part of any cluster
 // window (frozen: half the cluster dollar floor, one owner). Comparison cohort
