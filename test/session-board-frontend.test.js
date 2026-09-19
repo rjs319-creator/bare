@@ -242,3 +242,18 @@ test('loadSessionBoard: renders on success, keeps the last good board with a sta
   assert.ok(!/sb-stale/.test(el.innerHTML));
   clearTimeout(SB._internals.state.seenTimer);
 });
+
+test('F-grade items render collapsed under a Low grade block, never above the board', () => {
+  const fx = JSON.parse(readFileSync(join(ROOT, 'test', 'fixtures', 'session-board-sample.json'), 'utf8'));
+  const mk = (id, letter) => ({ ...fx.items[0], id, ticker: id, grade: { ...fx.items[0].grade, letter, score: letter === 'F' ? 10 : 70 }, flags: { ...(fx.items[0].flags || {}), heldOut: false } });
+  const payload = { ...fx, items: [mk('GOOD1', 'B'), mk('BAD1', 'F'), mk('BAD2', 'F')], heldOut: [], empty: false };
+  const html = SB.renderSessionBoard(payload, { now: new Date('2026-09-19T13:00:00Z') });
+  const { primary, low } = SB.splitLowGrade(payload.items);
+  assert.equal(primary.length, 1); assert.equal(low.length, 2);
+  assert.match(html, /class="sb-lowgrade"/);
+  assert.match(html, /Low grade \(F\) <span class="sb-dim">2<\/span>/);
+  assert.ok(html.indexOf('GOOD1') < html.indexOf('sb-lowgrade'), 'the graded board renders before the collapsed block');
+  assert.ok(html.indexOf('BAD1') > html.indexOf('sb-lowgrade'), 'F items live inside the collapsed block');
+  const allF = { ...payload, items: [mk('BAD1', 'F')] };
+  assert.match(SB.renderSessionBoard(allF, { now: new Date('2026-09-19T13:00:00Z') }), /Nothing graded above F/);
+});

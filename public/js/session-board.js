@@ -317,6 +317,30 @@ function heldOutBlock(items) {
   </details>`;
 }
 
+// F-grade items are real candidates the rubric rejected (stopped, no plan, nothing lit). On a
+// closed market they are mostly the prior session's day-trade watch names — dozens of them —
+// so they render collapsed by default; the counts and ranks stay honest (ranks continue).
+export const LOW_GRADE_LETTERS = new Set(['F']);
+export function splitLowGrade(items) {
+  const arr = Array.isArray(items) ? items : [];
+  const primary = arr.filter((it) => !LOW_GRADE_LETTERS.has(it && it.grade && it.grade.letter));
+  const low = arr.filter((it) => LOW_GRADE_LETTERS.has(it && it.grade && it.grade.letter));
+  return { primary, low };
+}
+function listWithLowGradeCollapsed(shown, delta) {
+  const { primary, low } = splitLowGrade(shown);
+  const card = (it, i) => renderCard(it, { delta: delta.byId[it.id] || null, rank: i + 1 });
+  const main = primary.length
+    ? `<div class="sb-list">${primary.map(card).join('')}</div>`
+    : `<div class="sb-empty sb-dim">Nothing graded above F right now — every candidate is stopped, unplanned or unlit.</div>`;
+  if (!low.length) return main;
+  const lowCards = low.map((it, i) => card(it, primary.length + i)).join('');
+  return `${main}<details class="sb-lowgrade"><summary>Low grade (F) <span class="sb-dim">${low.length}</span></summary>
+    <div class="sb-dim sb-lowgrade-note">Considered and rejected by the snapshot rubric — listed so nothing is hidden, never ranked above the board.</div>
+    <div class="sb-list">${lowCards}</div>
+  </details>`;
+}
+
 export function renderSessionBoard(payload, { lastSeen = null, now = new Date(), filter = 'all', stale = null } = {}) {
   const p = payload || {};
   const delta = deltaSince(p, lastSeen);
@@ -329,7 +353,7 @@ export function renderSessionBoard(payload, { lastSeen = null, now = new Date(),
   let body;
   if (p.empty || !items.length) body = emptyPanel(p);
   else if (!shown.length) body = `<div class="sb-empty sb-dim">Nothing in this time frame right now.</div>`;
-  else body = `<div class="sb-list">${shown.map((it, i) => renderCard(it, { delta: delta.byId[it.id] || null, rank: i + 1 })).join('')}</div>`;
+  else body = listWithLowGradeCollapsed(shown, delta);
   return `${staleBanner}${headerStrip(p, now)}
     ${summary ? `<div class="sb-since">👀 ${esc(summary)}</div>` : ''}
     ${degraded}
