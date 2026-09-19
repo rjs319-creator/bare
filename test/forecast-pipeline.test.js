@@ -181,6 +181,40 @@ test('the meta-ranker ABSTAINS when inner validation shows no edge over the base
   assert.equal(gate.passed, false);
 });
 
+test('EVERY arm, controls included, gets a training-window score for portfolio selection', () => {
+  // Comparing a tuned candidate against untuned controls confounds the cost levers with a
+  // handicap: a random ranking forced to churn at full turnover loses to anything. The
+  // per-fold parameter search must therefore reach the controls too.
+  // The fixture's folds are smaller than a research panel's, so lower the floor rather than
+  // inflate the fixture — the floor itself is what stops a thin fold tuning on noise, and it is
+  // exercised by its own assertion below.
+  const selCfg = FX.testConfig({
+    walkforward: { minTrainSessions: 70, testSessions: 30, innerFolds: 3, holdoutFraction: 0.2, scheme: 'expanding' },
+    portfolio: { selectParameters: true, minSelectionRows: 500, topK: 20, noTradeBand: 2, switchCostTest: true, weighting: 'equal', maxWeightPerName: 0.1, maxWeightPerSector: 0.35, longOnly: true, quantiles: 5, overlappingSleeves: true, parameterGrid: { topK: [10, 20], noTradeBand: [1, 4], switchCostTest: [false, true] } },
+  });
+  const res = F.walkforward.runHorizon({
+    horizon: 5, rows: rows5, featureKeys: built.featureKeys, cfg: selCfg, caps, panel,
+    decisionDates, sessions: panel.sessions, stride: STRIDE,
+  });
+  const reports = res.foldReports.filter((f) => !f.skipped && f.diagnostics.portfolio && Object.keys(f.diagnostics.portfolio).length);
+  assert.ok(reports.length > 0, 'at least one fold must report a portfolio selection');
+
+  const armsWithSelection = new Set(reports.flatMap((f) => Object.keys(f.diagnostics.portfolio)));
+  for (const control of ['control-random', 'control-delayed-signal']) {
+    assert.ok(armsWithSelection.has(control), `${control} must receive a portfolio selection, not the defaults`);
+  }
+  assert.ok(armsWithSelection.has('ridge'), 'and so must the candidate arms');
+
+  // A selection is a real choice from the grid, not a pass-through of the config defaults.
+  for (const f of reports) {
+    for (const [arm, sel] of Object.entries(f.diagnostics.portfolio)) {
+      if (sel.fallback) continue;                       // thin fold kept the defaults, by design
+      assert.ok(selCfg.portfolio.parameterGrid.topK.includes(sel.selected.topK), `${arm} topK off-grid`);
+      assert.ok(selCfg.portfolio.parameterGrid.noTradeBand.includes(sel.selected.noTradeBand), `${arm} band off-grid`);
+    }
+  }
+});
+
 test('the run is reproducible: the same seed and inputs give identical scoreboard numbers', () => {
   const run = () => F.scoreboard.compare(F.scoreboard.makeScoreboard(F.walkforward.runHorizon({
     horizon: 3, rows: built.rowsByHorizon.get(3), featureKeys: built.featureKeys, cfg, caps, panel,
