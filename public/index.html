@@ -432,6 +432,28 @@
     </div>
   </section>
 
+  <section class="screener-section" id="session">
+    <div class="section-label">
+      <div class="accent-bar" style="background:#06c4d4"></div>
+      <h2 style="color:#06c4d4">🎯 Session</h2>
+      <span class="label-meta">· what is worth looking at <b>right now</b>, graded on today's snapshot, with the time frame spelled out</span>
+      <div class="label-action">
+        <button class="refresh-btn" style="color:#06c4d4" id="session-refresh-btn">⟳ Refresh</button>
+      </div>
+    </div>
+    <details class="scr-help">
+      <summary>📖 New here? What is the Session Board?</summary>
+      <div class="scr-help-body">
+        <p><b>What this is.</b> One ranked list of today's candidates from every engine, each graded <b>A–F</b> on its current snapshot and labelled with a <b>time frame</b>: intraday (today), days to weeks, weeks to months, or long term.</p>
+        <p><b>It changes with the session.</b> Before the open it reads the premarket gap and pre-volume. During the session it tracks each name against its frozen entry, stop and target (VWAP and opening range when available). After the close it shows what is setting up for the next session. Come back and it tells you what changed since you last looked.</p>
+        <p class="scr-help-note">Grades are snapshot-quality reads, not probabilities and not a proven edge. Held-out names are lanes the app has proven to lose — read them as what to avoid.</p>
+      </div>
+    </details>
+    <div id="session-container">
+      <div class="mom-status"><div class="mom-spinner"></div><p>Grading this session's candidates…</p></div>
+    </div>
+  </section>
+
   <section class="screener-section" id="start">
     <div class="section-label">
       <div class="accent-bar" style="background:#34c759"></div>
