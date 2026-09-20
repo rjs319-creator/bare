@@ -12,14 +12,14 @@ across 5 years and multiple methods, and the honest conclusion is:
 
 - It does **not** have a proven, money-making "edge" you can follow blindly. No
   retail stock screener does, and this one is honest enough to tell you so (see
-  the research panels inside the Custom Screener).
+  the Evidence tab and the grade stamped under every tab heading).
 - Its **real, defensible value** is twofold:
   1. **Keeping you on the right side of the market** (the Risk-On / Risk-Off read).
   2. **Surfacing what's genuinely strong or weak right now** (momentum, relative
      strength, sector rotation) so you make *better-informed* decisions.
 
 Use it as a **co-pilot for your own judgment**, not an autopilot. If you treat it
-that way, it's genuinely useful. If you treat its "Apex" picks as guaranteed
+that way, it's genuinely useful. If you treat its A-grade or top-ranked names as guaranteed
 winners, you'll be disappointed — they're *good candidates in a good tape*, nothing
 more.
 
@@ -32,84 +32,97 @@ more.
 
 Do this before you look at any individual stock:
 
-1. **Open the Custom Screener (🧠 tab). Look at the regime badge** at the top:
+1. **Open 🏠 Today and read the regime badge** at the top:
    - 🟢 **Risk-On** → momentum longs have the wind at their back. Green light to hunt.
    - 🟡 **Neutral** → be selective, size smaller.
    - 🔴 **Risk-Off** → **stand down on new long momentum trades.** This is the one
      rule the data most strongly supports. In Risk-Off these setups are a coin
      flip at best, and worse in a real downturn.
-2. **Check Markets → Sector Rotation** to see where money is flowing in vs. out.
-   Lean toward names in the overweight (green) sectors.
-3. **Only then** look at individual names.
+2. **Glance at the sector chips on Today (or 📊 Markets → Rotation)** to see where
+   money is flowing in vs. out. Lean toward names in the leading sectors.
+3. **Open 🎯 Session.** It is one ranked list of what is worth looking at right
+   now, graded **A to F**, each with a **time frame** (intraday, days to weeks,
+   weeks to months) and frozen entry / stop / target levels.
+4. **Only then** look at individual names.
 
 That's it. If the regime is red, the best use of the app today is *not trading*.
 
 ---
 
-## 3. Tab-by-tab — what each is for and how to use it
+## 3. The five destinations
 
-### 🧠 Custom Screener (Apex Runner) — your main workspace
-The flagship. It scores breakout/momentum candidates on four "pillars" (momentum,
-structure, fundamentals, accumulation), weighted by the current regime.
+The nav has five places. **Simple mode** (the default, the 🌱 button in the
+header) shows twelve tabs. **🎓 Expert** shows every research surface the app has
+ever built, grouped by holding horizon. Everything that is hidden in Simple is still
+reachable by its link and from the ⌘K search.
 
-- **Tiers:** **Apex** (balanced strength + confirmed setup) > **Loaded** (strong,
-  one pillar lags) > **Watch** (building). Treat Apex/Loaded as your shortlist of
-  *strong names to research further* — not buy signals.
-- **Pillar bars** on each card tell you *why* a name scored well. A name strong on
-  Momentum + Accumulation but weak on Fundamentals is a different bet than one
-  strong everywhere — glance at the bars before you act.
-- **📊 Portfolio panel** (top of the results): use it for **position sizing**. Set
-  your portfolio size and risk-% per trade; it shows equal-risk share counts and
-  flags sector concentration. This is one of the most practically useful features —
-  it stops you over-betting any single name or sector.
-- **🧠 Model panel** (collapsible): the honesty layer. It shows the regime presets,
-  the live drift-health check, and the research findings (factor efficacy, exit
-  study, the PEAD test). Worth reading once to understand *why* to be humble about
-  the picks — but you don't need it day-to-day.
+### 🏠 Today
+- **Today** — the regime read, sector chips, and the ranked decision board. When
+  nothing has cleared the evidence gate (which is most days, honestly) it says so in
+  one line instead of pretending.
+- **Session** — the graded board. Before the open it reads premarket gaps and
+  pre-volume; during the session it shows where price sits against the frozen
+  levels, VWAP and the opening range; after the close it shows what is setting up
+  for tomorrow. A high grade means the snapshot looks clean and the lane's own
+  record does not argue against it. It is **not** a probability and not a buy signal.
+  **Held-out** names are the app's proven-negative lanes: read them as what to avoid.
 
-### 📊 Markets (hub: Screener / Rotation / Sectors / Backtest)
-- **Breakout Screener** — the raw scan of S&P 500 + small/micro caps clearing the
-  4-filter accumulation-breakout gate. Good for *idea generation*.
-- **Sector Rotation** — where money is rotating in/out. Use it to bias toward
-  leading sectors and avoid lagging ones.
-- **Sectors** — today's sector ETF performance at a glance.
-- **Backtest** — historical forward-return stats by tier. Use it to calibrate
-  expectations (note: these are optimistic — survivorship bias is disclosed).
+### 🎯 Trade
+- **Day Trade** — the intraday engine with a lifecycle per name and a timing grade.
+  Its own track record is on the tab; it is negative so far, and the tab says so.
+- **Ignition Live** — what is igniting during the session, with alerts.
+- **Breakout** — the base breakout scan of S&P 500 plus small and micro caps. The
+  only swing engine with a real forward-return ledger. Good for idea generation.
+- **Swing Supervisor** — every published swing pick followed to a documented end.
+  This is your "what am I watching" page.
+- **Technology** — the 837-name tech universe with three independent horizon reads.
 
-### 🏆 Scoreboard — your reality check
-This logs every Screener/Momentum pick and shows **realized** 1-week / 1-month /
-3-month returns and win rates. **Check it weekly.** It's the antidote to fooling
-yourself: it tells you which signal types are actually working *for you* lately,
-and lets you disable the ones that aren't. Let the Scoreboard, not your memory,
-tell you what's working.
+In Expert mode this group also shows the archived swing and position research
+tabs (Pre-Move, ATLAS-X, Adaptive Momentum, Core Momentum, Pattern Radar and the
+rest). They are research surfaces at zero weight, kept so their ledgers keep
+accruing evidence. None of them is a buy list.
 
-### 🔥 Alerts (Momentum) — time-sensitive movers
-Real-time Strong Buy / Strong Sell flips on early momentum. Turn on notifications
-(🔔) if you want pings. Useful for *timing* an entry on a name you already like —
-less so as a standalone signal.
+### 📊 Markets
+- **Rotation** — sector rotation, daily and weekly. Use it to bias toward leading
+  sectors and avoid lagging ones.
+- **News** — curated headlines from quality sources.
+- **Pulse** — the three-speed market state, narratives and upcoming events.
 
-### ⭐ Picks — news-driven ideas
-An AI scan of the day's financial news into 10 ranked picks, split into a
-short-term (technical) and long-term (fundamentals) track. Good for **discovering
-names you weren't watching** and seeing the news narrative behind a move. Always
-read the thesis + key risk on each card.
+Expert mode adds the forecast and crowd surfaces (Game Plan, Brief, Forecast,
+Crowd, Sharp Money, Alerts) and the thesis-change feed.
 
-### ⚡ Options · 📈 Trends · 📰 News
-Supporting context — options flow/sentiment, trend data, and curated headlines from
-quality sources. Use them to *understand* a name, not to decide on one.
+### 🎖️ Evidence — your reality check
+- **Scoreboard** — logs every pick and shows **realized** 1-week, 1-month and
+  3-month returns and win rates per strategy, plus the negative lanes. **Check it
+  weekly.** It is the antidote to fooling yourself. Disable the signals that keep
+  losing.
+- **Evidence** — the earned grade per tab (Validated, Promising, Experimental,
+  Informational, Disabled). The same grade is stamped under every tab heading.
+
+### 🔬 Research (Expert only)
+Every alternative-signal lab: forced-flow events, read-through, cross-asset,
+options flow, the backtest harness, and the shadow labs. All at paper weight.
+Read them to understand what has been tested and what failed.
+
+### 🔎 Ticker lookup
+Type a ticker in the search (or ⌘K) for one name read across all three horizons,
+with its pattern, options and alert context. This is the best single-name read in
+the app and does not live in a tab.
 
 ---
 
 ## 4. A sensible weekly workflow
 
-- **Daily (2 min):** regime check → if green/yellow, scan Custom Screener Apex/Loaded
-  + sector rotation for ideas. If red, do nothing new.
-- **Per idea:** read the pillar bars, the levels (entry/stop/target), and the
-  narrative/news. Cross-check the name in Picks/Options/News for context.
-- **Before buying:** size it with the Portfolio panel. Never risk more than your
-  set %; respect the concentration warning.
-- **Weekly (5 min):** open the Scoreboard. Which tiers/sections actually delivered?
+- **Daily (2 min):** Today for the regime → Session for the graded board. If green
+  or yellow, scan Breakout and Ignition Live for ideas. If red, do nothing new.
+- **Per idea:** read the grade inputs, the levels (entry / stop / target), and the
+  Expert checklist on the Session card (catalyst, relative volume, spread,
+  dilution, earnings risk). Cross-check the name in the ticker lookup and News.
+- **Before buying:** size by the stop. Never risk more than your set percent.
+- **Weekly (5 min):** open Scoreboard. Which strategies actually delivered?
   Adjust what you pay attention to. Disable signals that keep losing.
+- **Occasionally:** flip to Expert and read the Research labs to see what has been
+  tested. Flip back.
 
 ---
 
@@ -117,9 +130,9 @@ quality sources. Use them to *understand* a name, not to decide on one.
 
 - ❌ **Don't take new long momentum trades in Risk-Off.** This is the clearest,
   most repeatable finding. The regime gate exists for a reason.
-- ❌ **Don't treat "Apex" as a guaranteed winner.** It's a strong candidate in a
+- ❌ **Don't treat an A grade as a guaranteed winner.** It's a strong candidate in a
   supportive tape — that's all the evidence supports.
-- ❌ **Don't over-concentrate.** Heed the Portfolio panel's sector-concentration
+- ❌ **Don't over-concentrate.** Heed the sector chips and any concentration
   warning; spread risk.
 - ❌ **Don't bet big expecting alpha.** The app has no proven standalone edge.
   Position sizes should reflect that humility.

@@ -40,7 +40,7 @@ function gradeChip(sig) {
 }
 function pctileChip(sig) {
   if (sig.percentile == null) return '';
-  return `<span class="td-pctile" title="Universe percentile — a relative rank within this screen, NOT a probability.">${sig.percentile}th pct</span>`;
+  return `<span class="td-pctile expert-only" title="Universe percentile — a relative rank within this screen, NOT a probability.">${sig.percentile}th pct</span>`;
 }
 // Strategy-family chip (#2) — the archetype this trade belongs to (Trend / Early-momentum /
 // Event-driven / Intraday / Context), consolidating overlapping screeners under one banner.
@@ -52,7 +52,7 @@ function familyChip(sig) {
   if (!meta) return '';
   const extra = (sig.strategyFamilies && sig.strategyFamilies.length > 1)
     ? ` +${sig.strategyFamilies.length - 1}` : '';
-  return `<span class="td-fam fam-${esc(key)}" title="Strategy family — ${esc(meta.blurb || '')}${extra ? ' · also spans other families' : ''}">${meta.icon} ${esc(meta.label)}${extra}</span>`;
+  return `<span class="td-fam expert-only fam-${esc(key)}" title="Strategy family — ${esc(meta.blurb || '')}${extra ? ' · also spans other families' : ''}">${meta.icon} ${esc(meta.label)}${extra}</span>`;
 }
 
 const pct = v => (v == null ? '' : `${v > 0 ? '+' : ''}${v}%`);
@@ -75,7 +75,7 @@ function opportunityBanner(o) {
   const reasons = (o.reasons || []).slice(0, 2).map(r => `<li>${esc(r)}</li>`).join('');
   return `<div class="td-opp ${cls}">`
     + `<div class="td-opp-head"><span class="td-opp-badge">${icon} <b>${esc(label)}</b></span>`
-    + `<span class="td-opp-metrics">density <b>${o.score}</b>/100 · max exposure <b>${o.maxExposurePct}%</b>`
+    + `<span class="td-opp-metrics expert-only">density <b>${o.score}</b>/100 · max exposure <b>${o.maxExposurePct}%</b>`
     + (o.qualifyingCount != null ? ` · <b>${o.qualifyingCount}</b> qualify` : '')
     + (((o.bestNetTargetMovePct ?? o.expectedBestEdgeAfterCostsPct)) != null ? ` · best net move to target <b>${pct(o.bestNetTargetMovePct ?? o.expectedBestEdgeAfterCostsPct)}</b>` : '') + `</span></div>`
     + (reasons ? `<ul class="td-opp-why">${reasons}</ul>` : '')
@@ -409,7 +409,7 @@ function actionSection() {
   if (!c) return '';
   const D = c.decisions || { TRADE: [], WAIT: [], AVOID: [] };
   const nt = c.noTradeCause;
-  let h = `<div class="td-action"><div class="td-action-h">🧪 Challenger decision <span class="td-dim">— an independent, shadow-only four-outcome read</span> <span class="td-action-badge">SHADOW · 0 weight · not affecting ranks</span></div>`;
+  let h = `<div class="td-action expert-only"><div class="td-action-h">🧪 Challenger decision <span class="td-dim">— an independent, shadow-only four-outcome read</span> <span class="td-action-badge">SHADOW · 0 weight · not affecting ranks</span></div>`;
   if (c.boardDecision === 'NO_TRADE') {
     h += `<div class="td-action-notrade"><b>NO-TRADE</b> — ${esc(nt ? nt.label : 'no candidate qualifies to enter now')}${nt && nt.detail ? `<div class="td-dim">${esc(nt.detail)}</div>` : ''}</div>`;
   }
@@ -463,7 +463,7 @@ export function renderCommandCenter(container, p) {
   // Related workspaces — Today is the single starting point; the overlapping shortlists
   // (Quick Hit / Opportunities / Edge Book / Game Plan) are one tap away as drill-downs,
   // not competing landing pages (#1 consolidation).
-  html += `<div class="td-related"><span class="td-dim">Also explore:</span>`
+  html += `<div class="td-related expert-only"><span class="td-dim">Also explore:</span>`
     + [['quickhit', '⚡ Quick Hit'], ['opportunities', '⭐ Opportunities'], ['edge', '📓 Edge Book'], ['gameplan', '🗞️ Game Plan']]
       .map(([t, l]) => `<button class="td-rel" data-go="${t}">${l}</button>`).join('') + `</div>`;
 
@@ -491,6 +491,16 @@ export function renderCommandCenter(container, p) {
     return h + `</div>`;
   };
 
+  // Simple-mode collapse: with nothing cleared in EITHER governed lane, the two empty
+  // lane blocks say the same thing twice. Simple mode shows one line; the full blocks
+  // (with their lane contracts) remain as expert detail. A non-empty lane always renders.
+  const laneHas = byHorizon => Object.values(byHorizon || {}).some(l => l && l.length);
+  const governedEmpty = !!abh && !!p.qualifiedLeadsByHorizon && !laneHas(abh) && !laneHas(p.qualifiedLeadsByHorizon);
+  const governedCls = governedEmpty ? ' expert-only' : '';
+  if (governedEmpty) {
+    html += `<div class="td-dim td-empty td-governed-empty">No cleared trades today — every strategy is still at paper weight; the list below is research, not a buy list.</div>`;
+  }
+
   // ── LANE 1: EXECUTABLE IDEAS ──────────────────────────────────────────────
   // Evidence-cleared AND sizable. Honestly EMPTY when nothing clears; never backfilled.
   if (abh) {
@@ -498,7 +508,7 @@ export function renderCommandCenter(container, p) {
       'cleared strategy + complete plan + known liquidity + current data. The only lane that can be sized — an empty list is the honest answer, never padded.',
       abh,
       'No executable ideas today. Everything below is a lead or research — shown, tracked and graded, but not something to size.',
-      'td-lane-exec');
+      'td-lane-exec' + governedCls);
   }
 
   // ── LANE 2: QUALIFIED LEADS ───────────────────────────────────────────────
@@ -509,7 +519,7 @@ export function renderCommandCenter(container, p) {
       'the evidence is cleared but the trade is not executable yet (no complete plan, unknown liquidity, or a lead-only strategy). Watch — do not size.',
       p.qualifiedLeadsByHorizon,
       'No qualified leads today.',
-      'td-lane-lead');
+      'td-lane-lead' + governedCls);
   }
 
   // PER-HORIZON shortlists — deliberately NOT one global list. A same-session exit and a
@@ -543,7 +553,12 @@ export function renderCommandCenter(container, p) {
   const laneHtml = lane('🆕 New', L.new, legend) + lane('⬆️ Upgraded', L.upgraded, legend)
     + lane('⬇️ Downgraded', L.downgraded, legend) + lane('🏁 Resolved', L.resolved, legend)
     + lane('❌ Failed', L.failed, legend) + lane('⏰ Expired', L.expired, legend);
-  if (laneHtml) html += `<div class="td-lanes"><div class="td-lanes-h">Since yesterday</div>${laneHtml}</div>`;
+  if (laneHtml) {
+    const laneCounts = [['new', '🆕'], ['upgraded', '⬆️'], ['downgraded', '⬇️'], ['resolved', '🏁'], ['failed', '❌'], ['expired', '⏰']]
+      .filter(([k]) => L[k] && L[k].length).map(([k, ic]) => `${ic} ${L[k].length} ${k}`).join(' · ');
+    html += `<div class="td-dim td-lanes-summary">Since yesterday: ${esc(laneCounts)}</div>`;
+    html += `<div class="td-lanes expert-only"><div class="td-lanes-h">Since yesterday</div>${laneHtml}</div>`;
+  }
 
   // Swing Research / Shadow lane (defects #1 + #4) — standalone Emerging Leaders and
   // micro/expanded scope observations. VISUALLY AND MECHANICALLY DISTINCT from the
@@ -555,7 +570,7 @@ export function renderCommandCenter(container, p) {
     const srRow = r => `<span class="td-evt" title="${esc(r.researchLane === 'emergingLeader' ? 'Standalone Emerging Leader (no base-pattern status) — shadow research, not a recommendation' : 'Unapproved scope/strategy observation — shadow research, not a recommendation')}">`
       + `${r.researchLane === 'emergingLeader' ? '🌱' : '🔬'} ${esc(r.ticker)} <span class="td-dim">${esc(r.universeScope || '?')}${r.alsoInScopes && r.alsoInScopes.length ? ' +' + r.alsoInScopes.join('+') : ''}</span></span>`;
     const missing = (SR.coverage && SR.coverage.missingScopeCache) || [];
-    html += `<div class="td-lanes"><div class="td-lanes-h">🔬 Swing Research / Shadow <span class="td-dim">— observed, graded prospectively, weight-0 on the board (promotion is a registry change only)</span></div>`
+    html += `<div class="td-lanes expert-only"><div class="td-lanes-h">🔬 Swing Research / Shadow <span class="td-dim">— observed, graded prospectively, weight-0 on the board (promotion is a registry change only)</span></div>`
       + ((SR.inventory || []).slice(0, 20).map(srRow).join('') || `<div class="td-dim td-empty">No shadow swing observations today.</div>`)
       + (missing.length ? `<div class="td-dim" style="margin-top:4px">⚠ missing scope cache: ${esc(missing.join(', '))}</div>` : '')
       + `</div>`;
@@ -575,7 +590,7 @@ export function renderCommandCenter(container, p) {
   if (fr.warnings && fr.warnings.length) html += `<div class="dt-note" style="border-left-color:var(--amber,#f59e0b)">🔧 ${esc(fr.warnings.join(' · '))}</div>`;
   html += redundancyPanel(p.redundancy);
   html += dataTrustPanel(fr);
-  html += `<div class="td-dim td-cc-foot">One ranked table across ${p.counts?.signals ?? 0} signals — ranked by resolved track record × confidence × regime-fit × execution × <b>independent evidence</b> (not a sum of screener scores; resolved records are prospective samples, not validated edges). Leads, not advice; always confirm and use a stop.</div>`;
+  html += `<div class="td-dim td-cc-foot expert-only">One ranked table across ${p.counts?.signals ?? 0} signals — ranked by resolved track record × confidence × regime-fit × execution × <b>independent evidence</b> (not a sum of screener scores; resolved records are prospective samples, not validated edges). Leads, not advice; always confirm and use a stop.</div>`;
   html += `</div>`;
   container.innerHTML = html;
   const redunBtn = container.querySelector('[data-redun-load]');
@@ -607,7 +622,7 @@ function dataTrustPanel(fr) {
     return `<div class="dt-src"><span>${dot} <b>${esc(s.label || s.source)}</b></span><span class="td-dim">${esc((s.feed || []).join(', '))}</span><span class="dt-src-st ${s.stale ? 'stale' : ''}">${esc(status)}</span></div>`;
   }).join('');
   const legend = (fr.legend || []).map(l => `<div class="dt-leg"><span>${l.icon} <b>${esc(l.label)}</b></span> <span class="td-dim">${esc(l.basis)}</span></div>`).join('');
-  return `<details class="dt-trust"><summary>🔎 Data trust — sources, freshness &amp; what's fact vs interpretation${fr.dataVersion ? ` · ${esc(fr.dataVersion)}` : ''}</summary>
+  return `<details class="dt-trust expert-only"><summary>🔎 Data trust — sources, freshness &amp; what's fact vs interpretation${fr.dataVersion ? ` · ${esc(fr.dataVersion)}` : ''}</summary>
     <div class="dt-trust-body">
       <div class="dt-trust-note">This is an <b>end-of-day dashboard</b> — market data is <b>delayed</b>, not a live trading feed. Always confirm a live quote before acting.</div>
       <div class="dt-srcs">${rows}</div>
@@ -623,7 +638,7 @@ function dataTrustPanel(fr) {
 function redundancyPanel(r) {
   if (!r) return '';
   if (r.method !== 'measured') {
-    return `<details class="td-redunp"><summary>⚖️ Evidence independence — <b>assumed</b>, not yet measured</summary>
+    return `<details class="td-redunp expert-only"><summary>⚖️ Evidence independence — <b>assumed</b>, not yet measured</summary>
       <div class="td-redunp-body">
         <div class="td-redunp-note">${esc(r.note || '')}</div>
         <div class="td-dim">Until a pair of algorithms has enough shared history, a second agreeing screener in the same family is charged a flat <b>${r.priorCredit}</b> — a defensible default, but an assumption. Nothing here is measured yet.</div>
@@ -634,7 +649,7 @@ function redundancyPanel(r) {
     : r.confirmationPays === true
       ? `<div class="td-redunp-ok">✓ Co-selected names have out-performed single-selected ones by ${r.avgConfirmationLift}% on average.</div>` : '';
   const verdictLabel = { 'more-redundant-than-assumed': 'More redundant than the family map assumed', 'largely-independent': 'Largely independent', mixed: 'Mixed — wrong in both directions', insufficient: 'Not enough history yet' }[r.verdict] || esc(r.verdict);
-  return `<details class="td-redunp" data-redun><summary>⚖️ Evidence independence — <b>measured</b> from ${r.measurablePairs}/${r.totalPairs} algorithm pairs</summary>
+  return `<details class="td-redunp expert-only" data-redun><summary>⚖️ Evidence independence — <b>measured</b> from ${r.measurablePairs}/${r.totalPairs} algorithm pairs</summary>
     <div class="td-redunp-body">
       <div class="td-redunp-note"><b>${esc(verdictLabel)}.</b> How much a <i>second</i> agreeing screener is really worth is earned from the ledgers here — overlap in the names they pick, plus how much their realized returns move together — instead of being assumed at a flat ${r.priorCredit}.</div>
       ${pays}
