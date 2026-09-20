@@ -65,18 +65,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   // ── App tabs with a "Markets" hub (Screener / Rotation / Sectors) ──
   const TAB_GROUPS = {
-    // Seven decision-purpose workspaces. Candidates & Portfolio are ordered by holding
-    // horizon (see SUB_HZ dividers). Markets = macro/context; Predict = the forecast &
-    // prediction-market read. Unproven overlays live in the Research Lab; the honest
-    // report cards live in Evidence.
+    // Five destinations (2026-09-20 simplification): Today · Trade · Markets · Evidence
+    // · Research. EVERY section id stays registered here so #hash deep links, the ⌘K
+    // palette and hashchange keep resolving — but Simple mode (the default) renders
+    // only SIMPLE_TABS in the sub-nav; Expert mode shows the whole group under the
+    // SUB_HZ dividers. Hiding a tab never touches its nightly ledger.
+    // (session-board-frontend.test.js pins the home literal byte-exact.)
     home:       ['today', 'session', 'ensemble', 'start', 'quickhit'],
-    candidates: ['swingsup', 'premove', 'daytrade', 'lowfloat', 'ignitionlive', 'breakoutradar', 'gapgo', 'ignition', 'gapdown', 'opportunities', 'omega', 'atlas', 'aligned', 'screener', 'custom', 'ghost', 'coil', 'patternradar', 'downday', 'confluence', 'trendrider', 'fade', 'biotech'],
-    // Technology Command Center — its own top-level destination. One sector, three
-    // INDEPENDENT horizon conclusions; it consumes the other engines read-only.
-    tech:       ['tech-command'],
-    positions:  ['coremo', 'momentum', 'putsell', 'picks'],
-    markets:    ['rotation', 'sectors', 'news', 'thesis', 'pulse', 'evolve'],
-    predict:    ['gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
+    // Trade = every candidate / position surface, ordered by holding horizon.
+    // ignition-live-routes.test.js pins 'lowfloat','ignitionlive','breakoutradar' adjacent.
+    trade:      ['daytrade', 'lowfloat', 'ignitionlive', 'breakoutradar', 'gapgo', 'gapdown', 'ignition', 'swingsup', 'screener', 'premove', 'opportunities', 'omega', 'atlas', 'aligned', 'custom', 'ghost', 'coil', 'patternradar', 'downday', 'confluence', 'trendrider', 'fade', 'biotech', 'tech-command', 'coremo', 'momentum', 'putsell', 'picks'],
+    // Markets = macro/context + the forecast & prediction-market read (was Markets + Predict).
+    markets:    ['rotation', 'sectors', 'news', 'pulse', 'thesis', 'evolve', 'gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
     proof:      ['scoreboard', 'evidence', 'movermiss', 'intradayval', 'baselines', 'leaderboard', 'coreperf'],
     // NOTE: ignition-live-routes.test.js pins 'edge','cfl','orbitlab' + 'rltlab','psrl',
     // 'gridlock' adjacencies and requires 'peerlab' to close the list — insert new lab
@@ -93,9 +93,27 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     swingsup: 'swing', premove: 'swing', opportunities: 'swing', omega: 'swing', atlas: 'swing', aligned: 'swing', screener: 'swing', custom: 'swing', ghost: 'swing', coil: 'swing', patternradar: 'swing', downday: 'swing', confluence: 'swing', trendrider: 'swing', fade: 'swing', biotech: 'swing',
     coremo: 'portfolio', momentum: 'portfolio', putsell: 'portfolio', picks: 'portfolio',
   };
-  const HZ_DIVIDER = { intraday: '⏱ Intraday · same-day', swing: '📅 Swing · days–weeks', portfolio: '💼 Portfolio · weeks–months' };
+  const HZ_DIVIDER = { intraday: '⏱ Intraday · same-day', swing: '📅 Swing · days–weeks', portfolio: '💼 Portfolio · weeks–months', context: '📊 Context', predict: '🔮 Forecast & crowd', audit: '🧪 Audits' };
+  Object.assign(SUB_HZ, {
+    'tech-command': 'portfolio',
+    rotation: 'context', sectors: 'context', news: 'context', pulse: 'context', thesis: 'context', evolve: 'context',
+    gameplan: 'predict', brief: 'predict', forecast: 'predict', crowd: 'predict', sharp: 'predict', alerts: 'predict',
+    movermiss: 'audit', intradayval: 'audit', baselines: 'audit', leaderboard: 'audit', coreperf: 'audit',
+  });
   const TOP_TABS = Object.keys(TAB_GROUPS);
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
+  // ── Simple mode = the curated app. Twelve tabs that serve the daily jobs (is today
+  // a day to trade · best graded setup now · what is igniting · what is moving · did
+  // the picks work). Everything else is a research surface with paper weight and
+  // lives in Expert mode, still reachable by #hash and ⌘K. Order within a group is
+  // still TAB_GROUPS order.
+  const SIMPLE_TABS = new Set(['today', 'session', 'daytrade', 'ignitionlive', 'screener', 'swingsup', 'tech-command', 'rotation', 'news', 'pulse', 'scoreboard', 'evidence']);
+  // Old top-level keys (bookmarks, localStorage) → their new destination.
+  const LEGACY_TOP = { candidates: 'trade', positions: 'trade', tech: 'trade', predict: 'markets' };
+  const isSimpleMode = () => document.body.classList.contains('simple');
+  const isTabVisible = s => !isSimpleMode() || SIMPLE_TABS.has(s);
+  // First member of a group the current mode actually shows (never open a group on a hidden tab).
+  const defaultSubOf = top => (TAB_GROUPS[top] || []).find(isTabVisible) || (TAB_GROUPS[top] || [])[0];
   const SUB_LABEL = {
     today: '🏠 Today', session: '🎯 Session', ensemble: '🎯 OMEGA Ensemble', start: '📘 Guide',
     quickhit: '⚡ Quick Hit', swingsup: '📋 Swing Supervisor', premove: '📡 Pre-Move', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', atlas: '🛰 ATLAS-X', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', lowfloat: '🧨 Low-Float Ignition', ignitionlive: '🚀 Ignition Live', breakoutradar: '📉 Breakout Radar', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', patternradar: '📐 Pattern Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
@@ -183,7 +201,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // Mark each section as a switchable screen
   SECTION_IDS.forEach(id => document.getElementById(id)?.classList.add('tabbable'));
 
-  let hubSub = { home: 'today', candidates: 'opportunities', tech: 'tech-command', positions: 'coremo', markets: 'rotation', predict: 'gameplan', proof: 'scoreboard', lab: 'events' };
+  let hubSub = { home: 'today', trade: 'daytrade', markets: 'rotation', proof: 'scoreboard', lab: 'events' };
   try { const hs = JSON.parse(localStorage.getItem('hubSub')); if (hs) hubSub = { ...hubSub, ...hs }; } catch {}
   // Sanitize stored hubSub: after the nav regrouping a saved sub may no longer
   // belong to its group (e.g. markets→screener). Reset any stale entry to the
@@ -198,7 +216,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const h = (location.hash || '').replace('#', '');
     if (SECTION_IDS.includes(h)) { const t = topOf(h); if (TAB_GROUPS[t].length > 1) hubSub[t] = h; return t; }
     if (TOP_TABS.includes(h)) return h;
-    try { const s = localStorage.getItem('activeTab'); if (TOP_TABS.includes(s)) return s; if (SECTION_IDS.includes(s)) return topOf(s); } catch {}
+    if (LEGACY_TOP[h]) return LEGACY_TOP[h];
+    try { const s = localStorage.getItem('activeTab'); if (TOP_TABS.includes(s)) return s; if (LEGACY_TOP[s]) return LEGACY_TOP[s]; if (SECTION_IDS.includes(s)) return topOf(s); } catch {}
     return 'home';    // first-time visitors land on the Today command center (📘 Guide sits beside it in the home sub-nav)
   })();
 
@@ -454,14 +473,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function renderHubSubnav(top, sub) {
     const el = document.getElementById('hub-subnav');
     if (!el) return;
-    const group = TAB_GROUPS[top] || [];
+    // Simple mode: only the curated tabs, plus the active one if the user deep-linked
+    // to a hidden tab (so they can see where they are). Expert mode: the whole group
+    // under horizon dividers.
+    const group = (TAB_GROUPS[top] || []).filter(s => isTabVisible(s) || s === sub);
     if (group.length <= 1) { el.innerHTML = ''; el.style.display = 'none'; return; }
     el.style.display = '';
     let lastHz = null;
+    const showDividers = !isSimpleMode();
     const parts = group.map(s => {
       let divider = '';
       const hz = SUB_HZ[s];
-      if (hz && hz !== lastHz) { divider = `<div class="hub-sub-div">${HZ_DIVIDER[hz] || ''}</div>`; lastHz = hz; }
+      if (showDividers && hz && hz !== lastHz) { divider = `<div class="hub-sub-div">${HZ_DIVIDER[hz] || ''}</div>`; lastHz = hz; }
       return divider + `<button class="hub-sub-btn ${s === sub ? 'active' : ''}" data-sub="${s}"${SECTION_HELP[s] ? ` title="${esc(SECTION_HELP[s])}"` : ''}>${SUB_LABEL[s] || s}</button>`;
     });
     el.innerHTML = `<div class="hub-sub">` + parts.join('') + `</div>`;
@@ -471,7 +494,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   window.showTab = showTab; // let ES-module views (today.js) deep-link to a tab
   function showTab(id, opts = {}) {
     let top, sub;
-    if (TOP_TABS.includes(id)) { top = id; sub = TAB_GROUPS[id].length > 1 ? (hubSub[id] || TAB_GROUPS[id][0]) : TAB_GROUPS[id][0]; }
+    if (LEGACY_TOP[id]) id = LEGACY_TOP[id];
+    if (TOP_TABS.includes(id)) {
+      top = id;
+      // Remembered sub-tab, unless the current mode hides it — then the group's first visible tab.
+      const remembered = hubSub[id];
+      sub = (remembered && TAB_GROUPS[id].includes(remembered) && isTabVisible(remembered)) ? remembered : defaultSubOf(id);
+    }
     else if (SECTION_IDS.includes(id)) { top = topOf(id); sub = id; if (TAB_GROUPS[top].length > 1) hubSub[top] = id; }
     else { top = 'home'; sub = TAB_GROUPS.home[0]; }
     currentTop = top;
@@ -486,7 +515,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // banner from the same grade, so it opts out here rather than showing two.
     if (sub !== 'events') mountVerdict(sub);
     renderHubSubnav(top, sub);
-    if (typeof updateTapeBadge === 'function') updateTapeBadge(top === 'candidates' ? sub : null);
+    if (typeof updateTapeBadge === 'function') updateTapeBadge(top === 'trade' ? sub : null);
     if (sub === 'quickhit' && typeof ensureQuickHit === 'function') ensureQuickHit();
     if (sub === 'opportunities' && typeof ensureOpportunities === 'function') { ensureOpportunities(); syncOppScope(); }
     if (sub === 'screener' && typeof ensureScreener === 'function') ensureScreener();
@@ -507,6 +536,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'catalyst' && typeof ensureCatalystLab === 'function') ensureCatalystLab();
     if (sub === 'tech-command' && typeof ensureTechCommand === 'function') ensureTechCommand();
     if (sub === 'evidence' && typeof ensureEvidence === 'function') ensureEvidence();
+    if (sub === 'scoreboard' && typeof ensureScoreboard === 'function') ensureScoreboard();
     if (sub === 'thesis' && typeof ensureThesis === 'function') ensureThesis();
     if (sub === 'baselines' && typeof ensureBaselines === 'function') ensureBaselines();
     if (sub === 'today' && typeof ensureToday === 'function') ensureToday();
@@ -4199,7 +4229,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     };
     apply();
   }
-  const GROUP_LABEL = { home: 'Today', candidates: 'Candidates', positions: 'Portfolio', markets: 'Markets', predict: 'Predict', proof: 'Evidence', lab: 'Research Lab' };
+  const GROUP_LABEL = { home: 'Today', trade: 'Trade', markets: 'Markets', proof: 'Evidence', lab: 'Research Lab' };
   initCommandPalette({
     sections: SECTION_IDS.map(id => ({ id, label: (SUB_LABEL[id] || id).replace(/^[^\w]+\s*/, ''), group: GROUP_LABEL[topOf(id)] || '' })),
     learn: Object.keys(LEARN).map(key => ({ key, label: LEARN[key].t, group: LEARN[key].g })),
@@ -5888,11 +5918,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   let alertsLoaded = false, alertItems = [];
   const getSeen = () => { try { return +localStorage.getItem('notifySeen') || 0; } catch { return 0; } };
   const setSeen = t => { try { localStorage.setItem('notifySeen', String(t)); } catch {} };
-  // Refresh the unread count + paint a badge on every Predict nav button.
+  // Refresh the unread count + paint a badge on every Markets nav button (Alerts lives there now).
   function paintAlertBadge() {
     const seen = getSeen();
     const unread = alertItems.filter(i => Date.parse(i.ts) > seen).length;
-    document.querySelectorAll('[data-tab="predict"]').forEach(el => {
+    document.querySelectorAll('[data-tab="markets"]').forEach(el => {
       let b = el.querySelector('.nav-badge');
       if (unread > 0) { if (!b) { b = document.createElement('span'); b.className = 'nav-badge'; el.appendChild(b); } b.textContent = unread > 9 ? '9+' : unread; b.style.display = ''; }
       else if (b) b.style.display = 'none';
@@ -5992,8 +6022,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     uiMode = uiMode === 'expert' ? 'simple' : 'expert';
     try { localStorage.setItem('uiMode', uiMode); } catch {}
     applyUiMode(uiMode);
-    // If we just hid the tab the user is on (Research), bounce to a visible one.
-    if (uiMode === 'simple' && currentTop === 'lab' && typeof showTab === 'function') showTab('candidates');
+    // Re-render the sub-nav for the new mode. If Simple just hid the tab the user is
+    // on (Research Lab, or an archived tab), land on the group's first visible tab.
+    if (typeof showTab === 'function') {
+      if (uiMode === 'simple' && currentTop === 'lab') showTab('trade');
+      else if (uiMode === 'simple' && hubSub[currentTop] && !SIMPLE_TABS.has(hubSub[currentTop])) showTab(currentTop);
+      else showTab(hubSub[currentTop] || currentTop);
+    }
   });
 
   document.getElementById('custom-refresh-btn').addEventListener('click', () => { runApex(); fetchApexDrift(); });
@@ -9431,7 +9466,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const loadComponentLab = () => loadLazyPanel('sb-complab', '/api/tracker?op=complab', componentLabPanel, clSpinner);
 
   scoreboardRefreshBtn.addEventListener('click', fetchScoreboard);
-  fetchScoreboard();
+  // Lazy: the Scoreboard is the heaviest read in the app (multi-MB). Fetch it the
+  // first time the tab is opened instead of on every boot (hoisted for showTab).
+  let scoreboardRequested = false;
+  function ensureScoreboard() {
+    if (scoreboardRequested) return;
+    scoreboardRequested = true;
+    fetchScoreboard();
+  }
 
   // ── Evidence & Maturity — the earned trust grade for every strategy ──────────
   // Grades come from op=maturity (lib/maturity): each class is graded on its own
@@ -10672,4 +10714,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   // Boot the initial tab LAST, so every lazy-loader (let-scoped) is initialized
   // before its tab-switch dispatch runs. Still executes before first paint.
-  showTab(currentTop, { instant: true, noScroll: true });
+  // A #hash deep link to a section opens THAT section even when Simple mode hides it
+  // from the sub-nav (renderHubSubnav keeps the active hidden tab visible).
+  const bootHash = (location.hash || '').replace('#', '');
+  showTab(SECTION_IDS.includes(bootHash) ? bootHash : currentTop, { instant: true, noScroll: true });
