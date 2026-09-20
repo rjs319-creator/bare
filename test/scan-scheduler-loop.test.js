@@ -58,7 +58,12 @@ printf '%s' "$code"
 
   const script = scanScript()
     .replace('LOOP_SECONDS=3300', `LOOP_SECONDS=${loopSeconds}`)
-    .replace('TICK_SECONDS=300', `TICK_SECONDS=${tickSeconds}`);
+    .replace('TICK_SECONDS=300', `TICK_SECONDS=${tickSeconds}`)
+    // The real loop also stops once the UTC hour reaches WINDOW_END_HOUR (22). Left as-is,
+    // every run of this file after 22:00 UTC saw ONE iteration and failed — a wall-clock
+    // flake, not a scheduler bug. The loop budget is the thing under test here, so push
+    // the window end past any real hour (the guard itself is untouched in the workflow).
+    .replace(/WINDOW_END_HOUR=\d+/, 'WINDOW_END_HOUR=25');
   const file = path.join(dir, 'scan.sh');
   fs.writeFileSync(file, script);
 
