@@ -28,6 +28,9 @@ const EVENT = {
   FIRE_SALE: { name: 'Fund fire-sale', what: 'A concentrated ETF is being cashed out heavily, so it has to sell everything it owns proportionally, this name included.' },
   MARGIN_SPIRAL: { name: 'Margin-call spiral', what: 'A sharp drop triggered margin calls, forcing leveraged holders to sell into the fall — which drops it further.' },
   FORCED_DOWNGRADE: { name: 'Analyst downgrade', what: 'A sell-side downgrade sets off mechanical de-risking: mandate funds trim and quant models flip out of the name.' },
+  // ARK daily-holdings diff — research-only (shadow) price-pressure types, never sized.
+  ARK_NET_BUY: { name: 'ARK fund net buying', what: 'ARK’s ETFs added a large slice of this thinly traded name in one day — the buying itself can lift the price for a few sessions before that pressure fades. Research-only: the engine logs it and never trades it.' },
+  ARK_NET_SELL: { name: 'ARK fund net selling', what: 'ARK’s ETFs dumped a large slice of this thinly traded name in one day — the selling can weigh on the price for a few sessions. Logged as an avoid flag for research; never traded.' },
 };
 export const eventName = t => (EVENT[t] ? EVENT[t].name : String(t || '').replace(/_/g, ' ').toLowerCase());
 const eventWhat = t => (EVENT[t] ? EVENT[t].what : 'A forced-flow event — someone had to trade regardless of price.');

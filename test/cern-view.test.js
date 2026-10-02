@@ -72,9 +72,9 @@ test('rewardRisk: an incoherent or incomplete plan yields no ratio rather than a
 });
 
 test('eventName: every raw event enum has a plain-English name', () => {
-  // Arrange — the seven types in lib/cern.js EVENT_TYPES.
+  // Arrange — the original seven types in lib/cern.js EVENT_TYPES plus the ARK pair (2026-10).
   const { eventName } = loadCernView();
-  const TYPES = ['INDEX_DELETE', 'INDEX_ADD_FADE', 'LOCKUP_EXPIRY', 'TAX_LOSS', 'FIRE_SALE', 'MARGIN_SPIRAL', 'FORCED_DOWNGRADE'];
+  const TYPES = ['INDEX_DELETE', 'INDEX_ADD_FADE', 'LOCKUP_EXPIRY', 'TAX_LOSS', 'FIRE_SALE', 'MARGIN_SPIRAL', 'FORCED_DOWNGRADE', 'ARK_NET_BUY', 'ARK_NET_SELL'];
 
   // Act / Assert — no SCREAMING_SNAKE ever reaches the page.
   for (const t of TYPES) {

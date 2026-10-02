@@ -8019,7 +8019,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       t.bounces, longCard, 'No clean oversold-bounce setups right now.');
 
     // 🎁 Forced-Selling Reversion (CERN long reversions) — a different, event-driven long.
-    const CERN_LBL = { FIRE_SALE: '🔥 ETF fire-sale', FORCED_DOWNGRADE: '📉 Forced downgrade', INDEX_DELETE: '🗑 Index deletion', LOCKUP_EXPIRY: '🔓 Lockup expiry', TAX_LOSS: '🧾 Tax-loss selling', MARGIN_SPIRAL: '⚠ Margin spiral' };
+    const CERN_LBL = { FIRE_SALE: '🔥 ETF fire-sale', FORCED_DOWNGRADE: '📉 Forced downgrade', INDEX_DELETE: '🗑 Index deletion', LOCKUP_EXPIRY: '🔓 Lockup expiry', TAX_LOSS: '🧾 Tax-loss selling', MARGIN_SPIRAL: '⚠ Margin spiral', ARK_NET_BUY: '🏹 ARK net buying (shadow)', ARK_NET_SELL: '🏹 ARK net selling (shadow)' };
     const revCard = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
         <div class="dt-card-top">
           <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> <span class="dt-tier-b" style="background:#a78bfa22;color:#a78bfa;border-color:#a78bfa55">${esc(CERN_LBL[r.type] || r.type)}</span>${controlChip(r)}</span>
