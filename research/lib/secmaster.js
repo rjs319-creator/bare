@@ -74,15 +74,32 @@ function memberAsOf(rec, dateMs, band = DEFAULT_BAND) {
   return { sym: rec.sym, cap: Math.round(cap), adv: Math.round(pa.adv), close: pa.close };
 }
 
+// PURE. Resolve the optional PIT-membership restriction for one date: `membership` is a Set of
+// symbols, a function(dateMs) → Set | null (e.g. research/lib/sp500-pit membersAt), or absent.
+// A null answer means "the membership source cannot speak for this date" — the cross-section is
+// then EMPTY and `membershipUnknown` is reported, never silently widened to the whole cache.
+function resolveMembership(membership, dateMs) {
+  if (membership == null) return { set: null, unknown: false };
+  const set = typeof membership === 'function' ? membership(dateMs) : membership;
+  if (set === null || set === undefined) return { set: new Set(), unknown: true };
+  return { set: set instanceof Set ? set : new Set(set), unknown: false };
+}
+
 // PURE. The survivorship-free cross-section as of dateMs, over an in-memory { sym: cachedRec } map.
 // Delisted names ARE included up to the day they stopped trading — that is the whole point.
-function universeFrom(recordsMap, dateMs, band = DEFAULT_BAND) {
+// `opts.membership` additionally restricts the cross-section to a point-in-time index membership
+// (see resolveMembership) — the S&P 500 PIT list from research/lib/sp500-pit is the first user.
+function universeFrom(recordsMap, dateMs, band = DEFAULT_BAND, { membership = null } = {}) {
+  const mem = resolveMembership(membership, dateMs);
   const out = [];
   for (const sym of Object.keys(recordsMap || {})) {
+    if (mem.set && !mem.set.has(sym)) continue;
     const m = memberAsOf(recordsMap[sym], dateMs, band);
     if (m) out.push(m);
   }
-  return out.sort((a, b) => (a.sym < b.sym ? -1 : 1));
+  out.sort((a, b) => (a.sym < b.sym ? -1 : 1));
+  if (mem.unknown) Object.defineProperty(out, 'membershipUnknown', { value: true, enumerable: false });
+  return out;
 }
 
 // PURE. Adapt an FMP price array (newest-first) to the ascending OHLCV candle shape the NSL
@@ -153,15 +170,20 @@ function readSurvivorSectors() {
 
 // Disk convenience: universe as-of a YYYY-MM-DD over the WHOLE cache. Scans every cached series, so
 // prefer loadRecordsForSyms + universeFrom when querying many dates for a fixed candidate set.
-function universeAt(asOfDate, band = DEFAULT_BAND) {
+function universeAt(asOfDate, band = DEFAULT_BAND, { membership = null } = {}) {
   const dateMs = Date.parse(asOfDate + 'T00:00:00Z');
+  const mem = resolveMembership(membership, dateMs);
   const map = {};
-  for (const sym of cachedSyms()) { const rec = loadCached(sym); if (rec) map[sym] = rec; }
-  return universeFrom(map, dateMs, band);
+  // With a membership restriction only the member symbols need to be read from disk.
+  for (const sym of cachedSyms()) {
+    if (mem.set && !mem.set.has(sym)) continue;
+    const rec = loadCached(sym); if (rec) map[sym] = rec;
+  }
+  return universeFrom(map, dateMs, band, { membership });
 }
 
 module.exports = {
   VERSION, ACTIVE_CUTOFF_MS, DEFAULT_BAND, SECMASTER_PATH,
-  buildRecord, memberAsOf, universeFrom, candlesFor,          // pure
+  buildRecord, memberAsOf, resolveMembership, universeFrom, candlesFor,   // pure
   cachedSyms, loadCached, loadRecordsForSyms, buildMaster, loadMaster, universeAt, readSurvivorSectors,  // disk
 };

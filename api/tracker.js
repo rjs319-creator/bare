@@ -211,6 +211,10 @@ const PRIVILEGED_OPS = new Set([
   // factors/ff5mom-daily.json (read by the Scoreboard's SHADOW factorAlpha block).
   // Cron/manual-with-bearer only; op=factors (status read) stays public.
   'factorsrefresh',
+  // DELISTING-PENDING FLAG shadow logger — EDGAR daily index (Form 25 / 15 notices) → CAS
+  // union shards (delist/<date>.json) + snapshot (delist/current.json). Cron/manual-with-bearer
+  // only; op=delisting (read) stays public.
+  'delistingtick',
   // STOCKTWITS BULL-RATIO FLAG shadow logger/resolver — writes the snapshot + write-once
   // prospective ledger (stbull/v1/*) and spends a StockTwits fan-out / a ≤60-name candle
   // fan-out. Cron/manual-with-bearer only; op=stbull (read) stays public.
@@ -636,6 +640,9 @@ async function handleRequest(req, res) {
   // Scoreboard's SHADOW factorAlpha block (weight 0; proposal #18).
   if (req.query.op === 'factors') return require('../lib/factors/factors-routes').runFactors(req, res);
   if (req.query.op === 'factorsrefresh') return require('../lib/factors/factors-routes').runFactorsRefresh(req, res);
+  // DELISTING-PENDING FLAG — shadow avoid-flag overlay (weight-0; EDGAR Form 25 / 15 notices).
+  if (req.query.op === 'delisting') return require('../lib/edgar-delisting-routes').runDelisting(req, res);
+  if (req.query.op === 'delistingtick') return require('../lib/edgar-delisting-routes').runDelistingTick(req, res);
   if (req.query.op === 'stbull') return require('../lib/stbull-routes').runStbull(req, res);
   if (req.query.op === 'stbulltick') return require('../lib/stbull-routes').runStbullTick(req, res);
   if (req.query.op === 'stbullresolve') return require('../lib/stbull-routes').runStbullResolve(req, res);

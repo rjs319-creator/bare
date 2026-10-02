@@ -1,0 +1,21 @@
+{
+ "version": "sp500-pit-v1",
+ "generatedAt": "2026-10-02T05:04:47.158Z",
+ "upstream": {
+  "repo": "fja05680/sp500",
+  "file": "S&P 500 Historical Components & Changes (Updated).csv",
+  "license": "MIT",
+  "commit": "a2430f2af0c79ddf0748e91de11bdeb1616ab5a7",
+  "commitDate": "2026-09-07T14:56:49Z",
+  "source": "gh api (raw contents)"
+ },
+ "rawSha256": "36326709d46d6cd25834de5df457b16f5f96fad3a06b9beac28f7b88aa0b0d54",
+ "rawBytes": 5530907,
+ "snapshots": 2720,
+ "firstDate": "1996-01-02",
+ "lastDate": "2026-08-18",
+ "intervals": 1262,
+ "distinctTickers": 1209,
+ "currentMembers": 503,
+ "semantics": "end is EXCLUSIVE (first snapshot date without the ticker); empty end = still a member; membersAt(date) is null before firstDate"
+}
