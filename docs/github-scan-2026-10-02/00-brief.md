@@ -1,0 +1,24 @@
+# Shared brief: GitHub resource scan for the market-news-app (stock trading research site)
+
+## What the site is
+- Repo: ~/worktrees/simplify (GitHub rjs319-creator/bare). Production: market-news-app-chi.vercel.app
+- Stack: **vanilla Node.js ESM** serverless functions on Vercel (`api/*.js` → `lib/*.js`, ~550 lib modules), **framework-free vanilla JS frontend** (`public/js/*.js`, PWA, inline SVG charts), storage = **Vercel Blob** (JSON files; read-back lags 10-60s). Runtime deps: only `@anthropic-ai/sdk`, `@vercel/blob`, `web-push`. Tests: `node --test`. Nightly cron 22:00 UTC (`api/warm.js`, 300s max, 2GB) chains ~38 jobs; `api/tracker.js` 300s/3GB.
+- Offline research lives in `research/` (also JS; large panel/outcome datasets, PIT security master with 2,573 delistings).
+- Data vendors already wired: FinancialModelingPrep (paid plan; NO transcripts; 10k-row cap), Finnhub, Yahoo quote/chart, Stooq EOD, SEC EDGAR (full-text search, daily index, XBRL companyfacts, Form 4 bulk), FINRA API (short interest), StockTwits, NewsAPI, FRED, Polymarket/Kalshi, USAspending, PJM, Greenhouse jobs, npm/GitHub adoption stats, Nasdaq Trader lists, Wikipedia.
+- LLM: Claude (Fable 5.1 parametric, Haiku + web_search) for Market Pulse, earnings-call tone, news→thesis, gameplan reflection.
+
+## What is already built (do NOT re-propose)
+Regime (Risk-On/Off) router; momentum/relative-strength screener; sector rotation; Session Board (A–F graded ranked list with frozen entry/stop/target); Scoreboard measuring every pick vs SPY at 1/5/10/20d with excess & beat-rate; hypothesis registry + evidence grades (Validated…Disabled) with FDR/BH, PBO, purged walk-forward, PIT joins, negative controls, fail-closed eligibility; day-trade engine (gap-continuation + ORB, two-stage lifecycle, low-float ignition, early-runner CUSUM); swing engines (OMEGA, ATLAS-X, Trend Core, 3-horizon lookup); options flow + OI-confirm; CERN forced-flow events (index adds, lockups) w/ decay curves; biotech catalyst radar; chart-pattern detectors (14, stateful episodes); coil/compression radar; anomaly "stealth mover" screener; StockTwits attention fast/sticky; Form 4 insider cluster-buy shadow ledger; 424B5 dilution AVOID flag; short-interest overlay (no alpha); CFTC COT (no alpha); peer-propagation graph; read-through beneficiary graph; tech operational evidence (npm/GitHub/SEC adoption for MDB/DDOG/NET/TWLO/ESTC); GRIDLOCK (PJM) + GOVDEMAND (USAspending) verticals; Market Pulse v2 narratives; public AI-readable feed /feed/daytrade.md; push alerts; command palette; Simple/Expert nav modes; TradingAgents-style multi-agent reflection loop (audited & adopted).
+
+## Hard-won conclusions (respect them)
+- 5 years of back-tests: **no durable retail alpha** found; momentum edge was survivorship; LLM stock pickers are flat/negative; agreement between signals does not pay. Site's real value = regime discipline + honest evidence + surfacing what is strong now.
+- Everything ships as a **shadow, Scoreboard-tracked overlay first**; promoted only after it beats the market under preregistered gates.
+- Pain points worth solving: Vercel Blob read-after-write lag and lost appends; nightly cron chain depth/timeouts/OOM; FMP data gaps (transcripts, bulk quotes, 10k cap); survivorship-free historical panels (needs delisted data); 2dp rounding in evidence stats; un-memoized fetch fan-out; test flakiness; UI is hand-rolled inline SVG (no proper candlestick/time-series chart lib); no user accounts; no portfolio/position tracking.
+
+## Your output contract
+Write your report to the file path given in your prompt, in Markdown, then return the same content. Structure:
+1. `## Lane summary` (3-5 sentences: what you searched, how many repos screened, the headline).
+2. `## Candidates` — a table: Repo | Stars | Last push | License | Language | What it does (1 line) | Fit (which existing module/pain point) | Verdict (ADOPT / PORT / RESEARCH-ONLY / REFERENCE / REJECT).
+3. `## Top proposals` — for each ADOPT/PORT/RESEARCH-ONLY (max 5): what to build, where it plugs in (name the lib/ or public/js/ module or research/ step), integration shape (npm dep vs vendored port vs offline script vs data pipeline), effort (S/M/L), risk/caveats (license, maintenance, Vercel serverless fit, Python-only, etc.), and how it would be shadow-tracked/measured.
+4. `## Rejected / noise` — one line each for notable repos you deliberately rejected and why.
+Rules: verify stars/last-push/license with `gh api repos/<owner>/<repo>` (jq .stargazers_count,.pushed_at,.license.spdx_id). Prefer repos pushed within 18 months unless the code is small and vendorable. Do not propose things in the "already built" list. Be concrete about Node/vanilla-JS fit: Python-only libs can only be RESEARCH-ONLY (offline) or PORT. Keep the report under ~1,500 words. Do not modify the repo.
