@@ -2367,14 +2367,21 @@
     .opp-sig.sig-rs2 { color: var(--green); border-color: #10d98a44; }
     .opp-sig.sig-hi { color: var(--cyan); border-color: #06c4d444; }
     .opp-sig.sig-vcp, .opp-sig.sig-vdu, .opp-sig.sig-acc { color: var(--text-dim); }
-    /* 🏆 Algo Leaderboard */
-    .lb-row { display: flex; align-items: center; gap: 12px; padding: 11px 14px; margin-top: 8px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
+    /* 🏆 Algo Leaderboard — one sortable table per metric basis (leaderboard.js renderBoardHTML) */
+    .lb-basis { margin: 12px 0 2px; font-size: 0.66rem; }
+    .lb-table { width: 100%; border-collapse: separate; border-spacing: 0 8px; }
+    .lb-table th { text-align: left; font-size: 0.64rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; padding: 0 10px 2px; }
+    .lb-table td { background: var(--card); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 11px 10px; vertical-align: middle; }
+    .lb-table td:first-child { border-left: 1px solid var(--border); border-radius: 10px 0 0 10px; }
+    .lb-table td:last-child { border-right: 1px solid var(--border); border-radius: 0 10px 10px 0; }
     .lb-rank { font-size: 1.1rem; font-weight: 800; min-width: 28px; text-align: center; color: var(--text-dim); }
-    .lb-mid { flex: 1; min-width: 0; }
+    .lb-mid { min-width: 0; }
     .lb-name { font-size: 0.92rem; font-weight: 700; }
     .lb-detail { font-size: 0.76rem; margin-top: 2px; }
     .lb-live { font-size: 0.7rem; color: var(--text-dim); display: block; margin-top: 1px; }
+    .lb-n { font-size: 0.78rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .lb-verdict { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+    @media (max-width: 640px) { .lb-table .lb-livecol { display: none; } }
 
 /* 🧬 Coil Radar — responsive card grid + calibration reasons */
 .dt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 8px; }
@@ -3608,3 +3615,20 @@
   #session .sb-bars { grid-template-columns:repeat(2, 1fr); }
   #session .sb-name { white-space:normal; }
 }
+
+/* ── 📴 Offline-first + micro-kit (sw.js / last-good.js / toasts.js / vendored sortable) ── */
+/* Last-good strip: the board on screen is the last usable snapshot, not the current read. */
+.lg-strip { font-size: .78rem; color: var(--amber); background: var(--amber-dim); border: 1px solid rgba(240,168,50,.5); border-radius: 8px; padding: .4rem .7rem; margin-bottom: .5rem; }
+.lg-strip .lg-why { color: var(--text-dim); }
+/* tofsjonas/sortable: any <table class="sortable"> — header cursor + direction indicator (aria-sort). */
+table.sortable th { cursor: pointer; user-select: none; white-space: nowrap; }
+table.sortable th.no-sort { cursor: default; }
+table.sortable th[aria-sort="ascending"]::after { content: " ▲"; font-size: .7em; opacity: .8; }
+table.sortable th[aria-sort="descending"]::after { content: " ▼"; font-size: .7em; opacity: .8; }
+/* Notyf toasts (toasts.js) — the app's own types; the vendored stylesheet follows. */
+.notyf__toast { font-family: var(--font); font-size: .84rem; border: 1px solid var(--border-hi); box-shadow: 0 8px 28px rgba(0,0,0,.45); }
+.notyf__toast--update { cursor: pointer; }
+.notyf__message b { color: #fff; }
+
+/*! Notyf v3.10.0 stylesheet — (c) 2016-2020 Carlos Roso — MIT — https://github.com/caroso1222/notyf — inlined verbatim from npm notyf@3.10.0/notyf.min.css (license: /js/vendor/notyf-3.10.0.LICENSE) */
+@-webkit-keyframes notyf-fadeinup{0%{opacity:0;transform:translateY(25%)}to{opacity:1;transform:translateY(0)}}@keyframes notyf-fadeinup{0%{opacity:0;transform:translateY(25%)}to{opacity:1;transform:translateY(0)}}@-webkit-keyframes notyf-fadeinleft{0%{opacity:0;transform:translateX(25%)}to{opacity:1;transform:translateX(0)}}@keyframes notyf-fadeinleft{0%{opacity:0;transform:translateX(25%)}to{opacity:1;transform:translateX(0)}}@-webkit-keyframes notyf-fadeoutright{0%{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(25%)}}@keyframes notyf-fadeoutright{0%{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(25%)}}@-webkit-keyframes notyf-fadeoutdown{0%{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(25%)}}@keyframes notyf-fadeoutdown{0%{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(25%)}}@-webkit-keyframes ripple{0%{transform:scale(0) translateY(-45%) translateX(13%)}to{transform:scale(1) translateY(-45%) translateX(13%)}}@keyframes ripple{0%{transform:scale(0) translateY(-45%) translateX(13%)}to{transform:scale(1) translateY(-45%) translateX(13%)}}.notyf{position:fixed;top:0;left:0;height:100%;width:100%;color:#fff;z-index:9999;display:flex;flex-direction:column;align-items:flex-end;justify-content:flex-end;pointer-events:none;box-sizing:border-box;padding:20px}.notyf__icon--error,.notyf__icon--success{height:21px;width:21px;background:#fff;border-radius:50%;display:block;margin:0 auto;position:relative}.notyf__icon--error:after,.notyf__icon--error:before{content:"";background:currentColor;display:block;position:absolute;width:3px;border-radius:3px;left:9px;height:12px;top:5px}.notyf__icon--error:after{transform:rotate(-45deg)}.notyf__icon--error:before{transform:rotate(45deg)}.notyf__icon--success:after,.notyf__icon--success:before{content:"";background:currentColor;display:block;position:absolute;width:3px;border-radius:3px}.notyf__icon--success:after{height:6px;transform:rotate(-45deg);top:9px;left:6px}.notyf__icon--success:before{height:11px;transform:rotate(45deg);top:5px;left:10px}.notyf__toast{display:block;overflow:hidden;pointer-events:auto;-webkit-animation:notyf-fadeinup .3s ease-in forwards;animation:notyf-fadeinup .3s ease-in forwards;box-shadow:0 3px 7px 0 rgba(0,0,0,.25);position:relative;padding:0 15px;border-radius:2px;max-width:300px;transform:translateY(25%);box-sizing:border-box;flex-shrink:0}.notyf__toast--disappear{transform:translateY(0);-webkit-animation:notyf-fadeoutdown .3s forwards;animation:notyf-fadeoutdown .3s forwards;-webkit-animation-delay:.25s;animation-delay:.25s}.notyf__toast--disappear .notyf__icon,.notyf__toast--disappear .notyf__message{-webkit-animation:notyf-fadeoutdown .3s forwards;animation:notyf-fadeoutdown .3s forwards;opacity:1;transform:translateY(0)}.notyf__toast--disappear .notyf__dismiss{-webkit-animation:notyf-fadeoutright .3s forwards;animation:notyf-fadeoutright .3s forwards;opacity:1;transform:translateX(0)}.notyf__toast--disappear .notyf__message{-webkit-animation-delay:.05s;animation-delay:.05s}.notyf__toast--upper{margin-bottom:20px}.notyf__toast--lower{margin-top:20px}.notyf__toast--dismissible .notyf__wrapper{padding-right:30px}.notyf__ripple{height:400px;width:400px;position:absolute;transform-origin:bottom right;right:0;top:0;border-radius:50%;transform:scale(0) translateY(-51%) translateX(13%);z-index:5;-webkit-animation:ripple .4s ease-out forwards;animation:ripple .4s ease-out forwards}.notyf__wrapper{display:flex;align-items:center;padding-top:17px;padding-bottom:17px;padding-right:15px;border-radius:3px;position:relative;z-index:10}.notyf__icon{width:22px;text-align:center;font-size:1.3em;opacity:0;-webkit-animation:notyf-fadeinup .3s forwards;animation:notyf-fadeinup .3s forwards;-webkit-animation-delay:.3s;animation-delay:.3s;margin-right:13px}.notyf__dismiss{position:absolute;top:0;right:0;height:100%;width:26px;margin-right:-15px;-webkit-animation:notyf-fadeinleft .3s forwards;animation:notyf-fadeinleft .3s forwards;-webkit-animation-delay:.35s;animation-delay:.35s;opacity:0}.notyf__dismiss-btn{background-color:rgba(0,0,0,.25);border:none;cursor:pointer;transition:opacity .2s ease,background-color .2s ease;outline:none;opacity:.35;height:100%;width:100%}.notyf__dismiss-btn:after,.notyf__dismiss-btn:before{content:"";background:#fff;height:12px;width:2px;border-radius:3px;position:absolute;left:calc(50% - 1px);top:calc(50% - 5px)}.notyf__dismiss-btn:after{transform:rotate(-45deg)}.notyf__dismiss-btn:before{transform:rotate(45deg)}.notyf__dismiss-btn:hover{opacity:.7;background-color:rgba(0,0,0,.15)}.notyf__dismiss-btn:active{opacity:.8}.notyf__message{vertical-align:middle;position:relative;opacity:0;-webkit-animation:notyf-fadeinup .3s forwards;animation:notyf-fadeinup .3s forwards;-webkit-animation-delay:.25s;animation-delay:.25s;line-height:1.5em}@media only screen and (max-width:480px){.notyf{padding:0}.notyf__ripple{height:600px;width:600px;-webkit-animation-duration:.5s;animation-duration:.5s}.notyf__toast{max-width:none;border-radius:0;box-shadow:0 -2px 7px 0 rgba(0,0,0,.13);width:100%}.notyf__dismiss{width:56px}}

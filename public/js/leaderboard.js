@@ -104,18 +104,49 @@ function verdict(row) {
 }
 
 const MEDAL = ['🥇', '🥈', '🥉'];
+const UNRANKED_SORT = 999;
+const NO_SCORE_SORT = -999;
+// One ranked <table class="sortable"> per basis (vendored tofsjonas/sortable: click a header to
+// sort; data-sort carries the raw number so numeric columns never sort lexically). Rows are
+// SORTABLE ONLY WITHIN their basis — RT-04: a live record, a backtest alpha and a confluence
+// backtest are different yardsticks and never share a rank, so they never share a table either.
 function row(r, i) {
   const [vk, col, detail] = verdict(r);
   const live = r.live;
   const matChip = r.maturity === 'production'
     ? `<span class="dt-tier-a" style="font-size:0.6rem" title="Registry maturity: production">production</span>`
     : `<span class="dt-dim" style="font-size:0.6rem;border:1px solid #64748b55;border-radius:4px;padding:0 4px" title="Registry maturity: shadow — zero live weight; this row is measurement, not clearance">shadow · 0 weight</span>`;
-  const liveStr = live ? `<span class="lb-live">live: ${live.avg > 0 ? '+' : ''}${live.avg}% · ${live.winRate}% win <span class="dt-dim">(${live.horizon}, n${live.n})</span></span>` : `<span class="dt-dim">live: building</span>`;
-  return `<div class="lb-row">`
-    + `<div class="lb-rank">${r.ranked ? (MEDAL[i] || (i + 1)) : '·'}</div>`
-    + `<div class="lb-mid"><div class="lb-name">${esc(r.name)} ${matChip}</div>`
-    + `<div class="lb-detail" style="color:${col}">${detail}</div>${liveStr}</div>`
-    + `<div class="lb-verdict" style="color:${col}">${vk}</div></div>`;
+  const liveStr = live ? `<span class="lb-live">${live.avg > 0 ? '+' : ''}${live.avg}% · ${live.winRate}% win <span class="dt-dim">(${live.horizon}, n${live.n})</span></span>` : `<span class="dt-dim">building</span>`;
+  const score = Number.isFinite(r.score) ? r.score : NO_SCORE_SORT;
+  return `<tr class="lb-row">`
+    + `<td class="lb-rank" data-sort="${r.ranked ? i + 1 : UNRANKED_SORT}">${r.ranked ? (MEDAL[i] || (i + 1)) : '·'}</td>`
+    + `<td class="lb-mid"><div class="lb-name">${esc(r.name)} ${matChip}</div><div class="lb-detail" style="color:${col}">${detail}</div></td>`
+    + `<td class="lb-livecol" data-sort="${Number.isFinite(live && live.avg) ? live.avg : NO_SCORE_SORT}">${liveStr}</td>`
+    + `<td class="lb-n" data-sort="${score}" title="Basis metric used for this table's rank">${Number.isFinite(r.score) ? `${r.score > 0 ? '+' : ''}${r.score}%` : '—'} <span class="dt-dim">n${r.n || 0}</span></td>`
+    + `<td class="lb-verdict" style="color:${col}">${vk}</td></tr>`;
+}
+
+const TABLE_HEAD = `<thead><tr><th title="Rank within this basis — click any header to sort">#</th><th>Algorithm</th><th title="Live forward record (scoreboard)">Live</th><th title="This basis's metric: live avg, backtest alpha or confluence excess — all vs SPY">Metric</th><th>Verdict</th></tr></thead>`;
+function table(title, rows) {
+  if (!rows.length) return '';
+  return `<div class="dt-dim lb-basis">${esc(title)}</div><table class="lb-table sortable">${TABLE_HEAD}<tbody>${rows.join('')}</tbody></table>`;
+}
+
+// Group the sorted board by basis (ranked rows) with the thin-sample rows in a last "building"
+// table; medals restart inside each basis so a backtest number never outranks a live record.
+export function renderBoardHTML(board) {
+  const rows = Array.isArray(board) ? board : [];
+  if (!rows.length) return '';
+  const groups = new Map();
+  for (const r of rows) {
+    const key = r.ranked ? r.basis : 'building';
+    const g = groups.get(key) || [];
+    groups.set(key, [...g, row(r, g.length)]);
+  }
+  const order = [...Object.keys(BASIS_ORDER), 'building'];
+  return order.filter(k => groups.has(k))
+    .map(k => table(k === 'building' ? `Building evidence (fewer than ${MIN_RANKED_N} resolved — not ranked)` : (BASIS_LABEL[k] || k), groups.get(k)))
+    .join('');
 }
 
 export async function loadLeaderboard(container) {
@@ -135,14 +166,7 @@ export async function loadLeaderboard(container) {
 
   let html = `<div class="rot-panel"><div class="rot-head">🏆 Which algos are actually working?</div>`
     + `<div class="rot-sub">The app's screener strategies, ranked by realized performance — <b>within</b> each metric basis (a live forward record, a 3-month ${L('backtest', 'backtest')} and a cached confluence backtest are different yardsticks and never share a rank). This board is <b>measurement only</b>: it feeds no ranking, no weights, and no candidate list — registry governance does that.</div></div>`;
-  // Render grouped by basis; medals restart inside each basis so a backtest number
-  // never outranks a live record (or vice versa) on an incomparable scalar.
-  let lastBasis = null, medalIdx = 0;
-  html += board.map(r => {
-    let head = '';
-    if (r.ranked && r.basis !== lastBasis) { lastBasis = r.basis; medalIdx = 0; head = `<div class="dt-dim" style="margin:8px 0 2px;font-size:0.66rem">${esc(BASIS_LABEL[r.basis] || r.basis)}</div>`; }
-    return head + row(r, r.ranked ? medalIdx++ : 999);
-  }).join('');
+  html += renderBoardHTML(board);
   html += `<div class="dt-note" style="margin-top:10px">⚠️ <b>Honest read:</b> most strategies sit at or below SPY out-of-sample (the project's recurring finding) — the leaderboard exists to surface the few that hold up and to keep grading them. Ranks update as live picks mature toward the full 3-month horizon. A strategy needs <b>${MIN_RANKED_N} resolved picks</b> before it can be ranked at all: a handful of lucky picks is not a track record, however good the average looks.</div>`;
   if (!withData) html += `<div class="dt-dim" style="margin-top:8px">Live records are still maturing; the 3-month backtest column fills the gap.</div>`;
   container.innerHTML = html;

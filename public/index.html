@@ -1769,6 +1769,12 @@
   </div>
 </nav>
 
+<!-- Vendored micro-kit (classic scripts, deferred → run in order before the module entry):
+     idb-keyval → globalThis.idbKeyval (last-good snapshots), sortable → click-to-sort <table class="sortable">,
+     Notyf → window.Notyf (toasts). Fuse.js is lazy-imported by the ⌘K palette. Licenses sit next to each file. -->
+<script src="/js/vendor/idb-keyval-6.2.2.umd.js" defer></script>
+<script src="/js/vendor/sortable-3.2.3.min.js" defer></script>
+<script src="/js/vendor/notyf-3.10.0.min.js" defer></script>
 <script type="module" src="/js/app.js"></script>
 </body>
 </html>

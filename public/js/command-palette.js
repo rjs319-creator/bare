@@ -4,6 +4,7 @@
 // client-side over data the app already holds; routes via callbacks so this
 // module stays decoupled from app.js internals.
 import { esc } from './format.js';
+import { buildIndexItems, FUSE_OPTIONS, rankMatches, collectTickersFromDom } from './palette-index.js';
 
 const MAX_RESULTS = 12;
 const TICKER_RE = /^[A-Za-z.]{1,6}$/;
@@ -11,6 +12,27 @@ const TICKER_RE = /^[A-Za-z.]{1,6}$/;
 let cfg = null;          // { sections, learn, onRoute, onLearn, onTickerOptions }
 let box = null, input = null, list = null, overlay = null;
 let results = [], active = 0;
+
+// Fuzzy search (Fuse.js, vendored). Lazy: the 18 KB module is imported on the FIRST ⌘K open, and
+// the index is rebuilt per open so the tickers on screen (with company names) are always current.
+// If the import fails the palette keeps its substring match — fuzzy is an upgrade, not a dependency.
+let FuseCtor = null, fuseLoad = null, fuse = null;
+function loadFuse() {
+  if (FuseCtor) return Promise.resolve(FuseCtor);
+  if (!fuseLoad) {
+    fuseLoad = import('./vendor/fuse-7.1.0.min.mjs')
+      .then((m) => { FuseCtor = m && m.default; return FuseCtor; })
+      .catch(() => { fuseLoad = null; return null; });
+  }
+  return fuseLoad;
+}
+function rebuildIndex() {
+  if (!FuseCtor || !cfg) { fuse = null; return; }
+  try {
+    const tickers = typeof document === 'undefined' ? [] : collectTickersFromDom(document);
+    fuse = new FuseCtor(buildIndexItems({ sections: cfg.sections, learn: cfg.learn, tickers }), FUSE_OPTIONS);
+  } catch { fuse = null; }
+}
 
 function injectStyles() {
   if (document.getElementById('cmdk-style')) return;
@@ -109,6 +131,26 @@ function tickerCommands(q) {
 
 function match(q, hay) { return hay.toLowerCase().includes(q); }
 
+// A fuzzy-matched index item → palette command. Ticker items open the full lookup (price, chart,
+// grade) — the company name is what made them findable, so it is shown.
+function itemCmd(item) {
+  if (item.type === 'section') { const s = cfg.sections.find(x => x.id === item.id); return s ? sectionCmd(s) : null; }
+  if (item.type === 'learn') return learnCmd({ key: item.key, label: item.label });
+  if (item.type === 'ticker') {
+    const open = cfg.onTickerLookup || cfg.onTickerOptions;
+    const co = item.company ? ` <span style="color:#6b7280;font-size:.78em">· ${esc(item.company.slice(0, 48))}</span>` : '';
+    return { ic: '📈', kind: 'Look up', title: `<b>${esc(item.ticker)}</b>${co}`, run: () => open(item.ticker) };
+  }
+  return null;
+}
+
+function substringResults(q) {
+  const out = [];
+  cfg.sections.forEach(s => { if (match(q, s.label) || match(q, s.id) || match(q, s.group)) out.push(sectionCmd(s)); });
+  cfg.learn.forEach(l => { if (match(q, l.label) || match(q, l.group)) out.push(learnCmd(l)); });
+  return out;
+}
+
 function buildResults(raw) {
   const q = raw.trim().toLowerCase();
   if (!q) {
@@ -116,9 +158,18 @@ function buildResults(raw) {
     return cfg.sections.slice(0, 8).map(s => sectionCmd(s));
   }
   const out = [];
-  if (TICKER_RE.test(raw.trim())) out.push(...tickerCommands(raw.trim()));
-  cfg.sections.forEach(s => { if (match(q, s.label) || match(q, s.id) || match(q, s.group)) out.push(sectionCmd(s)); });
-  cfg.learn.forEach(l => { if (match(q, l.label) || match(q, l.group)) out.push(learnCmd(l)); });
+  const tickerShaped = TICKER_RE.test(raw.trim());
+  if (TICKER_RE.test(raw.trim())) out.push(...tickerCommands(raw.trim()));   // fast path first
+  if (fuse) {
+    const skip = tickerShaped ? raw.trim().toUpperCase() : null;             // already covered above
+    rankMatches(fuse, q, MAX_RESULTS).forEach(item => {
+      if (item.type === 'ticker' && item.ticker === skip) return;
+      const cmd = itemCmd(item);
+      if (cmd) out.push(cmd);
+    });
+  } else {
+    out.push(...substringResults(q));
+  }
   return out.slice(0, MAX_RESULTS);
 }
 
@@ -175,6 +226,9 @@ export function openPalette() {
   input.value = '';
   rebuild('');
   setTimeout(() => input.focus(), 0);
+  // Index what is on screen now; the first open also pulls the Fuse module in.
+  if (FuseCtor) rebuildIndex();
+  else loadFuse().then(() => { rebuildIndex(); if (!overlay.hidden && input.value) rebuild(input.value); });
 }
 function close() {
   if (!overlay) return;
