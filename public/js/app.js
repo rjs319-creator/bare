@@ -692,9 +692,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const chainsFrom = ch && ch.source === 'github-matrix'
       ? ` Nightly chains ${esc(ch.date || '')} ran on GitHub${ch.runUrl ? ` — <a href="${esc(ch.runUrl)}" target="_blank" rel="noopener" style="color:inherit">open run</a>` : ''}.`
       : '';
+    if (ch && ch.noMatrixRun) {
+      // The dead-man for ONE night: warm handed the chains to GitHub and no FULL run has
+      // reported since. A partial (only=) run cannot clear this — on 2026-10-02 one did,
+      // and a missing night read as healthy. Say it plainly.
+      const night = ch.noMatrixRun.date || '';
+      const todayEt = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      const which = night && night !== todayEt ? `The background refresh for ${esc(night)} never ran` : `Tonight's background refresh has not run yet`;
+      warns.push(`⚠️ ${which} — the nightly chains were handed to GitHub Actions and no full run has reported. Ledgers, scoreboard and research tabs still show the previous session.`);
+    }
     if (ch && ch.missing) {
-      // The dead-man: in-process dispatch is off and NO night has reported for days. This is
-      // the one failure a job e-mail can never deliver (nothing ran to fail).
+      // The dead-man for DAYS: in-process dispatch is off and NO night has reported at all.
+      // This is the one failure a job e-mail can never deliver (nothing ran to fail).
       warns.push(`⚠️ No nightly chain summary has been posted in the last few days — the GitHub nightly-chains workflow did not run or could not report. Ledgers, scoreboard and research tabs are NOT being refreshed.`);
     }
     if (sev.data.length) {

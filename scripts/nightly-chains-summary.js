@@ -23,7 +23,9 @@ const DEFAULT_APP_URL = 'https://market-news-app-chi.vercel.app';
 const DEFAULT_OUT_DIR = '.nightly';
 const POST_TIMEOUT_MS = 60000;
 
-const isoDate = (ms) => new Date(ms).toISOString().slice(0, 10);
+// Summary dates are ET SESSION dates (lib/chain-summary.js): the retry schedules run as
+// late as 01:00 UTC, which is still the same evening in New York.
+const { etDate } = require('../lib/chain-summary');
 const parseOnly = (only) => String(only || '').split(',').map((s) => s.trim()).filter(Boolean);
 
 function readResults(outDir) {
@@ -49,8 +51,12 @@ function buildSummaryPayload(results, { expected = ROOT_CHAINS, only = [], runId
   const ends = Object.values(byChain).map((r) => Date.parse(r.finishedAt)).filter(Number.isFinite);
   const startedMs = starts.length ? Math.min(...starts) : now;
   return {
-    date: isoDate(startedMs),
+    date: etDate(startedMs),
     source: only.length ? 'manual' : 'github-matrix',
+    // A filtered run reports the chains it ran and nothing about the night: op=health treats
+    // only a full run (partial:false) as covering the date. `covered` names what ran.
+    partial: only.length > 0,
+    covered: wanted,
     runId: runId == null ? null : String(runId),
     runUrl,
     startedAt: new Date(startedMs).toISOString(),
@@ -64,7 +70,7 @@ function stepSummaryMarkdown(payload) {
     `| ${c.ok ? '✅' : '❌'} ${name} | ${c.status} | ${c.httpStatus ?? '—'} | ${c.attempts ?? '—'} | ${c.elapsedMs != null ? Math.round(c.elapsedMs / 1000) + 's' : '—'} | ${(c.failed || []).join(', ') || (c.error || '')} | ${(c.skipped || []).join(', ')} |`);
   const failed = Object.entries(payload.chains).filter(([, c]) => !c.ok).map(([n]) => n);
   return [
-    `## Nightly chains ${payload.date} (${payload.source})`,
+    `## Nightly chains ${payload.date} (${payload.source}${payload.partial ? ', partial' : ''})`,
     failed.length ? `**${failed.length} failed:** ${failed.join(', ')}` : '**All chains ok.**',
     '',
     '| chain | status | http | attempts | elapsed | failed steps / error | budget-skipped |',

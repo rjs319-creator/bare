@@ -79,6 +79,7 @@ test('buildSummaryPayload: every expected root is present; a missing one is no-r
   const p = SUM.buildSummaryPayload([res('ledger'), res('capture', { ok: false, status: 'failed', failed: ['op=archive'], error: 'op=archive http:500' })],
     { expected: ['ledger', 'capture', 'ticks1'], runId: 99, runUrl: 'https://gh/run/99', now: NOW });
   assert.equal(p.date, '2026-10-02'); assert.equal(p.source, 'github-matrix'); assert.equal(p.runId, '99');
+  assert.equal(p.partial, false); assert.deepEqual(p.covered, ['ledger', 'capture', 'ticks1']);
   assert.equal(p.chains.ledger.ok, true);
   assert.deepEqual(p.chains.capture.failed, ['op=archive']);
   assert.equal(p.chains.ticks1.status, 'no-report'); assert.equal(p.chains.ticks1.ok, false);
@@ -92,8 +93,16 @@ test('buildSummaryPayload: every expected root is present; a missing one is no-r
 test('buildSummaryPayload: a filtered (workflow_dispatch only=) run expects only those roots and is recorded as manual', () => {
   const p = SUM.buildSummaryPayload([res('maturity')], { expected: ['ledger', 'maturity', 'bearcase'], only: ['maturity', 'bearcase'], now: NOW });
   assert.deepEqual(Object.keys(p.chains), ['maturity', 'bearcase']); assert.equal(p.source, 'manual');
+  assert.equal(p.partial, true, 'a filtered run can never cover the night'); assert.deepEqual(p.covered, ['maturity', 'bearcase']);
   assert.equal(p.chains.bearcase.status, 'no-report');
+  assert.match(SUM.stepSummaryMarkdown(p), /\(manual, partial\)/);
   assert.deepEqual(SUM.parseOnly(' maturity, bearcase ,'), ['maturity', 'bearcase']);
+});
+
+test('buildSummaryPayload: a run that starts after 00:00 UTC is dated by its ET session (same evening in New York)', () => {
+  const late = res('ledger', { startedAt: '2026-10-03T01:02:00Z', finishedAt: '2026-10-03T01:05:00Z' });
+  const p = SUM.buildSummaryPayload([late], { expected: ['ledger'], now: Date.parse('2026-10-03T01:06:00Z') });
+  assert.equal(p.date, '2026-10-02');
 });
 
 test('stepSummaryMarkdown: names the failed chains up top and one row per chain', () => {

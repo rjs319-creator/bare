@@ -2,8 +2,8 @@
 // op=chainsummary — the per-night chains record the GitHub Actions matrix POSTs so the app
 // knows what happened to the nightly chains without reading the Actions UI.
 //   • pure: payload validation + normalisation, health view derivation, lookback dates
-//   • route: bearer auth, POST-only, 400 on a bad payload, writeChecked to chains/<date>.json,
-//     idempotent per (date, runId)
+//   • route: bearer auth, POST-only, 400 on a bad payload, CAS-merged into chains/<date>.json
+//     (a full run replaces the night, a partial run folds in per chain)
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const CS = require('../lib/chain-summary');
@@ -63,10 +63,10 @@ test('normalizeChainSummary: a chain without an explicit ok is graded from statu
 
 // ── health view ──────────────────────────────────────────────────────────────
 test('chainsHealthView: a GitHub summary becomes the compact banner block', () => {
-  const { value } = CS.normalizeChainSummary(payload(), { now: NOW });
-  const v = CS.chainsHealthView({ summary: value });
-  assert.deepEqual(v, { date: '2026-10-02', ok: false, failed: ['capture'], skipped: [], source: 'github-matrix',
-    runUrl: 'https://github.com/x/y/actions/runs/42', at: '2026-10-02T22:39:00.000Z', missing: false });
+  const { value } = CS.normalizeChainSummary(payload({ partial: false }), { now: NOW });
+  const v = CS.chainsHealthView({ summary: value, roots: ['ledger', 'capture'], now: NOW });
+  assert.deepEqual(v, { date: '2026-10-02', ok: false, full: true, partial: false, covered: ['ledger', 'capture'], failed: ['capture'], skipped: [], source: 'github-matrix',
+    runUrl: 'https://github.com/x/y/actions/runs/42', at: '2026-10-02T22:39:00.000Z', missing: false, noMatrixRun: null });
 });
 
 test('chainsHealthView: falls back to the in-process run record when no summary exists', () => {
@@ -105,7 +105,12 @@ function memStore() {
     docs, writes: 0,
     hasStore: () => true,
     readJSON: async (k, fb) => (docs.has(k) ? docs.get(k) : fb),
-    writeJSON: async (k, o) => { docs.set(k, o); return { pathname: k }; },
+    // The CAS primitive the route uses (lib/store-cas.js contract): mutate(current|initial) → new doc.
+    updateJSON: async function (k, mutate, { initial = null } = {}) {
+      const next = await mutate(docs.has(k) ? docs.get(k) : initial);
+      docs.set(k, next); this.writes += 1;
+      return { written: true, value: next, etag: null, attempts: 1 };
+    },
   };
 }
 const withSecret = async (secret, fn) => {
@@ -139,27 +144,51 @@ test('runChainSummary: a bad payload is 400 with the reason, and nothing is writ
   assert.equal(res.code, 400); assert.match(res.body.error, /date/); assert.equal(store.docs.size, 0);
 }));
 
-test('runChainSummary: writes chains/<date>.json via writeChecked and reports the verdict; a string body is parsed', () => withSecret('s3cret', async () => {
+test('runChainSummary: writes chains/<date>.json under CAS and reports the verdict; a string body is parsed', () => withSecret('s3cret', async () => {
   const store = memStore(); const res = fakeRes();
-  await R.runChainSummary(req({ body: JSON.stringify(payload()) }), res, { store, now: () => NOW });
+  await R.runChainSummary(req({ body: JSON.stringify(payload({ partial: false })) }), res, { store, now: () => NOW });
   assert.equal(res.code, 200);
   assert.equal(res.body.ok, true);
-  assert.equal(res.body.written, true); assert.equal(res.body.verified, true);
+  assert.equal(res.body.written, true); assert.equal(res.body.partial, false); assert.equal(res.body.merged, false);
   assert.equal(res.body.chainsOk, false); assert.deepEqual(res.body.failed, ['capture']);
   assert.equal(res.headers['Cache-Control'], 'no-store');
   const doc = store.docs.get('chains/2026-10-02.json');
-  assert.equal(doc.runId, '42'); assert.equal(doc.receivedAt, new Date(NOW).toISOString());
+  assert.equal(doc.runId, '42'); assert.equal(doc.receivedAt, new Date(NOW).toISOString()); assert.equal(doc.partial, false);
 }));
 
-test('runChainSummary: idempotent — the same run posted twice yields one identical doc; a newer run replaces it', () => withSecret('s3cret', async () => {
+test('runChainSummary: idempotent — the same full run posted twice yields the same record; a newer full run replaces it', () => withSecret('s3cret', async () => {
   const store = memStore();
-  await R.runChainSummary(req(), fakeRes(), { store, now: () => NOW });
+  await R.runChainSummary(req({ body: payload({ partial: false }) }), fakeRes(), { store, now: () => NOW });
   const first = store.docs.get('chains/2026-10-02.json');
-  await R.runChainSummary(req(), fakeRes(), { store, now: () => NOW });
-  assert.deepEqual(store.docs.get('chains/2026-10-02.json'), first);
-  await R.runChainSummary(req({ body: payload({ runId: '43', chains: { ledger: okChain } }) }), fakeRes(), { store, now: () => NOW });
+  await R.runChainSummary(req({ body: payload({ partial: false }) }), fakeRes(), { store, now: () => NOW });
+  const { priorRuns, ...second } = store.docs.get('chains/2026-10-02.json');
+  assert.deepEqual(second, first);
+  assert.deepEqual(priorRuns.map((p) => p.runId), ['42'], 'the earlier post is kept as provenance');
+  await R.runChainSummary(req({ body: payload({ partial: false, runId: '43', chains: { ledger: okChain } }) }), fakeRes(), { store, now: () => NOW });
   assert.equal(store.docs.get('chains/2026-10-02.json').runId, '43');
   assert.equal(store.docs.size, 1, 'one key per date — never a shared RMW doc');
+}));
+
+test('runChainSummary: a partial (only=) post merges into the night instead of replacing it', () => withSecret('s3cret', async () => {
+  const store = memStore();
+  await R.runChainSummary(req({ body: payload({ partial: false }) }), fakeRes(), { store, now: () => NOW });
+  const res = fakeRes();
+  await R.runChainSummary(req({ body: payload({ partial: true, runId: '44', chains: { capture: okChain } }) }), res, { store, now: () => NOW + 1000 });
+  assert.equal(res.body.merged, true); assert.equal(res.body.partial, true);
+  const doc = store.docs.get('chains/2026-10-02.json');
+  assert.equal(doc.runId, '42', 'the night keeps the full run\'s identity'); assert.equal(doc.partial, false);
+  assert.equal(doc.chains.capture.ok, true); assert.equal(doc.ok, true); assert.deepEqual(doc.failed, []);
+  assert.deepEqual(doc.patches.map((p) => p.runId), ['44']);
+  // A partial post onto an empty night is stored as partial — it can never cover the night.
+  const store2 = memStore();
+  await R.runChainSummary(req({ body: payload({ partial: true, chains: { maturity: okChain } }) }), fakeRes(), { store: store2, now: () => NOW });
+  assert.equal(store2.docs.get('chains/2026-10-02.json').partial, true);
+}));
+
+test('runChainSummary: a CAS failure is an honest 500 (the summary job goes red and says why)', () => withSecret('s3cret', async () => {
+  const store = { ...memStore(), updateJSON: async () => { throw new Error('CAS conflict on chains/x: 6 attempt(s)'); } }; const res = fakeRes();
+  await R.runChainSummary(req({ body: payload({ partial: false }) }), res, { store, now: () => NOW });
+  assert.equal(res.code, 500); assert.equal(res.body.ok, false); assert.equal(res.body.written, false); assert.match(res.body.error, /CAS conflict/);
 }));
 
 test('runChainSummary: no store = honest 200 written:false (never a 500 that fails the dead-man job for a config gap)', () => withSecret('s3cret', async () => {
@@ -168,11 +197,127 @@ test('runChainSummary: no store = honest 200 written:false (never a 500 that fai
   assert.equal(res.code, 200); assert.equal(res.body.written, false); assert.match(res.body.note, /Blob/);
 }));
 
-test('readLatestChainSummary: returns the newest doc inside the lookback, or null', async () => {
+test('readChainSummaries: every doc inside the lookback, newest first; empty past the lookback or without a store', async () => {
   const store = memStore();
   store.docs.set('chains/2026-10-02.json', { date: '2026-10-02', ok: true, failed: [], source: 'github-matrix', chains: {} });
-  const hit = await R.readLatestChainSummary({ store, now: () => Date.parse('2026-10-04T12:00:00Z') });
-  assert.equal(hit.date, '2026-10-02');
-  assert.equal(await R.readLatestChainSummary({ store, now: () => Date.parse('2026-10-09T12:00:00Z') }), null);
-  assert.equal(await R.readLatestChainSummary({ store: { ...store, hasStore: () => false }, now: () => NOW }), null);
+  store.docs.set('chains/2026-10-01.json', { date: '2026-10-01', ok: true, failed: [], source: 'manual', chains: {} });
+  store.docs.set('chains/2026-09-30.json', { date: 'wrong', chains: {} });
+  const hits = await R.readChainSummaries({ store, now: () => Date.parse('2026-10-04T12:00:00Z') });
+  assert.deepEqual(hits.map((d) => d.date), ['2026-10-02', '2026-10-01'], 'a doc whose date does not match its key is ignored');
+  assert.deepEqual(await R.readChainSummaries({ store, now: () => Date.parse('2026-10-09T12:00:00Z') }), []);
+  assert.deepEqual(await R.readChainSummaries({ store: { ...store, hasStore: () => false }, now: () => NOW }), []);
+});
+
+// ── full vs partial summaries (the dead-man that a filtered run cannot satisfy) ─────────
+const ROOTS = ['ledger', 'capture', 'maturity'];
+const fullChains = Object.fromEntries(ROOTS.map((c) => [c, okChain]));
+
+test('isFullSummary: an explicit partial:false (or true) is believed; a legacy doc without the flag is full only when it covers every root', () => {
+  assert.equal(CS.isFullSummary({ source: 'github-matrix', partial: false, chains: { ledger: okChain } }, ROOTS), true);
+  assert.equal(CS.isFullSummary({ source: 'manual', partial: false, chains: fullChains }, ROOTS), true);
+  assert.equal(CS.isFullSummary({ source: 'manual', partial: true, chains: fullChains }, ROOTS), false);
+  assert.equal(CS.isFullSummary({ source: 'manual', chains: { maturity: okChain } }, ROOTS), false, 'this morning\'s only= doc');
+  assert.equal(CS.isFullSummary({ source: 'manual', chains: fullChains }, ROOTS), true);
+  assert.equal(CS.isFullSummary({ source: 'in-process', partial: false, chains: fullChains }, ROOTS), false, 'only a matrix/manual run covers a night');
+  assert.equal(CS.isFullSummary(null, ROOTS), false);
+});
+
+test('normalizeChainSummary: records partial (explicit, else inferred from root coverage) and the covered chain list', () => {
+  const a = CS.normalizeChainSummary(payload({ partial: true, chains: { maturity: okChain } }), { now: NOW, roots: ROOTS });
+  assert.equal(a.value.partial, true); assert.deepEqual(a.value.covered, ['maturity']);
+  const b = CS.normalizeChainSummary(payload({ chains: { maturity: okChain } }), { now: NOW, roots: ROOTS });
+  assert.equal(b.value.partial, true, 'a legacy poster that covers one root is partial');
+  const c = CS.normalizeChainSummary(payload({ chains: fullChains }), { now: NOW, roots: ROOTS });
+  assert.equal(c.value.partial, false); assert.deepEqual(c.value.covered, ROOTS);
+});
+
+test('chainsHealthView: a partial summary contributes statuses but never ok for the night', () => {
+  const partial = { date: '2026-10-02', source: 'manual', partial: true, ok: true, failed: [], finishedAt: '2026-10-02T14:00:00Z', chains: { maturity: okChain, capture: badChain } };
+  const v = CS.chainsHealthView({ summaries: [partial], roots: ROOTS, now: NOW });
+  assert.equal(v.full, false); assert.equal(v.partial, true); assert.equal(v.ok, false);
+  assert.deepEqual(v.covered, ['maturity', 'capture']);
+  assert.deepEqual(v.failed, ['capture'], 'uncovered roots are not failures of a partial run');
+  assert.equal(v.missing, false);
+});
+
+test('chainsHealthView: a full summary missing a root lists that root as failed', () => {
+  const full = { date: '2026-10-02', source: 'github-matrix', partial: false, ok: true, failed: [], chains: { ledger: okChain, capture: okChain } };
+  const v = CS.chainsHealthView({ summaries: [full], roots: ROOTS, now: NOW });
+  assert.equal(v.full, true); assert.equal(v.ok, false); assert.deepEqual(v.failed, ['maturity']);
+});
+
+test('chainsHealthView: the newest date wins; the legacy single `summary` option still works', () => {
+  const older = { date: '2026-10-01', source: 'github-matrix', partial: false, ok: true, failed: [], chains: fullChains };
+  const newer = { date: '2026-10-02', source: 'manual', partial: true, ok: true, failed: [], chains: { maturity: okChain } };
+  assert.equal(CS.chainsHealthView({ summaries: [newer, older], roots: ROOTS, now: NOW }).date, '2026-10-02');
+  assert.equal(CS.chainsHealthView({ summary: older, roots: ROOTS, now: NOW }).full, true);
+});
+
+// ── matrixRunOverdue: warm handed the chains to GitHub and nothing full came back ──────
+const warmRun = { at: '2026-10-02T22:00:40Z', chainsInProcess: false, chains: {} };
+const fullDoc = (date) => ({ date, source: 'github-matrix', partial: false, ok: true, failed: [], chains: fullChains });
+const partialDoc = (date) => ({ date, source: 'manual', partial: true, ok: true, failed: [], chains: { maturity: okChain } });
+
+test('matrixRunOverdue: fires 90 min after a chainsInProcess:false warm with no FULL summary for that ET session date', () => {
+  const at = Date.parse(warmRun.at);
+  assert.equal(CS.NO_MATRIX_RUN_GRACE_MS, 90 * 60 * 1000);
+  assert.equal(CS.matrixRunOverdue({ run: warmRun, summaries: [], now: at + CS.NO_MATRIX_RUN_GRACE_MS - 1, roots: ROOTS }), null, 'inside the grace window');
+  const tripped = CS.matrixRunOverdue({ run: warmRun, summaries: [], now: at + CS.NO_MATRIX_RUN_GRACE_MS, roots: ROOTS });
+  assert.deepEqual(tripped, { date: '2026-10-02', warmAt: warmRun.at, graceMs: CS.NO_MATRIX_RUN_GRACE_MS });
+  // A partial (only=) doc for the night does NOT satisfy it — that is exactly what fooled op=health on 2026-10-02.
+  assert.ok(CS.matrixRunOverdue({ run: warmRun, summaries: [partialDoc('2026-10-02')], now: at + 2 * CS.NO_MATRIX_RUN_GRACE_MS, roots: ROOTS }));
+  // A legacy only= doc (no partial flag, one root) does not either.
+  assert.ok(CS.matrixRunOverdue({ run: warmRun, summaries: [{ date: '2026-10-02', source: 'manual', chains: { maturity: okChain } }], now: at + 2 * CS.NO_MATRIX_RUN_GRACE_MS, roots: ROOTS }));
+  // A full summary for the night clears it — even one whose chains failed (it RAN; failures are reported as chain:<name>).
+  assert.equal(CS.matrixRunOverdue({ run: warmRun, summaries: [{ ...fullDoc('2026-10-02'), ok: false, failed: ['capture'] }], now: at + 2 * CS.NO_MATRIX_RUN_GRACE_MS, roots: ROOTS }), null);
+  // Yesterday's full run is not tonight's.
+  assert.ok(CS.matrixRunOverdue({ run: warmRun, summaries: [fullDoc('2026-10-01')], now: at + 2 * CS.NO_MATRIX_RUN_GRACE_MS, roots: ROOTS }));
+});
+
+test('matrixRunOverdue: a 01:00 UTC run still belongs to the same ET session date (summary dates are ET dates)', () => {
+  // 22:00 UTC = 18:00 EDT on 2026-10-02; 01:30 UTC next day = 21:30 EDT, still 2026-10-02 in ET.
+  const late = Date.parse('2026-10-03T01:30:00Z');
+  assert.equal(CS.etDate(late), '2026-10-02');
+  assert.equal(CS.matrixRunOverdue({ run: warmRun, summaries: [fullDoc('2026-10-02')], now: late, roots: ROOTS }), null);
+  // The morning after (ET) the night is still judged — last night's warm had no full run.
+  assert.ok(CS.matrixRunOverdue({ run: warmRun, summaries: [partialDoc('2026-10-02')], now: Date.parse('2026-10-03T13:00:00Z'), roots: ROOTS }));
+});
+
+test('matrixRunOverdue: silent when warm ran in-process, when there is no warm record, or when the warm is older than the lookback', () => {
+  const at = Date.parse(warmRun.at);
+  assert.equal(CS.matrixRunOverdue({ run: { ...warmRun, chainsInProcess: true }, summaries: [], now: at + 2 * CS.NO_MATRIX_RUN_GRACE_MS, roots: ROOTS }), null);
+  assert.equal(CS.matrixRunOverdue({ run: null, summaries: [], now: at, roots: ROOTS }), null);
+  assert.equal(CS.matrixRunOverdue({ run: warmRun, summaries: [], now: at + (CS.LOOKBACK_DAYS + 2) * 86400000, roots: ROOTS }), null, 'cannot judge a night older than the summaries we read');
+});
+
+test('chainsHealthView: carries noMatrixRun so the banner can say the night has not run', () => {
+  const at = Date.parse(warmRun.at);
+  const v = CS.chainsHealthView({ summaries: [partialDoc('2026-10-02')], run: warmRun, inProcess: false, now: at + 2 * CS.NO_MATRIX_RUN_GRACE_MS, roots: ROOTS });
+  assert.equal(v.noMatrixRun && v.noMatrixRun.date, '2026-10-02');
+  const dead = CS.chainsHealthView({ summaries: [], run: warmRun, inProcess: false, now: at + 2 * CS.NO_MATRIX_RUN_GRACE_MS, roots: ROOTS });
+  assert.equal(dead.missing, true); assert.equal(dead.noMatrixRun && dead.noMatrixRun.date, '2026-10-02');
+});
+
+test('recentSummaryDates: ET dates, so a 01:00 UTC health probe still looks at the ET session it belongs to', () => {
+  assert.deepEqual(CS.recentSummaryDates(Date.parse('2026-10-03T01:00:00Z')), ['2026-10-02', '2026-10-01', '2026-09-30', '2026-09-29']);
+});
+
+// ── merge (route): a partial post folds INTO the night's doc instead of replacing it ─────
+test('mergeChainSummary: a full post replaces (keeping prior runs as provenance); a partial post merges per chain', () => {
+  const full = { ...fullDoc('2026-10-02'), runId: '1', runUrl: 'u1', receivedAt: 'r1', ok: false, failed: ['capture'], chains: { ...fullChains, capture: badChain }, covered: ROOTS };
+  const partial = { ...partialDoc('2026-10-02'), runId: '2', runUrl: 'u2', receivedAt: 'r2', chains: { capture: okChain }, covered: ['capture'] };
+  const merged = CS.mergeChainSummary(full, partial);
+  assert.equal(merged.partial, false, 'the night stays full'); assert.equal(merged.runId, '1');
+  assert.equal(merged.chains.capture.ok, true); assert.equal(merged.ok, true); assert.deepEqual(merged.failed, []);
+  assert.deepEqual(merged.covered, ROOTS);
+  assert.deepEqual(merged.patches.map((p) => p.runId), ['2']);
+  const replaced = CS.mergeChainSummary(merged, { ...fullDoc('2026-10-02'), runId: '3', runUrl: 'u3', receivedAt: 'r3', covered: ROOTS });
+  assert.equal(replaced.runId, '3'); assert.deepEqual(replaced.priorRuns.map((p) => p.runId), ['1']);
+  assert.equal('patches' in replaced, false);
+  // partial onto partial stays partial, union of coverage; partial onto nothing is itself.
+  const pp = CS.mergeChainSummary(partialDoc('2026-10-02'), { ...partialDoc('2026-10-02'), chains: { ledger: okChain }, covered: ['ledger'] });
+  assert.equal(pp.partial, true); assert.deepEqual(pp.covered.sort(), ['ledger', 'maturity']);
+  assert.deepEqual(CS.mergeChainSummary(null, partial), partial);
+  // Inputs are not mutated.
+  assert.equal(full.chains.capture.ok, false);
 });
