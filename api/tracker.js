@@ -97,6 +97,10 @@ const PRIVILEGED_OPS = new Set([
   // Evidence Consensus & Thesis Change engine — the daily snapshot build makes LLM extraction
   // calls per active-attention name + writes the evidence ledger. Cron/manual-with-bearer only.
   'evidencetick',
+  // Exact-precision evidence migration: rewrites scoreboard/summary.json (and other
+  // allowlisted evidence docs) with full-precision `exact` blocks. Idempotent Blob WRITE —
+  // orchestrator/manual-with-bearer only; ?dry=1 previews without writing.
+  'evidencemigrate',
   // GOV-DEMAND shadow vertical WRITES (USAspending collect + PIT prediction log / forward
   // outcome resolution). Cron/manual-with-bearer only.
   'govdemandtick', 'govdemandresolve',
@@ -677,6 +681,7 @@ async function handleRequest(req, res) {
   if (req.query.op === 'evidence') return require('../lib/evidence-routes').runEvidence(req, res);
   if (req.query.op === 'evidencestock') return require('../lib/evidence-routes').runEvidenceStock(req, res);
   if (req.query.op === 'evidencediag') return require('../lib/evidence-routes').runEvidenceDiag(req, res);
+  if (req.query.op === 'evidencemigrate') return require('../lib/evidence-routes').runEvidenceMigrate(req, res);
   // NOVEL SIGNAL LAB — shadow-only research surface (never touches prod recs; kill-switch NSL_DISABLED).
   if (req.query.op === 'nsl') return require('../lib/nsl-routes').runNsl(req, res);
   if (req.query.op === 'today') return require('../lib/decision-routes').runToday(req, res);
