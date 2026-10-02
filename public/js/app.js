@@ -8215,8 +8215,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   let patternRadarLoaded = false, patternRadarView = 'all';
   // A populated radar can hold 1,000+ episodes per bucket; rendering them in one innerHTML
   // pass froze the tab on phones, so each bucket pages in PR_PAGE_SIZE-card chunks.
+  // The SERVER pages too (site audit 2026-10-02 #8: the full radar was 24.5 MB): the first
+  // load carries only each bucket's first page plus `totals`, and "show more" fetches the
+  // next page of ONE bucket (`&bucket=k&offset=n&limit=PR_PAGE_SIZE`).
   const PR_PAGE_SIZE = 30;
-  let prRadarBuckets = null;
+  let prRadarBuckets = null, prRadarTotals = null;
   const PR_ACTION_LABEL = {
     LONG_ENTRY_READY: 'Long — near trigger', LONG_TRIGGERED: 'Long entry triggered',
     SHORT_ENTRY_READY: 'Short — near trigger', SHORT_TRIGGERED: 'Short entry triggered',
@@ -8241,7 +8244,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading pattern radar…</p></div>`;
     try {
-      const t = await fetchJSON(`/api/tracker?op=patterns&view=${patternRadarView}`, { timeoutMs: HEAVY_TIMEOUT_MS });
+      const t = await fetchJSON(`/api/tracker?op=patterns&view=${patternRadarView}&limit=${PR_PAGE_SIZE}`, { timeoutMs: HEAVY_TIMEOUT_MS });
       renderPatternRadar(t, el);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the pattern radar.</p></div>`; }
   }
@@ -8270,19 +8273,23 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       ['expired', '⌛ Expired'], ['resolved', '🏁 Resolved (target/stop)'], ['failedEarlier', '🗄 Failed Earlier'],
     ];
     prRadarBuckets = r;
+    prRadarTotals = t.totals || null;
     const body = buckets.map(([k, lbl]) => {
       const items = r[k] || [];
-      if (!items.length) return '';
+      // Heading count = the bucket's TOTAL (server-paged payload) — never the page length.
+      const total = prRadarTotals && Number.isFinite(prRadarTotals[k]) ? prRadarTotals[k] : items.length;
+      if (!total) return '';
       const collapsed = k === 'failedEarlier' || k === 'expired' || k === 'resolved';
+      const shown = Math.min(items.length, PR_PAGE_SIZE);
       const cards = items.slice(0, PR_PAGE_SIZE).map(prCard).join('');
-      const hidden = items.length - PR_PAGE_SIZE;
+      const hidden = total - shown;
       const pager = hidden > 0
-        ? `<button class="hub-sub-btn" data-pr-more="${k}" data-pr-next="${PR_PAGE_SIZE}" style="margin:6px 0">Show ${Math.min(PR_PAGE_SIZE, hidden)} more (${hidden} hidden)</button>`
+        ? `<button class="hub-sub-btn" data-pr-more="${k}" data-pr-next="${shown}" style="margin:6px 0">Show ${Math.min(PR_PAGE_SIZE, hidden)} more (${hidden} hidden)</button>`
         : '';
       const inner = `<div data-pr-cards="${k}">${cards}</div>${pager}`;
       return collapsed
-        ? `<details class="pr-bucket"><summary><h3 style="display:inline">${lbl} (${items.length})</h3></summary>${inner}</details>`
-        : `<div class="pr-bucket"><h3>${lbl} (${items.length})</h3>${inner}</div>`;
+        ? `<details class="pr-bucket"><summary><h3 style="display:inline">${lbl} (${total})</h3></summary>${inner}</details>`
+        : `<div class="pr-bucket"><h3>${lbl} (${total})</h3>${inner}</div>`;
     }).filter(Boolean).join('');
     el.innerHTML = `${prEvidenceBanner(t.evidence)}${prScanLine(t.scan)}
       <div class="hub-subnav" style="margin-bottom:10px">${filters}</div>
@@ -8301,12 +8308,26 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     }));
     scope.querySelectorAll('[data-pr-chart]').forEach(b => b.addEventListener('click', () => prLoadChart(b)));
   }
-  function prShowMore(btn, el) {
+  async function prShowMore(btn, el) {
     const k = btn.dataset.prMore;
-    const items = (prRadarBuckets && prRadarBuckets[k]) || [];
     const holder = el.querySelector(`[data-pr-cards="${k}"]`);
     const start = Number(btn.dataset.prNext) || 0;
-    const chunk = items.slice(start, start + PR_PAGE_SIZE);
+    // Server page for THIS bucket (totals-bearing payload); a legacy payload without totals
+    // falls back to slicing the full list it already carried.
+    let chunk, total;
+    if (prRadarTotals) {
+      btn.disabled = true;
+      try {
+        const j = await fetchJSON(`/api/tracker?op=patterns&view=${patternRadarView}&bucket=${k}&offset=${start}&limit=${PR_PAGE_SIZE}`, { timeoutMs: HEAVY_TIMEOUT_MS });
+        chunk = (j && j.radar && j.radar[k]) || [];
+        total = j && j.totals && Number.isFinite(j.totals[k]) ? j.totals[k] : prRadarTotals[k];
+      } catch { chunk = []; total = prRadarTotals[k]; }
+      btn.disabled = false;
+    } else {
+      const items = (prRadarBuckets && prRadarBuckets[k]) || [];
+      chunk = items.slice(start, start + PR_PAGE_SIZE);
+      total = items.length;
+    }
     if (!holder || !chunk.length) { btn.remove(); return; }
     // Build the chunk detached and wire it there — appendChild moves the nodes with their
     // listeners intact, so revealed cards behave exactly like first-page cards.
@@ -8315,7 +8336,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     prWireCards(tpl.content);
     holder.appendChild(tpl.content);
     const next = start + chunk.length;
-    const hidden = items.length - next;
+    const hidden = total - next;
     if (hidden <= 0) { btn.remove(); return; }
     btn.dataset.prNext = String(next);
     btn.textContent = `Show ${Math.min(PR_PAGE_SIZE, hidden)} more (${hidden} hidden)`;
