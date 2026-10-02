@@ -1843,6 +1843,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       ${crush ? `<div style="color:var(--amber,#f0a832)">⚠ ${esc(crush)}</div>` : ''}
       ${missing.length ? `<div class="dt-dim" title="${esc(missing.map(m => m.block + ': ' + m.reason).join(' | '))}">Unavailable: ${missing.map(m => esc(m.block)).join(', ')} (hover for why)</div>` : ''}
       ${g && !g.available ? `<div class="dt-dim" title="${esc(g.disclosure)}">Greeks / dealer positioning: not supplied by this data source — not estimated.</div>` : ''}
+      ${g && g.available && g.derived ? `<div class="dt-dim" title="${esc(g.disclosure)}">Greeks: model-derived from the quoted IV (Black-Scholes) — not vendor-supplied.</div>` : ''}
+      ${g && g.available && !g.derived ? `<div class="dt-dim" title="${esc(g.disclosure)}">Greeks: vendor-supplied (delayed chain).</div>` : ''}
     </div>`;
   }
 

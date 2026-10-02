@@ -60,7 +60,7 @@ test('runSessionBoard: builds from injected sources, grades, persists, session-a
   assert.ok(tickers.includes('ABC') && tickers.includes('IOVA') && tickers.includes('GAPR'));
   assert.equal(p.items.find((i) => i.ticker === 'ABC').live.status, 'triggered');
   assert.ok(p.items.every((i) => i.grade.letter !== 'A'), 'paper governance caps at B');
-  assert.deepEqual(p.sources.map((s) => s.source).sort(), ['calendar', 'daytrade', 'governance', 'market', 'premarket', 'scoreboard', 'today']);
+  assert.deepEqual(p.sources.map((s) => s.source).sort(), ['calendar', 'daytrade', 'gex', 'governance', 'market', 'premarket', 'scoreboard', 'today']);
   assert.ok(p.sources.every((s) => s.ok === true));
   // earnings-today from the official calendar: flag + checklist row on the reporting name only
   assert.equal(p.items.find((i) => i.ticker === 'IOVA').flags.earningsToday, true);
