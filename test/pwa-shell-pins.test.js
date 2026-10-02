@@ -87,13 +87,21 @@ test('every vendored library ships its license and a header naming version + lic
   const dir = join(PUB, 'js', 'vendor');
   const files = readdirSync(dir);
   const libs = files.filter((f) => /\.(m?js)$/.test(f));
-  assert.deepEqual(libs.sort(), ['fuse-7.1.0.min.mjs', 'idb-keyval-6.2.2.umd.js', 'notyf-3.10.0.min.js', 'sortable-3.2.3.min.js']);
+  assert.deepEqual(libs.sort(), [
+    'd3-hierarchy-3.1.2.esm.js', 'fuse-7.1.0.min.mjs', 'idb-keyval-6.2.2.umd.js',
+    'lightweight-charts-5.2.1.standalone.mjs', 'notyf-3.10.0.min.js', 'sortable-3.2.3.min.js',
+  ]);
+  // The chart engine's vendor files (PR #431) keep their upstream LICENSE names.
+  const LICENSE_BY_LIB = {
+    'd3-hierarchy-3.1.2.esm.js': 'LICENSE-d3-hierarchy',
+    'lightweight-charts-5.2.1.standalone.mjs': 'LICENSE-lightweight-charts',
+  };
   for (const lib of libs) {
-    const lic = lib.replace(/\.(umd\.js|min\.m?js)$/, '.LICENSE');
+    const lic = LICENSE_BY_LIB[lib] || lib.replace(/\.(umd\.js|min\.m?js)$/, '.LICENSE');
     assert.ok(files.includes(lic), `${lic} next to ${lib}`);
     assert.ok(statSync(join(dir, lic)).size > 100);
     const head = readFileSync(join(dir, lib), 'utf8').slice(0, 400);
-    assert.match(head, /Apache|MIT|Unlicense/, `${lib} header names its license`);
+    assert.match(head, /Apache|MIT|Unlicense|ISC/, `${lib} header names its license`);
   }
   assert.ok(/GPL/.test(readFileSync(join(dir, 'fuse-7.1.0.LICENSE'), 'utf8')) === false, 'no GPL');
 });
