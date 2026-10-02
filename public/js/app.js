@@ -5720,6 +5720,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (arr) arr.style.transform = open ? '' : 'rotate(180deg)';
   });
 
+  // Plain-English label per CERN forced-flow event type — the ONE map app.js uses wherever a
+  // CERN row is labelled outside cern.js (today the Scoreboard's CERN tiers). Every type the
+  // engine can emit must be here, including the two ARK shadow types from PR #438, or the
+  // Scoreboard shows a raw ARK_NET_BUY once those rows accrue (test/cern-ark.test.js pins it).
+  const CERN_LBL = { FIRE_SALE: '🔥 ETF fire-sale', FORCED_DOWNGRADE: '📉 Forced downgrade', INDEX_DELETE: '🗑 Index deletion', INDEX_ADD_FADE: '➕ Index add (fade)', LOCKUP_EXPIRY: '🔓 Lockup expiry', TAX_LOSS: '🧾 Tax-loss selling', MARGIN_SPIRAL: '⚠ Margin spiral', ARK_NET_BUY: '🏹 ARK net buying (shadow)', ARK_NET_SELL: '🏹 ARK net selling (shadow)' };
+
   // ── CERN — forced-flow event engine. The whole view lives in ./cern.js (a
   // novice-first rewrite); this only wires the tab hook and the refresh button.
   let cernLoaded = false;
@@ -7496,7 +7502,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     EV_STRONG: '🧾 Strong change', EV_MODERATE: '🧾 Moderate change', EV_WEAK: '🧾 Weak change',
     Actionable: '✅ Actionable (all gates passed)', Tracked: '👀 Tracked (a gate failed — reason logged)',
     STRONG: '🔴 Strong (≥5% gap)', MODERATE: '🟠 Moderate (3–5% gap)',
-    INDEX_DELETE: 'Index Delete', INDEX_ADD_FADE: 'Index Add (fade)', LOCKUP_EXPIRY: 'Lockup Expiry', TAX_LOSS: 'Tax-Loss Selling', FIRE_SALE: 'Fire Sale', MARGIN_SPIRAL: 'Margin Spiral', FORCED_DOWNGRADE: 'Forced Downgrade',
+    ...CERN_LBL,   // CERN event types incl. the ARK shadow pair — one shared map, see its definition
     Bullish: '📈 Bullish tone', Neutral: '➖ Neutral tone', Bearish: '📉 Bearish tone',
     Sticky: '📈 Sticky attention', Fast: '⚡ Fast hype',
     Fresh: '🟢 Fresh (not yet moved)', Moved: '⚪ Moved (priced in)', Unknown: '◽ Unknown',
