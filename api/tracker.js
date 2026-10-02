@@ -12,6 +12,8 @@
 //   GET /api/tracker?op=cerntick           → run one CERN daily cycle (warm cron)
 //   GET /api/tracker?op=cern               → CERN engine state for the Events tab
 //   GET /api/tracker?op=cernlockprobe      → read-only lockup-feed liquidity probe
+//   GET /api/tracker?op=arktick            → ARK daily-holdings diff → CERN ARK_NET_* events (warm cron)
+//   GET /api/tracker?op=ark                → ARK holdings-diff shadow ledger (public read)
 //   GET /api/tracker?op=drift              → Apex model drift / health (Module 3)
 //   GET /api/tracker?op=recalibrate        → re-optimize pillar weights (Module 2)
 //   GET /api/tracker?op=model              → active model weights / version (for client)
@@ -192,6 +194,9 @@ const PRIVILEGED_OPS = new Set([
   // writes write-once tx shards + ledger day (insidercluster/*). Cron/manual-with-bearer
   // only; op=insidercluster (read) stays public.
   'insiderclustertick',
+  // 'arktick' fetches the six ARK holdings CSVs and writes ark/* snapshots + the trades doc
+  // op=cerntick ingests (lib/ark-routes.js). Cron/manual-with-bearer only; op=ark stays public.
+  'arktick',
   // STOCKTWITS BULL-RATIO FLAG shadow logger/resolver — writes the snapshot + write-once
   // prospective ledger (stbull/v1/*) and spends a StockTwits fan-out / a ≤60-name candle
   // fan-out. Cron/manual-with-bearer only; op=stbull (read) stays public.
@@ -596,6 +601,8 @@ async function handleRequest(req, res) {
   // INSIDER CLUSTER BUYS — shadow prospective ledger (weight-0; research/98 finding).
   if (req.query.op === 'insidercluster') return require('../lib/insider-cluster-routes').runInsiderCluster(req, res);
   if (req.query.op === 'insiderclustertick') return require('../lib/insider-cluster-routes').runInsiderClusterTick(req, res);
+  if (req.query.op === 'ark') return require('../lib/ark-routes').runArk(req, res);
+  if (req.query.op === 'arktick') return require('../lib/ark-routes').runArkTick(req, res);
   if (req.query.op === 'stbull') return require('../lib/stbull-routes').runStbull(req, res);
   if (req.query.op === 'stbulltick') return require('../lib/stbull-routes').runStbullTick(req, res);
   if (req.query.op === 'stbullresolve') return require('../lib/stbull-routes').runStbullResolve(req, res);
