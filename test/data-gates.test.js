@@ -122,3 +122,58 @@ test('buildToday runs the gate BEFORE ranking and reports it on the payload', ()
     assert.ok(['MONITOR', 'HOLD', 'INVALIDATED', 'DATA_STALE'].includes(r.retainedLabel));
   }
 });
+
+// ── Liquidity rule per row shape (site audit 2026-10-02 #9) ──────────────────────────────
+// optionsflow rows are option CONTRACTS and the AI screeners publish LEADS; neither carries
+// an equity dollar-volume, so measuring liquidity coverage on them blocked every one of
+// those sources every day ("liquidity data on only 0% of rows").
+const CONTRACT_ROWS = () => ({
+  generatedAt: iso(1),
+  freshness: { decisionSession: '2026-07-23' },
+  signals: [
+    { ticker: 'AAA', side: 'call', strike: 100, expiry: '2026-08-21', volume: 5000, openInterest: 1200, bid: 1.1, ask: 1.3 },
+    { ticker: 'BBB', side: 'put', strike: 50, expiry: '2026-08-21', volume: 900, openInterest: 300, bid: 0.4, ask: 0.5 },
+  ],
+});
+const LEAD_ROWS = () => ({ generatedAt: iso(1), asOf: '2026-07-23', items: [{ ticker: 'AAA', thesis: 'x' }, { ticker: 'BBB', thesis: 'y' }] });
+
+test('lead-only sources skip the equity liquidity-coverage control (contracts and AI leads)', () => {
+  const opt = DG.evaluateSource('optionsflow', CONTRACT_ROWS(), { horizon: 'swing', liquidity: DG.LIQUIDITY_RULES.LEAD_ONLY }, { nowMs: NOW, available: {} });
+  assert.equal(opt.ok, true, opt.staleInputs.join('; '));
+  assert.equal(opt.liquidityCoverage, null);
+  assert.equal(opt.liquidityRule, 'lead-only');
+  assert.equal(opt.rows, 2);
+  const lead = DG.evaluateSource('sw', LEAD_ROWS(), { horizon: 'position', liquidity: DG.LIQUIDITY_RULES.LEAD_ONLY }, { nowMs: NOW, available: {} });
+  assert.equal(lead.ok, true, lead.staleInputs.join('; '));
+  assert.equal(lead.liquidityCoverage, null);
+});
+
+test('the same contract rows under the equity rule are still blocked — the rule is explicit, not a loophole', () => {
+  const g = DG.evaluateSource('optionsflow', CONTRACT_ROWS(), { horizon: 'swing' }, { nowMs: NOW, available: {} });
+  assert.equal(g.ok, false);
+  assert.match(g.reason, /liquidity data on only 0%/);
+  assert.equal(g.liquidityRule, 'equity');
+});
+
+test('specsFromContracts derives the liquidity rule from the contract fill policy', () => {
+  const specs = DG.specsFromContracts(['screener', 'optionsflow', 'biotech']);
+  assert.equal(specs.screener.liquidity, 'equity');
+  assert.equal(specs.biotech.liquidity, 'equity');
+  assert.equal(specs.optionsflow.liquidity, 'lead-only');
+});
+
+test('buildToday no longer blocks optionsflow / second-wave / cross-asset on liquidity', () => {
+  const fresh23 = { generatedAt: iso(1), freshness: { decisionSession: '2026-07-23' } };
+  const sources = {
+    ...SOURCES,
+    optionsflow: { ...fresh23, ...CONTRACT_ROWS() },
+    sectors: SOURCES.sectors, scoreboard: SOURCES.scoreboard,
+  };
+  const ai = { ...(sources.ai || {}), sw: LEAD_ROWS(), ca: LEAD_ROWS() };
+  const p = buildToday({ ...sources, ai }, null, null, null, { nowMs: NOW });
+  const ps = p.dataGate.perSource;
+  for (const k of ['optionsflow', 'sw', 'ca']) {
+    assert.ok(ps[k], `no gate for ${k}`);
+    assert.ok(!(ps[k].staleInputs || []).some(s => /liquidity data/.test(s)), `${k} still blocked on liquidity: ${ps[k].staleInputs}`);
+  }
+});
