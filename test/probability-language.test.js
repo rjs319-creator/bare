@@ -12,7 +12,6 @@ const path = require('node:path');
 const read = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
 const appJs = read('public/js/app.js');
 const indexHtml = read('public/index.html');
-const evolveJs = read('public/js/evolve.js');
 const tickerJs = read('public/js/ticker-lookup.js');
 const omegaEnsJs = read('public/js/omega-ensemble.js');
 const momentumApi = read('api/momentum.js');
@@ -30,17 +29,7 @@ test('fade engine posterior is labeled backtested, not "confidence"', () => {
   assert.ok(!appJs.includes('Confidence</b> is how sure it is the edge is real'), 'caveat copy no longer oversells');
 });
 
-test('coil % is an empirical decile base rate, never a "calibrated chance"', () => {
-  assert.ok(!appJs.includes('calibrated chance'), 'the phrase "calibrated chance" is banned');
-  assert.ok(appJs.includes('not a calibrated live probability'), 'coil copy discloses the study basis');
-  assert.ok(appJs.includes('survivorship-unsafe'), 'coil copy surfaces the survivorship caveat the server already declares');
-});
 
-test('EVOLVE per-card tooltip only claims "calibrated" when modelHealth says so', () => {
-  assert.ok(evolveJs.includes('health.calibrated'), 'tooltip branches on model health');
-  assert.ok(evolveJs.includes('NOT yet calibrated'), 'uncalibrated branch is explicit');
-  assert.ok(!evolveJs.includes('"calibrated P(upside barrier first)'), 'no unconditional calibrated claim');
-});
 
 test('alert card evidence strength is not called confidence', () => {
   assert.ok(!appJs.includes('Conf: ${c.confidence}/10'), 'old "Conf:" label removed');
@@ -64,7 +53,7 @@ test('omega-ensemble header matches its cells (not calibrated)', () => {
 });
 
 test('no user-facing surface uses forbidden certainty language', () => {
-  for (const [name, src] of [['app.js', appJs], ['index.html', indexHtml], ['evolve.js', evolveJs]]) {
+  for (const [name, src] of [['app.js', appJs], ['index.html', indexHtml]]) {
     // "sure thing" / "guaranteed" may appear ONLY in negations or pump-detection copy.
     for (const line of src.split('\n')) {
       if (!/\b(sure thing|guaranteed|highly accurate)\b/i.test(line)) continue;

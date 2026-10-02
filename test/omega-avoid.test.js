@@ -41,31 +41,11 @@ test('buildOmega buckets a broken-down name into byTier.AVOID with a derivable r
   // The fields the frontend derives the transition reason from are present on the card.
   assert.ok(avoid.stage === 'FAILED' || avoid.stage === 'EXHAUSTED' || avoid.utility <= 0, 'has a derivable Avoid cause');
 
-  // The frontend derived-reason function turns those fields into a human transition reason.
-  const { deriveAvoidReason } = await import('../public/js/omega-swing.js');
-  const reasons = deriveAvoidReason(avoid);
-  assert.ok(Array.isArray(reasons) && reasons.length >= 1, 'at least one reason');
-  assert.ok(reasons.some(r => /momentum|utility|liquidity|strength|extended|risk-off|volume|entry bar/i.test(r)), `sensible reason, got ${reasons.join(', ')}`);
+  // (The frontend deriveAvoidReason check was retired with public/js/omega-swing.js, 2026-10-02.)
 });
 
-test('deriveAvoidReason falls back to "no longer clears the entry bar" when nothing else applies', async () => {
-  const { deriveAvoidReason } = await import('../public/js/omega-swing.js');
-  const bare = { stage: 'CONTINUATION', utility: 0.5, penalties: [], risks: [], features: { rsSpy5: 0.01, rsSpy10: 0.01, volPersistence: 0.8, extAbove20: 5 } };
-  assert.deepStrictEqual(deriveAvoidReason(bare), ['no longer clears the entry bar']);
-});
-
-test('avoidSection renders a collapsed <details>, never a raw probability percentage', async () => {
-  const { avoidSection } = await import('../public/js/omega-swing.js');
-  const om = { byTier: { AVOID: [{ ticker: 'BRKN', tier: 'AVOID', stage: 'FAILED', utility: -0.03, score: 20, price: 40, features: { rsSpy10: -0.05 }, penalties: ['risk-off tape'], risks: ['risk-off tape'], pred: { p3pct: 0.7, p5pct: 0.6 }, calibration: { p3pct: { display: false, band: 'favorable' }, p5pct: { display: false, band: 'neutral' } } }] } };
-  const html = avoidSection(om);
-  assert.ok(/<details class="om-avoid"/.test(html), 'collapsed details section');
-  assert.ok(/No Longer Actionable/.test(html), 'labeled section');
-  assert.ok(/Why Avoid:/.test(html), 'shows a derived transition reason');
-  assert.ok(!/70%|60%/.test(html), 'never renders the uncalibrated probability as a percentage');
-  assert.strictEqual(avoidSection({ byTier: { AVOID: [] } }), '', 'empty when no AVOID cards');
-});
-
-// ── DEFECT B — carry-forward join-back keeps sub-funnel episodes monitored ─────────────────
+// Frontend deriveAvoidReason / avoidSection tests removed 2026-10-02: public/js/omega-swing.js
+// was retired with the OMEGA-Swing tab (registry no-edge). The server-side contract below stands.
 test('carryForwardEpisodes returns most-recent episode per ticker for names ABSENT from the shortlist', () => {
   const livePicks = [
     { ticker: 'AAA', signalDate: '2026-07-10', tier: 'OMEGA_WATCH' },

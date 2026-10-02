@@ -132,40 +132,8 @@ test('today.js wraps op=today in the last-good layer, renders the strip and keep
   assert.match(src, /data-sort="\$\{/, 'numeric cells carry data-sort so the sort is numeric, not lexical');
 });
 
-// ── leaderboard ─────────────────────────────────────────────────────────────────────
-function loadLeaderboard() {
-  const src = R('leaderboard.js').replace(/^import .*$/gm, '').replace(/^export /gm, '');
-  const factory = new Function('esc', 'fetchJSON', 'HEAVY_TIMEOUT_MS', 'OPTIONAL_TIMEOUT_MS', 'module',
-    `${src}\nmodule.exports = { buildBoard, renderBoardHTML, MIN_RANKED_N };`);
-  const mod = { exports: {} };
-  factory((x) => String(x), async () => null, 0, 0, mod);
-  return mod.exports;
-}
-
-test('renderBoardHTML: one sortable table per metric basis (medals restart per basis) plus a building table', () => {
-  const { buildBoard, renderBoardHTML } = loadLeaderboard();
-  const g = (section, tier, n, avg, winRate) => ({ section, tier, horizons: { '1m': { n, avg, winRate } } });
-  const board = buildBoard([g('momentum', 'StrongSell', 18, 7.37, 55), g('screener', 'Breakout', 30, 3.2, 70), g('CERN', 'INDEX_ADD_FADE', 3, 16.85, 100)],
-    { Breakout: { avgAlpha: 1.1, winRate: 52, n: 40 } }, { conf1: { name: 'Confluence A', excess: 0.4, beatRate: 51, wilsonLo: 44, n: 12 } });
-  const html = renderBoardHTML(board);
-  assertClean(html);
-  const tables = html.match(/<table class="lb-table sortable">/g) || [];
-  assert.equal(tables.length, 4, 'live + backtest + confluence + building');
-  assert.match(html, /<thead><tr><th/);
-  assert.match(html, /<tr class="lb-row">/);
-  assert.match(html, /data-sort="/);
-  assert.equal((html.match(/🥇/g) || []).length, 3, 'a gold medal per ranked basis, never across bases');
-  assert.match(html, /Building evidence/);
-  assert.match(html, /only 3 resolved/);
-  assert.equal(renderBoardHTML([]), '');
-});
-
-test('leaderboard.js emits <table class="lb-table sortable"> and no flex-row divs', () => {
-  const src = R('leaderboard.js');
-  assert.match(src, /<table class="lb-table sortable">/);
-  assert.ok(!/<div class="lb-row">/.test(src));
+// ── sortable kit CSS (the Algo Leaderboard that first used it was retired 2026-10-02) ──
+test('app.css carries the sortable-table sort-direction indicator styles', () => {
   const css = readFileSync(join(ROOT, 'public', 'css', 'app.css'), 'utf8');
-  assert.match(css, /\.lb-table/);
   assert.match(css, /table\.sortable th\[aria-sort="ascending"\]/, 'sort direction indicator styles');
-  assert.ok(!/\.lb-row \{ display: flex/.test(css), 'the old flex row rule would break <tr> layout');
 });

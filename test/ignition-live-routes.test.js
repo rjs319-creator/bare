@@ -137,9 +137,9 @@ test('ignitionlive is registered at every UI touchpoint', () => {
 });
 
 test('the lab tab pins are untouched (cfl/psrl/peerprop regexes still hold)', () => {
-  assert.match(APP, /'edge', 'cfl', 'orbitlab'/);
-  assert.match(APP, /'rltlab', 'psrl', 'gridlock'/);
-  assert.match(APP, /'peerlab'\]/);
+  assert.match(APP, /'backtest', 'cfl', 'psrl'/);
+  assert.match(APP, /'cfl', 'psrl', 'gridlock'/);
+  assert.match(APP, /'gridlock'\]/);
 });
 
 test('the frontend module renders only — default sort is opportunity, no scoring math', () => {

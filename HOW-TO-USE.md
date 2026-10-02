@@ -52,25 +52,35 @@ That's it. If the regime is red, the best use of the app today is *not trading*.
 ## 3. The five destinations
 
 The nav has five places. **Simple mode** (the default, the 🌱 button in the
-header) shows twelve tabs. **🎓 Expert** shows every research surface the app has
-ever built, grouped by holding horizon. Everything that is hidden in Simple is still
+header) shows eleven tabs. **🎓 Expert** shows every research surface the app still
+runs, grouped by holding horizon. Everything that is hidden in Simple is still
 reachable by its link and from the ⌘K search.
+
+Some tabs have **lanes**: a second, smaller row of pills under the tab. A lane is a
+surface that used to be its own tab and showed the same rows a different way, so it
+now lives inside the tab that owns the question (Sectors under Rotation, the two
+intraday radars under Ignition Live, Grades and Baselines under the Scoreboard).
 
 ### 🏠 Today
 - **Today** — the regime read, sector chips, and the ranked decision board. When
   nothing has cleared the evidence gate (which is most days, honestly) it says so in
-  one line instead of pretending.
+  one line instead of pretending. Lanes: **Game Plan** (the morning narrative) and
+  **Brief** (where the signals agree and disagree).
 - **Session** — the graded board. Before the open it reads premarket gaps and
   pre-volume; during the session it shows where price sits against the frozen
   levels, VWAP and the opening range; after the close it shows what is setting up
   for tomorrow. A high grade means the snapshot looks clean and the lane's own
   record does not argue against it. It is **not** a probability and not a buy signal.
   **Held-out** names are the app's proven-negative lanes: read them as what to avoid.
+  Expert lanes: Quick Hit, the combined shortlist and the research list — three
+  other compositions of the same rows.
 
 ### 🎯 Trade
 - **Day Trade** — the intraday engine with a lifecycle per name and a timing grade.
   Its own track record is on the tab; it is negative so far, and the tab says so.
-- **Ignition Live** — what is igniting during the session, with alerts.
+- **Ignition Live** — what is igniting during the session, with alerts. Lanes:
+  the **low-float lane** (the same engine on actual float) and **5-min structure**
+  (one chart state per name).
 - **Breakout** — the base breakout scan of S&P 500 plus small and micro caps. The
   only swing engine with a real forward-return ledger. Good for idea generation.
 - **Swing Supervisor** — every published swing pick followed to a documented end.
@@ -78,31 +88,37 @@ reachable by its link and from the ⌘K search.
 - **Technology** — the 837-name tech universe with three independent horizon reads.
 
 In Expert mode this group also shows the archived swing and position research
-tabs (Pre-Move, ATLAS-X, Adaptive Momentum, Core Momentum, Pattern Radar and the
-rest). They are research surfaces at zero weight, kept so their ledgers keep
-accruing evidence. None of them is a buy list.
+tabs (Gap & Go, Pre-Move, the swing entry planner, Adaptive Momentum, Pattern
+Radar, Overheated, Biotech, Core Momentum). They are research surfaces at zero
+weight, kept so their ledgers keep accruing evidence. None of them is a buy list.
 
 ### 📊 Markets
 - **Rotation** — sector rotation, daily and weekly. Use it to bias toward leading
-  sectors and avoid lagging ones.
-- **News** — curated headlines from quality sources.
+  sectors and avoid lagging ones. Lane: the **sector heatmap**.
+- **News** — curated headlines from quality sources. Lane: **Picks**, cheap
+  news-driven discovery.
 - **Pulse** — the three-speed market state, narratives and upcoming events.
 
-Expert mode adds the forecast and crowd surfaces (Game Plan, Brief, Forecast,
-Crowd, Sharp Money, Alerts) and the thesis-change feed.
+Expert mode adds the thesis-change feed, the Forecast, one **Options** page (flow,
+crowd odds, sharp money and put-selling setups as lanes) and **Alerts**, which also
+holds the sound and notification switches for flip alerts.
 
 ### 🎖️ Evidence — your reality check
 - **Scoreboard** — logs every pick and shows **realized** 1-week, 1-month and
   3-month returns and win rates per strategy, plus the negative lanes. **Check it
   weekly.** It is the antidote to fooling yourself. Disable the signals that keep
-  losing.
-- **Evidence** — the earned grade per tab (Validated, Promising, Experimental,
-  Informational, Disabled). The same grade is stamped under every tab heading.
+  losing. Lanes: **Grades** (the earned Validated / Promising / Experimental /
+  Informational / Disabled grade per tab — the same grade is stamped under every
+  tab heading), **vs dumb baselines**, and in Expert the two intraday diagnostics
+  (mover-miss audit, intraday validation).
 
 ### 🔬 Research (Expert only)
-Every alternative-signal lab: forced-flow events, read-through, cross-asset,
-options flow, the backtest harness, and the shadow labs. All at paper weight.
-Read them to understand what has been tested and what failed.
+What is still being tested: forced-selling bounces, cross-asset catch-ups, social
+trade alerts, the backtest harness, the Counterfactual Lab, Persistent Trends and
+GRIDLOCK. All at paper weight. Labs whose own evidence closed as no-edge (ORBIT,
+leadership transition, peers, short interest, Catalyst–Flow, read-through, Stealth,
+Second Wave, Tone Shift, the Edge Book) were retired from the nav on 2026-10-02;
+their ledgers that still accrue are read by the Scoreboard.
 
 ### 🔎 Ticker lookup
 Type a ticker in the search (or ⌘K) for one name read across all three horizons,

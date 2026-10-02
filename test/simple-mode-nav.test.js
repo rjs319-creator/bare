@@ -11,7 +11,8 @@ const APP = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app.js')
 const HTML = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
 
 const TOP = ['home', 'trade', 'markets', 'proof', 'lab'];
-const SIMPLE = ['today', 'session', 'daytrade', 'ignitionlive', 'screener', 'swingsup', 'tech-command', 'rotation', 'news', 'pulse', 'scoreboard', 'evidence'];
+// Phase 2 (2026-10-02): eleven — 'evidence' became a lane of the Scoreboard.
+const SIMPLE = ['today', 'session', 'daytrade', 'ignitionlive', 'screener', 'swingsup', 'tech-command', 'rotation', 'news', 'pulse', 'scoreboard'];
 
 function tabGroups() {
   const m = APP.match(/const TAB_GROUPS = \{([\s\S]*?)\n  \};/);
@@ -36,7 +37,7 @@ test('every legacy top-level key is redirected and no longer a group', () => {
   assert.match(APP, /if \(LEGACY_TOP\[h\]\) return LEGACY_TOP\[h\];/, 'initial hash redirects legacy ids');
 });
 
-test('SIMPLE_TABS is the curated twelve and every member is a registered section', () => {
+test('SIMPLE_TABS is the curated eleven and every member is a registered section', () => {
   const m = APP.match(/const SIMPLE_TABS = new Set\(\[(.*?)\]\);/);
   assert.ok(m, 'SIMPLE_TABS literal found');
   const simple = [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1]);
@@ -54,13 +55,13 @@ test('nothing was dropped from the nav registry: every section in index.html is 
     .filter(tag => /class="[^"]*\bscreener-section\b/.test(tag))
     .map(tag => (tag.match(/\bid="([^"]+)"/) || [])[1])
     .filter(Boolean);
-  assert.ok(sections.length >= 40, `sections found: ${sections.length}`);
+  assert.ok(sections.length >= 25, `sections found: ${sections.length}`);
   for (const id of sections) assert.ok(all.has(id), `section #${id} still in TAB_GROUPS (deep links + palette)`);
 });
 
 test('the sub-nav filters by mode and each group opens on a visible tab', () => {
-  assert.match(APP, /const isTabVisible = s => !isSimpleMode\(\) \|\| SIMPLE_TABS\.has\(s\);/);
-  assert.match(APP, /\.filter\(s => isTabVisible\(s\) \|\| s === sub\)/, 'renderHubSubnav keeps the active hidden tab visible');
+  assert.match(APP, /const isTabVisible = s => !isSimpleMode\(\) \|\| SIMPLE_TABS\.has\(s\) \|\| isLaneVisible\(s\);/);
+  assert.match(APP, /\.filter\(s => !MERGED_INTO\[s\] && \(isTabVisible\(s\) \|\| s === navSub\)\)/, 'renderHubSubnav keeps the active hidden tab visible and never pills a merged lane');
   assert.match(APP, /const defaultSubOf = top =>/);
   assert.match(APP, /hubSub = \{ home: 'today', trade: 'daytrade', markets: 'rotation', proof: 'scoreboard', lab: 'events' \}/);
 });

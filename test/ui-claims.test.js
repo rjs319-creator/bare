@@ -40,11 +40,6 @@ const FORBIDDEN = [
   // 2026-08 alpha-research delta: research/shadow strategies may not address the reader
   // with BUY imperatives or publish a suggested position size (RESEARCH/SHADOW/OBSERVATION
   // vocabulary only; zero size until governance clears a weight).
-  ['public/js/omega-swing.js', [
-    'Buy only above trigger',
-    'Buy only on pullback',
-    'Suggested size',
-  ]],
   ['public/js/opportunities.js', [
     'per $1k risked',
     'at 1% account risk',
