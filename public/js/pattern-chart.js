@@ -1,99 +1,62 @@
-// Pattern chart — hand-drawn candle canvas with structural overlays, so a user can SEE
-// why the engine assigned a label: pivots, frozen trigger/invalidation/target, and the
-// confirmation bar. No chart library (repo convention: canvas only).
+// PATTERN CHART — candles with the structural overlays that let a user SEE why the engine
+// assigned a label: pivots (joined), frozen trigger / invalidation / target, and the
+// confirmation bar. Renders through the shared chart-engine (lightweight-charts v5).
+//
+// Convention change (deliberate, 2026-10-02): this file used to draw on a 2d canvas by
+// hand under a "no chart library" rule. That rule is retired — one vendored, Apache-2.0
+// engine now draws every chart in the app, so the pattern radar, the card toggles and the
+// Session Board agree on candles, scales and level styling instead of three hand-drawn
+// variants drifting apart. `drawPatternChart(host, chart, det)` keeps its signature; the
+// host is now a block element (a legacy <canvas> is swapped for its parent).
+import { mountCandles } from './chart-engine.js';
 
-const COLORS = {
-  up: '#22c55e', down: '#ef4444', wick: '#6b7280',
-  trigger: '#38bdf8', stop: '#ef4444', target: '#22c55e',
-  pivot: '#eab308', vol: '#334155', grid: '#1f2937', text: '#94a3b8',
-};
+const MIN_BARS = 5;
+const PATTERN_HEIGHT = 260;
+const LEVEL_TITLES = Object.freeze({ entry: 'TRIG', stop: 'STOP', target: 'TGT' });
+const CONFIRM_CLOSED_THROUGH = 'rgba(16,217,138,0.16)';
+const CONFIRM_PENDING = 'rgba(192,208,232,0.12)';
 
-// chart: { candles: [{date,o,h,l,c,v}] }; det: canonical detection (plan + pivotsUsed).
-export function drawPatternChart(canvas, chart, det) {
-  if (!canvas || !chart || !Array.isArray(chart.candles) || chart.candles.length < 5) return;
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  const W = canvas.clientWidth || 640;
-  const H = canvas.clientHeight || 260;
-  canvas.width = W * dpr;
-  canvas.height = H * dpr;
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, W, H);
+const numOrNull = (v) => (Number.isFinite(v) ? v : null);
 
-  const cs = chart.candles;
-  const padL = 6;
-  const padR = 52;
-  const volH = 34;
-  const priceH = H - volH - 14;
+// Pure: chart payload ({candles:[{date,o,h,l,c,v}]}) + canonical detection → mount spec.
+// Null when there is nothing worth drawing (fewer than MIN_BARS bars).
+export function patternChartSpec(chart, det) {
+  const candles = chart && Array.isArray(chart.candles) ? chart.candles : [];
+  if (candles.length < MIN_BARS) return null;
   const plan = (det && det.plan) || {};
-  const levels = [plan.trigger, plan.stop, plan.target].filter(v => typeof v === 'number');
-  let lo = Math.min(...cs.map(c => c.l), ...levels);
-  let hi = Math.max(...cs.map(c => c.h), ...levels);
-  const pad = (hi - lo) * 0.05 || 1;
-  lo -= pad; hi += pad;
-  const x = i => padL + (i / (cs.length - 1)) * (W - padL - padR);
-  const y = p => 8 + (1 - (p - lo) / (hi - lo)) * (priceH - 8);
-  const barW = Math.max(1.5, (W - padL - padR) / cs.length * 0.62);
-
-  // volume
-  const vmax = Math.max(...cs.map(c => c.v || 0)) || 1;
-  for (let i = 0; i < cs.length; i++) {
-    const vh = ((cs[i].v || 0) / vmax) * (volH - 4);
-    ctx.fillStyle = COLORS.vol;
-    ctx.fillRect(x(i) - barW / 2, H - 12 - vh, barW, vh);
-  }
-  // candles
-  for (let i = 0; i < cs.length; i++) {
-    const c = cs[i];
-    const up = c.c >= c.o;
-    ctx.strokeStyle = COLORS.wick;
-    ctx.beginPath();
-    ctx.moveTo(x(i), y(c.h));
-    ctx.lineTo(x(i), y(c.l));
-    ctx.stroke();
-    ctx.fillStyle = up ? COLORS.up : COLORS.down;
-    const top = y(Math.max(c.o, c.c));
-    const hgt = Math.max(1, Math.abs(y(c.o) - y(c.c)));
-    ctx.fillRect(x(i) - barW / 2, top, barW, hgt);
-  }
-  // frozen levels
-  const lvl = (price, color, label) => {
-    if (typeof price !== 'number') return;
-    ctx.strokeStyle = color;
-    ctx.setLineDash([5, 4]);
-    ctx.beginPath();
-    ctx.moveTo(padL, y(price));
-    ctx.lineTo(W - padR, y(price));
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = color;
-    ctx.font = '10px ui-monospace, monospace';
-    ctx.fillText(`${label} ${price.toFixed(2)}`, W - padR + 3, y(price) + 3);
+  const conf = det && det.confirmation;
+  const highlights = conf && conf.confirmBarDate
+    ? [{ date: String(conf.confirmBarDate), color: conf.closedThrough ? CONFIRM_CLOSED_THROUGH : CONFIRM_PENDING }]
+    : [];
+  return {
+    candles,
+    height: PATTERN_HEIGHT,
+    levels: { entry: numOrNull(plan.trigger), stop: numOrNull(plan.stop), target: numOrNull(plan.target) },
+    levelTitles: LEVEL_TITLES,
+    pivots: (det && Array.isArray(det.pivotsUsed)) ? det.pivotsUsed : [],
+    highlights,
+    label: det ? [det.patternLabel, det.direction, det.timeframe].filter(Boolean).join(' ') : '',
   };
-  lvl(plan.trigger, COLORS.trigger, 'TRIG');
-  lvl(plan.stop, COLORS.stop, 'STOP');
-  lvl(plan.target, COLORS.target, 'TGT');
+}
 
-  // pivots (matched by date where possible)
-  const dateIdx = new Map(cs.map((c, i) => [String(c.date), i]));
-  for (const p of (det && det.pivotsUsed) || []) {
-    const i = dateIdx.get(String(p.date));
-    if (i == null || typeof p.price !== 'number') continue;
-    ctx.fillStyle = COLORS.pivot;
-    ctx.beginPath();
-    ctx.arc(x(i), y(p.price), 3.2, 0, Math.PI * 2);
-    ctx.fill();
+function resolveHost(host) {
+  if (!host) return null;
+  if (host.tagName === 'CANVAS') {
+    const parent = host.parentElement;
+    host.remove();
+    return parent;
   }
-  // confirmation bar marker
-  if (det && det.confirmation && det.confirmation.confirmBarDate) {
-    const i = dateIdx.get(String(det.confirmation.confirmBarDate));
-    if (i != null) {
-      ctx.strokeStyle = det.confirmation.closedThrough ? COLORS.up : COLORS.text;
-      ctx.strokeRect(x(i) - barW / 2 - 2, 6, barW + 4, priceH - 4);
-    }
-  }
-  ctx.fillStyle = COLORS.text;
-  ctx.font = '10px ui-monospace, monospace';
-  const label = det ? `${det.patternLabel || ''} ${det.direction || ''} ${det.timeframe || ''}` : '';
-  ctx.fillText(label, padL + 2, H - 2);
+  return host;
+}
+
+// Resolves to the chart handle (or null). Never throws: a failed mount shows an inline error.
+export function drawPatternChart(host, chart, det) {
+  const el = resolveHost(host);
+  if (!el) return Promise.resolve(null);
+  const spec = patternChartSpec(chart, det);
+  if (!spec) { el.innerHTML = '<div class="chart-err">Not enough bars to draw this pattern.</div>'; return Promise.resolve(null); }
+  return mountCandles(el, spec).catch(() => {
+    el.innerHTML = '<div class="chart-err">Chart unavailable.</div>';
+    return null;
+  });
 }

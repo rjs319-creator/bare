@@ -13,6 +13,7 @@
 // negatives) never appear in the main list.
 import { esc } from './format.js';
 import { fetchJSON, HEAVY_TIMEOUT_MS } from './fetch-json.js';
+import { mountCandles } from './chart-engine.js';
 
 export const SESSION_BOARD_URL = '/api/tracker?op=sessionboard';
 export const LAST_SEEN_KEY = 'sessionBoardLastSeen';
@@ -254,6 +255,7 @@ export function renderCard(it, { delta = null, rank = null } = {}) {
     <div class="sb-card-st">${statusPill(it.live)}</div>
     ${premarketRow(it.premarket)}
     ${levelsRow(it.levels)}
+    ${chartExpander(it)}
     ${liveRow(it.live)}
     ${gradeWhy}
     ${bars(it.grade && it.grade.components)}
@@ -263,6 +265,35 @@ export function renderCard(it, { delta = null, rank = null } = {}) {
     ${whyList(it.why)}
     <div class="sb-src sb-dim">${esc(it.section || it.source || '')}${it.tier ? ` · ${esc(it.tier)}` : ''}</div>
   </article>`;
+}
+
+// 📈 Expand card: the shared chart component with THIS row's frozen levels as price lines.
+// Lazy — the candles (/api/chart) and the chart engine load on first open only.
+const CHART_URL = '/api/chart?ticker=';
+function chartExpander(it) {
+  return `<details class="sb-chart" data-chart-ticker="${esc(it.ticker || '')}"><summary>📈 Chart · frozen levels on live bars</summary><div class="sb-chart-host chart-canvas-wrap"></div></details>`;
+}
+export function sessionLevels(item) {
+  const L = (item && item.levels) || {};
+  return { entry: isNum(L.entry) ? L.entry : null, stop: isNum(L.stop) ? L.stop : null, target: isNum(L.target) ? L.target : null };
+}
+export async function mountSessionChart(det, item, { fetcher = fetchJSON, mount = mountCandles } = {}) {
+  if (!det || det.dataset.chartLoaded === '1') return null;
+  const host = det.querySelector('.sb-chart-host');
+  const ticker = (item && item.ticker) || det.dataset.chartTicker;
+  if (!host || !ticker) return null;
+  det.dataset.chartLoaded = '1';
+  host.innerHTML = '<div class="chart-loading">Loading chart…</div>';
+  try {
+    const data = await fetcher(CHART_URL + encodeURIComponent(ticker));
+    if (!data || !Array.isArray(data.candles)) throw new Error('no candles');
+    const ind = data.indicators || {};
+    return await mount(host, { candles: data.candles, levels: sessionLevels(item), indicators: { ema9: ind.ema9, ema21: ind.ema21, vwap: data.source === 'yahoo' ? ind.vwap : null } });
+  } catch {
+    det.dataset.chartLoaded = '';
+    host.innerHTML = `<div class="chart-err">Chart unavailable for ${esc(ticker)}.</div>`;
+    return null;
+  }
 }
 
 function headerStrip(p, now) {
@@ -396,6 +427,16 @@ export async function loadSessionBoard(el, { silent = false, now = Date.now(), f
   if (!el.dataset.sbBound) {
     el.dataset.sbBound = '1';
     el.addEventListener('click', (ev) => {
+      const sum = ev.target && ev.target.closest && ev.target.closest('.sb-chart > summary');
+      if (sum && el.contains(sum)) {
+        ev.stopPropagation(); // the app's card-click delegation would open the ticker-lookup modal
+        const det = sum.parentElement;
+        const card = det.closest('.sb-card');
+        const items = (state.lastGood && state.lastGood.items) || [];
+        const item = items.find((it) => it && String(it.id) === (card && card.dataset.id)) || null;
+        mountSessionChart(det, item);
+        return;
+      }
       const b = ev.target && ev.target.closest && ev.target.closest('.sb-pill');
       if (!b || !el.contains(b)) return;
       state.filter = b.dataset.tf || 'all';

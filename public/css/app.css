@@ -866,7 +866,29 @@
     .cl-val.stop { color: var(--red); } .cl-val.rr { color: var(--cyan); }
 
     .chart-canvas-wrap { position: relative; width: 100%; }
-    .chart-canvas-wrap canvas { width: 100%; display: block; border-radius: 6px; }
+    /* Single chart component (chart-engine.js → lightweight-charts). The attribution link is
+       an Apache-2.0 NOTICE requirement — keep it visible wherever a chart renders. */
+    .chart-pane { width: 100%; border-radius: 6px; overflow: hidden; background: var(--bg); }
+    .chart-attrib-row { display: flex; justify-content: flex-end; margin-top: 3px; }
+    .chart-attrib { font-size: 0.58rem; color: var(--text-dim); text-decoration: none; letter-spacing: 0.02em; }
+    .chart-attrib:hover { color: var(--text); text-decoration: underline; }
+    .pat-chart-host { margin-top: 6px; }
+    #session .sb-chart { font-size: 0.72rem; }
+    #session .sb-chart summary { cursor: pointer; color: var(--cyan); list-style: none; }
+    #session .sb-chart summary::-webkit-details-marker { display: none; }
+    #session .sb-chart[open] summary { margin-bottom: 6px; }
+    /* Sector treemap (sector-treemap.js): inline SVG, area = dollar volume, colour = % change */
+    .sector-treemap { display: flex; flex-direction: column; gap: 8px; }
+    .sector-treemap .tm-bench .sector-tile { min-width: 110px; }
+    .sector-treemap-svg { display: block; width: 100%; border-radius: 8px; }
+    .sector-treemap-svg .tm-tile { transition: opacity 0.15s; }
+    .sector-treemap-svg .tm-ticker { cursor: pointer; }
+    .sector-treemap-svg .tm-ticker:hover { opacity: 0.8; }
+    .sector-treemap-svg .tm-label { font-family: var(--font); pointer-events: none; }
+    .sector-treemap-svg .tm-sym { font-size: 11px; font-weight: 800; letter-spacing: 0.04em; }
+    .sector-treemap-svg .tm-pct { font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .sector-treemap-svg .tm-sector-label { font-family: var(--font); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; pointer-events: none; opacity: 0.85; }
+    .tm-foot { font-size: 0.62rem; color: var(--text-dim); }
     .chart-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 7px; font-size: 0.6rem; color: var(--text-dim); }
     .chart-legend span { display: flex; align-items: center; gap: 4px; }
     .cleg-swatch { width: 12px; height: 2px; border-radius: 1px; display: inline-block; }

@@ -34,6 +34,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadCern, eventName as cernEventName } from './cern.js';
   import { mountVerdict, loadGrades } from './evidence-badge.js';
   import { drawPatternChart } from './pattern-chart.js';
+  import { mountCandles } from './chart-engine.js';
+  import { renderSectorTreemap, hasSizeData } from './sector-treemap.js';
   import { LEARN, LEARN_GROUPS } from './learn-data.js';
 
   // ── Honest payload timestamp ────────────────────────────────────────────────
@@ -873,8 +875,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     return { bg: '#1e0606', border: '#ef505066', col: '#ef5050' };
   }
 
-  function renderSectorHeatmap(sectors) {
-    const chips = sectors.map(s => {
+  // Sector map: a d3-hierarchy treemap (sector-treemap.js) when /api/sectors carries dollar
+  // volume — area = dollar volume, colour = % change via sectorStyle(); the Screener's
+  // large-cap rows nest inside their sector once that tab has loaded. A payload without size
+  // data keeps the original equal-size chips.
+  let sectorTickers = [];
+  let lastSectors = null;
+  function setSectorTickers(rows) {
+    sectorTickers = Array.isArray(rows) ? rows : [];
+    if (lastSectors) renderSectorHeatmap(lastSectors);
+  }
+  function sectorChips(sectors) {
+    return sectors.map(s => {
       const st = sectorStyle(s.changePct);
       const sign = s.changePct >= 0 ? '+' : '';
       return `<div class="sector-tile" style="background:${st.bg};border-color:${st.border}">
@@ -883,8 +895,15 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         <div class="st-pct" style="color:${st.col}">${sign}${s.changePct}%</div>
       </div>`;
     }).join('');
-    sectorContainer.innerHTML = `<div class="sector-grid fade-in">${chips}</div>`;
-    document.getElementById('sector-time').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+  }
+  function renderSectorHeatmap(sectors) {
+    lastSectors = sectors;
+    if (!sectorContainer) return;
+    const drewTreemap = hasSizeData(sectors)
+      && renderSectorTreemap(sectorContainer, sectors, { tickers: sectorTickers, style: sectorStyle, onTicker: t => openTickerLookup(t) });
+    if (!drewTreemap) sectorContainer.innerHTML = `<div class="sector-grid fade-in">${sectorChips(sectors)}</div>`;
+    const stamp = document.getElementById('sector-time');
+    if (stamp) stamp.textContent = `Updated ${new Date().toLocaleTimeString()}`;
   }
 
   async function loadSectorHeatmap() {
@@ -3022,6 +3041,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (cap) scrCaps[scope] = cap;
       if (scope === 'large') { lastRegime = data.regime || null; renderRotation(rotation); renderRotationTrend(data.rotationHistory); renderRegime(lastRegime); renderMomentumRegime(); }
       scrRaw[scope] = results;
+      if (scope === 'large') setSectorTickers(results);
       rankAndRender(scope);
       // The regime read comes with the large scope — re-rank the other scopes so
       // any already-loaded small/micro lists pick up the bearish score downgrade.
@@ -8315,8 +8335,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       // Prefer the detection matching this episode's family; fall back to the first.
       const det = dets.find(d => ep && d.patternFamily === ep.family && d.direction === ep.direction) || dets[0] || null;
       const detForChart = det ? { ...det, plan: ep ? { trigger: ep.trigger, stop: ep.invalidation, target: ep.target, action: det.plan && det.plan.action } : det.plan } : (ep ? { patternLabel: ep.label, direction: ep.direction, timeframe: ep.timeframe, plan: { trigger: ep.trigger, stop: ep.invalidation, target: ep.target }, pivotsUsed: [] } : null);
-      slot.innerHTML = '<canvas style="width:100%;height:260px;display:block;margin-top:6px"></canvas>';
-      drawPatternChart(slot.querySelector('canvas'), j.chart, detForChart);
+      slot.innerHTML = '<div class="pat-chart-host chart-canvas-wrap"></div>';
+      await drawPatternChart(slot.firstElementChild, j.chart, detForChart);
       btn.textContent = '📈 Reload chart';
     } catch {
       slot.innerHTML = '<div class="hzp-warn">Could not load the chart.</div>';
@@ -10390,7 +10410,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       ${dualHtml}
       ${bannerHtml}
       ${chartOnly ? '' : levelsHtml}
-      <div class="chart-canvas-wrap"><canvas></canvas></div>
+      <div class="chart-canvas-wrap" data-chart-host></div>
       <div class="chart-legend">
         <span><i class="cleg-swatch" style="background:#c0d0e8"></i>Price</span>
         <span><i class="cleg-swatch" style="background:#06c4d4"></i>EMA9</span>
@@ -10410,14 +10430,14 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       <div class="chart-disclaimer">⚠ Technical signal from real-time price action (EMA · VWAP · RSI · MACD · volume) — for educational use, not financial advice. Confirm before trading.</div>
     `;
 
-    const canvas = panel.querySelector('canvas');
+    const chartHost = panel.querySelector('[data-chart-host]');
     // Overlay the trade plan (entry/breakout, stop=invalidation, target) as lines on the
     // chart, plus any real event markers (earnings) the payload carries (#5). Levels come
     // as strings from lib/signal.js → coerce to numbers; drop non-finite ones.
     const num = v => { const f = parseFloat(v); return Number.isFinite(f) ? f : null; };
     const chartLevels = lv ? { entry: num(lv.entry), stop: num(lv.stop), target: num(lv.target) } : null;
     const chartEvents = Array.isArray(data.events) ? data.events : [];
-    drawChart(canvas, candles, indicators, signals, source, { levels: chartLevels, events: chartEvents });
+    drawChart(chartHost, candles, indicators, signals, source, { levels: chartLevels, events: chartEvents });
 
     // Signal-flip chime/notification only when the signal is actually live and
     // executable — a weekend refresh of a demoted closed-market read must not
@@ -10594,158 +10614,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     return _dualBookPromise;
   }
 
-  function drawChart(canvas, candles, ind, signals, source, opts = {}) {
-    const levels = opts.levels || null;
-    const events = opts.events || [];
-    const wrap = canvas.parentElement;
-    const cssW = wrap.clientWidth || 380;
-    const cssH = 220;
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = cssW * dpr; canvas.height = cssH * dpr;
-    canvas.style.height = cssH + 'px';
-    const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
-
-    const padL = 6, padR = 46, padT = 8, padB = 26;
-    const plotW = cssW - padL - padR;
-    const priceH = (cssH - padT - padB) * 0.74;
-    const volH   = (cssH - padT - padB) * 0.26;
-    const volTop = padT + priceH + 6;
-
-    const n = candles.length;
-    if (!n) return;
-
-    // Price range across candles + EMAs + vwap
-    let lo = Infinity, hi = -Infinity;
-    candles.forEach(c => { lo = Math.min(lo, c.low); hi = Math.max(hi, c.high); });
-    [ind.ema9, ind.ema21, ind.ema50, ind.vwap].forEach(arr => arr && arr.forEach(v => {
-      if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
-    }));
-    // Keep the plan lines (entry/stop/target) inside the visible range.
-    if (levels) [levels.entry, levels.stop, levels.target].forEach(v => {
-      if (Number.isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
-    });
-    const pad = (hi - lo) * 0.06 || 1; lo -= pad; hi += pad;
-    const maxVol = Math.max(1, ...candles.map(c => c.volume || 0));
-
-    const x = i => padL + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
-    const y = p => padT + (1 - (p - lo) / (hi - lo)) * priceH;
-    const vy = v => volTop + volH - (v / maxVol) * volH;
-
-    // ── grid + price axis labels ──
-    ctx.strokeStyle = '#16223e'; ctx.lineWidth = 1;
-    ctx.font = '9px ui-monospace, monospace'; ctx.fillStyle = '#4d6688'; ctx.textBaseline = 'middle';
-    for (let g = 0; g <= 4; g++) {
-      const yy = padT + (priceH * g) / 4;
-      ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(padL + plotW, yy); ctx.stroke();
-      const val = hi - ((hi - lo) * g) / 4;
-      ctx.fillText('$' + val.toFixed(2), padL + plotW + 4, yy);
-    }
-
-    // ── volume bars ──
-    const bw = Math.max(1, plotW / n * 0.7);
-    candles.forEach((c, i) => {
-      const up = c.close >= c.open;
-      ctx.fillStyle = up ? 'rgba(16,217,138,0.35)' : 'rgba(239,80,80,0.35)';
-      const h = volTop + volH - vy(c.volume || 0);
-      ctx.fillRect(x(i) - bw / 2, vy(c.volume || 0), bw, h);
-    });
-
-    // ── candlesticks (wicks + bodies) ──
-    candles.forEach((c, i) => {
-      const up = c.close >= c.open;
-      const col = up ? '#10d98a' : '#ef5050';
-      const cx = x(i);
-      ctx.strokeStyle = col; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(cx, y(c.high)); ctx.lineTo(cx, y(c.low)); ctx.stroke();
-      ctx.fillStyle = col;
-      const yo = y(c.open), yc = y(c.close);
-      const top = Math.min(yo, yc); const bh = Math.max(1, Math.abs(yc - yo));
-      ctx.fillRect(cx - bw / 2, top, bw, bh);
-    });
-
-    // ── EMA / VWAP overlays ──
-    const line = (arr, color, dash) => {
-      if (!arr) return;
-      ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.setLineDash(dash || []);
-      ctx.beginPath(); let started = false;
-      arr.forEach((v, i) => {
-        if (v == null) { started = false; return; }
-        const px = x(i), py = y(v);
-        if (!started) { ctx.moveTo(px, py); started = true; } else ctx.lineTo(px, py);
-      });
-      ctx.stroke(); ctx.setLineDash([]);
-    };
-    line(ind.ema9,  '#06c4d4');
-    line(ind.ema21, '#f0a832');
-    line(ind.ema50, '#8a6dff');
-    if (source === 'yahoo') line(ind.vwap, '#ff6b35', [4, 3]);
-
-    // ── trade-plan level lines (#5): entry/breakout, stop=invalidation, target ──
-    const hLine = (p, color, label) => {
-      if (!Number.isFinite(p) || p < lo || p > hi) return;
-      const py = y(p);
-      ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.setLineDash([5, 4]);
-      ctx.beginPath(); ctx.moveTo(padL, py); ctx.lineTo(padL + plotW, py); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = color; ctx.font = '8px ui-monospace, monospace'; ctx.textBaseline = 'bottom'; ctx.textAlign = 'left';
-      ctx.fillText(label, padL + 2, py - 1);
-      ctx.textBaseline = 'middle';
-    };
-    if (levels) {
-      hLine(levels.target, '#10d98a', 'Target');
-      hLine(levels.entry,  '#06c4d4', 'Entry / breakout');
-      hLine(levels.stop,   '#ef5050', 'Stop (invalidation)');
-    }
-
-    // ── event markers (#5): a vertical dotted line + ⧫ at any real event date in range ──
-    const idxByTime = {}; candles.forEach((c, i) => { idxByTime[c.date] = i; });
-    const nearestIdx = (dateStr) => {
-      if (idxByTime[dateStr] != null) return idxByTime[dateStr];
-      const t = new Date(dateStr).getTime();
-      if (!Number.isFinite(t)) return null;
-      let best = null, bestD = Infinity;
-      candles.forEach((c, i) => { const d = Math.abs(new Date(c.date).getTime() - t); if (d < bestD) { bestD = d; best = i; } });
-      return best;
-    };
-    (events || []).forEach(ev => {
-      const i = nearestIdx(ev.date || ev.when); if (i == null) return;
-      const cx = x(i);
-      ctx.strokeStyle = 'rgba(240,168,50,0.55)'; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
-      ctx.beginPath(); ctx.moveTo(cx, padT); ctx.lineTo(cx, padT + priceH); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = '#f0a832'; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillText(ev.mark || '⧫', cx, padT + 1);
-      ctx.textBaseline = 'middle';
-    });
-    ctx.textAlign = 'left';
-
-    // ── buy/sell signal markers ──
-    const byTime = {}; candles.forEach((c, i) => { byTime[c.date] = i; });
-    (signals || []).forEach(s => {
-      const i = byTime[s.time]; if (i == null) return;
-      const cx = x(i), cy = y(s.price);
-      const buy = s.side === 'buy';
-      ctx.fillStyle = buy ? '#10d98a' : '#ef5050';
-      const oy = buy ? cy + 12 : cy - 12;
-      ctx.beginPath();
-      if (buy) { ctx.moveTo(cx, oy - 5); ctx.lineTo(cx - 4, oy + 3); ctx.lineTo(cx + 4, oy + 3); }
-      else     { ctx.moveTo(cx, oy + 5); ctx.lineTo(cx - 4, oy - 3); ctx.lineTo(cx + 4, oy - 3); }
-      ctx.closePath(); ctx.fill();
-    });
-
-    // ── time axis labels (first / mid / last) ──
-    ctx.fillStyle = '#4d6688'; ctx.textBaseline = 'top'; ctx.textAlign = 'center';
-    const fmt = d => {
-      const dt = new Date(d);
-      return source === 'yahoo'
-        ? dt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-        : dt.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    };
-    [0, Math.floor(n / 2), n - 1].forEach(i => {
-      ctx.fillText(fmt(candles[i].date), x(i), cssH - padB + 8);
-    });
-    ctx.textAlign = 'left';
+  // drawChart — the single chart component (chart-engine.js → TradingView lightweight-charts,
+  // vendored). Keeps the call shape the card toggles and ticker-lookup go through
+  // (renderChart → drawChart); the legacy glyph semantics survive as markers: ▲ buy below the
+  // bar, ▼ sell above, ⧫ at real event dates, dashed entry / stop / target price lines, EMA9/21/50
+  // overlays and a dashed VWAP on intraday (yahoo) data. Fire-and-forget: a failed mount shows
+  // an inline error instead of a blank panel.
+  function drawChart(host, candles, ind, signals, source, opts = {}) {
+    if (!host) return;
+    const I = ind || {};
+    const indicators = { ema9: I.ema9, ema21: I.ema21, ema50: I.ema50, vwap: source === 'yahoo' ? I.vwap : null };
+    mountCandles(host, { candles, indicators, signals, events: opts.events || [], levels: opts.levels || null })
+      .catch(() => { host.innerHTML = '<div class="chart-err">Chart unavailable.</div>'; });
   }
 
   function showMomError(msg) {
