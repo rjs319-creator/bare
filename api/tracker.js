@@ -121,6 +121,9 @@ const PRIVILEGED_OPS = new Set([
   'cfltick', 'cflbackfill',
   // VRP live paper put-write ledger WRITE (entry + resolution). Cron/manual only.
   'vrptick',
+  // Alpaca PAPER execution ledger writers (place 1-share brackets at the open / poll fills and
+  // flatten intraday rows). Dormant until ALPACA_* env exists; op=paperexec (read) stays public.
+  'paperopen', 'paperpoll',
   // Ephemeral edge factory WRITE (grammar rescan + paper-pick log + resolutions). Cron/manual only.
   'ephemeraltick',
   // GRIDLOCK shadow vertical WRITES (PJM/EIA/NWS collect + event ledger + PIT candidate
@@ -698,6 +701,11 @@ async function handleRequest(req, res) {
   // SESSION BOARD — session-aware "what is worth looking at right now" over the Today rows,
   // the day-trade lifecycle and the premarket gap lane (public read; lib/session-board-routes).
   if (req.query.op === 'sessionboard') return require('../lib/session-board-routes').runSessionBoard(req, res);
+  // Paper-execution ledger on Alpaca paper (lib/exec-paper-routes): writers are bearer-only and
+  // dormant without ALPACA_* env; the read serves paper-exec/<date>.json + measurement summary.
+  if (req.query.op === 'paperopen') return require('../lib/exec-paper-routes').runPaperOpen(req, res);
+  if (req.query.op === 'paperpoll') return require('../lib/exec-paper-routes').runPaperPoll(req, res);
+  if (req.query.op === 'paperexec') return require('../lib/exec-paper-routes').runPaperExec(req, res);
   // EVOLVE — Adaptive Pre-Move Discovery Engine (composition + calibration over the
   // existing engines-as-specialists). Live reads are public + cached; the writers
   // (evolvescore&log, evolveresolve) are cron-only via PRIVILEGED_OPS.

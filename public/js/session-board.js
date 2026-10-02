@@ -13,6 +13,8 @@
 // negatives) never appear in the main list.
 import { esc } from './format.js';
 import { fetchJSON, fetchSnapshot, HEAVY_TIMEOUT_MS } from './fetch-json.js';
+// Separate line on purpose: test/pwa-stale-strips.test.js pins the import above byte-exact.
+import { OPTIONAL_TIMEOUT_MS } from './fetch-json.js';
 import { mountCandles } from './chart-engine.js';
 import { lastGoodStripHTML } from './last-good.js';
 import { toast } from './toasts.js';
@@ -23,6 +25,9 @@ export const SESSION_BOARD_URL = '/api/tracker?op=sessionboard';
 export const LAST_GOOD_KEY = 'sessionboard';
 const defaultFetcher = (url, opts) => fetchSnapshot(url, { ...opts, key: LAST_GOOD_KEY });
 const defaultNotify = (msg) => toast('info', msg, { title: 'Session Board' });
+// Alpaca PAPER execution ledger read (lib/exec-paper-routes). Dormant until keys exist:
+// `exists:false` renders nothing; the line below the header appears only when fills exist.
+export const PAPER_EXEC_URL = '/api/tracker?op=paperexec';
 export const LAST_SEEN_KEY = 'sessionBoardLastSeen';
 export const ACTIVE_REFRESH_MS = 60 * 1000;        // premarket / regular session
 export const IDLE_REFRESH_MS = 5 * 60 * 1000;      // after hours / closed
@@ -344,6 +349,19 @@ function headerStrip(p, now) {
   </div>`;
 }
 
+// Compact paper-execution read: "paper fills: n / m · median slippage x bps". Renders ONLY
+// when a ledger exists for the day with at least one placed order — never an empty frame.
+export function renderPaperFills(paper) {
+  const s = paper && paper.exists && paper.summary;
+  if (!s || !isNum(s.placed) || s.placed <= 0) return '';
+  const ex = s.exits || {};
+  const exits = [['stop', ex.stop], ['target', ex.target], ['horizon', ex.horizon]].filter(([, n]) => isNum(n) && n > 0).map(([k, n]) => `${n} ${k}`).join(', ');
+  const slip = isNum(s.medianSlippageBps) ? `${s.medianSlippageBps > 0 ? '+' : ''}${s.medianSlippageBps.toFixed(1)} bps` : '–';
+  const recon = s.reconciliation && s.reconciliation.ok === false ? ' <span class="sb-flag sb-flag-warn">ledger/snapshot mismatch</span>' : '';
+  return `<div class="sb-paper">🧾 paper fills: <b>${s.filled} / ${s.placed}</b> · median slippage vs frozen level <b>${slip}</b>${exits ? ` · exits: ${esc(exits)}` : ''}${recon}
+    <span class="sb-dim">— Alpaca paper, 1 share per A/B row (${esc(String(s.date || ''))}); NBBO-touch fills are a lower bound on friction</span></div>`;
+}
+
 function pills(p, filter, items) {
   const bt = p.byTimeframe || {};
   const total = (items || []).length;
@@ -393,7 +411,7 @@ function listWithLowGradeCollapsed(shown, delta) {
   </details>`;
 }
 
-export function renderSessionBoard(payload, { lastSeen = null, now = new Date(), filter = 'all', stale = null } = {}) {
+export function renderSessionBoard(payload, { lastSeen = null, now = new Date(), filter = 'all', stale = null, paper = null } = {}) {
   const p = payload || {};
   const delta = deltaSince(p, lastSeen);
   const items = Array.isArray(p.items) ? p.items.filter((it) => it && !(it.flags && it.flags.heldOut)) : [];
@@ -410,6 +428,7 @@ export function renderSessionBoard(payload, { lastSeen = null, now = new Date(),
   else if (!shown.length) body = `<div class="sb-empty sb-dim">Nothing in this time frame right now.</div>`;
   else body = listWithLowGradeCollapsed(shown, delta);
   return `${staleBanner}${headerStrip(p, now)}
+    ${renderPaperFills(paper)}
     ${summary ? `<div class="sb-since">👀 ${esc(summary)}</div>` : ''}
     ${degraded}
     ${pills(p, filter, items)}
@@ -419,7 +438,7 @@ export function renderSessionBoard(payload, { lastSeen = null, now = new Date(),
 }
 
 // ── loader (browser) ────────────────────────────────────────────────────────────────
-const state = { lastGood: null, lastFetchAt: 0, filter: 'all', seenTimer: null, lastSeen: undefined, toastedFor: null };
+const state = { lastGood: null, lastFetchAt: 0, filter: 'all', seenTimer: null, lastSeen: undefined, toastedFor: null, paper: null, paperFetchAt: 0 };
 
 // Grade-change toast: once per server generatedAt, against the "since you last looked" baseline.
 function announceGradeChanges(p, notify) {
@@ -435,8 +454,24 @@ function isLivePhase(p) { const ph = p && p.session && p.session.phase; return p
 function paint(el, opts = {}) {
   if (!state.lastGood) return;
   if (state.lastSeen === undefined) state.lastSeen = readLastSeen();
-  el.innerHTML = renderSessionBoard(state.lastGood, { lastSeen: state.lastSeen, filter: state.filter, stale: opts.stale || null });
+  el.innerHTML = renderSessionBoard(state.lastGood, { lastSeen: state.lastSeen, filter: state.filter, stale: opts.stale || null, paper: state.paper });
   scheduleLastSeen(el);
+}
+
+// The paper ledger read is fail-soft and throttled: while no ledger exists (dormant) it is
+// re-asked at the idle cadence only, so a dormant deployment costs one Blob probe per 5 min.
+export function shouldFetchPaper(st, now) {
+  const wait = st.paper && st.paper.exists ? ACTIVE_REFRESH_MS : IDLE_REFRESH_MS;
+  return !st.paperFetchAt || now - st.paperFetchAt >= wait;
+}
+async function fetchPaper(fetcher, now) {
+  if (!shouldFetchPaper(state, now)) return state.paper;
+  state.paperFetchAt = now;
+  try {
+    const p = await fetcher(`${PAPER_EXEC_URL}&_cb=${now}`, { timeoutMs: OPTIONAL_TIMEOUT_MS });
+    state.paper = p && p.ok !== false ? p : null;
+  } catch { /* fail-soft: the board never waits on, or breaks for, the paper read */ }
+  return state.paper;
 }
 
 // The board counts as "looked at" only after it has stayed on screen for a few seconds.
@@ -451,7 +486,9 @@ function scheduleLastSeen(el) {
   }, LAST_SEEN_SETTLE_MS);
 }
 
-export async function loadSessionBoard(el, { silent = false, now = Date.now(), fetcher = defaultFetcher, notify = defaultNotify } = {}) {
+// `paperFetcher` is deliberately NOT the board's fetcher: the default board fetcher is the
+// last-good snapshot wrapper keyed 'sessionboard', and the paper read must never land in it.
+export async function loadSessionBoard(el, { silent = false, now = Date.now(), fetcher = defaultFetcher, notify = defaultNotify, paperFetcher = fetchJSON } = {}) {
   if (!el) return null;
   // A silent poll outside premarket / regular hours is throttled to the idle cadence even
   // though the host timer ticks every minute (lazySection has one fixed interval).
@@ -477,7 +514,7 @@ export async function loadSessionBoard(el, { silent = false, now = Date.now(), f
     });
   }
   try {
-    const p = await fetcher(`${SESSION_BOARD_URL}&_cb=${now}`, { timeoutMs: HEAVY_TIMEOUT_MS });
+    const [p] = await Promise.all([fetcher(`${SESSION_BOARD_URL}&_cb=${now}`, { timeoutMs: HEAVY_TIMEOUT_MS }), fetchPaper(paperFetcher, now)]);
     if (!p || p.ok === false) throw new Error((p && p.error) || 'session board unavailable');
     state.lastFetchAt = now;
     if (p.stale && state.lastGood && !state.lastGood.stale) {

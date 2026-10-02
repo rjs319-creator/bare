@@ -122,6 +122,37 @@ test('last-seen storage is try/catch safe', () => {
   assert.equal(SB.readLastSeen(ok), null);
 });
 
+// ── paper-execution read (Alpaca paper ledger) ───────────────────────────────────────
+test('renderPaperFills: nothing while dormant / empty; a compact line once fills exist; mismatch flagged', () => {
+  assert.equal(SB.renderPaperFills(null), '');
+  assert.equal(SB.renderPaperFills({ ok: true, exists: false }), '');
+  assert.equal(SB.renderPaperFills({ exists: true, summary: { placed: 0, filled: 0 } }), '');
+  const summary = { date: '2026-09-21', placed: 4, filled: 3, medianSlippageBps: 7.5, exits: { stop: 1, target: 1, horizon: 0, none: 1 }, reconciliation: { ok: true } };
+  const html = SB.renderPaperFills({ ok: true, exists: true, summary });
+  assertClean(html);
+  assert.match(html, /paper fills: <b>3 \/ 4<\/b>/);
+  assert.match(html, /median slippage vs frozen level <b>\+7\.5 bps<\/b>/);
+  assert.match(html, /exits: 1 stop, 1 target/);
+  assert.match(html, /lower bound on friction/);
+  assert.ok(!/mismatch/.test(html));
+  const bad = SB.renderPaperFills({ exists: true, summary: { ...summary, medianSlippageBps: null, reconciliation: { ok: false, missing: ['x'] } } });
+  assert.match(bad, /ledger\/snapshot mismatch/);
+  assert.match(bad, /<b>–<\/b>/);
+  // threaded through the full render, and absent when not supplied
+  const withPaper = SB.renderSessionBoard(FIXTURE, { now: new Date('2026-09-21T12:20:00.000Z'), paper: { exists: true, summary } });
+  assert.match(withPaper, /class="sb-paper"/);
+  assert.ok(!/sb-paper/.test(SB.renderSessionBoard(FIXTURE, { now: new Date('2026-09-21T12:20:00.000Z') })));
+  assert.match(CSS, /#session \.sb-paper \{/);
+  assert.equal(SB.PAPER_EXEC_URL, '/api/tracker?op=paperexec');
+});
+
+test('shouldFetchPaper: dormant ledger re-asked at the idle cadence, an existing one at the active cadence', () => {
+  assert.equal(SB.shouldFetchPaper({ paper: null, paperFetchAt: 0 }, 1000), true);
+  assert.equal(SB.shouldFetchPaper({ paper: { exists: false }, paperFetchAt: 1000 }, 1000 + SB.ACTIVE_REFRESH_MS), false);
+  assert.equal(SB.shouldFetchPaper({ paper: { exists: false }, paperFetchAt: 1000 }, 1000 + SB.IDLE_REFRESH_MS), true);
+  assert.equal(SB.shouldFetchPaper({ paper: { exists: true }, paperFetchAt: 1000 }, 1000 + SB.ACTIVE_REFRESH_MS), true);
+});
+
 // ── full render ──────────────────────────────────────────────────────────────────────
 test('renders the fixture: header, pills, ranked cards, held-out block, disclosure', () => {
   const html = SB.renderSessionBoard(FIXTURE, { now: new Date('2026-09-21T12:20:00.000Z') });
@@ -221,25 +252,34 @@ function stubEl() {
 
 test('loadSessionBoard: renders on success, keeps the last good board with a stale banner on failure, throttles idle polls', async () => {
   const el = stubEl();
-  let calls = 0;
+  let calls = 0, paperCalls = 0;
   const closed = clone(FIXTURE); closed.session.phase = 'closed';
-  const fetcher = async () => { calls++; if (calls === 2) throw new Error('HTTP 503'); return closed; };
+  // The paper-ledger read goes through its OWN fail-soft fetcher (never the board's last-good
+  // snapshot wrapper); it is dormant here. Board calls are counted as before.
+  const fetcher = async (url) => {
+    assert.ok(!url.startsWith(SB.PAPER_EXEC_URL), 'paper read must not use the board fetcher');
+    calls++; if (calls === 2) throw new Error('HTTP 503'); return closed;
+  };
+  const paperFetcher = async () => { paperCalls++; return { ok: true, exists: false }; };
+  SB._internals.state.paper = null; SB._internals.state.paperFetchAt = 0;
   const t0 = 1_000_000;
-  const p1 = await SB.loadSessionBoard(el, { fetcher, now: t0 });
+  const p1 = await SB.loadSessionBoard(el, { fetcher, paperFetcher, now: t0 });
   assert.equal(p1.version, 'session-board-v1');
   assert.match(el.innerHTML, /sb-phase-closed/);
   assert.ok(!/sb-stale/.test(el.innerHTML));
   // silent poll 60s later in a closed phase → throttled, no fetch
-  const p2 = await SB.loadSessionBoard(el, { fetcher, now: t0 + 60_000, silent: true });
+  const p2 = await SB.loadSessionBoard(el, { fetcher, paperFetcher, now: t0 + 60_000, silent: true });
   assert.equal(calls, 1); assert.equal(p2, p1);
   // manual refresh → fetch fails → last good board + stale banner
-  const p3 = await SB.loadSessionBoard(el, { fetcher, now: t0 + 120_000 });
+  const p3 = await SB.loadSessionBoard(el, { fetcher, paperFetcher, now: t0 + 120_000 });
   assert.equal(p3, null); assert.equal(calls, 2);
   assert.match(el.innerHTML, /sb-stale/); assert.match(el.innerHTML, /HTTP 503/); assert.match(el.innerHTML, /ABCD/);
   // silent poll after the idle window → fetches again
-  await SB.loadSessionBoard(el, { fetcher, now: t0 + 6 * 60_000, silent: true });
+  await SB.loadSessionBoard(el, { fetcher, paperFetcher, now: t0 + 6 * 60_000, silent: true });
   assert.equal(calls, 3);
   assert.ok(!/sb-stale/.test(el.innerHTML));
+  assert.equal(paperCalls, 2, 'dormant paper read is throttled to the idle cadence (t0 and t0+6min), never per board fetch');
+  assert.ok(!/sb-paper/.test(el.innerHTML), 'dormant → no paper line');
   clearTimeout(SB._internals.state.seenTimer);
 });
 
