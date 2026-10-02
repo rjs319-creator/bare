@@ -1,0 +1,59 @@
+{
+ "data": {
+  "calendar": {
+   "asOf": "Fri, Oct 2, 2026",
+   "headers": {
+    "symbol": "Symbol",
+    "companyName": "Name",
+    "dividend_Ex_Date": "Ex-Dividend Date",
+    "payment_Date": "Payment Date",
+    "record_Date": "Record Date",
+    "dividend_Rate": "Dividend",
+    "indicated_Annual_Dividend": "Historical Annual Dividend",
+    "announcement_Date": "Announcement Date"
+   },
+   "rows": [
+    {
+     "companyName": "Alico, Inc. Common Stock",
+     "symbol": "ALCO",
+     "dividend_Ex_Date": "10/02/2026",
+     "payment_Date": "10/16/2026",
+     "record_Date": "10/02/2026",
+     "dividend_Rate": 0.05,
+     "indicated_Annual_Dividend": 0.2,
+     "announcement_Date": "9/08/2026"
+    },
+    {
+     "companyName": "ATN International, Inc. Common Stock",
+     "symbol": "ATNI",
+     "dividend_Ex_Date": "10/02/2026",
+     "payment_Date": "10/09/2026",
+     "record_Date": "10/03/2026",
+     "dividend_Rate": 0.29,
+     "indicated_Annual_Dividend": 1.16,
+     "announcement_Date": "9/23/2026"
+    },
+    {
+     "companyName": "Cisco Systems, Inc. Common Stock (DE)",
+     "symbol": "CSCO",
+     "dividend_Ex_Date": "10/02/2026",
+     "payment_Date": "10/21/2026",
+     "record_Date": "10/02/2026",
+     "dividend_Rate": 0.42,
+     "indicated_Annual_Dividend": 1.68,
+     "announcement_Date": "8/12/2026"
+    }
+   ]
+  },
+  "timeframe": {
+   "minDate": "1988-10-03T00:00:00",
+   "maxDate": "2104-06-02T00:00:00"
+  }
+ },
+ "message": null,
+ "status": {
+  "rCode": 200,
+  "bCodeMessage": null,
+  "developerMessage": null
+ }
+}

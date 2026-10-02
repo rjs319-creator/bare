@@ -1,0 +1,57 @@
+{
+ "data": {
+  "asOf": "Fri, Oct 2, 2026",
+  "headers": {
+   "time": "Time",
+   "symbol": "Symbol",
+   "name": "Company Name",
+   "marketCap": "Market Cap",
+   "fiscalQuarterEnding": "Fiscal Quarter Ending",
+   "epsForecast": "Consensus EPS* Forecast",
+   "noOfEsts": "# of Ests",
+   "lastYearRptDt": "Last Year's Report Date",
+   "lastYearEPS": "Last year's EPS*"
+  },
+  "rows": [
+   {
+    "lastYearRptDt": "N/A",
+    "lastYearEPS": "($1.02)",
+    "time": "time-not-supplied",
+    "symbol": "CELU",
+    "name": "Celularity Inc.",
+    "marketCap": "$43,807,184",
+    "fiscalQuarterEnding": "Jun/2026",
+    "epsForecast": "",
+    "noOfEsts": "1"
+   },
+   {
+    "lastYearRptDt": "8/29/2025",
+    "lastYearEPS": "($1.20)",
+    "time": "time-not-supplied",
+    "symbol": "ENLV",
+    "name": "Enlivex Ltd.",
+    "marketCap": "$10,010,040",
+    "fiscalQuarterEnding": "Jun/2026",
+    "epsForecast": "($0.31)",
+    "noOfEsts": "1"
+   },
+   {
+    "lastYearRptDt": "N/A",
+    "lastYearEPS": "N/A",
+    "time": "time-not-supplied",
+    "symbol": "LNAI",
+    "name": "Lunai Bioworks Inc.",
+    "marketCap": "$6,664,818",
+    "fiscalQuarterEnding": "Jun/2026",
+    "epsForecast": "",
+    "noOfEsts": "1"
+   }
+  ]
+ },
+ "message": null,
+ "status": {
+  "rCode": 200,
+  "bCodeMessage": null,
+  "developerMessage": null
+ }
+}

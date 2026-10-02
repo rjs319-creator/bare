@@ -1,0 +1,43 @@
+{
+ "data": {
+  "asOf": "Thu, Oct 1, 2026",
+  "headers": {
+   "symbol": "SYMBOL",
+   "name": "COMPANY",
+   "ratio": "RATIO",
+   "executionDate": "EFFECTIVE DATE"
+  },
+  "rows": [
+   {
+    "symbol": "DXJ",
+    "name": "WisdomTree Japan Hedged Equity Fund",
+    "ratio": "3 : 1",
+    "executionDate": "10/09/2026"
+   },
+   {
+    "symbol": "MGF",
+    "name": "Aberdeen Government Markets Income Fund",
+    "ratio": "1 : 5",
+    "executionDate": "10/08/2026"
+   },
+   {
+    "symbol": "MIN",
+    "name": "Aberdeen Intermediate Income Fund",
+    "ratio": "1 : 6",
+    "executionDate": "10/08/2026"
+   },
+   {
+    "symbol": "GCDT",
+    "name": "Green Circle Decarbonize Technology Limited",
+    "ratio": "1 : 6",
+    "executionDate": "10/07/2026"
+   }
+  ]
+ },
+ "message": null,
+ "status": {
+  "rCode": 200,
+  "bCodeMessage": null,
+  "developerMessage": null
+ }
+}
