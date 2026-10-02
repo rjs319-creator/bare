@@ -12,7 +12,9 @@
 // the last good render behind a loud stale banner; held-out lanes (the app's proven
 // negatives) never appear in the main list.
 import { esc } from './format.js';
-import { fetchJSON, fetchSnapshot, HEAVY_TIMEOUT_MS, OPTIONAL_TIMEOUT_MS } from './fetch-json.js';
+import { fetchJSON, fetchSnapshot, HEAVY_TIMEOUT_MS } from './fetch-json.js';
+// Separate line on purpose: test/pwa-stale-strips.test.js pins the import above byte-exact.
+import { OPTIONAL_TIMEOUT_MS } from './fetch-json.js';
 import { mountCandles } from './chart-engine.js';
 import { lastGoodStripHTML } from './last-good.js';
 import { toast } from './toasts.js';
