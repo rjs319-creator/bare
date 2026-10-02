@@ -3,7 +3,7 @@
 //   GET /api/tracker?op=track[&force=1]    → snapshot today's picks to storage
 //   GET /api/tracker  (or ?op=scoreboard)  → realized forward-return scoreboard
 //   GET /api/tracker?op=apexlog[&force=1]  → log today's Apex/Loaded signals
-//   GET /api/tracker?op=ghostlog[&force=1] → log today's Ghost/Stalking signals
+//   GET /api/tracker?op=ghostlog[&force=1][&obsonly=1] → log today's Ghost/Stalking signals (obsonly=1: ghostobs/ observation only — the scheduled form)
 //   GET /api/tracker?op=archive            → snapshot per-ticker mentions + options baselines
 //   POST /api/tracker?op=insideringest     → receive EDGAR Form 4 history (external builder)
 //   GET /api/tracker?op=insider            → insider-history coverage snapshot

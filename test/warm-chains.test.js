@@ -256,6 +256,16 @@ test('evolve is reachable exactly once (root, not also nested)', () => {
   assert.equal(WC.ROOT_CHAINS.filter(r => r === 'evolve').length, 1, 'exactly one root entry');
 });
 
+test('postdecision carries only the two ledger WRITES — the CDN primes for the retired tabs are gone', () => {
+  // `op=ignition` and `op=omega` were pure read-only cache primes for the Ignition and
+  // OMEGA tabs, both removed from the UI in the 2026-10-02 simplification. Their ledger
+  // writes (ignitionlog / omegalog) stay — the shadow evidence keeps accruing.
+  assert.deepStrictEqual(WC.CHAINS.postdecision, ['op=ignitionlog', 'op=omegalog']);
+  for (const steps of Object.values(WC.CHAINS)) {
+    for (const s of steps) assert.ok(!/^op=(ignition|omega)(&|$)/.test(s), `read-only prime still scheduled: ${s}`);
+  }
+});
+
 test('detaching evolve did not orphan postdecision', () => {
   // postdecision still runs — now under the evolve root instead of the reprime spine.
   const nested = new Set();
