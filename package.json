@@ -17,5 +17,10 @@
     "@vercel/blob": "^2.4.0",
     "@vercel/functions": "^3.9.9",
     "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@stdlib/stats-base-dists-t-cdf": "^0.2.3",
+    "@stdlib/stats-padjust": "^0.2.3",
+    "@stdlib/stats-ttest": "^0.2.3"
   }
 }
