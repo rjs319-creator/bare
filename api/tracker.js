@@ -46,6 +46,7 @@ const { runPulse, runPulseRefine, runPulseGrade, runPulseEpisodes } = require('.
 const { runDualRead, runDualReadLog, runDualReadBook, runDualReadTune, runDualReadBackfill, runLtRecs } = require('../lib/dualread-routes');
 const { requireTrusted, requireMethod, stripForceParams, stripWriteParams, isTrusted } = require('../lib/auth');
 const { rateLimit, clientKey } = require('../lib/ratelimit');
+const { isDefaultOp, respondUnknownOp } = require('../lib/tracker-default-op');
 
 // Ops the DAILY CRON fans out to and the browser never fetches directly — safe to
 // require the CRON_SECRET bearer (enforced only once the secret is configured).
@@ -821,5 +822,11 @@ async function handleRequest(req, res) {
   if (req.query.op === 'patternlog') return require('../lib/pattern-routes').runPatternLog(req, res);
   if (req.query.op === 'patterngrade') return require('../lib/pattern-routes').runPatternGrade(req, res);
   if (req.query.op === 'patternresearch') return require('../lib/pattern-routes').runPatternResearch(req, res);
-  return runScoreboard(req, res);
+
+  // DEFAULT path — `GET /api/tracker` (public/js/app.js fetchScoreboard) or its documented
+  // alias `?op=scoreboard`. Anything that reached this line with ANY OTHER op is a typo or a
+  // retired op: answer with a small, uncached 400 rather than the multi-MB scoreboard
+  // (lib/tracker-default-op.js has the history).
+  if (isDefaultOp(req.query.op)) return runScoreboard(req, res);
+  return respondUnknownOp(req, res);
 };
