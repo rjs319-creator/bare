@@ -24,3 +24,6 @@ scratch-*
 # CFR optional python sidecar venv (large, machine-local; recreate from
 # tools/forecast-sidecar/requirements-optional.txt)
 tools/forecast-sidecar/.venv/
+
+# per-chain result files written by scripts/run-nightly-chain.js (GitHub Actions only)
+.nightly/

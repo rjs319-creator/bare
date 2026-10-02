@@ -733,14 +733,28 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       : '';
     const list = (arr) => esc(arr.slice(0, 4).join(', ')) + (arr.length > 4 ? ` +${arr.length - 4} more` : '');
 
+    // NIGHTLY CHAINS (lib/chain-summary.js). When the chains ran as the GitHub Actions
+    // matrix, the server's `chains` block carries the night's date, the failed chain
+    // NAMES and the run link — say which night and link the run, so a red banner is one
+    // click from the job log instead of a hunt through Vercel logs. The failed names are
+    // already in `problems` (rendered below); this adds the provenance, not a second list.
+    const ch = d.chains || null;
+    const chainsFrom = ch && ch.source === 'github-matrix'
+      ? ` Nightly chains ${esc(ch.date || '')} ran on GitHub${ch.runUrl ? ` — <a href="${esc(ch.runUrl)}" target="_blank" rel="noopener" style="color:inherit">open run</a>` : ''}.`
+      : '';
+    if (ch && ch.missing) {
+      // The dead-man: in-process dispatch is off and NO night has reported for days. This is
+      // the one failure a job e-mail can never deliver (nothing ran to fail).
+      warns.push(`⚠️ No nightly chain summary has been posted in the last few days — the GitHub nightly-chains workflow did not run or could not report. Ledgers, scoreboard and research tabs are NOT being refreshed.`);
+    }
     if (sev.data.length) {
       // The streak is only meaningful next to a real failure; it counts consecutive runs
       // that were not clean, NOT consecutive occurrences of these particular steps.
-      warns.push(`⚠️ Last nightly data refresh${when} had ${sev.data.length} failed step${sev.data.length === 1 ? '' : 's'}${d.failStreak > 1 ? ` (${d.failStreak} runs not clean)` : ''}: ${list(sev.data)}. Clears after the next run.`);
+      warns.push(`⚠️ Last nightly data refresh${when} had ${sev.data.length} failed step${sev.data.length === 1 ? '' : 's'}${d.failStreak > 1 ? ` (${d.failStreak} runs not clean)` : ''}: ${list(sev.data)}.${chainsFrom} Clears after the next run.`);
     }
     if (sev.background.length) {
       // Reported, not alarmed: these do not touch prices, screens or picks.
-      notes.push(`Background research steps didn't complete in the last nightly refresh${when}: ${list(sev.background)}. Market data is current; this doesn't affect prices, screens or picks.`);
+      notes.push(`Background research steps didn't complete in the last nightly refresh${when}: ${list(sev.background)}.${chainsFrom} Market data is current; this doesn't affect prices, screens or picks.`);
     }
     if (!warns.length && !notes.length) return;
     const page = document.querySelector('.page'); if (!page) return;

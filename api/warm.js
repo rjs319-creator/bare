@@ -92,7 +92,15 @@ module.exports = async function handler(req, res) {
   // burst shared Fluid instances and got /api/tracker OOM-killed on every cron run
   // 2026-08-07 → 2026-08-11, taking down whichever unrelated invocations were in flight.
   // Waves flatten the peak; every chain is still dispatched well inside the drain below.
-  const chainKicks = WC.ROOT_CHAINS.map((name, i) => ({
+  //
+  // OPT-OUT (WARM_CHAINS_INPROCESS=0): the same roots can run as a GitHub Actions matrix
+  // (.github/workflows/nightly-chains.yml — one job per root, max-parallel 4, each hitting
+  // op=warmchain directly and POSTing a per-night record to op=chainsummary). Flipping the
+  // env var hands dispatch over without a deploy; flipping it back is the rollback. The
+  // cache warms above, the AI ticks and the single kicks below are NOT part of the matrix
+  // and keep running here either way. Cutover: docs/nightly-chains-matrix.md.
+  const chainsInProcess = WC.inProcessChainsEnabled();
+  const chainKicks = (chainsInProcess ? WC.ROOT_CHAINS : []).map((name, i) => ({
     name,
     p: (async () => {
       const delay = WC.dispatchDelayMs(i);
@@ -171,8 +179,15 @@ module.exports = async function handler(req, res) {
   // was silently lost. The chains' own deadline is 240s, so 280s hears ~every report.
   const DRAIN_CEIL_MS = 280000;
   const chainReports = {};
+  // The deferred fire-and-forget kicks (AI ticks, single kicks) only leave the door while
+  // THIS invocation is alive — a setTimeout past res.json() never fires on a frozen function.
+  // With in-process chains ON they always dispatched during the long chain drain; with the
+  // chains handed to GitHub the drain would otherwise end at ~25s, before the 27s kick delay.
+  // Draining them explicitly keeps that implicit guarantee in both modes (never throws:
+  // delayedWarmOne already swallows).
+  const kickDrain = Promise.allSettled([...aiTicks, optionsAssessKick, putsellKick, optionsEpisodesKick, calibKick, researchKick, biotechGradeKick]);
   await Promise.race([
-    Promise.all(chainKicks.map(async (k) => {
+    Promise.all([kickDrain, ...chainKicks.map(async (k) => {
       const r = await k.p;
       if (r && r.error) { chainReports[k.name] = { dispatched: true, reportError: r.error }; return; }
       // A warmchain ALWAYS returns HTTP 200 (unknown-name→400, throw→500), so the status
@@ -194,7 +209,7 @@ module.exports = async function handler(req, res) {
             // streak undiagnosable from op=health.
             stepFailDetail: Array.isArray(b.failDetail) ? b.failDetail.slice(0, 12) : [] }
         : { dispatched: true, httpStatus: (r && r.httpStatus) || null, complete: null };
-    })),
+    })]),
     new Promise(r => setTimeout(r, Math.max(0, DRAIN_CEIL_MS - (Date.now() - START)))),
   ]);
   // A chain we didn't hear back from is STILL RUNNING — not failed, and not skipped. The
@@ -218,6 +233,9 @@ module.exports = async function handler(req, res) {
     // own per-step outcome in its OWN logs ([warmchain] <name>); a chain still running
     // when warm returns is normal and no longer means the work was lost.
     chains: chainReports, chainsDispatched, chainRoots: WC.ROOT_CHAINS,
+    // false = handed to the GitHub matrix (WARM_CHAINS_INPROCESS=0); op=health then reads
+    // chains/<date>.json (op=chainsummary) instead of grading `chains` above.
+    chainsInProcess,
     aiTicksKicked: 6, calibKicked: true, researchKicked: true,
     elapsedMs: Date.now() - START, at: new Date().toISOString(),
   };
@@ -225,7 +243,7 @@ module.exports = async function handler(req, res) {
   // Structured run summary — survives in Vercel logs even if the health write fails.
   // Per-STEP outcomes now live in each chain's own [warmchain] <name> log line; warm only
   // knows what it dispatched and what reported back before its ceiling.
-  console.info('[warm] done', JSON.stringify({ elapsedMs: result.elapsedMs, chainsDispatched, chains: chainReports }));
+  console.info('[warm] done', JSON.stringify({ elapsedMs: result.elapsedMs, chainsDispatched, chainsInProcess, chains: chainReports }));
 
   // Observability: persist a compact health record so failed ticks / stale data are visible (op=health).
   try { const { summarizeRun, writeHealthRun } = require('../lib/health'); await writeHealthRun(summarizeRun(result)); }
