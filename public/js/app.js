@@ -8708,12 +8708,39 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // Sizing row for one decision — refuses rather than guessing when inputs are missing.
   function xaSizingRow(dec) {
     if (!budgetIsSet(xaBudget)) return '';
-    const { size, capacity } = sizeAlertDecision(dec, xaBudget);
-    if (!size.available) return `<div class="xa-fine">📏 Size: <span style="color:var(--amber,#f0a832)">unevaluated</span> — ${esc(size.reason)}</div>`;
+    const { size, capacity, lane } = sizeAlertDecision(dec, xaBudget, xalertsData && xalertsData.sizing);
+    const laneRow = xaLaneSizingRow(lane);
+    if (!size.available) return `<div class="xa-fine">📏 Size: <span style="color:var(--amber,#f0a832)">unevaluated</span> — ${esc(size.reason)}</div>${laneRow}`;
     const capTxt = capacity.available
       ? `${capacity.pctOfAdv}% of ADV${capacity.constrained ? ' <b style="color:var(--red)">— capacity-constrained</b>' : capacity.comfortable ? '' : ' (moderate)'}`
       : `capacity ${esc(capacity.reason)}`;
-    return `<div class="xa-fine">📏 <b>${size.shares}</b> shares · $${size.dollarRisk} at risk · $${size.perShareRisk}/share stop · ~$${size.notionalUsd} notional · ${capTxt}</div>`;
+    return `<div class="xa-fine">📏 <b>${size.shares}</b> shares · $${size.dollarRisk} at risk · $${size.perShareRisk}/share stop · ~$${size.notionalUsd} notional · ${capTxt}</div>${laneRow}`;
+  }
+  // Lane Kelly / vol-target / drawdown odds — arithmetic over the SERVED graded record of this
+  // decision's lane (side × horizon). Kelly ≤ 0 says so in words instead of printing a size.
+  const XA_TIP = {
+    kelly: 'Kelly fraction: the share of your account the lane’s own graded win rate and average win/loss would mathematically justify. We show a QUARTER of it because Kelly on a small, noisy record is wildly unstable — a half-size error in the edge estimate turns full Kelly into a losing bet.',
+    vol: 'Vol-target size: how much of your account keeps this name’s recent swings (20-day realised volatility, annualised) at about a 25%-a-year wobble. Wilder names get a smaller slice.',
+    cap: 'Hard cap: no lane, however good its record, is ever sized above 20% of your account. The smallest of quarter-Kelly, the vol-target and this cap is what you see.',
+    dd: 'Odds of a losing streak: we re-deal this lane’s past trade outcomes into 2,000 imaginary 20-trade runs at YOUR risk per trade and count how often the worst dip exceeded 10% or 20% of the account. Bootstrap from the record — not a forecast.',
+    noEdge: 'Kelly at or below zero means the lane’s graded record, after costs and relative to the S&P, has not made money. The honest size for a bet with no measured edge is none.',
+  };
+  function xaLaneSizingRow(lane) {
+    if (!lane) return '';
+    if (!lane.available) {
+      const tone = lane.noEdge ? 'var(--red)' : 'var(--text-dim)';
+      const tip = lane.noEdge ? XA_TIP.noEdge : 'Lane sizing needs a graded record for this side and horizon; it is built on the nightly grade.';
+      return `<div class="xa-fine">🎲 Lane size: <span style="color:${tone}" title="${esc(tip)}">${esc(lane.reason)}</span></div>`;
+    }
+    const pct = v => (v == null ? '—' : `${Math.round(v * 100)}%`);
+    const bind = { kelly: '¼-Kelly binds', 'vol-target': 'vol target binds', 'max-position': 'hard cap binds' }[lane.bindingConstraint] || lane.bindingConstraint;
+    const dd = lane.drawdown
+      ? ` · <span title="${esc(XA_TIP.dd)}">P(drawdown &gt;10%) <b>${pct(lane.drawdown.p10)}</b> · &gt;20% <b>${pct(lane.drawdown.p20)}</b> over ${lane.drawdown.trades} trades</span>`
+      : ' · <span style="opacity:.7" title="Drawdown odds need at least 20 resolved R-multiples (alerts that stated a stop) in this lane.">drawdown odds unavailable</span>';
+    return `<div class="xa-fine">🎲 Lane ${esc(lane.laneKey)} (${lane.n} graded) · `
+      + `<span title="${esc(XA_TIP.kelly)}">¼-Kelly <b>${lane.kellyFractionalPct}%</b> of equity</span> · `
+      + `<span title="${esc(XA_TIP.vol)}">vol-target ${lane.volTargetPct != null ? `<b>${lane.volTargetPct}%</b>` : '<span style="opacity:.7">unavailable</span>'}</span> · `
+      + `<span title="${esc(XA_TIP.cap)}">cap ${lane.capPct}%</span> → <b>~$${lane.notionalUsd}</b> (${esc(bind)})${dd}</div>`;
   }
 
   // Freshness / execution / regime / dissent — each states WHY when unavailable.
