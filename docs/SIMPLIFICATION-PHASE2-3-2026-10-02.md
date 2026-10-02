@@ -59,8 +59,8 @@ a nightly step that writes a ledger the Scoreboard still reads.
 | `op=coreperf` (`stablecore-routes.runCorePerf`) | none of its own | reads `core/*` | plan §5 "performance page for an archived book"; the core book itself (shadow `coremo`) keeps `corebuild/corelog/coredrift` | op + function; book and its steps untouched |
 | `op=algorithmrouter` (public demo read) | none | none | census PR-08 "algo-router ≡ algorithm-router (duplicate; keep algo-router-v1)" | op only — `lib/algorithm-router.js` stays, see deferred |
 
-`ROOT_CHAINS` is unchanged (42 roots; two steps removed inside `capture` and
-`ticks3`), so `scripts/gen-nightly-matrix.js --check` is current and the
+`ROOT_CHAINS` is unchanged (44 roots after rebasing on the day's sibling PRs; two steps
+removed inside `capture` and `ticks3`), so `scripts/gen-nightly-matrix.js --check` is current and the
 GitHub-matrix workflow semantics are untouched.
 
 ## 2. Per-surface disposition
@@ -169,7 +169,7 @@ REMOVED (tab + backend gone).
 | `public/index.html` bytes | 105,947 | 83,546 |
 | `public/css/app.css` bytes | 280,026 | 261,499 (235 selectors/rules pruned) |
 | `lib/**/*.js` module count | 742 | 738 (+ 2 MB of committed JSON removed) |
-| Nightly ROOT_CHAINS | 42 | 42 (steps −2: `edgelog`, `leaderboardtick`) |
+| Nightly ROOT_CHAINS | 42 at 10670db (44 on main after the 2026-10-02 sibling PRs) | unchanged (steps −2: `edgelog`, `leaderboardtick`) |
 | Requests before first paint at `#today` | 11 + up to 12 chart polls | 11 (chart polling opt-in behind the bell) |
 | Onboarding surfaces | 2 | 2 |
 
