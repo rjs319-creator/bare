@@ -93,7 +93,7 @@ REMOVED (tab + backend gone).
 | atlas | ARCHIVE | weight-0 research, 0 rows | kept (relabelled "Swing entry planner") |
 | aligned | REMOVED-UI | composition of lookup reads, always empty | tab gone; `aligned` root (`op=aligned`, `op=alignedlog`) kept — ledger accrues |
 | custom | ARCHIVE | zero-weight benchmark since 2026-08-12 | kept |
-| ghost | REMOVED-UI | retired 2026-08-13 (`ghostlog` already removed from chains) | tab + renderer gone; `lib/ghost.js` kept — `c.ghost` still ships on screener candidates and the Scoreboard reads the historical ledger as record |
+| ghost | REMOVED-UI | retired 2026-08-13 (`ghostlog` left the `ledger` chain then; re-scheduled 2026-10-02 as `op=ghostlog&obsonly=1`, step 1 of `atlasx`, writing ONLY `ghostobs/` — the legacy `ghost/` ledger stays frozen) | tab + renderer gone; `lib/ghost.js` kept — `c.ghost` still ships on screener candidates and the Scoreboard reads the historical ledger as record |
 | coil | REMOVED-UI | governance DISABLED; hypothesis `coil-compression` provisional | tab gone; `op=coiltick` kept — §6: disabled ticks keep writing so the disabled evidence stays honest |
 | patternradar | ARCHIVE | 20.7 MB payload; lookup embeds pattern search | kept; summarized read deferred |
 | downday | REMOVED-UI | robustly negative; registered negative lane 2026-09-19 | tab gone; `op=downdaytick` kept (negative-lane ledger accrues) |
@@ -145,7 +145,7 @@ REMOVED (tab + backend gone).
 | Item | Why deferred |
 |---|---|
 | Retire `gapdown` as an engine (parameterize side in `gapgo`) | `op=gapdowntick` still writes a ledger the Scoreboard reads; the merge is an engine change, not a prune |
-| Drop the `evolve` root (`evolvescore/evolveresolve/evolve`) | carries the `@postdecision` handoff (`ignitionlog`, `ignition`, `omegalog`, `omega`) — `test/warm-chains.test.js` pins it; needs re-homing as its own shallow root first (HTTP-508 history) |
+| Drop the `evolve` root (`evolvescore/evolveresolve/evolve`) | carries the `@postdecision` handoff (`ignitionlog`, `omegalog` — the `ignition`/`omega` CDN primes were dropped 2026-10-02 as read-only primes for removed tabs) — `test/warm-chains.test.js` pins it; needs re-homing as its own shallow root first (HTTP-508 history) |
 | Retire `postdecision` ledgers (`ignition`, `omega` EOD) | shadow ledgers still accruing; `omegaab` A/B verdict ~2027-05 |
 | Pulse v1 (`op=pulse`, `pulserefine`, `pulsegrade`, `pulse` root, `pulse-store/-grade/-schema/-episodes`) | dead data (no reader) but live code: `app.js` falls back to v1 when `PULSE2_MODE=off`, the documented rollback lever; `warm-chains.test.js` uses the `pulse` chain as a fixture; `pulse-enrich.js` must stay for pulse2 |
 | Options flow v1 (`optionsflow-routes.js`, `api/warm.js` kicks) | `op=today` consumes `op=optionsflow` as its `optionsPositioning` evidence family; `lib/optionsflow.js` is shared by v2, gameplan, capture, omega-ab |
@@ -155,6 +155,26 @@ REMOVED (tab + backend gone).
 | Fade → AVOID badge fold | renderer work on live surfaces (Day Trade / Session cards) |
 | `lib/anomaly*`, `secondwave*`, `toneshift*`, `readthrough-routes` libs | ledgers still accrue and the Scoreboard reads their sections; pruning means retiring those sections |
 | `research/89-si-incremental.js` writes `lib/si-overlay/` | the bundle directory is gone; the script needs a new output path if it is ever rerun |
+| `aligned` root (`op=aligned`, `op=alignedlog` → `aligned/<date>.json`) | the only reader of the ledger is `op=alignedbook` (`lib/aligned-routes.js` `runAlignedBook`, the forward track-record read); the Dual-Confirmed tab is gone, but the registry row `aligned` is `shadow` with a live forward record — retiring the ledger is a registry disposition, not a prune |
+| `op=trendtick` (`trend/<date>.json` + `apex/trend-eng.json` learner state, `ticks1` chain) | the ledger's readers are its own resolve loop and `op=trendbook`; the Trend Rider tab is gone, but the registry row `trendrider` is `shadow` and the per-stock learner state is point-in-time evidence that cannot be rebuilt once the tick stops — needs a registry disposition first |
+| `confluence/` ledger (`op=confluencetick`, `ticks1` chain) | outside its own tick/book ops the only consumer is the confluence-marginal shadow learner (`op=confluencemarginal`, `lib/confluence-marginal.js`); dropping the tick ends that study's accrual, so it waits on the learner's verdict |
+
+NOT deferred — fixed on 2026-10-02: `op=ghostlog` routing. `ghostobs/` had no writer from
+2026-08-13 (when `ghostlog` left the `ledger` chain with the ghost retirement) while
+`lib/premove-routes.js` kept reading `readAllGhostObsDays()` — the Pre-Move input was frozen
+for ~7 weeks with nothing to show it. It is now scheduled as `op=ghostlog&obsonly=1`, step 1 of
+the `atlasx` chain ahead of `op=premovelog` / `op=premoveresolve`, writing only the `ghostobs/`
+observation (the legacy `ghost/` ledger stays frozen per the `rejected` registry row), and
+`op=premove` now reports `ghostobs: { lastDate, sessionsBehind, stale, status }`
+(`lib/ghostobs-freshness.js`). Pinned by `test/ghostobs-schedule.test.js` and
+`test/ghostlog-obsonly.test.js`.
+
+Terminology note: `disabled` is a governance RUNTIME status — written to `governance/latest.json`
+by `op=maturity` (`lib/maturity.js` grades a strategy `disabled` when its date-level net excess is
+significantly negative; `lib/governance.js` maps that grade to `status: 'disabled', weight: 0,
+newPositions: false`). It is not a `maturity` value in `lib/strategy-registry.js`, whose values on
+main are `production`, `shadow` and `rejected`. A tab or ledger disposition therefore reads the
+registry row, not the governance doc.
 
 ## 4. §8 measurements (before → after)
 
@@ -169,7 +189,7 @@ REMOVED (tab + backend gone).
 | `public/index.html` bytes | 105,947 | 83,546 |
 | `public/css/app.css` bytes | 280,026 | 261,499 (235 selectors/rules pruned) |
 | `lib/**/*.js` module count | 742 | 738 (+ 2 MB of committed JSON removed) |
-| Nightly ROOT_CHAINS | 42 at 10670db (44 on main after the 2026-10-02 sibling PRs) | unchanged (steps −2: `edgelog`, `leaderboardtick`) |
+| Nightly ROOT_CHAINS | 42 at 10670db (44 on main after the 2026-10-02 sibling PRs) | unchanged (steps −2: `edgelog`, `leaderboardtick`; follow-up PR: −2 `ignition`/`omega` primes, +1 `ghostlog&obsonly=1`) |
 | Requests before first paint at `#today` | 11 + up to 12 chart polls | 11 (chart polling opt-in behind the bell) |
 | Onboarding surfaces | 2 | 2 |
 
