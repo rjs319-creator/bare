@@ -27,7 +27,9 @@ test('SMALL-SAMPLE SAFETY: the critical value is Student-t, not a flat 1.96', ()
   assert.equal(ES.tCritical95(1), 12.706);
   assert.equal(ES.tCritical95(5), 2.571);
   assert.equal(ES.tCritical95(20), 2.086);
-  assert.equal(ES.tCritical95(1000), 1.96);
+  // Beyond the table the value is the real t quantile (t(0.975, 1000) = 1.9623), never
+  // the normal 1.96 the module used to fall back to.
+  assert.ok(Math.abs(ES.tCritical95(1000) - 1.9623) < 1e-3);
   assert.equal(ES.tCritical95(0), 12.706, 'an impossible df fails conservative');
   assert.equal(ES.tCritical95(NaN), 12.706);
 });
