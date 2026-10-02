@@ -204,6 +204,9 @@ const PRIVILEGED_OPS = new Set([
   // per-day shards + CAS-appends the rolling doc (shortvol/*). Cron/manual-with-bearer
   // only; op=shortvol (read) stays public.
   'shortvoltick',
+  // HOUSE BOOK paper-portfolio step — CAS-writes housebook/state.json + equity.json and
+  // spends a bounded candle fan-out. Cron/manual-with-bearer only; op=housebook stays public.
+  'housebooktick',
   // STOCKTWITS BULL-RATIO FLAG shadow logger/resolver — writes the snapshot + write-once
   // prospective ledger (stbull/v1/*) and spends a StockTwits fan-out / a ≤60-name candle
   // fan-out. Cron/manual-with-bearer only; op=stbull (read) stays public.
@@ -235,6 +238,10 @@ const EXPENSIVE_OPS = new Set([
   // bearcase: the empty state is deliberately no-store (pre-first-tick CDN trap), so an
   // anonymous cache-busting loop would otherwise drive an unthrottled Blob list() per hit.
   'bearcase',
+  // housebook: the pre-first-tick empty state is no-store (same trap); mybook runs a ≤26-name
+  // candle fan-out per call for the caller's own rows — CDN-cached 300s per query string, but
+  // an anonymous cache-busting loop must not drive the provider at will.
+  'housebook', 'mybook',
   // discover: the Day Trade page fires it every 60s (CDN-coalesced at 45s), but unthrottled
   // anonymous callers could drive a ~2,500-name provider fan-out + Blob writes at will.
   'discover',
@@ -613,6 +620,10 @@ async function handleRequest(req, res) {
   // FINRA REG SHO DAILY SHORT VOLUME — feature feed + weight-0 decile hypothesis cohorts.
   if (req.query.op === 'shortvol') return require('../lib/finra-shortvol-routes').runShortVol(req, res);
   if (req.query.op === 'shortvoltick') return require('../lib/finra-shortvol-routes').runShortVolTick(req, res);
+  // HOUSE BOOK — simulated paper portfolio of every Session Board A/B row (weight 0; proposal #30).
+  if (req.query.op === 'housebook') return require('../lib/house-book-routes').runHouseBook(req, res);
+  if (req.query.op === 'housebooktick') return require('../lib/house-book-routes').runHouseBookTick(req, res);
+  if (req.query.op === 'mybook') return require('../lib/house-book-routes').runMyBook(req, res);
   if (req.query.op === 'stbull') return require('../lib/stbull-routes').runStbull(req, res);
   if (req.query.op === 'stbulltick') return require('../lib/stbull-routes').runStbullTick(req, res);
   if (req.query.op === 'stbullresolve') return require('../lib/stbull-routes').runStbullResolve(req, res);

@@ -289,7 +289,8 @@ export function renderCard(it, { delta = null, rank = null } = {}) {
     ${flagChips(it.flags)}
     ${checklist(it.checks)}
     ${whyList(it.why)}
-    <div class="sb-src sb-dim">${esc(it.section || it.source || '')}${it.tier ? ` · ${esc(it.tier)}` : ''}</div>
+    <div class="sb-src sb-dim">${esc(it.section || it.source || '')}${it.tier ? ` · ${esc(it.tier)}` : ''}
+      <button type="button" class="sb-take" data-id="${esc(it.id || '')}" title="Add to my book — paper-traded in this browser under the house policy">☐ Taking this</button></div>
   </article>`;
 }
 
