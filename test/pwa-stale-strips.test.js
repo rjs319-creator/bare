@@ -101,7 +101,7 @@ test('loadSessionBoard: notifies ONCE per generatedAt on a grade change and rend
 
 test('session-board.js reads through fetchSnapshot (last-good layer) under the sessionboard key', () => {
   const src = R('session-board.js');
-  assert.match(src, /import \{ fetchSnapshot, HEAVY_TIMEOUT_MS \} from '\.\/fetch-json\.js'/);
+  assert.match(src, /import \{ (?:fetchJSON, )?fetchSnapshot, HEAVY_TIMEOUT_MS \} from '\.\/fetch-json\.js'/);
   assert.match(src, /export const LAST_GOOD_KEY = 'sessionboard'/);
   assert.match(src, /fetchSnapshot\(url, \{ \.\.\.opts, key: LAST_GOOD_KEY \}\)/);
   assert.match(src, /lastGoodStripHTML\(/);

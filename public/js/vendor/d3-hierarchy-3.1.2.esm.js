@@ -1,3 +1,4 @@
+/*! d3-hierarchy v3.1.2 — Copyright 2010-2021 Mike Bostock — Licensed under the ISC License (see LICENSE-d3-hierarchy). Single-file ESM bundle from jsDelivr. */
 /**
  * Bundled by jsDelivr using Rollup v4.62.2 and esbuild v0.28.1.
  * Original file: /npm/d3-hierarchy@3.1.2/src/index.js
