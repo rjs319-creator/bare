@@ -6,6 +6,7 @@
   import { startFlowBadges, setFlowNav, FLOW_BADGE_TABS } from './flow-badge.js';
   import { startDilutionBadges, DILUTION_BADGE_TABS } from './dilution-badge.js';
   import { initCommandPalette, openPalette, revealTicker } from './command-palette.js';
+  import { initServiceWorkerMessages } from './toasts.js';
 import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadOpportunities, mountOpportunitiesTab, whyNowBadge } from './opportunities.js';
   import { loadQuickHit } from './quickhit.js';
@@ -10132,6 +10133,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   let swReg = null;
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').then(r => { swReg = r; }).catch(() => {});
+    initServiceWorkerMessages();   // SW → page: push mirror toast + "update ready, tap to reload"
   }
 
   // ── Auto-update: prompt a reload when a new deploy lands ──────────────────

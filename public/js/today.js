@@ -6,6 +6,7 @@
 // module only renders, so there is no client/server scoring skew.
 import { esc, timeAgo } from './format.js';
 import { fetchJSON, HEAVY_TIMEOUT_MS, OPTIONAL_TIMEOUT_MS } from './fetch-json.js';
+import { withLastGood, lastGoodStripHTML } from './last-good.js';
 
 const HORIZONS = [
   ['intraday', '⚡ Intraday', 'gaps · momentum · VWAP/ORB — same-session'],
@@ -451,6 +452,9 @@ export function renderCommandCenter(container, p) {
     return `<span class="td-sec-chip ${dir}">${esc(s.name)}${chg == null ? '' : ` <b>${pct(chg)}</b>`}</span>`;
   };
   let html = `<div class="td-cc">`;
+  // Last-good strip: this board came from the snapshot layer (refresh failed / empty / offline
+  // cache), so it says WHEN it was good instead of posing as the current read.
+  html += lastGoodStripHTML(p, { cls: 'td-lg' });
   html += opportunityBanner(p.opportunity);
   html += actionSection(); // shadow challenger — first read, clearly labeled, never affects ranks below
   // `reg` (defaulted {}) — an ok payload without a regime block must degrade, not throw
@@ -675,15 +679,17 @@ function renderPairs(host, m) {
     const verdict = !measured ? 'assumed' : p.credit < 0.5 ? 'near-duplicate' : p.credit < 0.85 ? 'partly redundant' : 'independent';
     const drift = measured && Math.abs(p.credit - p.priorCredit) >= 0.2
       ? `<span class="td-redunp-drift" title="The static family map assumed ${p.priorCredit}; the ledgers say ${p.credit}.">map said ${p.priorCredit}</span>` : '';
+    // data-sort carries the raw number so a click on a header sorts numerically ("—" sorts last).
+    const sortVal = v => (v == null ? -999 : v);
     return `<tr class="${cls}">
       <td>${esc(p.a)} × ${esc(p.b)}</td>
-      <td>${p.overlapRate == null ? '—' : (p.overlapRate * 100).toFixed(0) + '%'}</td>
-      <td>${p.returnCorr == null ? '—' : p.returnCorr.toFixed(2)}</td>
-      <td><b>${p.credit == null ? '—' : p.credit.toFixed(2)}</b> ${drift}</td>
+      <td data-sort="${sortVal(p.overlapRate)}">${p.overlapRate == null ? '—' : (p.overlapRate * 100).toFixed(0) + '%'}</td>
+      <td data-sort="${sortVal(p.returnCorr)}">${p.returnCorr == null ? '—' : p.returnCorr.toFixed(2)}</td>
+      <td data-sort="${sortVal(p.credit)}"><b>${p.credit == null ? '—' : p.credit.toFixed(2)}</b> ${drift}</td>
       <td class="td-dim">${verdict}</td></tr>`;
   }).join('');
-  host.innerHTML = `<table class="td-redunp-tbl">
-    <thead><tr><th>Algorithm pair</th><th title="How often they pick the same name on the same day">Overlap</th><th title="How much their realized excess returns move together">Return corr</th><th title="What the 2nd one's agreement is worth (1.00 = fully independent)">Credit</th><th>Read</th></tr></thead>
+  host.innerHTML = `<table class="td-redunp-tbl sortable">
+    <thead><tr><th title="Click a column to sort">Algorithm pair</th><th title="How often they pick the same name on the same day">Overlap</th><th title="How much their realized excess returns move together">Return corr</th><th title="What the 2nd one's agreement is worth (1.00 = fully independent)">Credit</th><th>Read</th></tr></thead>
     <tbody>${rows}</tbody></table>
     <div class="td-dim td-redunp-cov">${cov.resolved ?? 0} resolved picks across ${cov.tickers ?? 0} tickers${cov.span ? `, ${esc(cov.span.from)} → ${esc(cov.span.to)}` : ''}. Pairs below the sample gate show the assumed prior.</div>`;
 }
@@ -761,10 +767,12 @@ export async function loadCommandCenter(container) {
   } catch { /* corrupt cache → ignore */ }
   if (!painted) container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Ranking every screener into one table…</p></div>`;
 
-  // 2) Fetch fresh in the background; swap in when it arrives.
+  // 2) Fetch fresh in the background; swap in when it arrives. op=today runs through the
+  //    last-good layer: a failed / empty / offline read comes back as the last good board
+  //    flagged stale (rendered with its "as of" strip) instead of an error card.
   let p = null, mat = null, chal = null;
   try { [p, mat, chal] = await Promise.all([
-    fetchJSON('/api/tracker?op=today', { timeoutMs: HEAVY_TIMEOUT_MS }),
+    withLastGood('today', () => fetchJSON('/api/tracker?op=today', { timeoutMs: HEAVY_TIMEOUT_MS })),
     fetchJSON('/api/tracker?op=maturity', { timeoutMs: OPTIONAL_TIMEOUT_MS }).catch(() => null),
     fetchJSON('/api/tracker?op=challenger', { timeoutMs: OPTIONAL_TIMEOUT_MS }).catch(() => null), // shadow — optional
   ]); } catch { p = null; }
@@ -778,11 +786,17 @@ export async function loadCommandCenter(container) {
       container.innerHTML = `<div class="dt-note" style="border-left-color:var(--red,#ef4444)"><b>Today view failed to render.</b> ${esc(String((e && e.message) || e))} — try ⟳ Refresh; if it persists the payload/renderer shapes have diverged.</div>`;
     }
   };
-  if (p && p.ok) {
+  if (p && p.ok && !p.stale) {
     applyGrades(mat);
     applyChallenger(chal);
     try { localStorage.setItem(TODAY_CACHE_KEY, JSON.stringify({ p, mat, chal, at: Date.now() })); } catch { /* quota → skip caching */ }
     renderSafely(p);                            // replace stale with fresh
+  } else if (p && p.ok && p.stale) {
+    // The last-good board (its own asOf strip says when it was good). Never written to the
+    // instant-paint cache: that cache's `at` stamp must mean "fetched fresh then".
+    if (mat) applyGrades(mat);
+    if (chal) applyChallenger(chal);
+    renderSafely(p);
   } else if (!painted) {
     renderSafely(p);                            // nothing cached → show the empty/error state
   } else {

@@ -12,10 +12,17 @@
 // the last good render behind a loud stale banner; held-out lanes (the app's proven
 // negatives) never appear in the main list.
 import { esc } from './format.js';
-import { fetchJSON, HEAVY_TIMEOUT_MS } from './fetch-json.js';
+import { fetchJSON, fetchSnapshot, HEAVY_TIMEOUT_MS } from './fetch-json.js';
 import { mountCandles } from './chart-engine.js';
+import { lastGoodStripHTML } from './last-good.js';
+import { toast } from './toasts.js';
 
 export const SESSION_BOARD_URL = '/api/tracker?op=sessionboard';
+// Last-good snapshot slot (fetch-json.js fetchSnapshot → last-good.js). A failed, empty or
+// offline read returns the last usable board flagged stale:true, asOf.
+export const LAST_GOOD_KEY = 'sessionboard';
+const defaultFetcher = (url, opts) => fetchSnapshot(url, { ...opts, key: LAST_GOOD_KEY });
+const defaultNotify = (msg) => toast('info', msg, { title: 'Session Board' });
 export const LAST_SEEN_KEY = 'sessionBoardLastSeen';
 export const ACTIVE_REFRESH_MS = 60 * 1000;        // premarket / regular session
 export const IDLE_REFRESH_MS = 5 * 60 * 1000;      // after hours / closed
@@ -142,6 +149,20 @@ export function deltaSummary(delta) {
   if (c.status) parts.push(`${plural(c.status, 'status change')}`);
   const since = delta.since ? ` since ${stampET(delta.since)}` : '';
   return parts.length ? `${parts.join(' · ')}${since}` : `No changes${since}`;
+}
+
+// One toast line for the grades that moved since the last look ("AAA ↑ C → A · BBB ↓ A → C").
+// Status-only changes and new rows are not grade changes; no baseline → nothing to announce.
+export const GRADE_TOAST_MAX = 4;
+export function gradeChangeMessage(delta, items) {
+  if (!delta || !delta.hasBaseline) return null;
+  const moved = Object.entries(delta.byId || {}).filter(([, d]) => d && (d.kind === 'up' || d.kind === 'down'));
+  if (!moved.length) return null;
+  const tickerOf = (id) => { const it = (items || []).find((x) => x && x.id === id); return it && it.ticker ? it.ticker : id; };
+  const parts = moved.slice(0, GRADE_TOAST_MAX).map(([id, d]) => `${tickerOf(id)} ${d.label}`);
+  const more = moved.length > GRADE_TOAST_MAX ? ` · +${moved.length - GRADE_TOAST_MAX} more` : '';
+  const since = delta.since ? ` since ${stampET(delta.since)}` : '';
+  return `${parts.join(' · ')}${more}${since}`;
 }
 
 export function readLastSeen(storage) {
@@ -378,7 +399,10 @@ export function renderSessionBoard(payload, { lastSeen = null, now = new Date(),
   const items = Array.isArray(p.items) ? p.items.filter((it) => it && !(it.flags && it.flags.heldOut)) : [];
   const shown = filter === 'all' ? items : items.filter((it) => (it.timeframe && it.timeframe.key || it.horizon) === filter);
   const summary = deltaSummary(delta);
-  const staleBanner = stale ? `<div class="sb-stale">⚠️ ${esc(stale)} — showing the last good board from ${stampET(p.generatedAt, now)}.</div>` : '';
+  // Two honesty strips: `stale` (option) = this refresh failed and the previous in-memory board
+  // is kept; `p.stale` (payload) = the board itself is the last-good snapshot (last-good.js).
+  const staleBanner = (stale ? `<div class="sb-stale">⚠️ ${esc(stale)} — showing the last good board from ${stampET(p.generatedAt, now)}.</div>` : '')
+    + lastGoodStripHTML(p, { now });
   const failed = (p.sources || []).filter((s) => s && s.ok === false);
   const degraded = failed.length && !p.empty ? `<div class="sb-dim sb-degraded">Partial read — not answering: ${failed.map((s) => esc(s.source)).join(', ')}.</div>` : '';
   let body;
@@ -395,7 +419,16 @@ export function renderSessionBoard(payload, { lastSeen = null, now = new Date(),
 }
 
 // ── loader (browser) ────────────────────────────────────────────────────────────────
-const state = { lastGood: null, lastFetchAt: 0, filter: 'all', seenTimer: null, lastSeen: undefined };
+const state = { lastGood: null, lastFetchAt: 0, filter: 'all', seenTimer: null, lastSeen: undefined, toastedFor: null };
+
+// Grade-change toast: once per server generatedAt, against the "since you last looked" baseline.
+function announceGradeChanges(p, notify) {
+  if (!p || !p.generatedAt || state.toastedFor === p.generatedAt) return;
+  if (state.lastSeen === undefined) state.lastSeen = readLastSeen();
+  const msg = gradeChangeMessage(deltaSince(p, state.lastSeen), p.items);
+  state.toastedFor = p.generatedAt;
+  if (msg) { try { notify(msg); } catch { /* a toast is never worth an exception */ } }
+}
 
 function isLivePhase(p) { const ph = p && p.session && p.session.phase; return ph === 'premarket' || ph === 'regular'; }
 
@@ -418,7 +451,7 @@ function scheduleLastSeen(el) {
   }, LAST_SEEN_SETTLE_MS);
 }
 
-export async function loadSessionBoard(el, { silent = false, now = Date.now(), fetcher = fetchJSON } = {}) {
+export async function loadSessionBoard(el, { silent = false, now = Date.now(), fetcher = defaultFetcher, notify = defaultNotify } = {}) {
   if (!el) return null;
   // A silent poll outside premarket / regular hours is throttled to the idle cadence even
   // though the host timer ticks every minute (lazySection has one fixed interval).
@@ -446,8 +479,16 @@ export async function loadSessionBoard(el, { silent = false, now = Date.now(), f
   try {
     const p = await fetcher(`${SESSION_BOARD_URL}&_cb=${now}`, { timeoutMs: HEAVY_TIMEOUT_MS });
     if (!p || p.ok === false) throw new Error((p && p.error) || 'session board unavailable');
-    state.lastGood = p;
     state.lastFetchAt = now;
+    if (p.stale && state.lastGood && !state.lastGood.stale) {
+      // The refresh fell back to the stored snapshot while a fresher live board is already on
+      // screen: keep that board, say the refresh failed.
+      const why = p.staleReason || 'refresh served from the offline cache';
+      paint(el, { stale: why.charAt(0).toUpperCase() + why.slice(1) });
+      return p;
+    }
+    state.lastGood = p;           // fresh, or the last-good snapshot carrying its own asOf strip
+    announceGradeChanges(p, notify);
     paint(el);
     return p;
   } catch (e) {
