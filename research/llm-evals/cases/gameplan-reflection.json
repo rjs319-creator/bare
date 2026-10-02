@@ -1,0 +1,922 @@
+{
+  "family": "gameplan-reflection",
+  "description": "Day state + measured record → game plan (lib/gameplan.js). Assertions: schema, caps on drivers/predictions/lists, numbers grounded in the rendered prompt, open predictions resolved.",
+  "fixtureNote": "FIXTURES — synthetic inputs written 2026-10-02 for regression testing. Companies, tickers, figures and headlines are fictional; nothing here is real news. Frozen: edit only via a new case id.",
+  "frozenAt": "2026-10-02",
+  "cases": [
+    {
+      "id": "gp-001",
+      "input": {
+        "state": {
+          "date": "2026-09-30",
+          "macro": {
+            "regime": "neutral",
+            "vix": 15.8,
+            "macroRisk": 42
+          },
+          "headlines": [
+            {
+              "title": "Acme Robotics beats Q3, raises FY26 guidance 8%",
+              "source": {
+                "name": "Reuters"
+              }
+            },
+            {
+              "title": "Chip stocks rally for fifth straight session",
+              "source": {
+                "name": "CNBC"
+              }
+            },
+            {
+              "title": "Regional banks slide after Castle Bancorp flags CRE losses",
+              "source": {
+                "name": "WSJ"
+              }
+            }
+          ],
+          "signals": {
+            "trendLight": "green",
+            "topSectors": [
+              "Semiconductors",
+              "Industrials"
+            ],
+            "botSectors": [
+              "Regional Banks"
+            ]
+          },
+          "reflection": "MEASURED RECORD of your prior plans (computed from realized SPY moves): last 5 predictions 3 right / 2 wrong. OPEN PREDICTIONS: (1) \"SPY holds 560 this week\" — open; (2) \"semis lead for 3 sessions\" — open.",
+          "priorNarrative": "Risk-on led by semis; banks the weak spot."
+        },
+        "expect": {
+          "mustResolveOpen": true
+        }
+      },
+      "golden": {
+        "expectPass": true,
+        "note": "grounded, resolves open predictions",
+        "output": {
+          "sentiment": {
+            "tone": "constructive",
+            "oneLiner": "Semis lead a fifth day while regional banks crack on CRE"
+          },
+          "headline": "Semis lead a fifth day while regional banks crack on CRE",
+          "drivers": [
+            {
+              "story": "Chip stocks rally for a fifth straight session",
+              "soWhat": "Leadership is narrow; ride it but tighten stops.",
+              "tickers": [
+                "Semiconductors"
+              ]
+            },
+            {
+              "story": "Castle Bancorp flags CRE losses",
+              "soWhat": "Regional banks are the pressure point — avoid until peers report.",
+              "tickers": [
+                "Regional Banks"
+              ]
+            }
+          ],
+          "gamePlan": {
+            "lean": [
+              "Semiconductors",
+              "Industrials"
+            ],
+            "avoid": [
+              "Regional Banks"
+            ],
+            "watch": [
+              "CRE commentary from other regionals"
+            ]
+          },
+          "predictions": [
+            {
+              "call": "Semis hold leadership through the week",
+              "rationale": "Fifth straight session with upgrades behind it",
+              "confidence": "medium",
+              "horizon": "this week"
+            }
+          ],
+          "novice": "Markets are mixed; keep position sizes small and do not chase moves.",
+          "pro": "Breadth is the tell; fade single-name squeezes into resistance.",
+          "narrativeUpdate": "Prior calls: \"SPY holds 560\" open and intact; \"semis lead for 3 sessions\" confirmed on day five. Banks replace rates as the main risk."
+        }
+      }
+    },
+    {
+      "id": "gp-002",
+      "input": {
+        "state": {
+          "date": "2026-09-30",
+          "macro": {
+            "regime": "neutral",
+            "vix": 15.8,
+            "macroRisk": 42
+          },
+          "headlines": [
+            {
+              "title": "Chip stocks rally for fifth straight session",
+              "source": {
+                "name": "CNBC"
+              }
+            }
+          ],
+          "signals": null,
+          "reflection": "MEASURED RECORD of your prior plans (computed from realized SPY moves): last 5 predictions 3 right / 2 wrong. OPEN PREDICTIONS: (1) \"SPY holds 560 this week\" — open; (2) \"semis lead for 3 sessions\" — open."
+        },
+        "expect": {
+          "mustResolveOpen": true
+        }
+      },
+      "golden": {
+        "expectPass": false,
+        "note": "NEGATIVE CONTROL: invents a level and ignores the open predictions",
+        "output": {
+          "sentiment": {
+            "tone": "risk-on",
+            "oneLiner": "Semis lead"
+          },
+          "headline": "Semis lead",
+          "drivers": [
+            {
+              "story": "Chips rally",
+              "soWhat": "SPX 5,900 is the next target.",
+              "tickers": []
+            }
+          ],
+          "gamePlan": {
+            "lean": [
+              "Semis"
+            ],
+            "avoid": [],
+            "watch": []
+          },
+          "predictions": [
+            {
+              "call": "SPX tags 5,900 by Friday",
+              "rationale": "momentum",
+              "confidence": "high",
+              "horizon": "this week"
+            }
+          ],
+          "novice": "Markets are mixed; keep position sizes small and do not chase moves.",
+          "pro": "Breadth is the tell; fade single-name squeezes into resistance.",
+          "narrativeUpdate": "Nothing to add."
+        }
+      }
+    },
+    {
+      "id": "gp-003",
+      "input": {
+        "state": {
+          "date": "2026-09-29",
+          "macro": {
+            "regime": "risk-off",
+            "vix": 24.3,
+            "macroRisk": 71
+          },
+          "headlines": [
+            {
+              "title": "Brightgate cuts FY26 outlook; software slides",
+              "source": {
+                "name": "Reuters"
+              }
+            },
+            {
+              "title": "Fed officials signal patience on cuts; 10-year yield rises to 4.35%",
+              "source": {
+                "name": "Bloomberg"
+              }
+            },
+            {
+              "title": "Dollar strengthens as rate-cut bets fade",
+              "source": {
+                "name": "FT"
+              }
+            }
+          ],
+          "signals": {
+            "trendLight": "red",
+            "fadeRegime": "risk-off",
+            "botSectors": [
+              "Software",
+              "Biotech"
+            ]
+          },
+          "priorNarrative": "Defensive tone building into quarter end."
+        }
+      }
+    },
+    {
+      "id": "gp-004",
+      "input": {
+        "state": {
+          "date": "2026-09-28",
+          "macro": {
+            "regime": "risk-on",
+            "vix": 13.1,
+            "macroRisk": 30
+          },
+          "headlines": [
+            {
+              "title": "FDA approves Novalux psoriasis drug",
+              "source": {
+                "name": "FiercePharma"
+              }
+            },
+            {
+              "title": "Meridian Foods to acquire Pinewood Snacks for $2.4 billion",
+              "source": {
+                "name": "Reuters"
+              }
+            },
+            {
+              "title": "Oil jumps 4% as OPEC+ delays output increase",
+              "source": {
+                "name": "CNBC"
+              }
+            }
+          ],
+          "signals": {
+            "trendLight": "green",
+            "topSectors": [
+              "Energy",
+              "Biotech"
+            ]
+          },
+          "optionsFlow": {
+            "marketGrade": "Bullish",
+            "marketScore": 28,
+            "topStocks": [
+              {
+                "ticker": "HLVN",
+                "grade": "Bullish",
+                "score": 61
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "gp-005",
+      "input": {
+        "state": {
+          "date": "2026-09-27",
+          "macro": null,
+          "headlines": [],
+          "signals": null
+        }
+      },
+      "golden": {
+        "expectPass": true,
+        "note": "no data → plan says so without inventing",
+        "output": {
+          "sentiment": {
+            "tone": "neutral",
+            "oneLiner": "No fresh headlines or macro data available today"
+          },
+          "headline": "No fresh headlines or macro data available today",
+          "drivers": [],
+          "gamePlan": {
+            "lean": [],
+            "avoid": [],
+            "watch": [
+              "Return of the data feed"
+            ]
+          },
+          "predictions": [],
+          "novice": "Markets are mixed; keep position sizes small and do not chase moves.",
+          "pro": "Breadth is the tell; fade single-name squeezes into resistance.",
+          "narrativeUpdate": "No new information; the running narrative is unchanged."
+        }
+      }
+    },
+    {
+      "id": "gp-006",
+      "input": {
+        "state": {
+          "date": "2026-09-26",
+          "macro": {
+            "regime": "neutral",
+            "vix": 17.2,
+            "macroRisk": 48
+          },
+          "headlines": [
+            {
+              "title": "Ventura pilots authorize strike",
+              "source": {
+                "name": "Reuters"
+              }
+            },
+            {
+              "title": "Airline stocks rise on lower jet fuel prices",
+              "source": {
+                "name": "CNBC"
+              }
+            },
+            {
+              "title": "Consumer confidence index falls to 98 from 101",
+              "source": {
+                "name": "AP"
+              }
+            }
+          ],
+          "signals": {
+            "topSectors": [
+              "Airlines"
+            ]
+          },
+          "reflection": "MEASURED RECORD: last 5 predictions 1 right / 4 wrong. OPEN PREDICTIONS: (1) \"VIX stays under 15\" — open."
+        },
+        "expect": {
+          "mustResolveOpen": true
+        }
+      }
+    },
+    {
+      "id": "gp-007",
+      "input": {
+        "state": {
+          "date": "2026-09-25",
+          "macro": {
+            "regime": "risk-off",
+            "vix": 28.9,
+            "macroRisk": 80
+          },
+          "headlines": [
+            {
+              "title": "Orchid Biologics halts Phase 3 trial",
+              "source": {
+                "name": "BioPharma Dive"
+              }
+            },
+            {
+              "title": "Plantex to restate FY25 results",
+              "source": {
+                "name": "WSJ"
+              }
+            },
+            {
+              "title": "Quantum Fabrics prices $150 million offering at $8.50",
+              "source": {
+                "name": "GlobeNewswire"
+              }
+            }
+          ],
+          "signals": {
+            "trendLight": "red",
+            "fadeRegime": "risk-off"
+          }
+        }
+      }
+    },
+    {
+      "id": "gp-008",
+      "input": {
+        "state": {
+          "date": "2026-09-24",
+          "macro": {
+            "regime": "risk-on",
+            "vix": 12.4,
+            "macroRisk": 25
+          },
+          "headlines": [
+            {
+              "title": "Stellar Semiconductor upgraded to Buy at Goldman, target $210",
+              "source": {
+                "name": "TheStreet"
+              }
+            },
+            {
+              "title": "Aerolith wins $780 million Air Force contract",
+              "source": {
+                "name": "Defense News"
+              }
+            },
+            {
+              "title": "Gridline raises dividend 6%, authorizes $500M buyback",
+              "source": {
+                "name": "BusinessWire"
+              }
+            }
+          ],
+          "signals": {
+            "trendLight": "green",
+            "topSectors": [
+              "Semiconductors",
+              "Defense"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "gp-009",
+      "input": {
+        "state": {
+          "date": "2026-09-23",
+          "macro": {
+            "regime": "neutral",
+            "vix": 16,
+            "macroRisk": 45
+          },
+          "headlines": [
+            {
+              "title": "Castle Retail comps rise 4.2%, beating 2.5% consensus",
+              "source": {
+                "name": "Reuters"
+              }
+            },
+            {
+              "title": "Kinetix recalls 210,000 vehicles over brake software",
+              "source": {
+                "name": "Reuters"
+              }
+            },
+            {
+              "title": "Kinetix deliveries hit record 48,500 in Q3",
+              "source": {
+                "name": "Bloomberg"
+              }
+            }
+          ],
+          "signals": {
+            "topSectors": [
+              "Retail"
+            ]
+          },
+          "priorNarrative": "Consumer holding up better than feared."
+        }
+      }
+    },
+    {
+      "id": "gp-010",
+      "input": {
+        "state": {
+          "date": "2026-09-22",
+          "macro": {
+            "regime": "neutral",
+            "vix": 15.2,
+            "macroRisk": 40
+          },
+          "headlines": [
+            {
+              "title": "Conflux Media in talks to be acquired by Harbor Group, sources say",
+              "source": {
+                "name": "Bloomberg"
+              }
+            },
+            {
+              "title": "Lumina Optics insiders buy $4.1 million of stock",
+              "source": {
+                "name": "Barron's"
+              }
+            }
+          ],
+          "signals": null,
+          "reflection": "MEASURED RECORD: last 5 predictions 4 right / 1 wrong. OPEN PREDICTIONS: (1) \"retail outperforms into month end\" — open."
+        },
+        "expect": {
+          "mustResolveOpen": true
+        }
+      }
+    },
+    {
+      "id": "gp-011",
+      "input": {
+        "state": {
+          "date": "2026-09-19",
+          "macro": {
+            "regime": "risk-on",
+            "vix": 13.8,
+            "macroRisk": 33
+          },
+          "headlines": [
+            {
+              "title": "Trident Networks launches Trident 9 router, priced from $1,299",
+              "source": {
+                "name": "The Verge"
+              }
+            },
+            {
+              "title": "Sabre X added to S&P SmallCap 600",
+              "source": {
+                "name": "S&P DJI"
+              }
+            },
+            {
+              "title": "Trucking rates fall for fourth straight week",
+              "source": {
+                "name": "FreightWaves"
+              }
+            }
+          ],
+          "signals": {
+            "trendLight": "green"
+          }
+        }
+      }
+    },
+    {
+      "id": "gp-012",
+      "input": {
+        "state": {
+          "date": "2026-09-18",
+          "macro": {
+            "regime": "risk-off",
+            "vix": 22.1,
+            "macroRisk": 66
+          },
+          "headlines": [
+            {
+              "title": "Halvern Energy CEO to step down; CFO named interim",
+              "source": {
+                "name": "WSJ"
+              }
+            },
+            {
+              "title": "Oil slips as OPEC+ signals output hike",
+              "source": {
+                "name": "CNBC"
+              }
+            }
+          ],
+          "signals": {
+            "botSectors": [
+              "Energy"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "gp-013",
+      "input": {
+        "state": {
+          "date": "2026-09-17",
+          "macro": {
+            "regime": "neutral",
+            "vix": 14.9,
+            "macroRisk": 38
+          },
+          "headlines": [
+            {
+              "title": "Fed holds rates, signals one cut this year",
+              "source": {
+                "name": "Reuters"
+              }
+            },
+            {
+              "title": "Treasury yields little changed after Fed",
+              "source": {
+                "name": "Bloomberg"
+              }
+            }
+          ],
+          "signals": null,
+          "predMarkets": "Prediction markets: 62% odds of a cut by December."
+        }
+      }
+    },
+    {
+      "id": "gp-014",
+      "input": {
+        "state": {
+          "date": "2026-09-16",
+          "macro": {
+            "regime": "risk-on",
+            "vix": 12.9,
+            "macroRisk": 28
+          },
+          "headlines": [
+            {
+              "title": "Chip stocks rally on AI capex upgrades",
+              "source": {
+                "name": "CNBC"
+              }
+            },
+            {
+              "title": "Semiconductor names extend gains as hyperscaler capex rises",
+              "source": {
+                "name": "Reuters"
+              }
+            },
+            {
+              "title": "Software lags as rotation continues",
+              "source": {
+                "name": "Barron's"
+              }
+            }
+          ],
+          "signals": {
+            "topSectors": [
+              "Semiconductors"
+            ],
+            "botSectors": [
+              "Software"
+            ]
+          },
+          "priorNarrative": "Rotation from software into hardware."
+        }
+      }
+    },
+    {
+      "id": "gp-015",
+      "input": {
+        "state": {
+          "date": "2026-09-15",
+          "macro": {
+            "regime": "neutral",
+            "vix": 16.4,
+            "macroRisk": 44
+          },
+          "headlines": [
+            {
+              "title": "Regional banks slide after Castle Bancorp flags CRE losses",
+              "source": {
+                "name": "WSJ"
+              }
+            }
+          ],
+          "signals": {
+            "botSectors": [
+              "Regional Banks"
+            ]
+          },
+          "reflection": "MEASURED RECORD: last 5 predictions 2 right / 3 wrong. OPEN PREDICTIONS: (1) \"banks bounce within two sessions\" — open; (2) \"VIX under 18\" — open."
+        },
+        "expect": {
+          "mustResolveOpen": true
+        }
+      }
+    },
+    {
+      "id": "gp-016",
+      "input": {
+        "state": {
+          "date": "2026-09-12",
+          "macro": {
+            "regime": "risk-off",
+            "vix": 26.5,
+            "macroRisk": 75
+          },
+          "headlines": [
+            {
+              "title": "Brightgate plunges 23% after slashing guidance",
+              "source": {
+                "name": "Bloomberg"
+              }
+            },
+            {
+              "title": "Software selloff deepens",
+              "source": {
+                "name": "CNBC"
+              }
+            },
+            {
+              "title": "Gold hits record as haven bid returns",
+              "source": {
+                "name": "Reuters"
+              }
+            }
+          ],
+          "signals": {
+            "trendLight": "red",
+            "fadeRegime": "risk-off",
+            "fadeTopShorts": [
+              "BRGT"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "gp-017",
+      "input": {
+        "state": {
+          "date": "2026-09-11",
+          "macro": {
+            "regime": "neutral",
+            "vix": 15.5,
+            "macroRisk": 41
+          },
+          "headlines": [
+            {
+              "title": "Novalux soars 42% premarket on FDA approval",
+              "source": {
+                "name": "MarketWatch"
+              }
+            },
+            {
+              "title": "Biotech ETF gains 2% in sympathy",
+              "source": {
+                "name": "CNBC"
+              }
+            }
+          ],
+          "signals": {
+            "topSectors": [
+              "Biotech"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "gp-018",
+      "input": {
+        "state": {
+          "date": "2026-09-10",
+          "macro": {
+            "regime": "risk-on",
+            "vix": 13.3,
+            "macroRisk": 31
+          },
+          "headlines": [
+            {
+              "title": "Meridian deal for Pinewood faces antitrust review",
+              "source": {
+                "name": "FT"
+              }
+            },
+            {
+              "title": "Packaged food names rise on deal chatter",
+              "source": {
+                "name": "Reuters"
+              }
+            }
+          ],
+          "signals": null
+        }
+      }
+    },
+    {
+      "id": "gp-019",
+      "input": {
+        "state": {
+          "date": "2026-09-09",
+          "macro": {
+            "regime": "neutral",
+            "vix": 15.9,
+            "macroRisk": 43
+          },
+          "headlines": [
+            {
+              "title": "Aerolith Systems awarded Air Force sensor contract worth up to $780M",
+              "source": {
+                "name": "Reuters"
+              }
+            },
+            {
+              "title": "Defense names bid on budget headlines",
+              "source": {
+                "name": "CNBC"
+              }
+            }
+          ],
+          "signals": {
+            "topSectors": [
+              "Defense"
+            ]
+          }
+        }
+      },
+      "golden": {
+        "expectPass": false,
+        "note": "NEGATIVE CONTROL: too many drivers and predictions",
+        "output": {
+          "sentiment": {
+            "tone": "constructive",
+            "oneLiner": "Defense bid"
+          },
+          "headline": "Defense bid",
+          "drivers": [
+            {
+              "story": "a",
+              "soWhat": "b",
+              "tickers": []
+            },
+            {
+              "story": "a",
+              "soWhat": "b",
+              "tickers": []
+            },
+            {
+              "story": "a",
+              "soWhat": "b",
+              "tickers": []
+            },
+            {
+              "story": "a",
+              "soWhat": "b",
+              "tickers": []
+            },
+            {
+              "story": "a",
+              "soWhat": "b",
+              "tickers": []
+            }
+          ],
+          "gamePlan": {
+            "lean": [
+              "Defense"
+            ],
+            "avoid": [],
+            "watch": []
+          },
+          "predictions": [
+            {
+              "call": "x",
+              "rationale": "y",
+              "confidence": "low",
+              "horizon": "1w"
+            },
+            {
+              "call": "x",
+              "rationale": "y",
+              "confidence": "low",
+              "horizon": "1w"
+            },
+            {
+              "call": "x",
+              "rationale": "y",
+              "confidence": "low",
+              "horizon": "1w"
+            },
+            {
+              "call": "x",
+              "rationale": "y",
+              "confidence": "low",
+              "horizon": "1w"
+            }
+          ],
+          "novice": "Markets are mixed; keep position sizes small and do not chase moves.",
+          "pro": "Breadth is the tell; fade single-name squeezes into resistance.",
+          "narrativeUpdate": "ok"
+        }
+      }
+    },
+    {
+      "id": "gp-020",
+      "input": {
+        "state": {
+          "date": "2026-09-08",
+          "macro": {
+            "regime": "risk-on",
+            "vix": 12.7,
+            "macroRisk": 27
+          },
+          "headlines": [
+            {
+              "title": "Gridline Utilities raises dividend 6% to $0.53",
+              "source": {
+                "name": "BusinessWire"
+              }
+            },
+            {
+              "title": "Utilities outperform as yields ease",
+              "source": {
+                "name": "CNBC"
+              }
+            }
+          ],
+          "signals": {
+            "topSectors": [
+              "Utilities"
+            ]
+          },
+          "priorNarrative": "Yield-sensitive sectors catching a bid."
+        }
+      }
+    },
+    {
+      "id": "gp-021",
+      "input": {
+        "state": {
+          "date": "2026-09-05",
+          "macro": {
+            "regime": "neutral",
+            "vix": 14.2,
+            "macroRisk": 36
+          },
+          "headlines": [
+            {
+              "title": "Jobs report: payrolls +140,000, unemployment 4.2%",
+              "source": {
+                "name": "BLS"
+              }
+            },
+            {
+              "title": "Stocks edge higher after in-line jobs data",
+              "source": {
+                "name": "Reuters"
+              }
+            }
+          ],
+          "signals": null,
+          "predMarkets": "Prediction markets: 55% odds of a cut next meeting."
+        }
+      }
+    }
+  ]
+}

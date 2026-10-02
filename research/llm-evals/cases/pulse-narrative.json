@@ -1,0 +1,729 @@
+{
+  "family": "pulse-narrative",
+  "description": "Collected Pulse items → crowding/contrarian reads (lib/pulse2-ticks.js refine, Fable 5.1). Assertions: schema, index ⊆ items, duplicateOf valid, no new numbers.",
+  "fixtureNote": "FIXTURES — synthetic inputs written 2026-10-02 for regression testing. Companies, tickers, figures and headlines are fictional; nothing here is real news. Frozen: edit only via a new case id.",
+  "frozenAt": "2026-10-02",
+  "cases": [
+    {
+      "id": "pn-001",
+      "input": {
+        "items": [
+          {
+            "headline": "Chip stocks rally for a fifth straight session on AI capex upgrades",
+            "tickers": [
+              "STLR",
+              "QNTM"
+            ],
+            "eventFamily": "sector_rotation",
+            "direction": "positive",
+            "evidence": "STLR +6%, sector ETF at 52-week high, 3 sell-side upgrades"
+          },
+          {
+            "headline": "Semiconductor names extend gains as hyperscaler capex guides rise",
+            "tickers": [
+              "STLR"
+            ],
+            "eventFamily": "sector_rotation",
+            "direction": "positive",
+            "evidence": "duplicate coverage of the same move"
+          },
+          {
+            "headline": "Regional banks slide after Castle Bancorp flags CRE losses",
+            "tickers": [
+              "CSTB"
+            ],
+            "eventFamily": "credit",
+            "direction": "negative",
+            "evidence": "CSTB -11%, KRE -3%"
+          }
+        ],
+        "expect": {
+          "duplicates": [
+            [
+              1,
+              0
+            ]
+          ]
+        }
+      },
+      "golden": {
+        "expectPass": true,
+        "note": "duplicate marked, no new numbers",
+        "output": {
+          "reads": [
+            {
+              "index": 0,
+              "crowding": "crowded",
+              "contrarian": "Five straight up days and three upgrades is late-cycle enthusiasm; the fade risk is any capex guide that merely meets.",
+              "duplicateOf": -1
+            },
+            {
+              "index": 1,
+              "crowding": "crowded",
+              "contrarian": "Same move as the chip rally above — nothing incremental.",
+              "duplicateOf": 0
+            },
+            {
+              "index": 2,
+              "crowding": "building",
+              "contrarian": "One bank flagging CRE losses is a story the group has not fully priced; watch for peers confirming.",
+              "duplicateOf": -1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "pn-002",
+      "input": {
+        "items": [
+          {
+            "headline": "Chip stocks rally for a fifth straight session on AI capex upgrades",
+            "tickers": [
+              "STLR"
+            ],
+            "eventFamily": "sector_rotation",
+            "direction": "positive",
+            "evidence": "STLR +6%"
+          },
+          {
+            "headline": "Regional banks slide after Castle Bancorp flags CRE losses",
+            "tickers": [
+              "CSTB"
+            ],
+            "eventFamily": "credit",
+            "direction": "negative",
+            "evidence": "CSTB -11%"
+          }
+        ]
+      },
+      "golden": {
+        "expectPass": false,
+        "note": "NEGATIVE CONTROL: invents a number and a self-duplicate",
+        "output": {
+          "reads": [
+            {
+              "index": 0,
+              "crowding": "crowded",
+              "contrarian": "STLR trades at 48x forward earnings, well above its 30x average.",
+              "duplicateOf": -1
+            },
+            {
+              "index": 1,
+              "crowding": "early",
+              "contrarian": "Priced in already.",
+              "duplicateOf": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "pn-003",
+      "input": {
+        "items": [
+          {
+            "headline": "Oil jumps 4% as OPEC+ delays output increase",
+            "tickers": [
+              "HLVN"
+            ],
+            "eventFamily": "commodity",
+            "direction": "positive",
+            "evidence": "WTI $84, HLVN +3%"
+          },
+          {
+            "headline": "Airlines fall on fuel spike",
+            "tickers": [
+              "VNTR"
+            ],
+            "eventFamily": "commodity",
+            "direction": "negative",
+            "evidence": "VNTR -5%"
+          },
+          {
+            "headline": "OPEC+ pushes back supply hike; crude rallies",
+            "tickers": [
+              "HLVN"
+            ],
+            "eventFamily": "commodity",
+            "direction": "positive",
+            "evidence": "same OPEC decision"
+          }
+        ],
+        "expect": {
+          "duplicates": [
+            [
+              2,
+              0
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "pn-004",
+      "input": {
+        "items": [
+          {
+            "headline": "Biotech bounce: Novalux approval lifts the group",
+            "tickers": [
+              "NVLX",
+              "ORCD"
+            ],
+            "eventFamily": "regulatory",
+            "direction": "positive",
+            "evidence": "NVLX +42%, XBI +2%"
+          },
+          {
+            "headline": "Orchid trial halt reminds investors of binary risk",
+            "tickers": [
+              "ORCD"
+            ],
+            "eventFamily": "regulatory",
+            "direction": "negative",
+            "evidence": "ORCD -58%"
+          }
+        ]
+      },
+      "golden": {
+        "expectPass": true,
+        "note": "two independent items, judgment only",
+        "output": {
+          "reads": [
+            {
+              "index": 0,
+              "crowding": "early",
+              "contrarian": "One approval lifting a whole group is sympathy buying, not fundamentals — fades unless followed by more approvals.",
+              "duplicateOf": -1
+            },
+            {
+              "index": 1,
+              "crowding": "capitulation",
+              "contrarian": "A 58% drop on a halted trial is the binary risk realized; little left to price.",
+              "duplicateOf": -1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "pn-005",
+      "input": {
+        "items": [
+          {
+            "headline": "Fed officials signal patience on cuts; yields rise",
+            "tickers": [],
+            "eventFamily": "macro",
+            "direction": "negative",
+            "evidence": "10y 4.35%"
+          },
+          {
+            "headline": "Dollar strengthens as rate-cut bets fade",
+            "tickers": [],
+            "eventFamily": "macro",
+            "direction": "negative",
+            "evidence": "DXY +0.6%"
+          },
+          {
+            "headline": "Gold retreats from record",
+            "tickers": [],
+            "eventFamily": "macro",
+            "direction": "negative",
+            "evidence": "gold -1.8%"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pn-006",
+      "input": {
+        "items": [
+          {
+            "headline": "Meridian to buy Pinewood for $2.4B",
+            "tickers": [
+              "MRDN"
+            ],
+            "eventFamily": "m_and_a",
+            "direction": "mixed",
+            "evidence": "MRDN -2%, PNWD +28%"
+          },
+          {
+            "headline": "Deal chatter lifts packaged food names",
+            "tickers": [
+              "MRDN"
+            ],
+            "eventFamily": "m_and_a",
+            "direction": "positive",
+            "evidence": "sector +1%"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pn-007",
+      "input": {
+        "items": [
+          {
+            "headline": "Brightgate guidance cut hits software",
+            "tickers": [
+              "BRGT"
+            ],
+            "eventFamily": "guidance",
+            "direction": "negative",
+            "evidence": "BRGT -23%, IGV -1.5%"
+          },
+          {
+            "headline": "Software selloff deepens as Brightgate warns",
+            "tickers": [
+              "BRGT"
+            ],
+            "eventFamily": "guidance",
+            "direction": "negative",
+            "evidence": "same warning, second-day coverage"
+          },
+          {
+            "headline": "Trident 9 launch draws strong preorders",
+            "tickers": [
+              "TRNT"
+            ],
+            "eventFamily": "product",
+            "direction": "positive",
+            "evidence": "TRNT +4%"
+          }
+        ],
+        "expect": {
+          "duplicates": [
+            [
+              1,
+              0
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "pn-008",
+      "input": {
+        "items": [
+          {
+            "headline": "Quiet tape ahead of CPI",
+            "tickers": [],
+            "eventFamily": "macro",
+            "direction": "neutral",
+            "evidence": "SPX flat, VIX 13"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pn-009",
+      "input": {
+        "items": [
+          {
+            "headline": "Insider cluster buying at Lumina Optics",
+            "tickers": [
+              "LUMN"
+            ],
+            "eventFamily": "insider",
+            "direction": "positive",
+            "evidence": "$4.1M across three directors"
+          },
+          {
+            "headline": "Lumina shares flat despite insider buys",
+            "tickers": [
+              "LUMN"
+            ],
+            "eventFamily": "insider",
+            "direction": "neutral",
+            "evidence": "LUMN +0.2%"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pn-010",
+      "input": {
+        "items": [
+          {
+            "headline": "Aerolith wins $780M Air Force contract",
+            "tickers": [
+              "AERO"
+            ],
+            "eventFamily": "contract",
+            "direction": "positive",
+            "evidence": "AERO +9%"
+          },
+          {
+            "headline": "Defense names bid on budget headlines",
+            "tickers": [
+              "AERO"
+            ],
+            "eventFamily": "sector_rotation",
+            "direction": "positive",
+            "evidence": "ITA +1%"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pn-011",
+      "input": {
+        "items": [
+          {
+            "headline": "Kinetix recall overshadows record deliveries",
+            "tickers": [
+              "KINX"
+            ],
+            "eventFamily": "operational",
+            "direction": "mixed",
+            "evidence": "KINX -3% after +5% premarket"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pn-012",
+      "input": {
+        "items": [
+          {
+            "headline": "Plantex restatement sparks accounting fears in agtech",
+            "tickers": [
+              "PLTX"
+            ],
+            "eventFamily": "accounting",
+            "direction": "negative",
+            "evidence": "PLTX -31%"
+          },
+          {
+            "headline": "Plantex auditor flags material weakness",
+            "tickers": [
+              "PLTX"
+            ],
+            "eventFamily": "accounting",
+            "direction": "negative",
+            "evidence": "same disclosure"
+          },
+          {
+            "headline": "Agtech peers dip in sympathy",
+            "tickers": [],
+            "eventFamily": "sector_rotation",
+            "direction": "negative",
+            "evidence": "group -2%"
+          }
+        ],
+        "expect": {
+          "duplicates": [
+            [
+              1,
+              0
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "pn-013",
+      "input": {
+        "items": [
+          {
+            "headline": "Gridline dividend hike cheers utilities",
+            "tickers": [
+              "GRDN"
+            ],
+            "eventFamily": "capital_return",
+            "direction": "positive",
+            "evidence": "GRDN +2%"
+          },
+          {
+            "headline": "Utilities outperform as yields ease",
+            "tickers": [],
+            "eventFamily": "macro",
+            "direction": "positive",
+            "evidence": "XLU +1.2%"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pn-014",
+      "input": {
+        "items": [
+          {
+            "headline": "Castle Retail comps beat; retail rallies",
+            "tickers": [
+              "CSTL"
+            ],
+            "eventFamily": "earnings",
+            "direction": "positive",
+            "evidence": "CSTL +8%, XRT +2%"
+          },
+          {
+            "headline": "Retail stocks jump on Castle results",
+            "tickers": [
+              "CSTL"
+            ],
+            "eventFamily": "earnings",
+            "direction": "positive",
+            "evidence": "duplicate"
+          },
+          {
+            "headline": "Consumer confidence slips",
+            "tickers": [],
+            "eventFamily": "macro",
+            "direction": "negative",
+            "evidence": "index 98 vs 101 prior"
+          }
+        ],
+        "expect": {
+          "duplicates": [
+            [
+              1,
+              0
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "pn-015",
+      "input": {
+        "items": [
+          {
+            "headline": "Ventura pilots authorize strike",
+            "tickers": [
+              "VNTR"
+            ],
+            "eventFamily": "labor",
+            "direction": "negative",
+            "evidence": "VNTR -6%"
+          },
+          {
+            "headline": "Airline peers rise as Ventura capacity may shrink",
+            "tickers": [],
+            "eventFamily": "sector_rotation",
+            "direction": "positive",
+            "evidence": "peers +1-2%"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pn-016",
+      "input": {
+        "items": [
+          {
+            "headline": "Sabre X added to S&P SmallCap 600",
+            "tickers": [
+              "SBRX"
+            ],
+            "eventFamily": "index",
+            "direction": "positive",
+            "evidence": "SBRX +7%"
+          }
+        ]
+      },
+      "golden": {
+        "expectPass": true,
+        "note": "single item, index-inclusion fade read",
+        "output": {
+          "reads": [
+            {
+              "index": 0,
+              "crowding": "crowded",
+              "contrarian": "Index inclusion pops are mechanical and usually give back once the rebalance trade clears.",
+              "duplicateOf": -1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "pn-017",
+      "input": {
+        "items": [
+          {
+            "headline": "Conflux denies sale talks",
+            "tickers": [
+              "CNFL"
+            ],
+            "eventFamily": "m_and_a",
+            "direction": "mixed",
+            "evidence": "CNFL gives back half of yesterday's 12% pop"
+          },
+          {
+            "headline": "Harbor Group said to eye Conflux",
+            "tickers": [
+              "CNFL"
+            ],
+            "eventFamily": "m_and_a",
+            "direction": "positive",
+            "evidence": "yesterday's report"
+          }
+        ],
+        "expect": {
+          "duplicates": [
+            [
+              1,
+              0
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "pn-018",
+      "input": {
+        "items": [
+          {
+            "headline": "Quantum Fabrics dilutive offering weighs",
+            "tickers": [
+              "QNTM"
+            ],
+            "eventFamily": "financing",
+            "direction": "negative",
+            "evidence": "QNTM -14%"
+          },
+          {
+            "headline": "Halvern CEO exit raises succession questions",
+            "tickers": [
+              "HLVN"
+            ],
+            "eventFamily": "management",
+            "direction": "negative",
+            "evidence": "HLVN -2%"
+          },
+          {
+            "headline": "Stellar upgraded at Goldman",
+            "tickers": [
+              "STLR"
+            ],
+            "eventFamily": "analyst",
+            "direction": "positive",
+            "evidence": "STLR +3%"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pn-019",
+      "input": {
+        "items": [
+          {
+            "headline": "Freight rates fall fourth week",
+            "tickers": [
+              "SBRX"
+            ],
+            "eventFamily": "macro",
+            "direction": "negative",
+            "evidence": "Cass index -3%"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pn-020",
+      "input": {
+        "items": [
+          {
+            "headline": "Acme beat-and-raise sparks robotics rally",
+            "tickers": [
+              "ACME"
+            ],
+            "eventFamily": "earnings",
+            "direction": "positive",
+            "evidence": "ACME +9%, peers +3%"
+          },
+          {
+            "headline": "Robotics names follow Acme higher",
+            "tickers": [],
+            "eventFamily": "sector_rotation",
+            "direction": "positive",
+            "evidence": "sympathy"
+          },
+          {
+            "headline": "Acme Q3 results top estimates",
+            "tickers": [
+              "ACME"
+            ],
+            "eventFamily": "earnings",
+            "direction": "positive",
+            "evidence": "same print"
+          }
+        ],
+        "expect": {
+          "duplicates": [
+            [
+              2,
+              0
+            ]
+          ]
+        }
+      },
+      "golden": {
+        "expectPass": false,
+        "note": "NEGATIVE CONTROL: index out of range",
+        "output": {
+          "reads": [
+            {
+              "index": 0,
+              "crowding": "building",
+              "contrarian": "Fine.",
+              "duplicateOf": -1
+            },
+            {
+              "index": 5,
+              "crowding": "early",
+              "contrarian": "Fine.",
+              "duplicateOf": -1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "pn-021",
+      "input": {
+        "items": [
+          {
+            "headline": "Novalux approval",
+            "tickers": [
+              "NVLX"
+            ],
+            "eventFamily": "regulatory",
+            "direction": "positive",
+            "evidence": "NVLX +42%"
+          },
+          {
+            "headline": "Orchid halt",
+            "tickers": [
+              "ORCD"
+            ],
+            "eventFamily": "regulatory",
+            "direction": "negative",
+            "evidence": "ORCD -58%"
+          }
+        ]
+      },
+      "golden": {
+        "expectPass": false,
+        "note": "NEGATIVE CONTROL: crowding off-enum",
+        "output": {
+          "reads": [
+            {
+              "index": 0,
+              "crowding": "euphoric",
+              "contrarian": "Fine.",
+              "duplicateOf": -1
+            },
+            {
+              "index": 1,
+              "crowding": "capitulation",
+              "contrarian": "Fine.",
+              "duplicateOf": -1
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
