@@ -12,6 +12,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadQuickHit } from './quickhit.js';
   import { loadCommandCenter } from './today.js';
   import { loadSessionBoard } from './session-board.js';
+  import { renderHouseBook } from './house-book.js';
+  import { initMyBook } from './my-book.js';
   import { loadEvolve } from './evolve.js';
   import { loadEnsemble } from './omega-ensemble.js';
   import { loadIgnition } from './ignition.js';
@@ -4549,13 +4551,15 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     movermiss: lazySection('movermiss', loadMoverAudit),
     intradayval: lazySection('intradayval', loadIntradayValidation),
     session: lazySection('session', loadSessionBoard, SESSION_BOARD_REFRESH_MS),
+    // My book (#30): the per-browser ledger of "taking this" rows, bound once beside the board.
+    mybook: () => initMyBook({ boardEl: document.getElementById('session-container'), panelEl: document.getElementById('mybook-container') }),
   };
   function ensureLowFloat() { _lowFloatLoaders.lowfloat(); }
   function ensureIgnitionLive() { _lowFloatLoaders.ignitionlive(); }
   function ensureBreakoutRadar() { _lowFloatLoaders.breakoutradar(); }
   function ensureMoverMiss() { _lowFloatLoaders.movermiss(); }
   function ensureIntradayVal() { _lowFloatLoaders.intradayval(); }
-  function ensureSessionBoard() { _lowFloatLoaders.session(); }
+  function ensureSessionBoard() { _lowFloatLoaders.session(); _lowFloatLoaders.mybook(); }
 
   // 💠 OMEGA-SWING — 5–10 day momentum continuation (loadOmega renders op=omega).
   let omegaLoaded = false;
@@ -9248,12 +9252,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       `<div class="sb-secgroup"><div class="sb-secgroup-h"${SB_SECTION_HELP[sec] ? ` title="${esc(SB_SECTION_HELP[sec])}"` : ''}>${SB_SECTIONS[sec] || esc(sec)}${secBadge(sec)}${SB_SECTION_HELP[sec] ? ' <span class="sb-help-i" title="' + esc(SB_SECTION_HELP[sec]) + '">ⓘ</span>' : ''}</div><div class="sb-grid">${bySec[sec].map(sbCard).join('')}</div></div>`
     ).join('');
 
-    scoreboardContainer.innerHTML = intro + allocationPanelHTML(data.allocation) + scoreDecilePanel(data.scoreQuality) + `<div id="sb-rankquality"></div><div id="sb-leadtime"></div><div id="sb-failure"></div><div id="sb-complab"></div>` + regimeBar + html;
+    scoreboardContainer.innerHTML = intro + allocationPanelHTML(data.allocation) + scoreDecilePanel(data.scoreQuality) + `<div id="sb-housebook"></div><div id="sb-rankquality"></div><div id="sb-leadtime"></div><div id="sb-failure"></div><div id="sb-complab"></div>` + regimeBar + html;
     const regimeSel = document.getElementById('sb-regime-sel');
     if (regimeSel) regimeSel.addEventListener('change', e => setSbRegime(e.target.value));
     scoreboardContainer.querySelectorAll('[data-sig-toggle]').forEach(btn => {
       btn.addEventListener('click', () => { const [s, t] = btn.dataset.sigToggle.split(':'); toggleSignal(s, t); });
     });
+    loadHouseBook();    // #30 — the paper house book + its reconciliation vs this board (lazy)
     loadRankQuality();  // #5 — does a higher score actually win? (lazy, own endpoint)
     loadLeadTime();     // §7 — does each algorithm find moves EARLY enough to be useful? (lazy)
     loadFailureModel(); // §5 — does the shadow failure model actually predict failure? (lazy)
@@ -9387,6 +9392,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     try { const d = await fetchJSON(url); st.data = d; set(render(d)); }
     catch { set(_panelErr); } finally { st.loading = false; }
   }
+  // 📒 HOUSE BOOK (#30) — the simulated paper portfolio of every Session Board A/B row and its
+  // reconciliation against this Scoreboard (lib/paper-portfolio, rendered by house-book.js).
+  const hbSpinner = `<div class="sb-secgroup"><div class="sb-secgroup-h">📒 House book</div><div class="mom-status"><div class="mom-spinner"></div><p>Reading the paper book…</p></div></div>`;
+  const loadHouseBook = () => loadLazyPanel('sb-housebook', '/api/tracker?op=housebook', renderHouseBook, hbSpinner);
   const rqSpinner = `<div class="sb-secgroup"><div class="sb-secgroup-h">🎯 Ranking quality — do higher scores win?</div><div class="mom-status"><div class="mom-spinner"></div><p>Checking whether higher scores actually produce better outcomes…</p></div></div>`;
   const loadRankQuality = () => loadLazyPanel('sb-rankquality', '/api/tracker?op=rankquality', rankQualityPanel, rqSpinner);
 

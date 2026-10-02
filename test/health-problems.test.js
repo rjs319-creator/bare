@@ -168,3 +168,18 @@ test('the banner renders the server list and no longer re-derives it', () => {
     assert.deepStrictEqual(r.problemsBySeverity.data, []);
   });
 }
+
+test('house-book reconciliation: a divergent book is a named problem; ok / absent books add nothing', () => {
+  const { houseBookProblems, HOUSEBOOK_PROBLEM } = require('../lib/health');
+  assert.deepStrictEqual(houseBookProblems(null), []);
+  assert.deepStrictEqual(houseBookProblems({ reconcile: { status: 'ok' } }), []);
+  assert.deepStrictEqual(houseBookProblems({ reconcile: { status: 'no-data' } }), []);
+  assert.deepStrictEqual(houseBookProblems({ reconcile: { status: 'divergent', problems: ['x'] } }), [HOUSEBOOK_PROBLEM]);
+  const runs = [{ at: '2026-08-18T22:05:45.910Z', ok: true, failed: [], warmFails: [], budgetSkipped: [], chainDispatchFails: [], chainSkips: [] }];
+  const res = buildHealthResponse(runs, { ...FRESH_DATA, auth: { ok: true, production: true, secretConfigured: true, warnings: [] },
+    houseBook: { reconcile: { status: 'divergent', asOfDate: '2026-09-18', divergencePct: 2.1, tolerancePct: 0.6, problems: ['equity-curve divergence 2.100% vs Scoreboard method exceeds the 0.6% cost-tier tolerance'] } } });
+  assert.ok(res.problems.includes(HOUSEBOOK_PROBLEM), 'surfaces in problems for the banner');
+  assert.equal(res.houseBook.status, 'divergent');
+  assert.equal(res.houseBook.divergencePct, 2.1);
+  assert.equal(res.healthy, true, 'a reconciliation warning does not flip the cron health verdict');
+});
