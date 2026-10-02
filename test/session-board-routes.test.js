@@ -171,3 +171,43 @@ test('api/tracker wires op=sessionboard publicly and rate-limits it', () => {
   const privileged = src.slice(src.indexOf('const PRIVILEGED_OPS'), src.indexOf(']);', src.indexOf('const PRIVILEGED_OPS')));
   assert.doesNotMatch(privileged, /'sessionboard'/);
 });
+
+// ── 2026-10-02 site audit: the persisted market-state doc is a WRAPPER ───────────────────
+// pulse2 writes { schema:'pulse2-market-state-doc-v1', at, state:{ mode, indexes, … } }. The
+// route handed the wrapper to the assembler, which reads the inner state, so production served
+// market.mode / spyChangePct / asOf = null on every board while the source reported ok.
+const WRAPPED_MARKET = {
+  schema: 'pulse2-market-state-doc-v1', at: '2026-10-01T20:05:00Z',
+  state: { schema: 'pulse2-market-state-v1', mode: { mode: 'ROTATION' }, indexes: { SPY: { dayReturnPct: -0.41 } }, sectors: { available: true, rows: [] }, marketDataAsOf: '2026-10-01T20:00:00.000Z' },
+  coverage: { intradayCount: 12 },
+};
+
+test('unwrapMarketState: unwraps the pulse2 doc wrapper, passes a bare state through, null-safe', () => {
+  assert.equal(R.unwrapMarketState(WRAPPED_MARKET), WRAPPED_MARKET.state);
+  assert.equal(R.unwrapMarketState(MARKET), MARKET);
+  assert.equal(R.unwrapMarketState(null), null);
+  assert.equal(R.unwrapMarketState('nope'), null);
+});
+
+test('marketForBoard: live state + sector leaders from op=today; falls back to today sectors; never mutates inputs', () => {
+  const m = R.marketForBoard(WRAPPED_MARKET, TODAY);
+  assert.equal(m.mode.mode, 'ROTATION');
+  assert.equal(m.indexes.SPY.dayReturnPct, -0.41);
+  assert.equal(m.marketDataAsOf, '2026-10-01T20:00:00.000Z');
+  assert.deepEqual(m.leading, TODAY.sectors.leading);
+  assert.equal(WRAPPED_MARKET.state.leading, undefined, 'input state not mutated');
+  assert.deepEqual(R.marketForBoard(null, TODAY), { leading: TODAY.sectors.leading, weakening: TODAY.sectors.weakening });
+  assert.equal(R.marketForBoard(null, null), null);
+});
+
+test('runSessionBoard: the WRAPPED pulse2 market-state doc yields a populated market block (the prod null-market regression)', async () => {
+  const { d } = deps({ readMarketState: async () => WRAPPED_MARKET });
+  const res = mockRes();
+  await R.runSessionBoard({ query: {} }, res, d);
+  const mk = res._json.market;
+  assert.equal(mk.mode, 'ROTATION');
+  assert.equal(mk.spyChangePct, -0.41);
+  assert.equal(mk.asOf, '2026-10-01T20:00:00.000Z');
+  assert.deepEqual(mk.leading, TODAY.sectors.leading);
+  assert.equal(res._json.sources.find((s) => s.source === 'market').ok, true);
+});
