@@ -1,0 +1,55 @@
+{
+ "feed": {
+  "title": "Top Free Apps",
+  "id": "https://rss.marketingtools.apple.com/api/v2/us/apps/top-free/25/apps.json",
+  "country": "us",
+  "updated": "Fri, 2 Oct 2026 04:49:07 +0000",
+  "results": [
+   {
+    "artistName": "Meta Platforms, Inc.",
+    "id": "6760173601",
+    "name": "Muse from Meta",
+    "releaseDate": "2026-09-08",
+    "kind": "apps",
+    "genres": [],
+    "url": "https://apps.apple.com/us/app/muse-from-meta/id6760173601"
+   },
+   {
+    "artistName": "OpenAI OpCo, LLC",
+    "id": "6448311069",
+    "name": "ChatGPT",
+    "releaseDate": "2023-05-18",
+    "kind": "apps",
+    "genres": [],
+    "url": "https://apps.apple.com/us/app/chatgpt/id6448311069"
+   },
+   {
+    "artistName": "Vinted Limited",
+    "id": "632064380",
+    "name": "Vinted: Pre-loved marketplace",
+    "releaseDate": "2013-04-11",
+    "kind": "apps",
+    "genres": [],
+    "url": "https://apps.apple.com/us/app/vinted-pre-loved-marketplace/id632064380"
+   },
+   {
+    "artistName": "AMZN Mobile LLC",
+    "id": "545519333",
+    "name": "Amazon Prime Video",
+    "releaseDate": "2012-07-31",
+    "kind": "apps",
+    "genres": [],
+    "url": "https://apps.apple.com/us/app/amazon-prime-video/id545519333"
+   },
+   {
+    "artistName": "Suzhou Xiying Guangnian Technology Co., Ltd",
+    "id": "1630403500",
+    "name": "APTV",
+    "releaseDate": "2022-07-07",
+    "kind": "apps",
+    "genres": [],
+    "url": "https://apps.apple.com/us/app/aptv/id1630403500"
+   }
+  ]
+ }
+}

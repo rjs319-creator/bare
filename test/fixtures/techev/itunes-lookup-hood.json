@@ -1,0 +1,23 @@
+{
+ "resultCount": 1,
+ "results": [
+  {
+   "trackId": 938003185,
+   "trackName": "Robinhood: Trading & Investing",
+   "bundleId": "com.robinhood.release.Robinhood",
+   "sellerName": "Robinhood Markets Inc",
+   "artistName": "Robinhood Markets, Inc.",
+   "userRatingCount": 4862757,
+   "averageUserRating": 4.2946,
+   "userRatingCountForCurrentVersion": 4862757,
+   "averageUserRatingForCurrentVersion": 4.2946,
+   "version": "2026.39.1",
+   "currentVersionReleaseDate": "2026-10-01T15:51:32Z",
+   "releaseDate": "2014-12-11T11:33:44Z",
+   "primaryGenreName": "Finance",
+   "trackViewUrl": "https://apps.apple.com/us/app/robinhood-trading-investing/id938003185?uo=4",
+   "price": 0,
+   "kind": "software"
+  }
+ ]
+}

@@ -1,0 +1,25 @@
+{
+ "total": 58,
+ "jobPostings": [
+  {
+   "title": "Senior Machine Learning Engineer, Recommendations Retrieval",
+   "externalPath": "/job/Brooklyn-New-York/Senior-Machine-Learning-Engineer--Recommendations-Retrieval_JR5959-1",
+   "locationsText": "Brooklyn, New York",
+   "postedOn": "Posted Today",
+   "remoteType": "Partially Remote",
+   "bulletFields": [
+    "JR5959"
+   ]
+  },
+  {
+   "title": "Senior Machine Learning Engineer I, Recommendations Ranking",
+   "externalPath": "/job/Brooklyn-New-York/Senior-Applied-Scientist-I_JR5631-1",
+   "locationsText": "Brooklyn, New York",
+   "postedOn": "Posted Today",
+   "remoteType": "Partially Remote",
+   "bulletFields": [
+    "JR5631"
+   ]
+  }
+ ]
+}

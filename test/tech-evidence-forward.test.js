@@ -50,8 +50,9 @@ test('a cutoff on a Saturday resolves to the prior Friday decision bar', () => {
 test('immature events return not-mature; bad prices are rejected', () => {
   const candles = candlesFrom('2026-06-01', 12);
   assert.equal(F.horizonReturns(candles, candles[5].date).status, 'not-mature');
-  // corrupt the 5-session exit bar (decIdx 10 → exit idx 15) so the guard must fire
-  const bad = candlesFrom('2026-06-01', 30).map((c, i) => (i === 15 ? { ...c, close: 0 } : c));
+  // corrupt the 5-session exit bar (decIdx 10 → exit idx 15) so the guard must fire;
+  // 60 bars keeps the 21-session horizon mature so the test reaches the price guard
+  const bad = candlesFrom('2026-06-01', 60).map((c, i) => (i === 15 ? { ...c, close: 0 } : c));
   assert.equal(F.horizonReturns(bad, bad[10].date).status, 'bad-prices');
 });
 
@@ -63,7 +64,8 @@ test('resolveEvent: net residual = gross − benchmark − round-trip cost (frac
   assert.equal(r.status, 'resolved');
   const expectedCost = roundTripCostPct(r.tier) / 100;
   assert.equal(r.costFraction, expectedCost, 'lib/costs speaks PERCENT — the ledger must divide by 100 exactly once');
-  for (const H of [1, 5, 10]) {
+  assert.deepEqual(F.HORIZONS, [1, 5, 10, 21], 'the 21-session horizon serves the app-store pre-earnings hypothesis');
+  for (const H of F.HORIZONS) {
     const residual = r.gross[H] - r.benchmark[H];
     assert.ok(Math.abs(r.netResidual[H] - (residual - expectedCost)) < 1e-12);
     assert.ok(Math.abs(r.gross[H] - (Math.pow(1.01, H) - 1)) < 1e-9, `gross ${H}-session return must be exit close / entry open − 1`);
