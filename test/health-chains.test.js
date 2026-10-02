@@ -18,7 +18,7 @@ const summary = (over = {}) => ({ date: '2026-10-02', source: 'github-matrix', r
 
 test('health: a posted GitHub summary with failures → chains block, problems, healthy:false', () => {
   const r = buildHealthResponse([cleanRun], { ...FRESH, chainSummary: summary({ partial: false }) });
-  assert.deepEqual(r.chains, { date: '2026-10-02', ok: false, full: true, partial: false, covered: WC.ROOT_CHAINS, failed: ['capture', 'challenger'], skipped: [], source: 'github-matrix',
+  assert.deepEqual(r.chains, { date: '2026-10-02', ok: false, full: true, partial: false, covered: WC.ROOT_CHAINS, failed: ['capture', 'challenger'], skipped: [], crashedWithPeers: [], source: 'github-matrix',
     runUrl: 'https://github.com/o/r/actions/runs/7', at: '2026-10-02T22:41:00Z', missing: false, noMatrixRun: null });
   assert.equal(r.healthy, false);
   assert.ok(r.problems.includes('chain:capture') && r.problems.includes('chain:challenger'));
@@ -122,6 +122,8 @@ test('app.js banner: reads d.chains — shows the night + run link for the GitHu
   assert.match(health, /if \(ch && ch\.missing\)/);
   assert.match(health, /No nightly chain summary has been posted/);
   assert.match(health, /if \(ch && ch\.noMatrixRun\)/, 'the night-not-run dead-man has its own line');
+  assert.match(health, /ch\.crashedWithPeers/, 'co-located crashes are labelled as one event');
+  assert.match(health, /esc\(ch\.crashedWithPeers\.join/, 'chain names are escaped before rendering');
   assert.match(health, /background refresh has not run yet/i, 'said plainly');
 });
 

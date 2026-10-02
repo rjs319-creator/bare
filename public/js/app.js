@@ -689,9 +689,15 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // click from the job log instead of a hunt through Vercel logs. The failed names are
     // already in `problems` (rendered below); this adds the provenance, not a second list.
     const ch = d.chains || null;
-    const chainsFrom = ch && ch.source === 'github-matrix'
-      ? ` Nightly chains ${esc(ch.date || '')} ran on GitHub${ch.runUrl ? ` — <a href="${esc(ch.runUrl)}" target="_blank" rel="noopener" style="color:inherit">open run</a>` : ''}.`
+    // Failures that landed within seconds of each other are ONE event — a shared compute
+    // instance died and took every co-located request with it — so say that instead of
+    // presenting them as N independent defects (2026-10-02: five at once).
+    const coLocated = ch && Array.isArray(ch.crashedWithPeers) && ch.crashedWithPeers.length > 1
+      ? ` ${ch.crashedWithPeers.length} of these (${esc(ch.crashedWithPeers.join(', '))}) failed together within seconds — a co-located crash, not separate defects; the next run retries them.`
       : '';
+    const chainsFrom = ch && ch.source === 'github-matrix'
+      ? ` Nightly chains ${esc(ch.date || '')} ran on GitHub${ch.runUrl ? ` — <a href="${esc(ch.runUrl)}" target="_blank" rel="noopener" style="color:inherit">open run</a>` : ''}.${coLocated}`
+      : coLocated;
     if (ch && ch.noMatrixRun) {
       // The dead-man for ONE night: warm handed the chains to GitHub and no FULL run has
       // reported since. A partial (only=) run cannot clear this — on 2026-10-02 one did,

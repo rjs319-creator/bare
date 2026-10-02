@@ -16,13 +16,21 @@ name: Nightly chains (warm roots as a matrix)
 # Here each root is ONE matrix job calling the SAME single-chain endpoint
 # (op=warmchain&name=<root>, which runs the chain's ordered steps inside its own tracker
 # invocation — ordering still lives in the callee, nothing changes server-side):
-#   • max-parallel: 4 — at most four chain invocations (plus their step children) in flight,
-#     which is the in-process WAVE width, now held for the whole night instead of only at the
-#     start. Total wall time grows (~15-30 min) but the peak that OOM-killed co-tenants is gone.
+#   • max-parallel: 2 — at most two chain invocations (plus their step children) in flight.
+#     It was 4 (the in-process WAVE width) until 2026-10-02, when the full manual run lost
+#     capture, universe, pulse, pattern and pitdata to FUNCTION_INVOCATION_FAILED 500s whose
+#     timestamps clustered at the same instants (22:56:28-33 ×3, 23:00:23-24 ×2): one Fluid
+#     instance hosting several heavy invocations died (OOM) and took every co-located request
+#     with it — the 2026-10-01 insidercluster signature. Halving the width halves what can
+#     share an instance. Trade-off: wall time ~doubles to ~25-45 min for 44 chains × ~1-2 min
+#     (worst case a few 12-min jobs), which is still well inside the night even for the 01:00
+#     UTC retry schedule.
 #   • fail-fast: false — one red chain never cancels the rest.
-#   • timeout-minutes: 6 — a chain's deadline is 240 s inside a 300 s function wall
+#   • timeout-minutes: 12 — a chain's deadline is 240 s inside a 300 s function wall
 #     (CHAIN_DEADLINE_MS / vercel.json); the runner's single-request cap is 290 s and it
-#     retries only a FAST failure (<30 s), so the worst path (30 + 15 + 290 s) fits.
+#     retries once — after a FAST failure (<30 s, 15 s backoff) or after a PLATFORM CRASH
+#     (FUNCTION_INVOCATION_FAILED / 502 / 503, 75 s backoff, at any elapsed time), so the
+#     worst path (290 + 75 + 290 s ≈ 11 min) fits.
 #   • a failed job = a red run = GitHub e-mails the workflow owner. That is the dead-man
 #     alarm, with no new vendor. The `summary` job POSTs the per-chain outcome to
 #     op=chainsummary (chains/<date>.json) so op=health / the UI banner can show WHICH chains
@@ -123,7 +131,7 @@ jobs:
     needs: preflight
     if: ${{ !cancelled() && needs.preflight.outputs.skip != 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 12
     strategy:
       fail-fast: false
       matrix:
@@ -153,10 +161,10 @@ jobs:
     needs: [preflight, spine]
     if: ${{ !cancelled() && needs.preflight.outputs.skip != 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 12
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 2
       matrix:
         # BEGIN GENERATED matrix:chains (scripts/gen-nightly-matrix.js — do not edit by hand)
         chain: [capture, ticks1, ticks2, ticks3, aligned, universe, pulse, router, maturity, researchgrade, evolve, swing, atlasx, rlt, altprobes, govdemand, gridlock, swingsearch, pattern, patternresearch, cfl, psrl, peerprop, expgap, pitdata, alphacal, gexa, vrp, ephemeral, optionsv2, pulse2, omegaab, swingverify, dilution, techev, stbull, bearcase, forecastshadow, insidercluster, delisting, optionsgex, housebook, challenger]

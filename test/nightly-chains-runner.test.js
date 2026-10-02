@@ -11,7 +11,7 @@ const SUM = require('../scripts/nightly-chains-summary');
 
 const resp = (status, body, text = null) => ({ status, ok: status >= 200 && status < 300, text: async () => (text != null ? text : JSON.stringify(body)) });
 const clock = (step = 1000) => { let t = Date.parse('2026-10-02T22:05:00Z'); return () => { t += step; return t; }; };
-const opts = (fetchImpl, over = {}) => ({ appUrl: 'https://app.test', secret: 's3cret', fetchImpl, now: clock(), retryDelayMs: 0, ...over });
+const opts = (fetchImpl, over = {}) => ({ appUrl: 'https://app.test', secret: 's3cret', fetchImpl, now: clock(), retryDelayMs: 0, crashRetryDelayMs: 0, ...over });
 
 test('runChain: HTTP 200 with a clean body → ok, one attempt, bearer + x-warm headers, right URL', async () => {
   const calls = [];
@@ -57,6 +57,65 @@ test('runChain: budget skips alone stay ok (complete:false) with a warning annot
   assert.match(RUN.annotations(r)[0], /budget-skipped::op=fadetick/);
   const r2 = await RUN.runChain('capture', opts(async () => resp(200, null, 'not json')));
   assert.equal(r2.ok, true); assert.equal(r2.complete, null);
+});
+
+// ── platform crashes (co-located Fluid instance OOM) ─────────────────────────────────
+const CRASH_TEXT = 'A server error has occurred\n\nFUNCTION_INVOCATION_FAILED\n\niad1::abc-123';
+
+test('runChain: a SLOW FUNCTION_INVOCATION_FAILED 500 on the chain IS retried once after the crash backoff (the one slow-failure exception)', async () => {
+  let n = 0;
+  const fetchImpl = async () => (++n === 1 ? resp(500, null, CRASH_TEXT) : resp(200, { ok: true, failed: [], skipped: [], elapsedMs: 100 }));
+  const r = await RUN.runChain('capture', opts(fetchImpl, { now: clock(RUN.FAST_FAIL_MS), crashRetryDelayMs: 0 }));
+  assert.equal(n, 2); assert.equal(r.attempts, 2); assert.equal(r.ok, true); assert.equal(r.crashRetry, true);
+  assert.equal(r.attemptFailures.length, 1, 'the crashed attempt\'s instant is recorded'); assert.equal(r.failedAt, null);
+});
+
+test('runChain: a slow 503 / 502 is retried as a crash; a slow 504 or a slow transport error is not (the chain ran)', async () => {
+  for (const code of [502, 503]) {
+    let n = 0;
+    const r = await RUN.runChain('capture', opts(async () => { n++; return resp(code, { ok: false, error: 'edge' }); }, { now: clock(RUN.FAST_FAIL_MS), crashRetryDelayMs: 0 }));
+    assert.equal(n, 2, `slow ${code} retried once`); assert.equal(r.crashRetry, true); assert.equal(r.status, `http:${code}`);
+    assert.equal(r.attemptFailures.length, 2); assert.equal(r.failedAt, r.attemptFailures[1]);
+  }
+  let n = 0;
+  const r504 = await RUN.runChain('capture', opts(async () => { n++; return resp(504, null, 'gateway timeout'); }, { now: clock(RUN.FAST_FAIL_MS), crashRetryDelayMs: 0 }));
+  assert.equal(n, 1); assert.equal(r504.crashRetry, false);
+  // A plain 500 WITHOUT the marker is the chain handler's own catch — a code defect, not a kill.
+  n = 0;
+  const r500 = await RUN.runChain('capture', opts(async () => { n++; return resp(500, { ok: false, error: 'TypeError: x is not a function' }); }, { now: clock(RUN.FAST_FAIL_MS), crashRetryDelayMs: 0 }));
+  assert.equal(n, 1); assert.equal(r500.crashRetry, false);
+});
+
+test('runChain: a 200 whose STEP died with FUNCTION_INVOCATION_FAILED is a crash too — retried once, step failure instants stamped from the body', async () => {
+  let n = 0;
+  const crashedBody = { ok: false, complete: true, elapsedMs: 6000, failed: ['op=alertsassess'],
+    steps: [{ op: 'op=track', status: 'ok', ms: 1000 }, { op: 'op=alertsassess', status: 'http:500', ms: 4000, error: CRASH_TEXT }, { op: 'op=fadetick', status: 'ok', ms: 1000 }],
+    failDetail: [{ op: 'op=alertsassess', status: 'http:500', ms: 4000, error: CRASH_TEXT }], skipped: [] };
+  const fetchImpl = async () => (++n === 1 ? resp(200, crashedBody) : resp(200, { ok: true, failed: [], skipped: [], elapsedMs: 100 }));
+  const r = await RUN.runChain('capture', opts(fetchImpl, { now: clock(RUN.FAST_FAIL_MS), crashRetryDelayMs: 0 }));
+  assert.equal(n, 2); assert.equal(r.ok, true); assert.equal(r.crashRetry, true);
+  assert.equal(r.attemptFailures.length, 1);
+  // The step ended 1 s before the chain finished (fadetick ran 1 s after it): instant = response time − 1000 ms.
+  const stamped = RUN.stampFailDetail(crashedBody, crashedBody.failDetail, Date.parse('2026-10-02T22:56:33Z'));
+  assert.equal(stamped[0].at, '2026-10-02T22:56:32.000Z');
+  // A nested child failure is stamped with its parent @step's end; no elapsedMs → at:null.
+  const nested = { elapsedMs: 3000, steps: [{ op: '@decision', status: 'ok', ms: 2000 }, { op: 'op=x', status: 'ok', ms: 1000 }] };
+  assert.equal(RUN.stampFailDetail(nested, [{ op: 'decision/op=redundancy', status: 'http:503' }], Date.parse('2026-10-02T22:56:33Z'))[0].at, '2026-10-02T22:56:32.000Z');
+  assert.equal(RUN.stampFailDetail({}, [{ op: 'op=x' }], 1)[0].at, null);
+});
+
+test('runChain: a 200 with an ordinary failed step (not a kill) is still never retried — including a deliberate app-level 503', async () => {
+  // challengerlog answers 503 on an empty board and privileged ops 503 without a secret:
+  // app decisions, not instance deaths. Only the Vercel marker / a 502 are kills at step level.
+  for (const [status, error] of [['http:503', 'challenger: empty board'], ['http:400', 'bad input'], ['http:500', 'TypeError: x is not a function']]) {
+    let n = 0;
+    const r = await RUN.runChain('ledger', opts(async () => { n++; return resp(200, { ok: false, complete: true, elapsedMs: 10, failed: ['op=track'], steps: [{ op: 'op=track', status, ms: 10 }], failDetail: [{ op: 'op=track', status, error }] }); }, { now: clock(RUN.FAST_FAIL_MS) }));
+    assert.equal(n, 1, `${status} is not a platform kill`); assert.equal(r.crashRetry, false);
+    assert.equal(r.attemptFailures.length, 1, 'the step failure instant is still recorded for peer clustering');
+  }
+  let m = 0;
+  await RUN.runChain('ledger', opts(async () => { m++; return resp(200, { ok: false, complete: true, elapsedMs: 10, failed: ['op=track'], steps: [{ op: 'op=track', status: 'http:502', ms: 10 }], failDetail: [{ op: 'op=track', status: 'http:502', error: 'Bad Gateway' }] }); }, { now: clock(RUN.FAST_FAIL_MS) }));
+  assert.equal(m, 2, 'a step-level 502 is the platform and gets the one crash retry');
 });
 
 test('runChain: an unknown chain name throws before any request', async () => {
@@ -120,6 +179,28 @@ test('buildSummaryPayload: a run that starts after 00:00 UTC is dated by its ET 
   const late = res('ledger', { startedAt: '2026-10-03T01:02:00Z', finishedAt: '2026-10-03T01:05:00Z' });
   const p = SUM.buildSummaryPayload([late], { expected: ['ledger'], now: Date.parse('2026-10-03T01:06:00Z') });
   assert.equal(p.date, '2026-10-02');
+});
+
+test('markPeerCrashes: failures of different chains within 5 s are one co-located crash; lone failures and ok chains are untouched', () => {
+  const T = (s) => `2026-10-02T22:56:${s}Z`;
+  const fails = (chain, ...ats) => res(chain, { ok: false, status: 'failed', failed: ['op=x'], attemptFailures: ats, failedAt: ats[ats.length - 1] });
+  const marked = SUM.markPeerCrashes([fails('capture', T('28')), fails('universe', T('31')), fails('pulse', T('34')), fails('pattern', T('59')), res('ledger')]);
+  const by = Object.fromEntries(marked.map((r) => [r.chain, r]));
+  assert.equal(by.capture.crashedWithPeers, true); assert.deepEqual(by.capture.peers, ['universe'], '28 and 34 are 6 s apart — not direct peers');
+  assert.deepEqual(by.universe.peers, ['capture', 'pulse'], 'universe is within 5 s of both');
+  assert.deepEqual(by.pulse.peers, ['universe']);
+  assert.equal('crashedWithPeers' in by.pattern, false, '26 s away is a separate failure');
+  assert.equal('crashedWithPeers' in by.ledger, false);
+  // The payload carries the label; the server validator keeps it; a lone failure has none.
+  const p = SUM.buildSummaryPayload(marked, { expected: ['capture', 'universe', 'pulse', 'pattern', 'ledger'], now: NOW });
+  assert.equal(p.chains.capture.crashedWithPeers, true); assert.deepEqual(p.chains.pulse.peers, ['universe']); assert.equal('crashedWithPeers' in p.chains.pattern, false);
+  const CS = require('../lib/chain-summary');
+  const v = CS.normalizeChainSummary({ ...p, partial: false }, { now: NOW, roots: ['capture', 'universe', 'pulse', 'pattern', 'ledger'] });
+  assert.equal(v.value.chains.capture.crashedWithPeers, true); assert.deepEqual(v.value.chains.universe.peers, ['capture', 'pulse']); assert.equal('crashedWithPeers' in v.value.chains.pattern, false);
+  assert.deepEqual(CS.chainsHealthView({ summaries: [{ ...v.value, date: '2026-10-02' }], roots: ['capture', 'universe', 'pulse', 'pattern', 'ledger'], now: NOW }).crashedWithPeers, ['capture', 'universe', 'pulse']);
+  assert.match(SUM.stepSummaryMarkdown(p), /co-located crash[^\n]*capture, universe, pulse/);
+  // Inputs are not mutated.
+  assert.equal('crashedWithPeers' in fails('a', T('00')), false);
 });
 
 test('stepSummaryMarkdown: names the failed chains up top and one row per chain', () => {

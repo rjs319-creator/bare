@@ -31,7 +31,7 @@ test('matrix: the generator reports the workflow current (--check), and would re
   assert.throws(() => GEN.applyGenerated('jobs: {}', 'spine', ['x']), /missing the generated block/);
 });
 
-test('workflow knobs: 22:05 UTC + three retry schedules (same ET session), fail-fast off, max-parallel 4, 6-minute jobs, ordered spine, always-on summary', () => {
+test('workflow knobs: 22:05 UTC + three retry schedules (same ET session), fail-fast off, max-parallel 2, 12-minute jobs, ordered spine, always-on summary', () => {
   assert.match(WF, /cron: '5 22 \* \* \*'/, 'runs after the 22:00 UTC Vercel cron has warmed the caches');
   // Retry schedules: GitHub delays this repo's schedules by hours (2026-10-02). Every one must
   // land before 04:00 UTC so lib/chain-summary.js keys it to the same ET session date.
@@ -39,8 +39,9 @@ test('workflow knobs: 22:05 UTC + three retry schedules (same ET session), fail-
   assert.deepEqual(crons, [{ min: 5, hour: 22 }, { min: 40, hour: 22 }, { min: 20, hour: 23 }, { min: 0, hour: 1 }]);
   for (const c of crons) assert.ok(c.hour >= 22 || c.hour < 4, `${c.hour}:${c.min} UTC would be the next ET session date`);
   assert.equal((WF.match(/\n      fail-fast: false\n/g) || []).length, 2, 'both chain jobs keep going when one root fails');
-  assert.match(WF, /max-parallel: 4/);
-  assert.equal((WF.match(/\n    timeout-minutes: 6\n/g) || []).length, 2, 'both chain jobs are capped at 6 minutes');
+  // Width 2, not 4: on 2026-10-02 five chains died together in one co-located OOM kill.
+  assert.match(WF, /max-parallel: 2/);
+  assert.equal((WF.match(/\n    timeout-minutes: 12\n/g) || []).length, 2, 'both chain jobs are capped at 12 minutes (two 290 s attempts + the 75 s crash backoff)');
   assert.match(WF, /\n  chains:\n    needs: \[preflight, spine\]\n    if: \$\{\{ !cancelled\(\) && needs\.preflight\.outputs\.skip != 'true' \}\}/, 'the rest waits for the decision spine, survives its failure, and skips a covered night');
   assert.match(WF, /\n  summary:[\s\S]*needs: \[preflight, spine, chains\]\n    if: \$\{\{ always\(\) && needs\.preflight\.outputs\.skip != 'true' \}\}/, 'the summary records cancelled/timed-out jobs too, unless the night was skipped');
   assert.match(WF, /run: node scripts\/run-nightly-chain\.js "\$\{\{ matrix\.chain \}\}"/);
@@ -64,6 +65,8 @@ test('runner contract: bearer header against the single-chain endpoint, graceful
   assert.match(RUN, /authorization: `Bearer \$\{secret\}`/);
   assert.match(RUN, /op=warmchain&name=/);
   assert.match(RUN, /CRON_SECRET repo secret not set/);
-  assert.ok(require('../scripts/run-nightly-chain').REQUEST_TIMEOUT_MS + require('../scripts/run-nightly-chain').FAST_FAIL_MS + require('../scripts/run-nightly-chain').RETRY_DELAY_MS < 6 * 60 * 1000,
-    'worst-case runner path must fit the 6-minute job timeout');
+  const R = require('../scripts/run-nightly-chain');
+  assert.ok(R.REQUEST_TIMEOUT_MS + R.FAST_FAIL_MS + R.RETRY_DELAY_MS < 12 * 60 * 1000, 'fast-fail retry path must fit the job timeout');
+  assert.ok(2 * R.REQUEST_TIMEOUT_MS + R.CRASH_RETRY_DELAY_MS < 12 * 60 * 1000, 'worst-case crash-retry path (two full attempts + backoff) must fit the 12-minute job timeout');
+  assert.ok(R.CRASH_RETRY_DELAY_MS >= 60000 && R.CRASH_RETRY_DELAY_MS <= 90000, 'crash backoff is 60-90 s');
 });

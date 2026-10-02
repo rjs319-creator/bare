@@ -65,7 +65,7 @@ test('normalizeChainSummary: a chain without an explicit ok is graded from statu
 test('chainsHealthView: a GitHub summary becomes the compact banner block', () => {
   const { value } = CS.normalizeChainSummary(payload({ partial: false }), { now: NOW });
   const v = CS.chainsHealthView({ summary: value, roots: ['ledger', 'capture'], now: NOW });
-  assert.deepEqual(v, { date: '2026-10-02', ok: false, full: true, partial: false, covered: ['ledger', 'capture'], failed: ['capture'], skipped: [], source: 'github-matrix',
+  assert.deepEqual(v, { date: '2026-10-02', ok: false, full: true, partial: false, covered: ['ledger', 'capture'], failed: ['capture'], skipped: [], crashedWithPeers: [], source: 'github-matrix',
     runUrl: 'https://github.com/x/y/actions/runs/42', at: '2026-10-02T22:39:00.000Z', missing: false, noMatrixRun: null });
 });
 
