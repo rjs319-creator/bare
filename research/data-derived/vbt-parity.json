@@ -1,0 +1,5 @@
+{
+ "version": "vbt-parity-v1",
+ "verdict": "not-computable",
+ "reason": "research/data/pick-ledger-export.json missing \u2014 run research/lib/export-pbo-matrices.js with BLOB access first"
+}

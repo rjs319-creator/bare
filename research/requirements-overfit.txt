@@ -1,0 +1,10 @@
+# research/101-overfit-crosscheck.py + research/103-vbt-scoreboard-parity.py
+# Python >= 3.11 (vectorbt 1.x requires >=3.11,<3.15). Create locally, never commit:
+#   uv venv --python 3.12 research/.venv && uv pip install --python research/.venv/bin/python -r research/requirements-overfit.txt
+numpy==2.5.3
+pandas==3.0.6
+scipy==1.18.1
+purgedcv==0.1.10
+arch==8.0.0
+vectorbt==1.1.1
+numba==0.68.0

@@ -30,3 +30,6 @@ tools/forecast-sidecar/.venv/
 
 # per-chain result files written by scripts/run-nightly-chain.js (GitHub Actions only)
 .nightly/
+
+# research-side Python venv (recreate from research/requirements-*.txt; never commit)
+research/.venv/

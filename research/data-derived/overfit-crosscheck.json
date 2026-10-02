@@ -1,0 +1,10 @@
+{
+ "version": "overfit-crosscheck-v1",
+ "generatedAt": "2026-10-02T09:01:30+00:00",
+ "inputs": [],
+ "results": [],
+ "verdict": "not-computable",
+ "reason": "no matrix produced a comparable statistic",
+ "checked": 0,
+ "note": "No exported matrices found \u2014 run research/lib/export-pbo-matrices.js with BLOB access first."
+}

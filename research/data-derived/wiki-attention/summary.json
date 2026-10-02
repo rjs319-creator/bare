@@ -1,0 +1,431 @@
+{
+  "study": "wiki-attention-reversal-2026-10",
+  "generatedAt": "2026-10-02T08:58:23.045Z",
+  "frozen": {
+    "study": "wiki-attention-reversal-2026-10",
+    "attention": {
+      "window": 7,
+      "baseline": 60,
+      "decile": 0.1,
+      "minZ": 0
+    },
+    "quietFilter": {
+      "returnSessions": 5,
+      "atrSessions": 14,
+      "maxAtrMultiple": 1
+    },
+    "horizons": [
+      5,
+      21,
+      63
+    ],
+    "primary": {
+      "variant": "quiet",
+      "H": 21
+    },
+    "variants": [
+      "quiet",
+      "all"
+    ],
+    "cooldownSessions": 21,
+    "placeboShiftDays": 30,
+    "universe": {
+      "minAdv": 2000000,
+      "maxNames": 2000,
+      "minBars": 280
+    },
+    "eligibility": {
+      "minPriorBars": 60,
+      "minClose": 2
+    },
+    "blocks": 4,
+    "fdrAlpha": 0.1,
+    "gates": {
+      "minEvents": 100,
+      "minDates": 40,
+      "minT": 2,
+      "minNegativeBlocks": 3
+    },
+    "expectedDirection": "negative"
+  },
+  "universe": {
+    "priced": 785,
+    "withPageviews": 594,
+    "attrition": {
+      "scanned": 838,
+      "tooFewBars": 2,
+      "tooIlliquid": 44,
+      "unreadable": 7,
+      "admitted": 785
+    }
+  },
+  "counts": {
+    "spikes": 128389,
+    "quiet": 59857,
+    "events": {
+      "quiet": 15715,
+      "all": 19419
+    }
+  },
+  "cells": [
+    {
+      "id": "event:quiet@5",
+      "arm": "event",
+      "variant": "quiet",
+      "H": 5,
+      "n": 15663,
+      "dates": 2428,
+      "mean": -0.198,
+      "t": -3.19,
+      "p": 0.0014365917215428362,
+      "ci95": {
+        "lo": 0,
+        "hi": 0
+      },
+      "effectiveN": 1853,
+      "blockMeans": [
+        -0.13,
+        -0.162,
+        -0.326,
+        0.054
+      ],
+      "negativeBlocks": 3,
+      "medianPct": -0.212,
+      "q": 0.0086
+    },
+    {
+      "id": "placebo:quiet@5",
+      "arm": "placebo",
+      "variant": "quiet",
+      "H": 5,
+      "n": 15518,
+      "dates": 1911,
+      "mean": -0.167,
+      "t": -2.58,
+      "p": 0.01010173855607093,
+      "ci95": {
+        "lo": 0,
+        "hi": 0
+      },
+      "effectiveN": 1425,
+      "blockMeans": [
+        -0.144,
+        -0.187,
+        -0.268,
+        -0.061
+      ],
+      "negativeBlocks": 4,
+      "medianPct": -0.264,
+      "q": 0.0303
+    },
+    {
+      "id": "event:quiet@21",
+      "arm": "event",
+      "variant": "quiet",
+      "H": 21,
+      "n": 15534,
+      "dates": 2412,
+      "mean": 0.161,
+      "t": 0.75,
+      "p": 0.45498793476474386,
+      "ci95": {
+        "lo": 0,
+        "hi": 0.01
+      },
+      "effectiveN": 761,
+      "blockMeans": [
+        0.028,
+        0.535,
+        -0.431,
+        0.078
+      ],
+      "negativeBlocks": 1,
+      "medianPct": -0.468,
+      "q": 0.9184
+    },
+    {
+      "id": "placebo:quiet@21",
+      "arm": "placebo",
+      "variant": "quiet",
+      "H": 21,
+      "n": 15372,
+      "dates": 1897,
+      "mean": -0.114,
+      "t": -0.54,
+      "p": 0.5868942992171591,
+      "ci95": {
+        "lo": -0.01,
+        "hi": 0
+      },
+      "effectiveN": 569,
+      "blockMeans": [
+        0.124,
+        0.099,
+        -0.453,
+        -0.392
+      ],
+      "negativeBlocks": 2,
+      "medianPct": -0.659,
+      "q": 0.9184
+    },
+    {
+      "id": "event:quiet@63",
+      "arm": "event",
+      "variant": "quiet",
+      "H": 63,
+      "n": 15180,
+      "dates": 2370,
+      "mean": 0.277,
+      "t": 0.51,
+      "p": 0.6122963104995648,
+      "ci95": {
+        "lo": -0.01,
+        "hi": 0.01
+      },
+      "effectiveN": 304,
+      "blockMeans": [
+        0.833,
+        1.561,
+        -1.302,
+        -0.374
+      ],
+      "negativeBlocks": 2,
+      "medianPct": -1.452,
+      "q": 0.9184
+    },
+    {
+      "id": "placebo:quiet@63",
+      "arm": "placebo",
+      "variant": "quiet",
+      "H": 63,
+      "n": 15042,
+      "dates": 1864,
+      "mean": 0.047,
+      "t": 0.1,
+      "p": 0.9241643387421339,
+      "ci95": {
+        "lo": -0.01,
+        "hi": 0.01
+      },
+      "effectiveN": 260,
+      "blockMeans": [
+        0.702,
+        1.256,
+        -1.251,
+        -0.424
+      ],
+      "negativeBlocks": 2,
+      "medianPct": -1.5,
+      "q": 0.9242
+    },
+    {
+      "id": "event:all@5",
+      "arm": "event",
+      "variant": "all",
+      "H": 5,
+      "n": 19361,
+      "dates": 2447,
+      "mean": -0.248,
+      "t": -3.97,
+      "p": 0.00007474849475697558,
+      "ci95": {
+        "lo": 0,
+        "hi": 0
+      },
+      "effectiveN": 1446,
+      "blockMeans": [
+        -0.239,
+        -0.099,
+        -0.294,
+        -0.356
+      ],
+      "negativeBlocks": 4,
+      "medianPct": -0.289,
+      "q": 0.0009
+    },
+    {
+      "id": "placebo:all@5",
+      "arm": "placebo",
+      "variant": "all",
+      "H": 5,
+      "n": 19191,
+      "dates": 1916,
+      "mean": -0.166,
+      "t": -2.75,
+      "p": 0.005989652859163533,
+      "ci95": {
+        "lo": 0,
+        "hi": 0
+      },
+      "effectiveN": 1255,
+      "blockMeans": [
+        -0.148,
+        -0.096,
+        -0.317,
+        -0.133
+      ],
+      "negativeBlocks": 4,
+      "medianPct": -0.263,
+      "q": 0.024
+    },
+    {
+      "id": "event:all@21",
+      "arm": "event",
+      "variant": "all",
+      "H": 21,
+      "n": 19197,
+      "dates": 2431,
+      "mean": 0.032,
+      "t": 0.17,
+      "p": 0.8641674371766268,
+      "ci95": {
+        "lo": 0,
+        "hi": 0
+      },
+      "effectiveN": 619,
+      "blockMeans": [
+        0.008,
+        0.441,
+        -0.442,
+        -0.178
+      ],
+      "negativeBlocks": 2,
+      "medianPct": -0.522,
+      "q": 0.9242
+    },
+    {
+      "id": "placebo:all@21",
+      "arm": "placebo",
+      "variant": "all",
+      "H": 21,
+      "n": 19006,
+      "dates": 1902,
+      "mean": -0.067,
+      "t": -0.34,
+      "p": 0.7337866445298296,
+      "ci95": {
+        "lo": 0,
+        "hi": 0
+      },
+      "effectiveN": 448,
+      "blockMeans": [
+        0.112,
+        0.258,
+        -0.419,
+        -0.214
+      ],
+      "negativeBlocks": 2,
+      "medianPct": -0.555,
+      "q": 0.9242
+    },
+    {
+      "id": "event:all@63",
+      "arm": "event",
+      "variant": "all",
+      "H": 63,
+      "n": 18772,
+      "dates": 2389,
+      "mean": 0.319,
+      "t": 0.63,
+      "p": 0.5261037941368113,
+      "ci95": {
+        "lo": -0.01,
+        "hi": 0.01
+      },
+      "effectiveN": 250,
+      "blockMeans": [
+        0.879,
+        1.571,
+        -1.151,
+        -0.395
+      ],
+      "negativeBlocks": 2,
+      "medianPct": -1.336,
+      "q": 0.9184
+    },
+    {
+      "id": "placebo:all@63",
+      "arm": "placebo",
+      "variant": "all",
+      "H": 63,
+      "n": 18608,
+      "dates": 1869,
+      "mean": 0.101,
+      "t": 0.21,
+      "p": 0.8327526047483678,
+      "ci95": {
+        "lo": -0.01,
+        "hi": 0.01
+      },
+      "effectiveN": 241,
+      "blockMeans": [
+        0.761,
+        1.396,
+        -1.221,
+        -0.394
+      ],
+      "negativeBlocks": 2,
+      "medianPct": -1.451,
+      "q": 0.9242
+    }
+  ],
+  "primary": {
+    "id": "event:quiet@21",
+    "arm": "event",
+    "variant": "quiet",
+    "H": 21,
+    "n": 15534,
+    "dates": 2412,
+    "mean": 0.161,
+    "t": 0.75,
+    "p": 0.45498793476474386,
+    "ci95": {
+      "lo": 0,
+      "hi": 0.01
+    },
+    "effectiveN": 761,
+    "blockMeans": [
+      0.028,
+      0.535,
+      -0.431,
+      0.078
+    ],
+    "negativeBlocks": 1,
+    "medianPct": -0.468,
+    "q": 0.9184
+  },
+  "placebo": {
+    "id": "placebo:quiet@21",
+    "arm": "placebo",
+    "variant": "quiet",
+    "H": 21,
+    "n": 15372,
+    "dates": 1897,
+    "mean": -0.114,
+    "t": -0.54,
+    "p": 0.5868942992171591,
+    "ci95": {
+      "lo": -0.01,
+      "hi": 0
+    },
+    "effectiveN": 569,
+    "blockMeans": [
+      0.124,
+      0.099,
+      -0.453,
+      -0.392
+    ],
+    "negativeBlocks": 2,
+    "medianPct": -0.659,
+    "q": 0.9184
+  },
+  "verdict": {
+    "verdict": "not-confirmed",
+    "reason": "mean not negative; t 0.75 > −2; q 0.9184 > 0.1; 1/4 negative blocks; placebo |-0.114| ≥ ½ |0.161|"
+  },
+  "honesty": [
+    "survivor universe (Yahoo chart, curated app lists) — verdict ceiling research-promising, never promotion evidence",
+    "pageview day D-1 is the last complete day used for a decision on session D; entry is the next open",
+    "one exploratory pass; the window is spent on completion"
+  ]
+}
