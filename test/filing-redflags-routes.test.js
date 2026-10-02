@@ -152,13 +152,14 @@ test('tracker: tick is privileged, read is public, both routed; the tick is the 
   assert.match(tracker, /op === 'redflags'\) return require\('\.\.\/lib\/filing-redflags-routes'\)\.runRedflags/);
   assert.match(tracker, /op === 'redflagstick'\) return require\('\.\.\/lib\/filing-redflags-routes'\)\.runRedflagsTick/);
   const WC = require('../lib/warm-chains');
-  // ROOT_CHAINS sits at the 44-root ceiling of the ≤90s last-wave pin, so the tick is a STEP
-  // on the EDGAR sibling chain — placed last so the two cheap dilution steps never starve.
+  // The tick is a STEP on the EDGAR sibling chain (not a root of its own) — placed last so
+  // the two cheap dilution steps never starve. (When it shipped, ROOT_CHAINS sat at the 44-root
+  // ceiling of a fixed 9s wave gap; the gap now compresses to fit LAST_WAVE_CEILING_MS.)
   assert.equal(WC.CHAINS.dilution[WC.CHAINS.dilution.length - 1], 'op=redflagstick');
   assert.equal(WC.CHAINS.redflags, undefined, 'no root of its own');
   assert.ok(!WC.ROOT_CHAINS.includes('redflags'));
   assert.ok(WC.ROOT_CHAINS.includes('dilution'));
-  assert.ok(WC.dispatchDelayMs(WC.ROOT_CHAINS.length - 1) <= 90000, 'the last wave must still fit the drain');
+  assert.ok(WC.dispatchDelayMs(WC.ROOT_CHAINS.length - 1) <= WC.LAST_WAVE_CEILING_MS, 'the last wave must still fit the drain');
 });
 
 test('op=redflags read: the empty state is never CDN-cached', () => {

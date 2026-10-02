@@ -37,7 +37,7 @@ test('registry: shadow, non-core, policy cohort CLUSTER, criteria carry the robu
 test('warm chain: own root, dispatched in the last wave, muted as a background chain', () => {
   assert.deepEqual(WC.CHAINS.insidercluster, ['op=insiderclustertick']);
   assert.ok(WC.ROOT_CHAINS.includes('insidercluster'));
-  assert.ok(WC.dispatchDelayMs(WC.ROOT_CHAINS.length - 1) <= 90000, 'the last wave must still fit the drain');
+  assert.ok(WC.dispatchDelayMs(WC.ROOT_CHAINS.length - 1) <= WC.LAST_WAVE_CEILING_MS, 'the last wave must still fit the drain');
   assert.ok(BACKGROUND_CHAINS.has('insidercluster'));
 });
 
