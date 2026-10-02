@@ -13,10 +13,19 @@
 //  • For real delistings inside the forward window we report two variants:
 //    A = return to the last traded bar (understates the wipeout);
 //    B = Shumway (1997) −30% delisting penalty applied to the terminal value.
+//
+//   node research/04-survivorship-bias.js --sp500-pit
+// runs the INDEX-LEVEL twin instead: at every month-end, the cross-section a naive
+// backtest uses (TODAY's S&P 500 list, back-filled) vs the point-in-time membership
+// (research/lib/sp500-pit, vendored fja05680/sp500), both over the cached series via
+// secmaster.universeFrom({ membership }). The gap in mean forward return is the
+// survivorship bias of back-filling the current index list. Cache coverage of PIT
+// member-months is reported — a member with no cached series is a stated hole.
 
 const fs = require('fs');
 const path = require('path');
 const pit = require('./lib/pit');
+const SM = require('./lib/secmaster');
 
 const DATA = path.join(__dirname, 'data');
 const ACTIVE_CUTOFF = Date.UTC(2026, 3, 1);        // last bar ≥ Apr-2026 ⇒ still active
@@ -70,7 +79,66 @@ function aggregate(records) {
   return { names, nameMonthsN, acc };
 }
 
+// Forward returns (A / B variants) for one cross-section at month-end d.
+function collectForward(acc, xs, recsBySym, d) {
+  for (const row of xs) {
+    const ps = pit.priceSeries(recsBySym[row.sym].price);
+    const active = ps[ps.length - 1].ms >= ACTIVE_CUTOFF;
+    for (const [hk, bars] of HORIZONS) {
+      const fr = pit.fwdReturn(ps, d, bars);
+      if (!fr || (fr.delistedWithin && active)) continue;
+      acc[hk].A.push(fr.ret);
+      acc[hk].B.push(fr.delistedWithin ? (1 + fr.ret) * (1 - SHUMWAY) - 1 : fr.ret);
+      if (fr.delistedWithin) acc[hk].delN++;
+    }
+  }
+}
+const newAcc = () => Object.fromEntries(HORIZONS.map(([hk]) => [hk, { A: [], B: [], delN: 0 }]));
+
+async function sp500PitComparison() {
+  const SP = require('./lib/sp500-pit').loadVendored();
+  const current = SP.currentMembers();
+  const recs = {}; const missingCache = [];
+  for (const sym of SP.tickers) {
+    const f = path.join(pit.CACHE, `${sym}.json`);
+    if (!fs.existsSync(f)) { missingCache.push(sym); continue; }
+    try { recs[sym] = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { missingCache.push(sym); }
+  }
+  const acc = { current: newAcc(), pit: newAcc() };
+  let months = 0, pitMemberMonths = 0, pitMemberMonthsCached = 0, xsCur = 0, xsPit = 0;
+  for (const d of GRID) {
+    const members = SP.membersAt(d);
+    if (!members) continue;
+    months++;
+    pitMemberMonths += members.size;
+    pitMemberMonthsCached += [...members].filter((s) => recs[s]).length;
+    const cur = SM.universeFrom(recs, d, null, { membership: current });   // today's list, back-filled
+    const pitXs = SM.universeFrom(recs, d, null, { membership: members }); // what was actually in the index
+    xsCur += cur.length; xsPit += pitXs.length;
+    collectForward(acc.current, cur, recs, d);
+    collectForward(acc.pit, pitXs, recs, d);
+  }
+  const pct = (x) => (x == null ? 'n/a' : (x * 100).toFixed(2) + '%');
+  console.log('\n=== S&P 500 INDEX-LEVEL SURVIVORSHIP BIAS (current list back-filled vs PIT membership) ===');
+  console.log(`months ${months} (${new Date(GRID[0]).toISOString().slice(0, 7)} → ${new Date(GRID[GRID.length - 1]).toISOString().slice(0, 7)}) | avg cross-section: current-list ${Math.round(xsCur / months)}, PIT ${Math.round(xsPit / months)}`);
+  console.log(`PIT member-months with a cached series: ${pitMemberMonthsCached}/${pitMemberMonths} (${(100 * pitMemberMonthsCached / pitMemberMonths).toFixed(1)}%) | ever-members without any cache: ${missingCache.length}/${SP.tickers.length}`);
+  const out = { generatedAt: new Date().toISOString(), mode: 'sp500-pit', months, coverage: { pitMemberMonths, pitMemberMonthsCached, everMembersMissingCache: missingCache.length, everMembers: SP.tickers.length }, horizons: {} };
+  for (const [hk] of HORIZONS) {
+    const c = acc.current[hk], p = acc.pit[hk];
+    const row = { currentA: mean(c.A), currentB: mean(c.B), pitA: mean(p.A), pitB: mean(p.B), nCurrent: c.A.length, nPit: p.A.length, delistedWithinPit: p.delN, delistedWithinCurrent: c.delN };
+    row.biasA = row.currentA - row.pitA; row.biasB = row.currentB - row.pitB;
+    out.horizons[hk] = row;
+    console.log(`\n[${hk}]`);
+    console.log(`  current-list mean fwd (A/B): ${pct(row.currentA)} / ${pct(row.currentB)}   n=${row.nCurrent}  delisted-within ${row.delistedWithinCurrent}`);
+    console.log(`  PIT-members  mean fwd (A/B): ${pct(row.pitA)} / ${pct(row.pitB)}   n=${row.nPit}  delisted-within ${row.delistedWithinPit}`);
+    console.log(`  INDEX SURVIVORSHIP BIAS (A): ${pct(row.biasA)}   (B, Shumway): ${pct(row.biasB)}   ← current-list minus PIT`);
+  }
+  fs.writeFileSync(path.join(DATA, 'survivorship-bias-sp500.json'), JSON.stringify(out));
+  console.log('\nsaved → research/data/survivorship-bias-sp500.json');
+}
+
 (async () => {
+  if (process.argv.includes('--sp500-pit')) return sp500PitComparison();
   const sampleN = parseInt(process.argv[2] || '800', 10);
   const survivors = Object.keys(JSON.parse(fs.readFileSync(path.join(DATA, 'symbols.json'), 'utf8')).symbols);
   const survSet = new Set(survivors);

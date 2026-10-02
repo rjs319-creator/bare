@@ -251,6 +251,7 @@ function flagChips(f) {
   const out = [];
   if (F.negativeLane) out.push('<span class="sb-flag sb-flag-bad">proven-negative lane</span>');
   if (F.dilution) out.push('<span class="sb-flag sb-flag-warn">dilution filing</span>');
+  if (F.delisting) out.push('<span class="sb-flag sb-flag-warn" title="EDGAR Form 25 / 15 delisting or deregistration notice on file — shadow research flag, affects no ranking">delisting notice</span>');
   if (F.shortInterest) out.push('<span class="sb-flag sb-flag-warn">high short interest</span>');
   if (F.lowFloat) out.push('<span class="sb-flag">low float</span>');
   return out.length ? `<div class="sb-flags">${out.join(' ')}</div>` : '';

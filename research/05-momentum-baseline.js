@@ -9,6 +9,13 @@
 //
 // CAVEAT: survivor-only panel (delisted names are still being pulled separately);
 // the just-measured survivorship bias is modest, so this is a fair baseline.
+//
+//   node research/05-momentum-baseline.js --sp500-pit
+// restricts each month's cross-section to the POINT-IN-TIME S&P 500 membership
+// (research/lib/sp500-pit, vendored fja05680/sp500) over every cached name that was
+// ever a member — delisted ex-members included up to their last bar. The small/mid
+// cap band is NOT applied in that mode (index names sit above CAP_HI); membership is
+// the universe definition. A month whose membership is unknown is skipped, never widened.
 
 const fs = require('fs');
 const path = require('path');
@@ -19,6 +26,8 @@ const FWD = 63;                                    // forward horizon (3 months)
 const GRID = pit.monthEnds('2022-07', '2026-03');  // need 252d lookback + 63d forward
 const MIN_XS = 40;                                  // minimum cross-section size per month
 const SIGNALS = { 'mom_12_1': [252, 21], 'mom_6_1': [126, 21], 'mom_3_1': [63, 21] };
+const SP500_PIT = process.argv.includes('--sp500-pit');
+const SP = SP500_PIT ? require('./lib/sp500-pit').loadVendored() : null;
 
 function momentum(series, dateMs, lookback, skip) {
   let idx = -1; for (let k = 0; k < series.length; k++) { if (series[k].ms <= dateMs) idx = k; else break; }
@@ -39,9 +48,12 @@ const sd = a => { if (a.length < 2) return null; const m = mean(a); return Math.
 
 (async () => {
   const survivors = Object.keys(JSON.parse(fs.readFileSync(path.join(DATA, 'symbols.json'), 'utf8')).symbols);
+  const names = SP ? SP.tickers : survivors;          // PIT mode: every name ever in the index
   const recs = [];
-  for (const s of survivors) { const f = path.join(pit.CACHE, `${s}.json`); if (fs.existsSync(f)) { try { const c = JSON.parse(fs.readFileSync(f, 'utf8')); recs.push({ sym: s, ps: pit.priceSeries(c.price), ss: pit.sharesSeries(c.income) }); } catch {} } }
-  console.log(`Loaded ${recs.length} survivor caches. Building monthly cross-sections…\n`);
+  for (const s of names) { const f = path.join(pit.CACHE, `${s}.json`); if (fs.existsSync(f)) { try { const c = JSON.parse(fs.readFileSync(f, 'utf8')); recs.push({ sym: s, ps: pit.priceSeries(c.price), ss: pit.sharesSeries(c.income) }); } catch {} } }
+  console.log(SP
+    ? `Loaded ${recs.length}/${names.length} cached S&P 500 ever-members (PIT membership mode, no cap band). Building monthly cross-sections…\n`
+    : `Loaded ${recs.length} survivor caches. Building monthly cross-sections…\n`);
 
   const ic = {}; const q = {};                      // per-signal IC list + quintile fwd buckets
   for (const k of Object.keys(SIGNALS)) { ic[k] = []; q[k] = [[], [], [], [], []]; }
@@ -50,12 +62,19 @@ const sd = a => { if (a.length < 2) return null; const m = mean(a); return Math.
   for (const d of GRID) {
     // cross-section: in-band members with all signals + forward return
     const rows = [];
+    const members = SP ? SP.membersAt(d) : null;
+    if (SP && !members) continue;                      // membership unknown for this date → skip, never widen
     for (const r of recs) {
-      if (r.ps.length < 60 || !r.ss.length) continue;
-      const pa = pit.asOfPriceAdv(r.ps, d); const sh = pit.asOfShares(r.ss, d);
-      if (!pa || pa.stale || !sh) continue;
-      const cap = pa.close * sh;
-      if (cap < pit.CAP_LO || cap > pit.CAP_HI || pa.adv < pit.ADV_FLOOR) continue;
+      if (r.ps.length < 60) continue;
+      if (members && !members.has(r.sym)) continue;
+      const pa = pit.asOfPriceAdv(r.ps, d);
+      if (!pa || pa.stale) continue;
+      if (!SP) {                                       // the small/mid band applies to the panel run only
+        const sh = r.ss.length ? pit.asOfShares(r.ss, d) : null;
+        if (!sh) continue;
+        const cap = pa.close * sh;
+        if (cap < pit.CAP_LO || cap > pit.CAP_HI || pa.adv < pit.ADV_FLOOR) continue;
+      }
       const fr = pit.fwdReturn(r.ps, d, FWD);
       if (!fr || fr.delistedWithin) continue;        // need a full elapsed forward window
       const sig = {}; let okAll = true;

@@ -5,6 +5,7 @@
   import { startLivePrices as startScreenerLive, stopLivePrices as stopScreenerLive, LIVE_SCREENERS } from './live-price.js';
   import { startFlowBadges, setFlowNav, FLOW_BADGE_TABS } from './flow-badge.js';
   import { startDilutionBadges, DILUTION_BADGE_TABS } from './dilution-badge.js';
+  import { startDelistingBadges, DELISTING_BADGE_TABS } from './delisting-badge.js';
   import { initCommandPalette, openPalette, revealTicker } from './command-palette.js';
   import { initServiceWorkerMessages } from './toasts.js';
 import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
@@ -594,6 +595,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (FLOW_BADGE_TABS.has(sub)) startFlowBadges(document.getElementById(sub));
     // Shadow 424B5 dilution flag (research/95) — display-only avoid-flag badge.
     if (DILUTION_BADGE_TABS.has(sub)) startDilutionBadges(document.getElementById(sub));
+    // Shadow delisting-pending flag (EDGAR Form 25 / 15 notices) — display-only avoid-flag badge.
+    if (DELISTING_BADGE_TABS.has(sub)) startDelistingBadges(document.getElementById(sub));
 
     const act = document.querySelector('.mobile-top-tabs .mtt-item.active');
     if (act) act.scrollIntoView({ inline: 'center', block: 'nearest', behavior: opts.instant ? 'auto' : 'smooth' });
