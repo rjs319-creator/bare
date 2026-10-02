@@ -12,6 +12,11 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { fetchCompanyNewsRich } = require('../lib/fundamentals');
 const { classifyNewsSkip } = require('../lib/evidence-routes');
+const { resetHttpMemo } = require('../lib/http-memo');
+
+// Each test scripts its own provider answers for the same ticker/window; clear the shared
+// fetch memo (lib/http-memo) so no test reads the previous test's cached rows.
+test.beforeEach(() => resetHttpMemo());
 
 const resp = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
 

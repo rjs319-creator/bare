@@ -9,6 +9,11 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { parseStooqCsv } = require('../lib/daily-fallback');
 const { sessionDue } = require('../lib/market-session');
+const { resetHttpMemo } = require('../lib/http-memo');
+
+// Every test below scripts its OWN Yahoo answer for the same URL; the shared fetch memo
+// (lib/http-memo) would otherwise hand test N the body test N-1 cached.
+test.beforeEach(() => resetHttpMemo());
 
 const TUE_PREMARKET = new Date('2026-08-18T13:22:00Z');   // 09:22 ET Tuesday
 

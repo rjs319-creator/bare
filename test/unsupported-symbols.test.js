@@ -74,11 +74,12 @@ function loadScreener(fetchImpl, logged) {
   const httpPath = require.resolve('../lib/http');
   const logPath = require.resolve('../lib/log');
   const screenerPath = require.resolve('../lib/screener');
+  const memoPath = require.resolve('../lib/http-memo');   // sits between screener and http; must rebind to the stub too
   const realHttp = require('../lib/http');
   const origLoad = Module._load;
   const origFallback = process.env.DAILY_FALLBACK;
   process.env.DAILY_FALLBACK = 'off';
-  for (const p of [httpPath, logPath, screenerPath]) delete require.cache[p];
+  for (const p of [httpPath, logPath, memoPath, screenerPath]) delete require.cache[p];
   Module._load = function (request, parent, isMain) {
     const resolved = (() => { try { return Module._resolveFilename(request, parent, isMain); } catch { return null; } })();
     if (resolved === httpPath) return { ...realHttp, fetchWithTimeout: fetchImpl };
@@ -89,6 +90,6 @@ function loadScreener(fetchImpl, logged) {
   finally {
     Module._load = origLoad;
     if (origFallback === undefined) delete process.env.DAILY_FALLBACK; else process.env.DAILY_FALLBACK = origFallback;
-    for (const p of [httpPath, logPath, screenerPath]) delete require.cache[p];
+    for (const p of [httpPath, logPath, memoPath, screenerPath]) delete require.cache[p];
   }
 }
