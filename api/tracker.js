@@ -207,6 +207,10 @@ const PRIVILEGED_OPS = new Set([
   // HOUSE BOOK paper-portfolio step — CAS-writes housebook/state.json + equity.json and
   // spends a bounded candle fan-out. Cron/manual-with-bearer only; op=housebook stays public.
   'housebooktick',
+  // KEN FRENCH FACTOR CACHE refresh — one weekly fetch of two Dartmouth zips, writes
+  // factors/ff5mom-daily.json (read by the Scoreboard's SHADOW factorAlpha block).
+  // Cron/manual-with-bearer only; op=factors (status read) stays public.
+  'factorsrefresh',
   // STOCKTWITS BULL-RATIO FLAG shadow logger/resolver — writes the snapshot + write-once
   // prospective ledger (stbull/v1/*) and spends a StockTwits fan-out / a ≤60-name candle
   // fan-out. Cron/manual-with-bearer only; op=stbull (read) stays public.
@@ -628,6 +632,10 @@ async function handleRequest(req, res) {
   if (req.query.op === 'housebook') return require('../lib/house-book-routes').runHouseBook(req, res);
   if (req.query.op === 'housebooktick') return require('../lib/house-book-routes').runHouseBookTick(req, res);
   if (req.query.op === 'mybook') return require('../lib/house-book-routes').runMyBook(req, res);
+  // FACTOR DATA — Ken French cache status (public) / weekly refresh (bearer). Feeds the
+  // Scoreboard's SHADOW factorAlpha block (weight 0; proposal #18).
+  if (req.query.op === 'factors') return require('../lib/factors/factors-routes').runFactors(req, res);
+  if (req.query.op === 'factorsrefresh') return require('../lib/factors/factors-routes').runFactorsRefresh(req, res);
   if (req.query.op === 'stbull') return require('../lib/stbull-routes').runStbull(req, res);
   if (req.query.op === 'stbulltick') return require('../lib/stbull-routes').runStbullTick(req, res);
   if (req.query.op === 'stbullresolve') return require('../lib/stbull-routes').runStbullResolve(req, res);
