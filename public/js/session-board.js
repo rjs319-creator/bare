@@ -226,6 +226,7 @@ function liveRow(live) {
   if (live.orb && (isNum(live.orb.high) || isNum(live.orb.low))) bits.push(`ORB <b>${px(live.orb.low)}–${px(live.orb.high)}</b>${live.orb.state ? ` (${esc(live.orb.state)})` : ''}`);
   if (isNum(live.relVol)) bits.push(`rel-vol <b>${live.relVol.toFixed(1)}×</b>`);
   if (isNum(live.dayRangePct)) bits.push(`day range <b>${live.dayRangePct.toFixed(1)}%</b>`);
+  if (isNum(live.gammaFlipDistancePct)) bits.push(`<span title="Dealer gamma-flip overlay (weight 0, shadow): spot vs the level where net dealer gamma changes sign — a regime read, not a signal">γ-flip <b>${live.gammaFlipDistancePct >= 0 ? 'above' : 'below'} ${Math.abs(live.gammaFlipDistancePct).toFixed(1)}%</b></span>`);
   return bits.length ? `<div class="sb-live">${bits.join(' · ')}</div>` : '';
 }
 function premarketRow(pm) {

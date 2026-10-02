@@ -117,7 +117,7 @@ jobs:
       max-parallel: 4
       matrix:
         # BEGIN GENERATED matrix:chains (scripts/gen-nightly-matrix.js — do not edit by hand)
-        chain: [capture, ticks1, ticks2, ticks3, aligned, universe, pulse, router, maturity, researchgrade, evolve, swing, atlasx, rlt, altprobes, govdemand, gridlock, swingsearch, pattern, patternresearch, cfl, psrl, peerprop, expgap, pitdata, alphacal, gexa, vrp, ephemeral, optionsv2, pulse2, omegaab, swingverify, dilution, techev, stbull, bearcase, forecastshadow, insidercluster, housebook, challenger]
+        chain: [capture, ticks1, ticks2, ticks3, aligned, universe, pulse, router, maturity, researchgrade, evolve, swing, atlasx, rlt, altprobes, govdemand, gridlock, swingsearch, pattern, patternresearch, cfl, psrl, peerprop, expgap, pitdata, alphacal, gexa, vrp, ephemeral, optionsv2, pulse2, omegaab, swingverify, dilution, techev, stbull, bearcase, forecastshadow, insidercluster, optionsgex, housebook, challenger]
         # END GENERATED matrix:chains
     steps:
       - uses: actions/checkout@v5

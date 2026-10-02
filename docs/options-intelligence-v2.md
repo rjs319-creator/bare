@@ -129,6 +129,7 @@ evidence report. **These weights are initial hypotheses — the UI says so.**
 | Var | Default | Effect |
 |---|---|---|
 | `OPTIONS_V2_MODE` | `on` | `off` = v2 scan/radar disabled; UI falls back to the legacy tab (rollback lever) |
+| `OPTIONS_PROVIDER` | `cboe` | Chain feed (lib/options-chain-provider.js): `cboe` = CBOE delayed chain with vendor greeks first, Yahoo fallback; `yahoo` = Yahoo only (**rollback lever**, the pre-2026-10 behaviour); `cboe-only` = no fallback (side-by-side runs) |
 | `OPTIONS_REALTIME_PROVIDER` | unset | Future realtime adapter id (must be registered; else safe fallback) |
 | `OPTIONS_COMPLEX_PROVIDER` | unset | Future complex-order adapter id (same) |
 
