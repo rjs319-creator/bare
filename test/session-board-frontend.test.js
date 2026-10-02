@@ -28,7 +28,7 @@ function assertClean(html) {
 
 // ── UI registration (the touchpoint checklist, mirrors ignition-live-routes.test.js) ──
 test('session is registered at every UI touchpoint', () => {
-  assert.match(APP, /home: {7}\['today', 'session', 'ensemble', 'start', 'quickhit'\]/, 'in TAB_GROUPS.home, right after today');
+  assert.match(APP, /home: {7}\['today', 'gameplan', 'brief', 'session', 'quickhit', 'ensemble', 'opportunities', 'start'\]/, 'in TAB_GROUPS.home (gameplan/brief are Today lanes; quickhit/ensemble/opportunities are Session lanes)');
   assert.match(APP, /session: '🎯 Session'/, 'SUB_LABEL');
   assert.match(APP, /session: 'Session Board — what is worth looking at RIGHT NOW/, 'SECTION_HELP');
   assert.match(APP, /session: \{\n {6}what:/, 'HOWTO');
@@ -43,9 +43,9 @@ test('session is registered at every UI touchpoint', () => {
 });
 
 test('the lab and candidates pins are untouched', () => {
-  assert.match(APP, /'edge', 'cfl', 'orbitlab'/);
-  assert.match(APP, /'rltlab', 'psrl', 'gridlock'/);
-  assert.match(APP, /'catalyst', 'peerlab'\]/);
+  assert.match(APP, /'backtest', 'cfl', 'psrl'/);
+  assert.match(APP, /'cfl', 'psrl', 'gridlock'/);
+  assert.match(APP, /'gridlock'\]/);
   assert.match(APP, /'lowfloat', 'ignitionlive', 'breakoutradar'/);
 });
 

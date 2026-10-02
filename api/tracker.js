@@ -34,11 +34,10 @@ const { runFadeOpt, runFadeSeed, runFadeSignals, runFadeTick, runFadeBook,
 const { runAlertsIngest, runAlerts, runAlertsGrade, runAlertsAssess } = require('../lib/alerts-routes');
 const { runArchive, runBaseline, runIvRvSample, runInsiderIngest, runInsider, runFundBuild, runFundamentals,
         runCernTickOp, runCern, runCernFsProbe, runCernLockProbe, runIntraCapture, runIntraday } = require('../lib/capture-routes');
-const { runTrack, runScoreboard, runApexLog, runGhostLog, runEdgeLog, runEdgeBook, runVReversal, runVReversalTest,
+const { runTrack, runScoreboard, runApexLog, runGhostLog, runVReversal, runVReversalTest,
         runDrift, runRecalibrate, runResearchOp, runExitsOp, runEmergingOp, runLongShortOp, runPeadOp, runBackfillOp, runModel, runNarrative, runMoverStudyOp, runCernDecay, runRankQuality, runCongressOp, runRevisionsOp } = require('../lib/apex-routes');
 const { runHealth } = require('../lib/health');
-const { runLeaderboard, runLeaderboardTick } = require('../lib/leaderboard');
-const { runCoreBuild, runCore, runCoreLog, runCoreDrift, runCorePerf } = require('../lib/stablecore-routes');
+const { runCoreBuild, runCore, runCoreLog, runCoreDrift } = require('../lib/stablecore-routes');
 const { runGamePlan } = require('../lib/gameplan-routes');
 const { runToneTick, runTone } = require('../lib/tone-routes');
 const { runAttention, runAttentionTick } = require('../lib/attention-routes');
@@ -59,8 +58,8 @@ const PRIVILEGED_OPS = new Set([
   'chainsummary',
   'alertsassess', 'alertsgrade', 'alignedlog', 'apexlog', 'archive', 'attentiontick',
   'brieftick', 'cerntick', 'coiltick', 'confluencetick', 'corebuild', 'corelog',
-  'crowdtick', 'daytradetick', 'downdaytick', 'dualreadlog', 'dualreadtune', 'edgelog',
-  'fadetick', 'gapdowntick', 'gapgotick', 'gapgoverify', 'ghostlog', 'intracapture', 'leaderboardtick',
+  'crowdtick', 'daytradetick', 'downdaytick', 'dualreadlog', 'dualreadtune',
+  'fadetick', 'gapdowntick', 'gapgotick', 'gapgoverify', 'ghostlog', 'intracapture',
   'narrative', 'optionsassess', 'optionsscan2', 'optionsresolve2', 'optionsgextick', 'patternlog', 'patterngrade', 'patternresearch', 'predicttick', 'timinglog', 'timingtune', 'tonetick',
   // 'track' snapshots the day's Screener+Momentum picks to Blob (a state-changing WRITE).
   // The daily cron dispatches it with the internal bearer (warm-chains-routes.js), so gating
@@ -180,7 +179,6 @@ const PRIVILEGED_OPS = new Set([
   'lifecyclegrade',
   // SI OVERLAY prospective logger/resolver — writes the frozen-model shadow ledger
   // (si/v1/prospective/*) + a ~75-name provider fan-out. Cron/manual-with-bearer only.
-  'sitick',
   // SCREENER intraday fill-verification channel (screener-verify-v1) — writes the
   // canonical episode shards + rollup (episodes/screener/*) and spends a bounded FMP
   // 5-min + daily-candle fan-out. Cron/manual-with-bearer only.
@@ -282,7 +280,6 @@ const EXPENSIVE_OPS = new Set([
   'sessionboard',
   // SI overlay heavier reads: sisnapshot may refresh the live FINRA cache, siledger can
   // page Blob prospective docs, siexport streams the full CSV ledger.
-  'sisnapshot', 'siledger', 'siexport',
   // techev/techevdetail: cached Blob-projection reads (several documents per call, and the
   // detail read fans across per-source series docs). CDN-cached when populated; the throttle
   // stops a cache-busting anonymous loop from driving repeated multi-doc Blob reads.
@@ -406,8 +403,6 @@ async function handleRequest(req, res) {
   if (req.query.op === 'track') return runTrack(req, res);
   if (req.query.op === 'apexlog') return runApexLog(req, res);
   if (req.query.op === 'ghostlog') return runGhostLog(req, res);
-  if (req.query.op === 'edgelog') return runEdgeLog(req, res);
-  if (req.query.op === 'edgebook') return runEdgeBook(req, res);
   if (req.query.op === 'vreversal') return runVReversal(req, res);
   if (req.query.op === 'vreversaltest') return runVReversalTest(req, res);
   if (req.query.op === 'fadeopt') return runFadeOpt(req, res);
@@ -605,13 +600,6 @@ async function handleRequest(req, res) {
   // OMEGA R10-vs-SCORE prospective shadow A/B (research/90-91 follow-through, weight-0).
   if (req.query.op === 'omegaab') return require('../lib/omega-ab-routes').runOmegaAb(req, res);
   if (req.query.op === 'omegaabtick') return require('../lib/omega-ab-routes').runOmegaAbTick(req, res);
-  if (req.query.op === 'sistatus') return require('../lib/si-overlay-routes').runSiStatus(req, res);
-  if (req.query.op === 'sisnapshot') return require('../lib/si-overlay-routes').runSiSnapshot(req, res);
-  if (req.query.op === 'sihealth') return require('../lib/si-overlay-routes').runSiHealth(req, res);
-  if (req.query.op === 'siwf') return require('../lib/si-overlay-routes').runSiWf(req, res);
-  if (req.query.op === 'siledger') return require('../lib/si-overlay-routes').runSiLedger(req, res);
-  if (req.query.op === 'siexport') return require('../lib/si-overlay-routes').runSiExport(req, res);
-  if (req.query.op === 'sitick') return require('../lib/si-overlay-routes').runSiTick(req, res);
   // PSRL — Persistent Staircase Relative Leadership (shadow, weight-0).
   if (req.query.op === 'psrl') return require('../lib/psrl-routes').runPsrlBoard(req, res);
   if (req.query.op === 'psrldetail') return require('../lib/psrl-routes').runPsrlDetail(req, res);
@@ -621,9 +609,6 @@ async function handleRequest(req, res) {
   // CATALYST–FLOW RANKER — event-conditioned swing ranking (shadow, weight-0).
   // Read-only by design: the model is trained offline and these ops only READ the
   // published artifact, so no request can ever train or recompute a ranking.
-  if (req.query.op === 'catalystflow') return require('../lib/catalyst-flow-routes').runCatalystFlow(req, res);
-  if (req.query.op === 'catalystflowcoverage') return require('../lib/catalyst-flow-routes').runCatalystFlowCoverage(req, res);
-  if (req.query.op === 'catalystflowregistry') return require('../lib/catalyst-flow-routes').runCatalystFlowRegistry(req, res);
   // 424B5 DILUTION FLAG — shadow avoid-flag overlay (weight-0; research/95 finding).
   if (req.query.op === 'dilution') return require('../lib/dilution-routes').runDilution(req, res);
   if (req.query.op === 'dilutiontick') return require('../lib/dilution-routes').runDilutionTick(req, res);
@@ -720,13 +705,10 @@ async function handleRequest(req, res) {
   if (req.query.op === 'hypotheses') return require('../lib/hypothesis-routes').runHypotheses(req, res);
   if (req.query.op === 'datahealth') return require('../lib/data-health-routes').runDataHealth(req, res);
   if (req.query.op === 'pitdata') return require('../lib/pitdata-routes').runPitData(req, res);
-  if (req.query.op === 'leaderboard') return runLeaderboard(req, res);
-  if (req.query.op === 'leaderboardtick') return runLeaderboardTick(req, res);
   if (req.query.op === 'corebuild') return runCoreBuild(req, res);
   if (req.query.op === 'core') return runCore(req, res);
   if (req.query.op === 'corelog') return runCoreLog(req, res);
   if (req.query.op === 'coredrift') return runCoreDrift(req, res);
-  if (req.query.op === 'coreperf') return runCorePerf(req, res);
   if (req.query.op === 'cerndecay') return runCernDecay(req, res);
   if (req.query.op === 'tonetick') return runToneTick(req, res);
   if (req.query.op === 'tone') return runTone(req, res);
@@ -791,7 +773,6 @@ async function handleRequest(req, res) {
   if (req.query.op === 'orbitresolve') return require('../lib/orbit-routes').runOrbitResolve(req, res);
   if (req.query.op === 'orbitwalkforward') return require('../lib/orbit-routes').runOrbitWalkForward(req, res);
   if (req.query.op === 'orbithealth') return require('../lib/orbit-routes').runOrbitHealth(req, res);
-  if (req.query.op === 'algorithmrouter') return require('../lib/orbit-routes').runAlgorithmRouter(req, res);
   // 🛰️ ORBIT-ML (shadow EVOLVE specialist `idiosyncraticPersistence`). Read/health public;
   // tick/resolve are cron-only WRITES; walkforward is a heavy backfill+train+eval recompute.
   if (req.query.op === 'orbitml') return require('../lib/orbit-ml-routes').runOrbitMl(req, res);

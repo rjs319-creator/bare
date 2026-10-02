@@ -34,19 +34,8 @@ test('permuteGroups: deterministic, size-preserving, membership-scrambling', () 
   assert.ok(moved >= 2, `permutation must actually cross groups (moved=${moved})`);
 });
 
-test('UI contract: peer-lab.js exports loadPeerLab and app.js wires the peerlab tab', () => {
-  const lab = read('public/js/peer-lab.js');
-  assert.match(lab, /export async function loadPeerLab\(/);
-  assert.match(lab, /op=peerprop/);
-  assert.match(lab, /cached=1/, 'the panel must only read the CACHED walk-forward, never trigger it');
-  const app = read('public/js/app.js');
-  assert.match(app, /import \{ loadPeerLab \} from '\.\/peer-lab\.js'/);
-  assert.match(app, /'peerlab'\]/, 'peerlab must be in TAB_GROUPS.lab');
-  assert.match(app, /ensurePeerLab/);
-  const html = read('public/index.html');
-  assert.match(html, /id="peerlab"/);
-  assert.match(html, /id="peerlab-container"/);
-});
+// UI contract test removed 2026-10-02: the Peers lab TAB was retired (two no-edge verdicts;
+// docs/SIMPLIFICATION-PLAN §5). The peerprop routes, ledger and registry rows are unchanged.
 
 test('tracker gates: log ops privileged; board/wf/underreaction rate-limited', () => {
   const tracker = read('api/tracker.js');

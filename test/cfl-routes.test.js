@@ -64,7 +64,7 @@ test('without a Blob token the store degrades honestly (no throw, no fake data)'
 });
 
 test('UI registration: lab tab, section, label, help, HOWTO, import and ensure hook all present', () => {
-  assert.match(APP, /'edge', 'cfl', 'orbitlab'/, 'cfl registered in TAB_GROUPS.lab');
+  assert.match(APP, /'backtest', 'cfl', 'psrl'/, 'cfl registered in TAB_GROUPS.lab');
   assert.match(APP, /cfl: '🔭 Counterfactual Lab'/, 'SUB_LABEL entry');
   assert.match(APP, /cfl: 'Counterfactual Lab —/, 'SECTION_HELP entry');
   assert.match(APP, /cfl: \{\n\s+what:/, 'HOWTO entry');

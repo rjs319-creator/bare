@@ -197,7 +197,6 @@ test('live OMEGA rankings are byte-for-byte unchanged when the experiment is ena
   require('../lib/research/finra-si');
   require('../lib/research/si-features');
   require('../lib/research/si-experiment');
-  require('../lib/si-overlay-routes');
   process.env.SI_OVERLAY_ENABLED = '1';
   X.runSpec(makePanels({ nDates: 30 }), { topK: 5, horizon: 5 });
   const after = JSON.stringify(O.evaluateCandidate(args()));
@@ -208,35 +207,5 @@ test('live OMEGA rankings are byte-for-byte unchanged when the experiment is ena
   assert.ok(!/si-overlay|si-experiment|si-features|finra-si|shortinterest/.test(src));
 });
 
-// ── Route authentication ─────────────────────────────────────────────────────
-function mkRes() {
-  const r = { headers: {}, code: null, body: null, setHeader(k, v) { r.headers[k] = v; }, status(c) { r.code = c; return r; }, json(o) { r.body = o; return r; }, send(s) { r.body = s; return r; } };
-  return r;
-}
-
-test('authentication protects the privileged research route', async () => {
-  const prevSecret = process.env.CRON_SECRET;
-  process.env.CRON_SECRET = 'test-secret-abc';
-  try {
-    delete require.cache[require.resolve('../lib/si-overlay-routes')];
-    const R = require('../lib/si-overlay-routes');
-    const res = mkRes();
-    await R.runSiTick({ query: {}, headers: {} }, res);        // no bearer
-    assert.strictEqual(res.code, 401);
-    const res2 = mkRes();
-    await R.runSiTick({ query: {}, headers: { authorization: 'Bearer wrong' } }, res2);
-    assert.strictEqual(res2.code, 401);
-  } finally {
-    if (prevSecret === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = prevSecret;
-    delete require.cache[require.resolve('../lib/si-overlay-routes')];
-  }
-});
-
-test('the tracker classifies sitick as privileged', () => {
-  const src = require('node:fs').readFileSync(require.resolve('../api/tracker.js'), 'utf8');
-  const priv = src.match(/PRIVILEGED_OPS = new Set\(\[([\s\S]*?)\]\)/)[1];
-  assert.ok(/'sitick'/.test(priv));
-  for (const op of ['sistatus', 'sisnapshot', 'sihealth', 'siwf', 'siledger', 'siexport', 'sitick']) {
-    assert.ok(new RegExp(`op === '${op}'`).test(src), `op=${op} must be dispatched`);
-  }
-});
+// Route tests removed 2026-10-02: lib/si-overlay-routes.js and its ops were pruned with the
+// Short-Interest lab tab (verdict NO_INCREMENTAL_ALPHA; no scheduled writer ever ran op=sitick).

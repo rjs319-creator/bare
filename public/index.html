@@ -59,21 +59,6 @@
   <div id="trust-badge" style="display:none"></div>
   <div id="tape-badge" style="display:none"></div>
 
-  <!-- 🏆 ALGO LEADERBOARD — top screener strategies by realized 3-month performance -->
-  <section class="scoreboard-section" id="leaderboard">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#f0a832"></div>
-      <h2 style="color:#f0a832">🏆 Algo Leaderboard</h2>
-      <span class="label-meta">· the app's screener strategies ranked by realized performance</span>
-      <div class="label-action">
-        <button class="refresh-btn" style="color:#f0a832" id="leaderboard-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="leaderboard-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Ranking the screener algos…</p></div>
-    </div>
-  </section>
-
   <!-- SIGNAL SCOREBOARD -->
   <section class="scoreboard-section" id="scoreboard">
     <div class="section-label">
@@ -302,62 +287,6 @@
     </div>
   </section>
 
-  <!-- CORE MOMENTUM — quarterly performance / track record -->
-  <section class="screener-section" id="coreperf">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#10d98a"></div>
-      <h2 style="color:#10d98a">Core Performance</h2>
-      <span class="label-meta" id="coreperf-meta">· quarterly realized returns vs IWM · the Core Momentum track record</span>
-      <div class="label-action">
-        <span class="lbl-time" id="coreperf-gen-time"></span>
-        <button class="refresh-btn" style="color:#10d98a" id="coreperf-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="coreperf-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load the Core Momentum track record…</p></div>
-    </div>
-  </section>
-
-  <!-- GHOST ACCUMULATION INDEX -->
-  <section class="screener-section" id="ghost">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#9b8cff"></div>
-      <h2 style="color:#9b8cff">Ghost Accumulation</h2>
-      <span class="label-meta" id="ghost-meta">· 6-pillar quiet-accumulation model</span>
-      <div class="label-action">
-        <span class="lbl-time" id="ghost-gen-time"></span>
-        <button class="refresh-btn" style="color:#06c4d4" id="gh-help-btn">ℹ️ How to use</button>
-        <button class="refresh-btn" style="color:#9b8cff" id="ghost-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-
-    <div class="cx-strip" id="ghost-strip"></div>
-
-    <div class="scr-filters">
-      <select class="scr-filter" id="gh-scope">
-        <option value="all">All caps (full universe)</option>
-        <option value="large">S&amp;P 500 (large cap)</option>
-        <option value="small">Small caps</option>
-        <option value="micro">Micro caps</option>
-        <option value="expanded">Expanded (full liquid universe)</option>
-      </select>
-      <select class="scr-filter" id="gh-tier">
-        <option value="all">All tiers</option>
-        <option value="ghost">Ghost only</option>
-        <option value="stalking">Ghost + Stalking</option>
-      </select>
-    </div>
-
-    <div class="scr-tune">
-      <button class="scr-tune-toggle" id="gh-model-toggle"><span>👻 Model · pillars, regime weights &amp; honest caveats</span><span class="ct-arrow">▾</span></button>
-      <div class="scr-tune-body" id="gh-model-body" style="display:none"></div>
-    </div>
-
-    <div id="ghost-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to run the Ghost Accumulation model…</p></div>
-    </div>
-  </section>
-
   <!-- CERN — Causal Event-Response Network -->
   <section class="screener-section" id="events">
     <div class="section-label">
@@ -536,67 +465,6 @@
     </div>
   </section>
 
-  <!-- EDGE BOOK — two orthogonal sleeves: conviction longs + CERN forced-flow -->
-  <section class="screener-section" id="edge">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#7c5cff"></div>
-      <h2 style="color:#7c5cff">Edge Book</h2>
-      <span class="label-meta" id="edge-meta">· conviction longs + CERN forced-flow (paper)</span>
-      <div class="label-action">
-        <span class="lbl-time" id="edge-gen-time"></span>
-        <button class="refresh-btn" style="color:#7c5cff" id="edge-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="edge-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load the Edge Book…</p></div>
-    </div>
-  </section>
-
-  <!-- ORBIT / ORBIT-ML shadow research systems (weight-0, never affect live rank) -->
-  <section class="screener-section" id="orbitlab">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#5ac8fa"></div>
-      <h2 style="color:#5ac8fa">🛰️ ORBIT <span style="font-size:.7em;color:#8e8e93">(shadow)</span></h2>
-      <span class="label-meta" id="orbitlab-meta">· residual-drift ranking · zero live-rank weight</span>
-      <div class="label-action">
-        <button class="refresh-btn" style="color:#5ac8fa" id="orbitlab-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="orbitlab-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load the ORBIT shadow systems…</p></div>
-    </div>
-  </section>
-
-  <!-- RLT — Relative Leadership Transition shadow system (weight-0, never affects live rank) -->
-  <section class="screener-section" id="rltlab">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#bf5af2"></div>
-      <h2 style="color:#bf5af2">🧭 Relative Leadership <span style="font-size:.7em;color:#8e8e93">(shadow)</span></h2>
-      <span class="label-meta" id="rltlab-meta">· stocks BEGINNING to lead their sector peers · zero live-rank weight · never a buy signal</span>
-      <div class="label-action">
-        <button class="refresh-btn" style="color:#bf5af2" id="rltlab-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="rltlab-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load the leadership-transition shadow board…</p></div>
-    </div>
-  </section>
-
-  <!-- Peer Propagation — peer-network + directed leader/follower shadow engine (weight-0, never affects live rank) -->
-  <section class="screener-section" id="peerlab">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#ff9f0a"></div>
-      <h2 style="color:#ff9f0a">🕸 Peer Propagation <span style="font-size:.7em;color:#8e8e93">(shadow)</span></h2>
-      <span class="label-meta" id="peerlab-meta">· peers moved, this name hasn't reacted yet · zero live-rank weight · never a buy signal</span>
-      <div class="label-action">
-        <button class="refresh-btn" style="color:#ff9f0a" id="peerlab-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="peerlab-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load the peer-propagation shadow board…</p></div>
-    </div>
-  </section>
-
   <!-- 🔭 COUNTERFACTUAL OPPORTUNITY & FORECASTABILITY LAB — shadow measurement:
        missed-winner attribution, dud grading, pipeline funnel, forecastability. -->
   <section class="screener-section" id="cfl">
@@ -610,36 +478,6 @@
     </div>
     <div id="cfl-container">
       <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load the counterfactual view…</p></div>
-    </div>
-  </section>
-
-  <section class="screener-section" id="catalyst">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#64d2ff"></div>
-      <h2 style="color:#64d2ff">⚡ Catalyst–Flow Ranker <span style="font-size:.7em;color:#8e8e93">(research / shadow)</span></h2>
-      <span class="label-meta" id="catalyst-meta">· earnings &amp; guidance events · one confirmation session, then a 5-session hold · sector-relative and net of costs · ordinal scores, never a probability</span>
-      <div class="label-action">
-        <button class="refresh-btn" style="color:#64d2ff" id="catalyst-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="catalyst-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load the Catalyst–Flow board…</p></div>
-    </div>
-  </section>
-
-  <!-- 📉 SHORT INTEREST OVERLAY — shadow research: does FINRA short-interest crowding
-       add incremental 5-session alpha to OMEGA selection? Weight-0, never a signal. -->
-  <section class="screener-section" id="silab">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#ff9f0a"></div>
-      <h2 style="color:#ff9f0a">📉 Short Interest Overlay — Shadow Research <span style="font-size:.7em;color:#8e8e93">(shadow)</span></h2>
-      <span class="label-meta" id="silab-meta">· does short-interest crowding improve OMEGA selection · does not affect live OMEGA ranking</span>
-      <div class="label-action">
-        <button class="refresh-btn" style="color:#ff9f0a" id="silab-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="silab-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load the short-interest shadow research…</p></div>
     </div>
   </section>
 
@@ -718,37 +556,6 @@
     </div>
   </section>
 
-  <!-- TREND RIDER (trend-following + momentum + market-climate traffic light) -->
-  <section class="screener-section" id="trendrider">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#22c55e"></div>
-      <h2 style="color:#22c55e">🚦 Trend Rider</h2>
-      <span class="label-meta" id="trendr-meta">· ride trends when the light is green · stand down on red</span>
-      <div class="label-action">
-        <span class="lbl-time" id="trendr-gen-time"></span>
-        <button class="refresh-btn" style="color:#22c55e" id="trendr-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <details class="scr-help">
-      <summary>📖 New here? What is Trend Rider?</summary>
-      <div class="scr-help-body">
-        <p><b>What this is.</b> A trend-following list with a <b>market "traffic light."</b> 🟢 Green = conditions favor riding trends; 🔴 Red = the broad market is shaky, so stand down. It finds stocks already in strong, <b>established</b> uptrends.</p>
-        <p><b>What it helps you find.</b> Existing winners to <b>ride</b>, rather than early movers to catch. The difference from the Breakout/Emerging tabs: those get you in early; this rides trends that have already established themselves — but only when the light says it's safe.</p>
-        <p class="scr-help-h">How to use it:</p>
-        <ol>
-          <li><b>Check the light first.</b> Green → look at the names. <b>Red → sit on your hands</b> (the light keeps you out of bad markets — that's its main job).</li>
-          <li>On green, read each card's <b>Entry / Stop / Target</b> and confirm on a chart.</li>
-          <li><b>Size by risk</b> and mind the <b>⚠ liquidity badge</b>.</li>
-        </ol>
-        <p class="scr-help-note">The light is the discipline — don't override a red. Research, not advice.</p>
-      </div>
-    </details>
-
-    <div id="trendr-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load the market-climate light…</p></div>
-    </div>
-  </section>
-
   <!-- DAY TRADE (momentum / relative-volume movers, self-learning) -->
   <section class="screener-section" id="daytrade">
     <div class="section-label">
@@ -766,22 +573,6 @@
   </section>
 
   <!-- GAP & GO (unscheduled catalyst gap-ups; validated event edge — skips earnings) -->
-  <!-- DUAL CONFIRMED (buy on BOTH horizons: short-term signal AND long-term trend) -->
-  <section class="screener-section" id="aligned">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#0ea5a5"></div>
-      <h2 style="color:#0ea5a5">🎯 Dual Confirmed</h2>
-      <span class="label-meta">· a buy on BOTH horizons — short-term signal AND ~1-year trend both bullish · ranked by conviction</span>
-      <div class="label-action">
-        <span class="lbl-time" id="aligned-gen-time"></span>
-        <button class="refresh-btn" style="color:#0ea5a5" id="aligned-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <p class="scr-help-note">Drawn from the breakout-screener pool, then kept only where the short-term signal AND the long-term trend read both say buy (trend-continuation). Research to help you find candidates — not financial advice.</p>
-    <div id="aligned-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to scan for names aligned on both horizons…</p></div>
-    </div>
-  </section>
 
   <section class="screener-section" id="gapgo">
     <div class="section-label">
@@ -796,38 +587,6 @@
     </div>
     <div id="gg-container">
       <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load today's unscheduled gappers…</p></div>
-    </div>
-  </section>
-
-  <!-- DOWN-DAY MODE (what to trade when the tape is red: reversion longs + overheated shorts) -->
-  <section class="screener-section" id="downday">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#a78bfa"></div>
-      <h2 style="color:#a78bfa">🪁 Down-Day Mode</h2>
-      <span class="label-meta" id="dd-meta">· red-tape router · oversold-bounce longs + overheated shorts · chasing strength on down days loses</span>
-      <div class="label-action">
-        <span class="lbl-time" id="dd-gen-time"></span>
-        <button class="refresh-btn" style="color:#a78bfa" id="dd-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="downday-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to read the tape…</p></div>
-    </div>
-  </section>
-
-  <!-- MOMENTUM IGNITION — one acceleration-ranked view over the momentum scanners -->
-  <section class="screener-section" id="ignition">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#f97316"></div>
-      <h2 style="color:#f97316">🔥 Momentum Ignition</h2>
-      <span class="label-meta" id="ignition-meta">· acceleration &gt; magnitude — catch names speeding up before they’re obvious</span>
-      <div class="label-action">
-        <span class="lbl-time" id="ignition-gen-time"></span>
-        <button class="refresh-btn" style="color:#f97316" id="ignition-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="ignition-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to rank today’s momentum by acceleration…</p></div>
     </div>
   </section>
 
@@ -942,21 +701,6 @@
     </div>
   </section>
 
-  <section class="screener-section" id="omega">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#7c3aed"></div>
-      <h2 style="color:#7c3aed">💠 OMEGA-SWING</h2>
-      <span class="label-meta" id="omega-meta">· 5–10 day momentum continuation — sustainable early-stage momentum, good entry, controlled downside</span>
-      <div class="label-action">
-        <span class="lbl-time" id="omega-gen-time"></span>
-        <button class="refresh-btn" style="color:#7c3aed" id="omega-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="omega-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to score 5–10 day continuation candidates…</p></div>
-    </div>
-  </section>
-
   <!-- ATLAS-X — SHADOW / weight-0 research workspace (op=atlasx). Cannot originate or affect a live trade. -->
   <section class="screener-section" id="atlas">
     <div class="section-label">
@@ -973,38 +717,6 @@
     </div>
   </section>
 
-  <!-- GAP-DOWN CONTINUATION (short — the mirror of Gap & Go: gap-downs that keep falling) -->
-  <section class="screener-section" id="gapdown">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#ef4444"></div>
-      <h2 style="color:#ef4444">🐻 Gap-Down Continuation</h2>
-      <span class="label-meta" id="gd-meta">· unscheduled gap-downs that keep falling · short the opening-range-low break · earnings filtered out</span>
-      <div class="label-action">
-        <span class="lbl-time" id="gd-gen-time"></span>
-        <button class="refresh-btn" style="color:#ef4444" id="gd-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="gapdown-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load today's gap-downs…</p></div>
-    </div>
-  </section>
-
-  <!-- COIL RADAR (pre-explosion: quiet, coiled names BEFORE the move, calibrated %) -->
-  <section class="screener-section" id="coil">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#a855f7"></div>
-      <h2 style="color:#a855f7">🧬 Coil Radar</h2>
-      <span class="label-meta" id="coil-meta">· quiet, coiled names before an abnormal expansion · historical decile base rates (uncalibrated)</span>
-      <div class="label-action">
-        <span class="lbl-time" id="coil-gen-time"></span>
-        <button class="refresh-btn" style="color:#a855f7" id="coil-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="coil-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to scan for coiled setups…</p></div>
-    </div>
-  </section>
-
   <!-- CHART PATTERN RADAR (objective geometry, shadow/descriptive) -->
   <section class="screener-section" id="patternradar">
     <div class="section-label">
@@ -1018,37 +730,6 @@
     </div>
     <div id="patternradar-container">
       <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load the pattern radar…</p></div>
-    </div>
-  </section>
-
-  <!-- CONFLUENCE (5 classic strategies agree, self-learning) -->
-  <section class="screener-section" id="confluence">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#06c4d4"></div>
-      <h2 style="color:#06c4d4">⚙️ Confluence</h2>
-      <span class="label-meta" id="cfl-meta">· 5 classic strategies agree · self-learning</span>
-      <div class="label-action">
-        <span class="lbl-time" id="cfl-gen-time"></span>
-        <button class="refresh-btn" style="color:#06c4d4" id="cfl-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <details class="scr-help">
-      <summary>📖 New here? What is Confluence?</summary>
-      <div class="scr-help-body">
-        <p><b>What this is.</b> It runs <b>5 classic strategies</b> on every stock — moving-average trend, Supertrend, RSI, MACD, and price-action — and surfaces the names where <b>most of them agree</b>. "Confluence" just means several independent signals pointing the same way at once.</p>
-        <p><b>What it helps you find.</b> Setups backed by <b>more than one</b> indicator, not a single lucky signal — generally a sturdier, higher-quality buy idea. The tab is <b>self-learning</b>: it tracks which strategies have actually been working lately and leans on those.</p>
-        <p class="scr-help-h">How to use it:</p>
-        <ol>
-          <li>Favor names where the <b>most strategies agree</b> — that's the whole point of the tab.</li>
-          <li>Read the card's <b>Entry / Stop / Target</b> and confirm on a chart.</li>
-          <li><b>Size by risk</b> and check the <b>⚠ liquidity badge</b>.</li>
-        </ol>
-        <p class="scr-help-note">More agreement = stronger signal, not a guarantee. Research, not advice.</p>
-      </div>
-    </details>
-
-    <div id="cfl-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to run the multi-strategy scan…</p></div>
     </div>
   </section>
 
@@ -1446,25 +1127,6 @@
 
   <hr class="section-divider" />
 
-  <!-- MOMENTUM ALERTS -->
-  <section class="momentum-section" id="momentum">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#ff6b35"></div>
-      <h2 style="color:#ff6b35">Momentum Alerts</h2>
-      <span class="label-meta" id="momentum-meta">· unusual volume &amp; bullish price action</span>
-      <div class="label-action">
-        <span class="lbl-time" id="momentum-gen-time"></span>
-        <button class="refresh-btn" style="color:#ff6b35" id="momentum-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="momentum-regime"></div>
-    <div id="momentum-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Scanning StockTwits &amp; live prices for unusual momentum…</p></div>
-    </div>
-  </section>
-
-  <hr class="section-divider" />
-
   <!-- 🧭 BRIEF — synthesized read across Forecast + Crowd + Sharp, with equity translation -->
   <section class="momentum-section" id="pulse">
     <div class="section-label">
@@ -1500,57 +1162,6 @@
 
   <hr class="section-divider" />
 
-  <section class="momentum-section" id="evolve">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#8b5cf6"></div>
-      <h2 style="color:#8b5cf6">🧬 EVOLVE</h2>
-      <span class="label-meta" id="evolve-meta">· adaptive pre-move discovery — calibrated probability of a large upside move, split by horizon</span>
-      <div class="label-action">
-        <span class="lbl-time" id="evolve-gen-time"></span>
-        <button class="refresh-btn" style="color:#8b5cf6" id="evolve-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="evolve-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load EVOLVE…</p></div>
-    </div>
-  </section>
-
-  <hr class="section-divider" />
-
-  <section class="momentum-section" id="readthrough">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#14b8a6"></div>
-      <h2 style="color:#14b8a6">🔗 Read-Through</h2>
-      <span class="label-meta" id="readthrough-meta">· who benefits from today's movers — and hasn't repriced yet</span>
-      <div class="label-action">
-        <span class="lbl-time" id="readthrough-gen-time"></span>
-        <button class="refresh-btn" style="color:#14b8a6" id="readthrough-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="readthrough-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load the read-through graph…</p></div>
-    </div>
-  </section>
-
-  <hr class="section-divider" />
-
-  <section class="momentum-section" id="anomaly">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#8b5cf6"></div>
-      <h2 style="color:#8b5cf6">🕵️ Stealth</h2>
-      <span class="label-meta" id="anomaly-meta">· names moving on volume with no news — AI-investigated for a hidden catalyst</span>
-      <div class="label-action">
-        <span class="lbl-time" id="anomaly-gen-time"></span>
-        <button class="refresh-btn" style="color:#8b5cf6" id="anomaly-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="anomaly-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load the stealth scan…</p></div>
-    </div>
-  </section>
-
-  <hr class="section-divider" />
-
   <section class="momentum-section" id="biotech">
     <div class="section-label">
       <div class="accent-bar" style="background:#10b981"></div>
@@ -1568,23 +1179,6 @@
 
   <hr class="section-divider" />
 
-  <section class="momentum-section" id="secondwave">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#0ea5e9"></div>
-      <h2 style="color:#0ea5e9">🌊 Second Wave</h2>
-      <span class="label-meta" id="secondwave-meta">· early movers the crowd hasn’t found yet — AI-forecast for a reflexive second wave</span>
-      <div class="label-action">
-        <span class="lbl-time" id="secondwave-gen-time"></span>
-        <button class="refresh-btn" style="color:#0ea5e9" id="secondwave-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="secondwave-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load the second-wave scan…</p></div>
-    </div>
-  </section>
-
-  <hr class="section-divider" />
-
   <section class="momentum-section" id="crossasset">
     <div class="section-label">
       <div class="accent-bar" style="background:#f97316"></div>
@@ -1597,23 +1191,6 @@
     </div>
     <div id="crossasset-container">
       <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load the cross-asset scan…</p></div>
-    </div>
-  </section>
-
-  <hr class="section-divider" />
-
-  <section class="momentum-section" id="toneshift">
-    <div class="section-label">
-      <div class="accent-bar" style="background:#a855f7"></div>
-      <h2 style="color:#a855f7">🎚️ Tone Shift</h2>
-      <span class="label-meta" id="toneshift-meta">· recent earnings calls that sounded more confident (or more cautious) than last quarter</span>
-      <div class="label-action">
-        <span class="lbl-time" id="toneshift-gen-time"></span>
-        <button class="refresh-btn" style="color:#a855f7" id="toneshift-refresh-btn">⟳ Refresh</button>
-      </div>
-    </div>
-    <div id="toneshift-container">
-      <div class="mom-status"><div class="mom-spinner"></div><p>Open this tab to load the tone-shift scan…</p></div>
     </div>
   </section>
 

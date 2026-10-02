@@ -64,7 +64,7 @@ test('live prices, charts and the version/health/push probes are network-only', 
 
 test('snapshot-shaped reads are cacheable: sessionboard, today, sectors, scoreboard (default op), maturity, screener, backtest', () => {
   for (const p of ['/api/tracker?op=sessionboard', '/api/tracker?op=today', '/api/tracker?op=scoreboard', '/api/tracker',
-    '/api/tracker?op=maturity', '/api/tracker?op=challenger', '/api/tracker?op=leaderboard', '/api/sectors',
+    '/api/tracker?op=maturity', '/api/tracker?op=challenger', '/api/sectors',
     '/api/sectors?mode=rotation', '/api/screener?scope=large', '/api/backtest?scope=large&months=3',
     '/api/tracker?op=techcommandticker&ticker=MDB', '/api/tracker?op=ignitionlive', '/api/tracker?op=cern']) {
     assert.equal(classify(p), 'snapshot', p);

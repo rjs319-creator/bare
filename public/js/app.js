@@ -16,26 +16,17 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   import { loadSessionBoard } from './session-board.js';
   import { renderHouseBook } from './house-book.js';
   import { initMyBook } from './my-book.js';
-  import { loadEvolve } from './evolve.js';
   import { loadEnsemble } from './omega-ensemble.js';
-  import { loadIgnition } from './ignition.js';
   import { loadLowFloat, loadBreakoutRadar, loadMoverAudit, loadIntradayValidation } from './lowfloat.js';
   import { loadIgnitionLive } from './ignition-live.js';
-  import { loadOmega } from './omega-swing.js';
   import { loadAtlas } from './atlas.js';
   import { loadSwingSupervisor } from './swing-supervisor.js';
   import { loadPremove } from './premove.js';
-  import { loadOrbitLab } from './orbit-lab.js';
-  import { loadRltLab } from './rlt-lab.js';
-  import { loadPeerLab } from './peer-lab.js';
   import { loadGridlock } from './gridlock.js';
   import { loadCflLab } from './cfl-lab.js';
-  import { loadSiLab } from './si-lab.js';
   import { loadPsrlLab } from './psrl-lab.js';
-  import { renderCatalystLab } from './catalyst-lab.js';
   import { renderShell as renderPulse2Shell } from './pulse2-render.js';
   import { loadTechCommand } from './tech-command.js';
-  import { loadLeaderboard } from './leaderboard.js';
   import { loadCern, eventName as cernEventName } from './cern.js';
   import { mountVerdict, loadGrades } from './evidence-badge.js';
   import { drawPatternChart } from './pattern-chart.js';
@@ -70,138 +61,154 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // Tapping a "💰 flow" badge on any screener card jumps to the Options tab.
   setFlowNav(() => showTab('options'));
 
-  // ── App tabs with a "Markets" hub (Screener / Rotation / Sectors) ──
+  // ── Five destinations · merged lanes · retired tabs (Phase 2, 2026-10-02) ──
   const TAB_GROUPS = {
     // Five destinations (2026-09-20 simplification): Today · Trade · Markets · Evidence
     // · Research. EVERY section id stays registered here so #hash deep links, the ⌘K
     // palette and hashchange keep resolving — but Simple mode (the default) renders
     // only SIMPLE_TABS in the sub-nav; Expert mode shows the whole group under the
     // SUB_HZ dividers. Hiding a tab never touches its nightly ledger.
+    // Phase 2 (docs/SIMPLIFICATION-PLAN §6): duplicate surfaces are MERGED_INTO a host
+    // tab and render as lane pills under it, not as sub-nav pills of their own; the 23
+    // §5 REMOVE tabs are gone from the DOM and RETIRED_TO redirects their deep links.
     // (session-board-frontend.test.js pins the home literal byte-exact.)
-    home:       ['today', 'session', 'ensemble', 'start', 'quickhit'],
+    home:       ['today', 'gameplan', 'brief', 'session', 'quickhit', 'ensemble', 'opportunities', 'start'],
     // Trade = every candidate / position surface, ordered by holding horizon.
     // ignition-live-routes.test.js pins 'lowfloat','ignitionlive','breakoutradar' adjacent.
-    trade:      ['daytrade', 'lowfloat', 'ignitionlive', 'breakoutradar', 'gapgo', 'gapdown', 'ignition', 'swingsup', 'screener', 'premove', 'opportunities', 'omega', 'atlas', 'aligned', 'custom', 'ghost', 'coil', 'patternradar', 'downday', 'confluence', 'trendrider', 'fade', 'biotech', 'tech-command', 'coremo', 'momentum', 'putsell', 'picks'],
-    // Markets = macro/context + the forecast & prediction-market read (was Markets + Predict).
-    markets:    ['rotation', 'sectors', 'news', 'pulse', 'thesis', 'evolve', 'gameplan', 'brief', 'forecast', 'crowd', 'sharp', 'alerts'],
-    proof:      ['scoreboard', 'evidence', 'movermiss', 'intradayval', 'baselines', 'leaderboard', 'coreperf'],
-    // NOTE: ignition-live-routes.test.js pins 'edge','cfl','orbitlab' + 'rltlab','psrl',
-    // 'gridlock' adjacencies and requires 'peerlab' to close the list — insert new lab
-    // tabs only at the unpinned seams (silab/catalyst sit between gridlock and peerlab).
-    lab:        ['events', 'readthrough', 'anomaly', 'secondwave', 'crossasset', 'toneshift', 'xalerts', 'options', 'backtest', 'edge', 'cfl', 'orbitlab', 'rltlab', 'psrl', 'gridlock', 'silab', 'catalyst', 'peerlab'],
+    trade:      ['daytrade', 'lowfloat', 'ignitionlive', 'breakoutradar', 'gapgo', 'swingsup', 'screener', 'premove', 'atlas', 'custom', 'patternradar', 'fade', 'biotech', 'tech-command', 'coremo'],
+    // Markets = macro/context + the forecast & crowd read + the ONE options page.
+    markets:    ['rotation', 'sectors', 'news', 'picks', 'pulse', 'thesis', 'forecast', 'options', 'crowd', 'sharp', 'putsell', 'alerts'],
+    // Evidence = one page: the Scoreboard hosts grades, baselines and the two diagnostics as lanes.
+    proof:      ['scoreboard', 'evidence', 'baselines', 'movermiss', 'intradayval'],
+    // Research = what still accrues a ledger and has not been judged no-edge.
+    // psrl-routes.test.js pins 'cfl', 'psrl', 'gridlock' adjacent.
+    lab:        ['events', 'crossasset', 'xalerts', 'backtest', 'cfl', 'psrl', 'gridlock'],
+  };
+  // Duplicate surface → the tab that hosts it. A merged tab keeps its section, its loader,
+  // its verdict banner and its #hash; it just has no pill of its own — it is a LANE of the
+  // host (rendered by renderHubSubnav right under the sub-nav). Host and lane share a group.
+  const MERGED_INTO = {
+    gameplan: 'today', brief: 'today',
+    quickhit: 'session', ensemble: 'session', opportunities: 'session',
+    lowfloat: 'ignitionlive', breakoutradar: 'ignitionlive',
+    sectors: 'rotation', picks: 'news',
+    crowd: 'options', sharp: 'options', putsell: 'options',
+    evidence: 'scoreboard', baselines: 'scoreboard', movermiss: 'scoreboard', intradayval: 'scoreboard',
+  };
+  const LANES_OF = Object.entries(MERGED_INTO).reduce((m, [lane, host]) => ({ ...m, [host]: [...(m[host] || []), lane] }), {});
+  // Lanes that stay Expert-only even when their host is a Simple tab (diagnostics and the
+  // second/third compositions of the same rows).
+  const EXPERT_LANES = new Set(['quickhit', 'ensemble', 'opportunities', 'movermiss', 'intradayval']);
+  // §5 REMOVE tabs (DOM + renderer deleted 2026-10-02) → where an old deep link / chip lands.
+  // Every one of these had a no-edge, Disabled, retired or falsified verdict; their nightly
+  // ledgers (where still accruing) are untouched and still read by the Scoreboard.
+  const RETIRED_TO = {
+    gapdown: 'gapgo', ignition: 'ignitionlive', omega: 'screener', aligned: 'session', ghost: 'screener',
+    coil: 'patternradar', downday: 'today', confluence: 'session', trendrider: 'screener', momentum: 'daytrade',
+    evolve: 'today', leaderboard: 'scoreboard', coreperf: 'coremo',
+    readthrough: 'news', anomaly: 'news', secondwave: 'news', toneshift: 'news',
+    edge: 'events', orbitlab: 'scoreboard', rltlab: 'psrl', silab: 'scoreboard', catalyst: 'scoreboard', peerlab: 'scoreboard',
   };
   // Holding-horizon of each candidate/position sub-tab → drives the horizon dividers
   // in the sub-nav so the app is visibly separated by time horizon (the spec ask).
   const SUB_HZ = {
-    daytrade: 'intraday', gapgo: 'intraday', gapdown: 'intraday',
+    daytrade: 'intraday', gapgo: 'intraday',
     lowfloat: 'intraday', breakoutradar: 'intraday',
     ignitionlive: 'intraday',
-    ignition: 'intraday',
-    swingsup: 'swing', premove: 'swing', opportunities: 'swing', omega: 'swing', atlas: 'swing', aligned: 'swing', screener: 'swing', custom: 'swing', ghost: 'swing', coil: 'swing', patternradar: 'swing', downday: 'swing', confluence: 'swing', trendrider: 'swing', fade: 'swing', biotech: 'swing',
-    coremo: 'portfolio', momentum: 'portfolio', putsell: 'portfolio', picks: 'portfolio',
+    swingsup: 'swing', premove: 'swing', opportunities: 'swing', atlas: 'swing', screener: 'swing', custom: 'swing', patternradar: 'swing', fade: 'swing', biotech: 'swing',
+    coremo: 'portfolio',
   };
   const HZ_DIVIDER = { intraday: '⏱ Intraday · same-day', swing: '📅 Swing · days–weeks', portfolio: '💼 Portfolio · weeks–months', context: '📊 Context', predict: '🔮 Forecast & crowd', audit: '🧪 Audits' };
   Object.assign(SUB_HZ, {
     'tech-command': 'portfolio',
-    rotation: 'context', sectors: 'context', news: 'context', pulse: 'context', thesis: 'context', evolve: 'context',
-    gameplan: 'predict', brief: 'predict', forecast: 'predict', crowd: 'predict', sharp: 'predict', alerts: 'predict',
-    movermiss: 'audit', intradayval: 'audit', baselines: 'audit', leaderboard: 'audit', coreperf: 'audit',
+    rotation: 'context', sectors: 'context', news: 'context', picks: 'context', pulse: 'context', thesis: 'context',
+    forecast: 'predict', options: 'predict', crowd: 'predict', sharp: 'predict', putsell: 'predict', alerts: 'predict',
+    movermiss: 'audit', intradayval: 'audit', baselines: 'audit',
   });
   const TOP_TABS = Object.keys(TAB_GROUPS);
   const SECTION_IDS = Object.values(TAB_GROUPS).flat();
-  // ── Simple mode = the curated app. Twelve tabs that serve the daily jobs (is today
+  // ── Simple mode = the curated app. Eleven tabs that serve the daily jobs (is today
   // a day to trade · best graded setup now · what is igniting · what is moving · did
   // the picks work). Everything else is a research surface with paper weight and
   // lives in Expert mode, still reachable by #hash and ⌘K. Order within a group is
-  // still TAB_GROUPS order.
-  const SIMPLE_TABS = new Set(['today', 'session', 'daytrade', 'ignitionlive', 'screener', 'swingsup', 'tech-command', 'rotation', 'news', 'pulse', 'scoreboard', 'evidence']);
+  // still TAB_GROUPS order. (Phase 2 folded 'evidence' into the Scoreboard as a lane.)
+  const SIMPLE_TABS = new Set(['today', 'session', 'daytrade', 'ignitionlive', 'screener', 'swingsup', 'tech-command', 'rotation', 'news', 'pulse', 'scoreboard']);
   // Old top-level keys (bookmarks, localStorage) → their new destination.
   const LEGACY_TOP = { candidates: 'trade', positions: 'trade', tech: 'trade', predict: 'markets' };
   const isSimpleMode = () => document.body.classList.contains('simple');
-  const isTabVisible = s => !isSimpleMode() || SIMPLE_TABS.has(s);
+  // A lane is visible in Simple when its host is a Simple tab and it is not an Expert lane.
+  const isLaneVisible = s => !!MERGED_INTO[s] && SIMPLE_TABS.has(MERGED_INTO[s]) && !EXPERT_LANES.has(s);
+  const isTabVisible = s => !isSimpleMode() || SIMPLE_TABS.has(s) || isLaneVisible(s);
   // First member of a group the current mode actually shows (never open a group on a hidden tab).
-  const defaultSubOf = top => (TAB_GROUPS[top] || []).find(isTabVisible) || (TAB_GROUPS[top] || [])[0];
+  const defaultSubOf = top => (TAB_GROUPS[top] || []).find(s => isTabVisible(s) && !MERGED_INTO[s]) || (TAB_GROUPS[top] || [])[0];
   const SUB_LABEL = {
-    today: '🏠 Today', session: '🎯 Session', ensemble: '🎯 OMEGA Ensemble', start: '📘 Guide',
-    quickhit: '⚡ Quick Hit', swingsup: '📋 Swing Supervisor', premove: '📡 Pre-Move', opportunities: '⭐ Opportunities', omega: '💠 OMEGA-Swing', atlas: '🛰 ATLAS-X', aligned: '🎯 Dual Confirmed', screener: '🔎 Breakout', custom: '🧠 Adaptive Momentum', coremo: '📈 Core Momentum', daytrade: '⚡ Day Trade', lowfloat: '🧨 Low-Float Ignition', ignitionlive: '🚀 Ignition Live', breakoutradar: '📉 Breakout Radar', gapgo: '🚀 Gap & Go', ignition: '🔥 Ignition', downday: '🪁 Down-Day Mode', coil: '🧬 Coil Radar', patternradar: '📐 Pattern Radar', confluence: '⚙️ Confluence', ghost: '👻 Ghost', trendrider: '🚦 Trend Rider', fade: '🔥 Overheated', gapdown: '🐻 Gap-Down',
-    'tech-command': '🖥 Technology Command Center',
-    movermiss: '🔍 Mover Miss Audit', intradayval: '🧪 Intraday Validation',
-    rotation: '🔄 Rotation', sectors: '📊 Sectors', momentum: '🔥 Momentum', news: '📰 News', thesis: '🧾 Thesis Changes', options: '⚡ Options', putsell: '💰 Options Moves', picks: '⭐ Picks',
-    pulse: '📡 Market Pulse', evolve: '🧬 EVOLVE', readthrough: '🔗 Read-Through', anomaly: '🕵️ Stealth', biotech: '🧬 Biotech', secondwave: '🌊 Second Wave', crossasset: '🌐 Cross-Asset', toneshift: '🎚️ Tone Shift', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', forecast: '🔮 Forecast', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', alerts: '🔔 Alerts',
-    backtest: '🧪 Backtest', events: '⚡ Events (CERN)', edge: '📓 Edge Book', orbitlab: '🛰️ ORBIT (shadow)', rltlab: '🧭 Leadership (shadow)', gridlock: '⚡ GRIDLOCK (shadow)', peerlab: '🕸 Peers (shadow)', cfl: '🔭 Counterfactual Lab', silab: '📉 Short Interest (shadow)', psrl: '🪜 Persistent Trends (shadow)', catalyst: '⚡ Catalyst–Flow (research)',
-    leaderboard: '🏆 Algo Leaderboard', scoreboard: '📋 Scoreboard', evidence: '🎖️ Evidence', baselines: '🧪 Baselines', coreperf: '📈 Core Performance', xalerts: '🐦 Trade Alerts',
+    today: '🏠 Today', session: '🎯 Session', ensemble: '🎯 Combined shortlist', start: '📘 Guide',
+    quickhit: '⚡ Quick Hit', gameplan: '🗞️ Game Plan', brief: '🧭 Brief', opportunities: '⭐ Opportunities',
+    daytrade: '⚡ Day Trade', lowfloat: '🧨 Low-Float Ignition', ignitionlive: '🚀 Ignition Live', breakoutradar: '📉 Breakout Radar', gapgo: '🚀 Gap & Go',
+    swingsup: '📋 Swing Supervisor', screener: '🔎 Breakout', premove: '📡 Pre-Move (research)', atlas: '🛰 Swing entry planner (research)', custom: '🧠 Adaptive Momentum',
+    patternradar: '📐 Pattern Radar', fade: '🔥 Overheated (avoid)', biotech: '🧬 Biotech', 'tech-command': '🖥 Technology Command Center', coremo: '📈 Core Momentum',
+    rotation: '🔄 Rotation', sectors: '📊 Sectors', news: '📰 News', picks: '⭐ Picks', pulse: '📡 Market Pulse', thesis: '🧾 Thesis Changes',
+    forecast: '🔮 Forecast', options: '⚡ Options', crowd: '🎲 Crowd', sharp: '🕵️ Sharp Money', putsell: '💰 Put-selling setups', alerts: '🔔 Alerts',
+    scoreboard: '📋 Scoreboard', evidence: '🎖️ Evidence', baselines: '🧪 Baselines', movermiss: '🔍 Mover Miss Audit', intradayval: '🧪 Intraday Validation',
+    events: '⚡ Forced-selling bounces', crossasset: '🌐 Cross-Asset', xalerts: '🐦 Trade Alerts', backtest: '🧪 Backtest', cfl: '🔭 Counterfactual Lab', psrl: '🪜 Persistent Trends (shadow)', gridlock: '⚡ GRIDLOCK (shadow)',
   };
-  // Plain-English "what is this tab?" hovers for a novice investor — one line per
-  // sub-tab, shown when you hover the tab button.
+  // Shorter names for the lane pills (a lane sits under its host, so the host's noun is implied).
+  const LANE_LABEL = {
+    evidence: '🎖️ Grades', baselines: '🧪 vs dumb baselines', movermiss: '🔍 Mover miss audit', intradayval: '🧪 Intraday validation',
+    lowfloat: '🧨 Low-float lane', breakoutradar: '📉 5-min structure', sectors: '📊 Heatmap', picks: '⭐ Picks',
+    crowd: '🎲 Crowd odds', sharp: '🕵️ Sharp money', putsell: '💰 Put-selling',
+    quickhit: '⚡ Quick Hit', ensemble: '🎯 Combined shortlist', opportunities: '⭐ Research list', gameplan: '🗞️ Game plan', brief: '🧭 Brief',
+  };
+  // One plain sentence per tab — the hover on its pill. Jargon is kept out on purpose
+  // (Phase 2 copy rule: say what it shows and whether it is proven, nothing else).
   const SECTION_HELP = {
-    today: 'Your daily home base: the market mood and where to start.',
-    session: 'Session Board — what is worth looking at RIGHT NOW, graded on today\'s snapshot with the time frame spelled out (intraday / days to weeks / weeks to months / long term). Premarket it reads gaps and pre-volume; during the session it tracks each name against its frozen entry, stop and target; it tells you what changed since you last looked. Grades are snapshot reads, not proven edge.',
-    ensemble: 'Every screener combined into ONE portfolio-aware book. Correlated screeners are counted once (not seven times), trading costs are charged against each target, and names are dropped when they add duplicate risk — with the reason shown. It composes the existing engines and computes no score of its own, so it is allowed to hand you fewer than 10 names, or none.',
-    start: 'A beginner’s guide to what everything in this app means.',
-    quickhit: 'The Top 5 plays across large, small AND micro caps — one fast shortlist with links to where each lives.',
-    swingsup: 'Every published swing pick, tracked from its original thesis until a documented end. A pick never disappears without an explanation — it is re-evaluated each session (still valid, weakening, displaced, target hit, invalidated, no-fill or expired) even after it drops off its own screener. Accountability, not a claim of edge.',
-    premove: 'SHADOW pre-move transition inventory: stocks that look primed for an upside move BEFORE it starts, held apart from (1) a valid executable trigger arriving and (2) whether positive expectancy remains after entry. States: PRIMED → ARMED → TRIGGERED → ACCEPTED, or WEAKENING / INVALIDATED / EXPIRED / COMPLETED. Weight-zero — it never changes any live rank; probabilities appear only after a validated calibration artifact exists.',
-    opportunities: 'Research candidates from across the screeners, gathered in one ranked list (not trade advice).',
-    aligned: 'Stocks that are a BUY on both horizons at once — the short-term signal AND the ~1-year trend both point up. The strongest agreement of the dual read.',
-    putsell: 'Options Moves — AI-screened options-strategy setups from full-market price action. First strategy: cash-secured put selling (quality uptrends pulled back to support, with a suggested strike below support). More strategies coming.',
-    screener: 'Stocks breaking out of chart patterns (classic breakout setups).',
-    custom: 'A momentum model that adapts its scoring to the current market regime.',
-    coremo: 'Steady, confirmed uptrends with the strongest 12-month momentum.',
-    daytrade: 'Short-term setups for same-day trading, with a live entry-timing grade.',
-    gapgo: 'Stocks gapping up on news and continuing — a shadow event challenger; its prospective ledger has not cleared promotion.',
-    omega: 'OMEGA-SWING — liquid names with early-to-middle-stage momentum likely to keep rising over the next 5–10 trading days. Sector- and market-relative, ranked by expected utility, with an entry plan and invalidation for each. Not a chaser of already-vertical moves; won’t force picks in weak regimes.',
-    atlas: 'ATLAS-X — a SHADOW / weight-0 swing research workspace. Expert-staged candidates are sorted into entry lanes (Enter Next Session / Wait-for-Breakout / -Pullback / -Confirmation / Do Not Chase / Avoid), tracked as episodes once live, and judged in an Evidence & Validation panel. It CANNOT originate or affect a live trade; failure-score and target-before-stop are qualitative bands (never percentages), and it is allowed to show nothing.',
-    lowfloat: 'Low-Float Ignition — the same-session explosion lane built on ACTUAL float (not market-cap as a proxy). Explosion potential and trade quality are scored separately, so a name can be flagged as likely to run and still be marked an unsuitable entry. Historically dormant stocks are NOT excluded: current-session dollar volume decides tradeability, not last month\'s average. Paper only — no template has passed the promotion gate.',
-    ignitionlive: 'IGNITION Live — the spec-shaped board over the low-float lane: two scores per name (Ignition = how abnormal the momentum event is; Opportunity = how good the CURRENT entry is), an 8-stage lifecycle (dormant → early ignition → confirming → breakout → expansion → parabolic → exhaustion / failed), extension risk with a hard do-not-chase price, market-wide attention-rank acceleration, catalyst letter grades with freshness decay, and EDGAR-backed dilution risk. Default sort is Opportunity — deliberately NOT % gain. Rule-based estimates only; 5-minute bars on a ~10-minute tick; paper only.',
-    breakoutradar: 'Intraday Breakout Radar — five-minute structure sorted into one state per name: early ignition, compression, breakout pending/attempt/confirmed/retest, failed breakout, distribution, exhaustion, stale. Confirmations use COMPLETED bars only; a forming candle can never confirm a breakout.',
-    movermiss: 'Large-Mover Miss Audit — after the close, the day\'s biggest movers with the exact pipeline stage and reason we lost each one. Answers what percentage of the top movers we detected, how early, and which filter costs the most recall.',
-    intradayval: 'Intraday Validation — the forward record of every entry template, measured from the simulated fill at the first bar AFTER the signal became user-visible. Templates are never pooled, and only the promotion gate can turn one live.',
-    ignition: 'One acceleration-ranked view over all the momentum scanners: catch names whose price AND volume are speeding up (up 10% and accelerating beats up 60% and slowing), with a catalyst tag, ignition score, and stage. EOD/daily data — no real-time or LULD halt prediction.',
-    downday: 'What to trade when the market is red: oversold-bounce longs + overheated shorts, with the honest proof that chasing strength on down days loses.',
-    coil: 'Names coiling in tight compression before a potential explosive move.',
-    patternradar: 'Stateful chart-setup engine: family-specific structural detectors, frozen episode levels, position-aware long/short actions, evidence-gated probabilities. Shadow — research until a family validates.',
-    confluence: 'Stocks flagged by several screeners at once (agreement = higher conviction).',
-    ghost: 'Quiet accumulation — big money building a position before the breakout.',
-    trendrider: 'Ride established uptrends; the model drops names once they stop trending.',
-    fade: 'Overheated names that may be due to pull back (short/caution ideas).',
-    gapdown: 'Stocks gapping DOWN hard on news and continuing lower — short setups (the mirror of Gap & Go). Best off red days; mind borrow costs.',
-    orbitlab: 'ORBIT & ORBIT-ML — experimental residual-drift ranking systems running in shadow (zero weight, never affect the live rank). Shown here to accrue an honest out-of-sample track record; currently grade C with no durable edge.',
-    rltlab: 'Relative Leadership Transition — shadow system finding stocks BEGINNING to outperform their sector peers (rank change, not just high rank). Watch/armed/triggered states only; zero weight, never a buy signal, no probabilities until calibration is earned.',
-    peerlab: 'Peer Propagation — shadow engine flagging stocks whose PEERS and historical leaders have moved while their own price has not yet reacted. Early/confirming stages only; zero weight, never a buy signal, no probabilities until out-of-fold calibration is earned.',
-    gridlock: 'GRIDLOCK — shadow engine mapping PHYSICAL constraints (AI data-center power demand, plant retirements, turbine orders — PJM first) to companies with VERIFIED exposure. Decomposed research scores only; zero weight, no probabilities, never a buy signal.',
-    psrl: 'Persistent Trends — shadow layer ranking stocks by CONTINUITY of their advance (gradual staircase vs one-day jump-and-plateau) and by beta-adjusted leadership vs SPY and their sector. Evidence scores only, zero weight, never a buy signal; probabilities are not trained or calibrated.',
-    silab: 'Short Interest Overlay — a SHADOW experiment testing whether FINRA consolidated short-interest crowding (days-to-cover) adds incremental 5-session alpha to OMEGA selection. Reports the honest verdict, walk-forward evidence and per-ticker crowding context. Weight-0; it does not affect the live OMEGA ranking and is never a buy/sell or squeeze signal.',
-    cfl: 'Counterfactual Lab — which big winners the pipeline MISSED (and at exactly which stage: universe, data, screeners, ranking, timing, risk gate, display), which picks became duds and why, and whether each miss was preventable or genuinely unforecastable. Measurement only; never a buy signal.',
-    'tech-command': 'One technology universe, three INDEPENDENT conclusions: a day-trade board projected read-only from the frozen Day Trade engine, a swing board that inherits the app\u2019s governed eligibility gate, and a separate long-term investment model. Every candidate states why now, the exact trigger and what invalidates it; an \u201cAround the Corner\u201d timeline covers past, present and scheduled events. Options and social attention are weight-zero annotations that can never originate a trade, and no probability is shown because none is calibrated.',
-    rotation: 'Which sectors money is rotating into and out of, week over week.',
-    sectors: 'Sector performance heatmap — what’s leading and lagging.',
-    momentum: 'Strong-buy and strong-sell momentum calls right now.',
+    today: 'Is today a day to trade at all? The market read, the regime and where to start.',
+    session: 'Session Board — what is worth looking at RIGHT NOW, graded A to F with the time frame and live status against its levels; grades are snapshot reads, not proven edge.',
+    ensemble: 'Every screen combined into one short list with duplicates counted once; research only, often empty.',
+    start: 'The plain-English guide to what everything in this app means.',
+    quickhit: 'The five strongest names across large, small and micro caps, with a link to where each lives.',
+    gameplan: 'A once-a-day plain-English plan for the session.',
+    brief: 'A short brief on where the signals agree and disagree.',
+    opportunities: 'Research candidates from every screen in one ranked list; not trade advice.',
+    daytrade: 'Same-day setups with a live entry-timing light; its own record is negative and says so.',
+    lowfloat: 'The same-session ignition lane built on actual float, scored separately for explosion potential and entry quality.',
+    ignitionlive: 'IGNITION Live — what is igniting right now on five-minute bars: how abnormal the move is and how good the current entry is, with a do-not-chase price.',
+    breakoutradar: 'Five-minute chart structure, one state per name; only completed bars can confirm.',
+    gapgo: 'Gap-ups on news that keep going; research only, not yet proven.',
+    swingsup: 'Every published swing pick followed until a documented end; accountability, not a claim of edge.',
+    screener: 'Stocks breaking out of chart bases; the one engine with a prospective cost-net record.',
+    premove: 'Names that look primed before a move starts; research only, no probabilities.',
+    atlas: 'A swing entry planner that stages candidates into wait / enter / avoid lanes; research only.',
+    custom: 'A momentum model that re-weights itself to the market regime; a zero-weight benchmark.',
+    patternradar: 'Classic chart setups tracked as episodes with frozen levels; research until a family proves out.',
+    fade: 'Overheated names that tend to lag; proven only as an avoid filter, never a short call.',
+    biotech: 'Biotech runners sorted into lanes with binary-event and dilution traps pulled out; a lead, not a trade.',
+    'tech-command': 'One technology universe judged three ways: day trade, swing and long-term investment.',
+    coremo: 'Steady twelve-month uptrends, filtered for quality; a falsified factor shown as a book.',
+    rotation: 'Which sectors money is rotating into and out of; the one read the data supports.',
+    sectors: 'Sector performance heatmap — what is leading and lagging.',
     news: 'Market-moving headlines, summarized.',
-    options: 'Unusual options activity — where the big option bets are landing.',
-    picks: 'Your saved / tracked picks.',
-    pulse: 'What the crowd is buzzing about on social + finance media (attention, not advice).',
-    evolve: 'An adaptive engine that composes the app’s own screeners, learns which one works in which market regime, and only surfaces names where a CALIBRATED probability of a large upside move clears an honest guardrail — split by Fast/Swing/Position horizon. It’s allowed to show nothing.',
-    readthrough: 'Second-order “who benefits and hasn’t moved yet” — names linked to today’s gappers by supply chain or competition.',
-    anomaly: 'Stocks quietly climbing on volume with NO news — the AI investigates each for a hidden catalyst (possible stealth accumulation).',
-    biotech: 'Biotech names that just started running (micro→large cap), scored 0–100 with a catalyst-aware model — the AI finds WHY each is moving (FDA/data/M&A/deal) or flags it Unknown, and the score penalizes dilution & pump-and-dump traps.',
-    secondwave: 'Stocks with a first move up that the crowd hasn’t piled into yet — the AI forecasts which are primed for a reflexive second wave of buyers.',
-    crossasset: 'US stocks levered to a move in another asset (a commodity, an overnight foreign market, crypto, or rates) that they haven’t caught up to yet.',
-    toneshift: 'Companies whose latest earnings call sounded more confident (or more cautious) than last quarter — a language shift before the numbers catch up.',
-    gameplan: 'A plain-English daily game plan for the market.',
-    brief: 'A concise market brief — the current stance and why.',
-    forecast: 'Falsifiable market predictions, auto-graded against real prices.',
+    picks: 'Cheap news-driven discovery; not tracked as a strategy.',
+    pulse: 'A measured read of the market right now plus evidence-graded stories, split by horizon.',
+    thesis: 'Where the weight of evidence on a name has turned; a stale research record.',
+    forecast: 'Falsifiable market calls, auto-graded against real prices.',
+    options: 'One options page: unusual flow, the crowd odds and put-selling setups; a lead to investigate.',
     crowd: 'Prediction-market odds on macro events.',
-    sharp: 'Large prediction-market positioning that diverges from the crowd — real bets, not a verified edge.',
-    alerts: 'Auto-caught events — sharp-money flags and stance flips.',
-    backtest: 'Test the models against history: does the edge hold up over time?',
-    events: 'Forced-selling events — when someone had to sell regardless of price (index changes, IPO lock-ups, fund fire-sales), and whether the bounce actually pays.',
-    edge: 'The Edge Book: two independent strategy sleeves and their beat-the-market rate.',
-    leaderboard: 'A leaderboard ranking the app’s own algorithms by track record.',
-    scoreboard: 'The honest report card: how every signal type has actually performed vs the market.',
-    evidence: 'How much to trust each strategy — a Validated/Promising/Experimental grade earned from its own track record, and which unproven ones live in the Research Lab.',
-    baselines: 'Does each strategy actually beat a DUMB baseline? Two baselines are enforced per strategy — SPY and its sector. The naive screens (random/equal-weight, momentum, 52-week-high, relative-volume) are shown alongside for context on a different benchmark and horizon; they are not applied as gates.',
-    coreperf: 'Quarterly performance of the Core Momentum model vs the market.',
-    xalerts: 'Ranked trade alerts scraped from social accounts, graded on forward returns.',
+    sharp: 'Large prediction-market positions that diverge from the crowd; real bets, not a verified edge.',
+    putsell: 'Cash-secured put-selling setups on quality pullbacks; nothing here has traded.',
+    alerts: 'Events the app caught — sharp-money flags and stance flips — and the notification settings.',
+    scoreboard: 'The track record: how every signal type actually performed against the market, after costs.',
+    evidence: 'How much to trust each strategy — a grade earned from its own record.',
+    baselines: 'Does each strategy actually beat a DUMB baseline? Two baselines are enforced per strategy (SPY and its sector); the naive screens are shown for context and not applied as gates.',
+    movermiss: 'After the close: which big movers the pipeline missed and at which stage.',
+    intradayval: 'The forward record of every intraday entry template, measured from the first visible bar.',
+    events: 'Forced-selling bounces — index changes, lock-ups and fire-sales — and whether the bounce pays.',
+    crossasset: 'US stocks levered to a move in another asset that they have not caught up to yet.',
+    xalerts: 'Trade alerts from social accounts, graded on forward returns.',
+    backtest: 'Test the models against history; a research harness, not a promise.',
+    cfl: 'Counterfactual Lab — which big winners the pipeline missed, at which stage, and whether the miss was preventable.',
+    psrl: 'Persistent Trends — steady climbers ranked by the continuity of their advance against the market and their sector; research only.',
+    gridlock: 'Physical grid constraints mapped to companies with verified exposure; research only.',
   };
   const topOf = sec => TOP_TABS.find(t => TAB_GROUPS[t].includes(sec));
 
@@ -220,11 +227,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   });
 
   let currentTop = (() => {
-    const h = (location.hash || '').replace('#', '');
+    const h0 = (location.hash || '').replace('#', '');
+    const h = RETIRED_TO[h0] || h0;
     if (SECTION_IDS.includes(h)) { const t = topOf(h); if (TAB_GROUPS[t].length > 1) hubSub[t] = h; return t; }
     if (TOP_TABS.includes(h)) return h;
     if (LEGACY_TOP[h]) return LEGACY_TOP[h];
-    try { const s = localStorage.getItem('activeTab'); if (TOP_TABS.includes(s)) return s; if (LEGACY_TOP[s]) return LEGACY_TOP[s]; if (SECTION_IDS.includes(s)) return topOf(s); } catch {}
+    try { const s0 = localStorage.getItem('activeTab'); const s = RETIRED_TO[s0] || s0; if (TOP_TABS.includes(s)) return s; if (LEGACY_TOP[s]) return LEGACY_TOP[s]; if (SECTION_IDS.includes(s)) return topOf(s); } catch {}
     return 'home';    // first-time visitors land on the Today command center (📘 Guide sits beside it in the home sub-nav)
   })();
 
@@ -236,202 +244,142 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // confluence/gapgo/gapdown/fade/aligned/putsell — are deliberately omitted).
   const HOWTO = {
     session: {
-      what: `The <b>Session Board</b>: one ranked list of what is worth looking at <i>right now</i>, graded <b>A–F</b> on today's snapshot and labelled with its <b>time frame</b> — intraday (today), days to weeks, weeks to months, or long term. The same board reads differently before the open (premarket gap and pre-volume), during the session (where price sits against the frozen entry / stop / target, VWAP and the opening range) and after the close (what is setting up for tomorrow).`,
-      read: `Start at the <b>phase strip</b> (premarket / regular / after hours, the countdown, regime and which sectors lead). Then each card: the <b>grade</b> with its four inputs (evidence, setup, live, regime), the <b>live status</b> pill (not triggered / in zone / triggered / extended / stopped), the levels row, and the <b>Expert checklist</b> — the things a trader checks before touching a name (catalyst, relative volume, spread, dilution, earnings risk). "Since you last looked" tells you what is new, upgraded, downgraded or changed status.`,
-      act: `A high grade means the snapshot looks clean and the lane's own record does not argue against it — it is <b>not</b> a probability and not a buy signal. Use the time-frame pills to match your own horizon, confirm on a real chart, and size by the stop. <b>Held-out</b> names are the app's proven-negative lanes: read them as what to avoid.`,
-      catch: `No lane on this board has cleared the promotion gate — every position is paper until it does, and the grade is capped accordingly. Quotes are delayed; there is no bid/ask, no halt feed and no futures read. The board refreshes every minute while it is open during premarket and the session, every five minutes otherwise.`,
+      what: `The <b>Session Board</b>: one ranked list of what is worth looking at <i>right now</i>, graded <b>A–F</b> on today's snapshot and labelled with its time frame (today, days to weeks, weeks to months, long term).`,
+      read: `Start at the phase strip, then each card: the grade, the live status pill (not triggered / in zone / triggered / extended / stopped), the levels row and what changed since you last looked.`,
+      act: `A high grade means the snapshot is clean and the lane's record does not argue against it — it is <b>not</b> a probability or a buy signal; match the time frame to your own, confirm on a chart and size by the stop.`,
+      catch: `No lane here is proven, so every position is paper and the grade is capped; quotes are delayed and there is no bid/ask or halt feed.`,
     },
     'tech-command': {
-      what: `<b>One technology universe, three separate answers.</b> The same stock is judged independently as a <b>day trade</b>, a <b>swing trade</b> and a <b>long-term investment</b> — because those are different questions with different holding periods, features, risks and benchmarks. A name can be a poor day trade, a promising swing setup and an attractive long-term holding <i>at the same time</i>, and the page will say exactly that.`,
-      read: `Start at the <b>regime header</b> (is technology leading, and is the move broad or narrow?). Then each board gives you: the <b>action</b>, <b>why now</b>, the <b>exact trigger</b>, and <b>what invalidates it</b>. "<b>Around the Corner</b>" lists what already happened, what is happening now, and what is scheduled next — with the source and timestamp on every item. Turn on <b>Expert view</b> for score decompositions, evidence quality, and every timestamp.`,
-      act: `Only the top of each board is an action, and only when it says so — <b>Triggered / Enter / Accumulate</b>. Everything else is a watch item, and the card tells you which gate it failed. Click any ticker for its <b>dossier</b>, and read the <b>Contradictions</b> block first: it is the part most likely to change your mind.`,
-      catch: `<b>Nothing here is a proven edge.</b> The day-trade board is a read-only view of the frozen Day Trade engine (this page cannot change it). The swing board inherits the app's existing eligibility gate. The long-term model is a documented heuristic with no track record. Options and social attention are <b>weight-zero annotations</b> that can never create a trade — the delayed option feed cannot tell buyer from seller, and "trending" is not "bullish". No probabilities are shown anywhere, because none has been calibrated.`,
+      what: `<b>One technology universe, three separate answers</b>: the same stock is judged as a day trade, a swing trade and a long-term investment, because those are different questions.`,
+      read: `Start at the regime header, then each board's action, why now, exact trigger and what invalidates it; "Around the Corner" lists what happened, what is happening and what is scheduled.`,
+      act: `Only a card that says <b>Triggered / Enter / Accumulate</b> is an action; everything else is a watch item that tells you which gate it failed.`,
+      catch: `<b>Nothing here is a proven edge</b>: the day-trade board is read-only, the swing board inherits the app's gate, the long-term model has no track record, and no probability is shown because none is calibrated.`,
     },
     ignitionlive: {
-      what: `The <b>IGNITION board</b>: which stocks are experiencing an unusually rapid POSITIVE CHANGE in volume, dollar flow, supply/demand, attention and price structure <i>right now</i> — while still early enough to offer a reasonable entry. It is a synthesis over the Low-Float Ignition lane, not another top-gainers list.`,
-      read: `Two scores per name, never combined: <b>Ignition</b> (how abnormal the momentum event is) and <b>Opportunity</b> (how good the CURRENT entry is). The default sort is Opportunity. Each name carries a <b>stage</b> (dormant → early ignition → confirming → breakout → expansion → parabolic → exhaustion/failed), an <b>extension risk</b> with a hard <b>do-not-chase price</b>, a catalyst letter grade (A–D) with freshness decay, market-wide <b>attention rank</b> movement (#184 → #5 matters more than being #5), and a dilution-risk label backed by EDGAR filing dates. Click a row for WHY NOW, risks, and the move timeline.`,
-      act: `The highest-value moments are EARLY IGNITION and CONFIRMING — before the vertical part of the move. A 97-ignition name with extension risk 90 is a <b>do-not-chase</b>, whatever the score says; wait for the pullback, new base or VWAP reclaim the card names. Everything actionable is <b>paper only</b> until a template passes the promotion gate.`,
-      catch: `Bars are <b>5-minute</b> and the board refreshes on a ~10-minute tick — this is genuinely NOT real-time, there is no halt/LULD feed and no NBBO. Scores are pre-registered rule-based estimates, not probabilities; no edge is claimed, and the lead-time report (op=ignitionleadtime) exists precisely to measure how early this board actually is.`,
+      what: `The <b>IGNITION board</b>: which stocks are seeing an unusually rapid rise in volume, dollar flow, attention and price structure <i>right now</i>, while still early enough to enter.`,
+      read: `Two scores per name, never combined — <b>Ignition</b> (how abnormal the move is) and <b>Opportunity</b> (how good the current entry is) — plus a stage, a do-not-chase price and a catalyst grade.`,
+      act: `The valuable moments are <b>early ignition</b> and <b>confirming</b>; a huge ignition score with high extension risk is a do-not-chase whatever the number says, and everything is paper until a template passes the gate.`,
+      catch: `Five-minute bars on a roughly ten-minute tick — not real-time, no halt feed, no NBBO; scores are rule-based estimates, not probabilities.`,
     },
     patternradar: {
-      what: `A <b>stateful setup engine</b> for classic chart structures — bull/bear flag, VCP, flat base, cup & handle, double bottom/top, triangles, wedges, breakout-retest, failed breakout, undercut & reclaim — each found by its <b>own structural detector</b> (real pivots, fitted trendlines, necklines), not a generic shape match. A detected setup becomes an <b>episode</b> with a <b>frozen trigger, invalidation and target</b> that never drift as new bars arrive.`,
-      read: `Each card shows the episode's <b>state</b> (Emerging → Forming → Ready → Triggered → Confirmed → Retesting → In position → Target/Stopped/Failed/Expired), a <b>position-aware action</b> (long-entry vs short-entry vs hold vs exit — a short setup never says "buy"), the frozen levels with their structural source, distance to trigger in % and ATR, remaining reward:risk, and the exact rule behind its last upgrade or downgrade. Expand a card for the transition history and an <b>annotated chart</b> (pivots + levels drawn on).`,
-      act: `Treat this as <b>research, not a buy list</b>. Until a pattern family passes independent validation on its own resolved out-of-sample record, even a confirmed breakout shows as <b>"Triggered — research only"</b>. Probabilities appear ONLY when calibrated evidence exists; otherwise the card says exactly why there is none.`,
-      catch: `<b>Shadow (weight-0).</b> This layer never changes a live ranking. The evidence banner at the top is Pattern Radar's <b>own</b> record — it starts at "no history yet" and has to earn anything more. Failed and expired setups stay on the board with the rule that killed them; "Failed Today" strictly means the failure happened today.`,
+      what: `A <b>stateful setup engine</b> for classic chart structures (flags, bases, cup and handle, double bottoms, triangles, wedges, retests), each with a frozen trigger, invalidation and target.`,
+      read: `Each card shows the episode's state, a position-aware action (a short setup never says "buy"), the frozen levels and the rule behind its last change; expand for the annotated chart.`,
+      act: `Research, not a buy list: until a pattern family validates on its own resolved record, even a confirmed breakout reads "Triggered — research only".`,
+      catch: `Research only — it never changes a live ranking, and its evidence banner is its own record starting from "no history yet".`,
     },
     gridlock: {
-      what: `A <b>shadow research</b> engine that starts from a <b>physical event</b> — a new AI data-center's power demand, a plant retirement, a record capacity auction, a turbine order — models the <b>regional grid constraint</b> it changes (PJM first), and maps it only to companies with <b>verified exposure</b> (filings/IR, never AI guesses). Most companies mentioned in the news are correctly classified as too indirect.`,
-      read: `The dashboard shows the region's <b>constraint-pressure score</b> (0–100, fully decomposed, missing inputs listed), the <b>event ledger</b> (deduped — five articles about one campus are ONE event), and <b>ranked candidates</b>: each card carries the causal chain, exposure role, decomposed scores, a not-yet-repriced read, and OMEGA-SWING's entry/stop/target if timing is defined. <b>Actionable</b> means every gate passed; everything else shows the exact gate that failed.`,
-      act: `Treat it as <b>research only</b> — weight-0, never a buy list, no win probabilities (nothing is calibrated). Use the scenario panel to stress the assumptions yourself; watch the <b>Gridlock section on the Scoreboard</b> to see whether Actionable names actually beat Tracked ones before trusting anything here.`,
-      catch: `<b>Shadow.</b> Region data may be missing (PJM/EIA keys are optional) — the score says exactly what it couldn't see rather than guessing. Seeded historical events are marked and are too old to be actionable by construction. All timing comes from OMEGA-SWING; GRIDLOCK adds no momentum math of its own.`,
-    },
-    omega: {
-      what: `A shortlist of liquid stocks with <b>early-to-middle-stage momentum</b> that's likely to keep rising over the next <b>5–10 trading days</b>. It looks for sustainable continuation — strong relative strength, real multi-day volume, a smooth trend, a fresh catalyst, and a good entry — <b>not</b> stocks that already went vertical.`,
-      read: `Cards are grouped into <b>💠 Prime</b> (best), <b>🟢 Qualified</b>, and <b>👁 Watch</b> (wait for a trigger). Each shows a <b>Stage</b> (Early/Confirmed/Continuation), an <b>entry recommendation</b> (Buy now / on breakout / on pullback), expected 5- and 10-day <b>sector- & market-relative</b> return, the odds of a ≥3% and ≥5% move, and an <b>invalidation</b> price. Names are ranked by expected utility (reward vs downside), not win rate.`,
-      act: `Treat it as <b>research, not a trade instruction</b> — OMEGA is registry-shadow with zero live weight, and its own research verdict is no-edge vs plain momentum. Read Prime/Qualified/Watch as the model's opinion, confirm anything on a chart, and check the OMEGA section of the Scoreboard before trusting it. No position size is suggested.`,
-      catch: `Uses <b>end-of-day data</b> — entry levels are next-session positioning, not live triggers. The probabilities are a <b>baseline</b> until the walk-forward confirms them, and the app's own research found no durable edge on this data beyond avoiding weak markets — so check the <b>OMEGA section on the Scoreboard</b> to see if it's actually working. Zero Prime picks on a given day is normal.`,
+      what: `Research that starts from a <b>physical event</b> (a data-center's power demand, a plant retirement, a turbine order), models the regional grid constraint it changes, and maps it only to companies with verified exposure.`,
+      read: `The region's constraint-pressure score, the deduped event ledger and ranked candidates, each with its causal chain and the gate it failed if it is not actionable.`,
+      act: `Research only, never a buy list; watch its Scoreboard section to see whether actionable names actually beat tracked ones before trusting anything here.`,
+      catch: `Region data may be missing (the score says what it could not see), seeded historical events are too old to act on, and all timing comes from the swing engine.`,
     },
     atlas: {
-      what: `A <b>shadow research</b> workspace (weight-0) that stages swing candidates into entry lanes — <b>Enter Next Session</b>, wait-for-breakout / -pullback / -first-hour-confirmation, do-not-chase, and avoid — then tracks each as a live <b>episode</b> and grades the whole system in an Evidence &amp; Validation panel.`,
-      read: `Each candidate card shows its expert &amp; stage, an action + trigger, invalidation and targets, a return distribution (bps / %), a utility waterfall, a <b>Champion</b> line and a <b>Prosecutor</b> failure-score band. The failure score and "target-before-stop" are <b>qualitative bands</b>, shown verbatim — <b>not</b> percentages.`,
-      act: `Treat it as <b>research only</b>. Nothing here can start or affect a live trade; the Evidence panel spells out that promotion is <b>not</b> eligible and the portfolio weight is <b>0</b>. Read it to understand how the ATLAS-X thesis is being tested, not as a buy list.`,
-      catch: `Weight-0 and <b>uncalibrated</b> — the numbers that look like probabilities are shown as bands on purpose. Return magnitudes (bps / %) are real returns, not odds. A day with zero actionable candidates is expected and correct.`,
-    },
-    ignition: {
-      what: `One list that ranks every momentum candidate by how fast it's <b>speeding up</b> — price AND volume accelerating — not by how much it's already moved. A stock up 10% and accelerating ranks <b>above</b> one up 60% and slowing down.`,
-      read: `Higher <b>Ignition Score</b> = stronger acceleration + a fresh catalyst + a clean trend. The <b>Stage</b> tells you where the move is: 👁 Watch (early) → 🔥 Ignition → 🚀 Pressure → ⚠️ Extended (already run — be careful). Sort and filter with the dropdowns.`,
-      act: `An <b>early-momentum research watchlist</b> (registry: shadow, zero live weight). Prefer Watch/Ignition (room left to run) over Extended; check the catalyst is real and fresh and confirm on a chart. No position size is suggested.`,
-      catch: `This uses <b>end-of-day daily data</b> — it can't see intraday ticks, predict an LULD halt, or measure sub-minute moves (those need a live feed the app doesn't have). And chasing momentum isn't proven forward edge — check the 🔥 Momentum Ignition section on the <b>Scoreboard</b> to see if it's actually working.`,
+      what: `A <b>swing entry planner</b> (research only) that stages candidates into lanes — enter next session, wait for breakout / pullback / confirmation, do not chase, avoid — and follows each as an episode.`,
+      read: `Each card shows its lane, trigger, invalidation and targets, a return distribution and a qualitative failure band; the bands are bands on purpose, not percentages.`,
+      act: `Read it to see how the planner's thesis is being tested, not as a buy list; it cannot start or affect a live trade.`,
+      catch: `Not on the board and uncalibrated; a day with zero actionable candidates is expected and correct.`,
     },
     custom: {
-      what: `Stocks that just broke OUT to new highs, scored 0–100 by a four-part model (trend, momentum, volume, fundamentals) that re-weights itself for the current market mood.`,
-      read: `Higher score and higher tier (<b>Apex &gt; Loaded &gt; Watch</b>) mean more of the four parts agree. The strip up top shows the market "regime" the model is using right now.`,
-      act: `Treat it as a <b>research watchlist only</b> — Apex was demoted to a zero-weight frozen benchmark (its historical weight search was never trial-ledgered). The entry/stop shown are reference levels, not instructions, and no position size is suggested.`,
-      catch: `Breakouts get chopped up in sideways or falling markets, so the model steps back in risk-off. The app's own tests rate this edge as <b>weak</b> — research, not advice.`,
-    },
-    ghost: {
-      what: `QUIET stocks that look like they're being <b>accumulated before</b> a breakout — the opposite of chasing a move that already happened. Scored /100 across six clues, including real insider buying.`,
-      read: `Tier <b>GHOST &gt; STALKING &gt; WATCH</b>. The pillar chips show which clues fired (relative strength, accumulation, up/down-volume flow (a proxy), insider buys, catalyst).`,
-      act: `Use it as an <b>early</b> watchlist. These are "getting ready," not "going now" — set an alert and wait for the actual breakout to confirm before buying.`,
-      catch: `"Quiet accumulation" is a guess about intent, and many names never break out. Insider buying is rare in big caps. A lead to watch, not a buy signal.`,
-    },
-    downday: {
-      what: `A tool that only switches on when the market is <b>RED</b>. It hunts oversold stocks that tend to bounce, flags overheated ones to avoid — or honestly tells you to sit out.`,
-      read: `Tiers <b>WATCH → EMERGING → CONFIRMED</b> (earlier turns often beat late ones). Each shows a bounce entry with a stop.`,
-      act: `For quick <b>mean-reversion bounces</b>, not long holds. Only act if the setup and your own chart agree; on a truly ugly tape, the honest move is cash.`,
-      catch: `Catching a falling knife is risky — bounces fail when the market keeps dropping. Backtests only validated the sharp V-reversal type, not buying strong names on red days.`,
+      what: `Stocks that just broke out to new highs, scored 0–100 by a four-part model (trend, momentum, volume, fundamentals) that re-weights itself for the current market mood.`,
+      read: `Higher score and higher tier (<b>Apex &gt; Loaded &gt; Watch</b>) mean more of the four parts agree; the strip up top shows the regime the model is using.`,
+      act: `A research watchlist only: the model was demoted to a zero-weight benchmark because its weight search was never trial-ledgered, so the entry and stop are reference levels, not instructions.`,
+      catch: `Breakouts get chopped up in sideways or falling markets, and the app's own tests rate this edge as weak.`,
     },
     opportunities: {
-      what: `The app's <b>combined shortlist</b> — the strongest names it sees right now, pulled from across all the screeners into one ranked list.`,
-      read: `Sorted best-first. Each card shows why it made the list and its levels. Names that appear here <i>and</i> on other tabs are the highest-conviction.`,
-      act: `A research shortlist, not a buy list. Work from the <b>top</b> down and confirm on a chart; the ranking uses only cleared inputs (shadow-strategy reads are shown as context and don't move it).`,
-      catch: `A shortlist is only as good as its inputs — check the 🏆 Scoreboard to see which signals have actually been working before trusting them.`,
+      what: `The app's <b>combined research list</b> — the strongest names it sees right now, pulled from across the screens into one ranked list.`,
+      read: `Sorted best-first; each card says why it made the list and shows its levels.`,
+      act: `A research shortlist, not a buy list: work from the top down and confirm on a chart; the ranking uses only cleared inputs.`,
+      catch: `A shortlist is only as good as its inputs — check the Scoreboard for which signals have actually been working.`,
     },
     screener: {
-      what: `The classic scan — stocks <b>breaking above a base to new highs</b> while stronger than the overall market.`,
-      read: `Each card shows the criteria that passed (accumulation, volume, resistance break) plus an entry, stop, and target.`,
-      act: `Watchlist. Wait for the breakout to hold, confirm on a chart, then enter with the shown stop.`,
-      catch: `This app's own research found the volume-surge and tight-base filters are <b>dead</b> — only the relative-strength/trend part carries a weak edge. Don't over-trust the pattern.`,
+      what: `The classic scan — stocks <b>breaking above a base to new highs</b> while stronger than the market.`,
+      read: `Each card shows the criteria that passed (accumulation, volume, resistance break) plus an entry, stop and target.`,
+      act: `A watchlist: wait for the breakout to hold, confirm on a chart, then use the shown stop if you act.`,
+      catch: `The app's own research found the volume-surge and tight-base filters are dead; only the relative-strength part carries a weak edge.`,
     },
     coremo: {
-      what: `A cleaner momentum list — names ranked mainly by how <b>strong and steady</b> their uptrend is, filtered for quality.`,
-      read: `Higher rank = a stronger, steadier trend.`,
-      act: `A trend-following watchlist. Buy <b>pullbacks</b> within the uptrend rather than extended spikes, and keep a stop under the trend.`,
-      catch: `Momentum is the one factor with (weak) edge here, but it mean-reverts hard in risk-off — respect the regime light.`,
-    },
-    momentum: {
-      what: `Names flagged as momentum leaders today — stocks whose trend and strength stand out right now.`,
-      read: `The list itself is the signal; each name is a current leader.`,
-      act: `Watchlist. Strongest when it agrees with the Screener or Ghost; combine with the regime and a chart before acting.`,
-      catch: `"Strong today" often means "already extended." Don't chase — wait for a pullback and confirm.`,
+      what: `A cleaner momentum list — names ranked by how <b>strong and steady</b> their uptrend is, filtered for quality.`,
+      read: `Higher rank means a stronger, steadier trend.`,
+      act: `A trend-following watchlist: pullbacks within the uptrend rather than extended spikes, with a stop under the trend.`,
+      catch: `Momentum is the one factor with a weak edge here, and it mean-reverts hard when the market turns red.`,
     },
     rotation: {
-      what: `Which <b>sectors</b> money is flowing into and out of (tech, energy, financials…) — the market's leadership.`,
+      what: `Which <b>sectors</b> money is flowing into and out of — the market's leadership, and the one read the app's data actually supports.`,
       read: `Sectors near the top are leading; near the bottom are lagging.`,
-      act: `Use it as context: hunt for stocks in the <b>leading</b> sectors and avoid fighting a sector that's being sold.`,
-      catch: `This is a backdrop, not a buy list, and leadership can rotate quickly.`,
+      act: `Context, not a buy list: look for stocks in the leading sectors and avoid fighting a sector that is being sold.`,
+      catch: `Leadership can rotate quickly.`,
     },
     options: {
-      what: `Unusually large or aggressive <b>options bets</b> — sometimes a clue that big money is positioning for a move.`,
-      read: `Each row shows the ticker, the bullish/bearish lean, and how unusual the activity is.`,
-      act: `A lead to investigate, not a trade — see if the flow lines up with a price setup on another tab.`,
-      catch: `Options flow is noisy and often just hedging, not conviction. This uses free data with real gaps — treat it as a hint only.`,
+      what: `One options page: unusually large or aggressive <b>options bets</b>, the prediction-market crowd and sharp-money lanes, and put-selling setups.`,
+      read: `Each row shows the ticker, the bullish or bearish lean and how unusual the activity is; use the lane pills to switch views.`,
+      act: `A lead to investigate, not a trade — see whether the flow lines up with a price setup elsewhere.`,
+      catch: `Options flow is noisy and often just hedging, and this uses free data with real gaps.`,
     },
     pulse: {
-      what: `A <b>measured read of the market right now</b> (indexes, sectors, breadth, regime) plus <b>evidence-graded events</b> — each claim mapped to real sources, each story checked against its actual price reaction, split into Day / Swing / Investor horizons.`,
-      read: `Start at Market Now and the tape playbook (all measured). Cards show a trade state — Context, Investigate, Watch, Armed, Price-confirmed — plus what must happen next and what invalidates it. Two freshness clocks: one for the story snapshot, one for market data.`,
-      act: `Nothing here is a buy signal. "Price-confirmed" means a trigger fired on fresh data — it still needs your own risk plan. Unverified stories stay visible but clearly labeled.`,
-      catch: `Verified ≠ profitable, and a story that already ran is labeled <b>extended</b> — chasing it is the classic mistake. Whether these reads add value is being measured prospectively on the Evidence panel, not assumed.`,
-    },
-    readthrough: {
-      what: `The <b>second-order</b> play — when a stock makes a big move, this finds other companies with a direct business link that <b>haven't moved yet</b>.`,
-      read: `Each card shows the mover, the linked beneficiary, the named connection, and how <b>direct</b> the link is (higher = tighter).`,
-      act: `A watchlist for catch-up trades. Favor the most direct links and check the beneficiary hasn't already jumped.`,
-      catch: `The market often prices these in fast. On the Scoreboard it's measured vs the beneficiary's sector — check that "Fresh" names actually beat already-"Moved" ones first.`,
-    },
-    anomaly: {
-      what: `Stocks moving on unusual <b>volume with no obvious news</b> — then an AI investigates whether it looks like quiet accumulation, an explained move, or just noise.`,
-      read: `Each is labeled <b>Accumulation / Explained / Noise</b> with the AI's reasoning. Accumulation (no clear reason) is the interesting bucket.`,
-      act: `A lead to dig into — unexplained volume sometimes precedes news. Confirm on a chart; don't buy on the label alone.`,
-      catch: `"No news I could find" isn't "no news exists," and many anomalies are nothing. Benchmarked vs sector on the Scoreboard.`,
+      what: `A <b>measured read of the market right now</b> (indexes, sectors, breadth, regime) plus evidence-graded stories, each checked against its actual price reaction and split by horizon.`,
+      read: `Start at Market Now, then the cards' trade state (Context, Investigate, Watch, Armed, Price-confirmed) and the two freshness clocks.`,
+      act: `Nothing here is a buy signal; "Price-confirmed" means a trigger fired on fresh data and still needs your own risk plan.`,
+      catch: `Verified is not profitable, and a story that already ran is labelled extended — chasing it is the classic mistake.`,
     },
     biotech: {
-      what: `The <b>Biotech Swing Engine</b> finds biotech runners and sorts them into opportunity lanes — post-catalyst continuation, pre-event run-up, catalyst-base breakout, buyable pullback, financing relief — while pulling <b>binary gambles, dilution traps, illiquid promotions and already-consumed moves</b> out of the actionable set.`,
-      read: `Use the view pills. The 0–100 is a <b>Research Priority</b> (attention ordering), <b>not</b> a probability. Each card shows an <b>action ceiling</b> (the highest action allowed after the severe-loss & dilution gates), a plan (entry/stop/targets/R:R), the verified catalyst + source link, and the capital-structure state. Benchmarked vs XBI.`,
-      act: `Biotech is a <b>lead-only</b> shadow system: even its ⚡ Trigger-Met lane is a research lead, not a trade instruction. Pre-event names carry a mandatory <b>exit-before</b> date; anything in <b>Binary Risk</b> or <b>Dilution / Avoid</b> is a warning, not a candidate.`,
-      catch: `A single trial result can gap a biotech 50% overnight. The engine withholds probabilities until a frozen model passes prospective validation — treat everything here as a research lead, size tiny, and never hold an unresolved binary you can't afford to lose.`,
-    },
-    secondwave: {
-      what: `Stocks that had a first move and may get a reflexive <b>second leg</b> as attention builds — catching early movers before the crowd piles in.`,
-      read: `Tier <b>Primed &gt; Early &gt; Faded</b>. "Primed" means the setup for a second leg still looks intact.`,
-      act: `A continuation watchlist. Check the name hasn't already faded and use a tight stop — these are momentum bets.`,
-      catch: `Most first moves don't get a clean second leg. Sector-benchmarked on the Scoreboard — verify Primed actually beats Faded before leaning on it.`,
+      what: `Biotech runners sorted into lanes — post-catalyst continuation, pre-event run-up, base breakout, buyable pullback, financing relief — with binary gambles, dilution traps and consumed moves pulled out.`,
+      read: `The 0–100 is a research priority, not a probability; each card shows an action ceiling, a plan, the verified catalyst and the capital-structure state, benchmarked against XBI.`,
+      act: `A lead-only system: even the trigger-met lane is a research lead, pre-event names carry an exit-before date, and anything in Binary Risk or Dilution is a warning.`,
+      catch: `A single trial result can gap a biotech 50% overnight; never hold an unresolved binary you cannot afford to lose.`,
     },
     crossasset: {
-      what: `When commodities, crypto, or overnight futures make a big move, this maps it to US stocks that <b>should follow but haven't caught up yet</b>.`,
-      read: `Tier <b>Lead &gt; Inline &gt; Weak</b> — "Lead" means the stock is still lagging the cross-asset signal (the opportunity).`,
-      act: `A catch-up watchlist. Check the linkage makes sense and the stock hasn't already moved.`,
-      catch: `Cross-asset links are loose and can break. Sector-benchmarked on the Scoreboard — confirm it works before trusting it.`,
-    },
-    toneshift: {
-      what: `Compares a company's latest <b>earnings-call tone</b> to last quarter — is management sounding more upbeat (Brightening) or more cautious (Darkening)?`,
-      read: `Labeled <b>Brightening / Stable / Darkening</b> with the reasoning. The bet: a brightening tone should lead the price.`,
-      act: `A fundamental lead to pair with a price setup — brightening tone <i>plus</i> a technical breakout is stronger than either alone.`,
-      catch: `Tone is a soft, AI-read signal that can misfire and only fires around earnings. Sector-benchmarked — check Brightening actually beats Darkening.`,
+      what: `When commodities, crypto or overnight futures make a big move, this maps it to US stocks that <b>should follow but have not caught up yet</b>.`,
+      read: `Tier <b>Lead &gt; Inline &gt; Weak</b> — "Lead" means the stock is still lagging the cross-asset signal.`,
+      act: `A catch-up watchlist: check the linkage makes sense and the stock has not already moved.`,
+      catch: `Two research passes found this "lead" is mostly sector beta; confirm on the Scoreboard before trusting it.`,
     },
     gameplan: {
-      what: `A once-a-day, plain-English <b>game plan</b> — the day's setups, key levels, and what to watch, pulled together for you.`,
-      read: `Read it top-to-bottom like a morning briefing.`,
-      act: `Use it to orient before the session, then drill into the specific tabs for the actual picks and levels.`,
-      catch: `It's a summary, not a signal — the honest track records live on the 🏆 Scoreboard.`,
+      what: `A once-a-day, plain-English <b>game plan</b> — the day's setups, key levels and what to watch.`,
+      read: `Read it top to bottom like a morning briefing.`,
+      act: `Orient before the session, then drill into the specific tabs for the picks and levels.`,
+      catch: `A summary, not a signal — the track records live on the Scoreboard.`,
     },
     brief: {
-      what: `A short brief that combines the app's signals into one "here's the picture" read, showing where they <b>agree and disagree</b>.`,
-      read: `Look for <b>agreement</b> — views or names that several signals share are the highest quality.`,
-      act: `Orientation. Treat the agreement as your shortlist and skip the conflicted calls.`,
+      what: `A short brief that combines the app's signals into one picture, showing where they <b>agree and disagree</b>.`,
+      read: `Look for agreement — names or views several signals share are the highest quality.`,
+      act: `Orientation: treat the agreement as your shortlist and skip the conflicted calls.`,
       catch: `A synthesis is only as good as its parts — verify on the Scoreboard.`,
     },
     forecast: {
-      what: `The app's directional <b>forecast</b> for the market — a probabilistic view of the tape, not a promise.`,
+      what: `The app's directional <b>forecast</b> for the market — a probabilistic view, not a promise.`,
       read: `Shown as odds or a leaning with the reasoning, never a certainty.`,
-      act: `Use it as backdrop for sizing and risk — lean in when the forecast and the regime agree, ease off when they don't.`,
-      catch: `Short-term market forecasting is close to random. Treat any single call with heavy skepticism.`,
+      act: `Backdrop for sizing and risk: lean in when the forecast and the regime agree, ease off when they do not.`,
+      catch: `Short-term market forecasting is close to random; treat any single call with heavy skepticism.`,
     },
     crowd: {
-      what: `What the betting/prediction markets and the broad crowd <b>expect</b> — a read on consensus.`,
-      read: `Higher numbers = the crowd is more confident in that outcome.`,
-      act: `Context. Knowing the consensus helps you notice when you're just agreeing with everyone (already priced in).`,
-      catch: `The crowd is often right but rarely gives an edge — the edge is spotting when it's wrong, which is hard.`,
+      what: `What the prediction markets and the broad crowd <b>expect</b> — a read on consensus.`,
+      read: `Higher numbers mean the crowd is more confident in that outcome.`,
+      act: `Context: knowing the consensus helps you notice when you are just agreeing with everyone.`,
+      catch: `The crowd is often right but rarely gives an edge.`,
     },
     sharp: {
-      what: `A read on where the "<b>sharp</b>" / informed money appears to be positioned, versus the general crowd.`,
+      what: `Where the informed money appears to be positioned in prediction markets, versus the general crowd.`,
       read: `It highlights where large-stake bettors <b>diverge</b> from the crowd — the divergence is the interesting part.`,
-      act: `Context and confirmation — sharp-money agreement can add conviction to a setup you found elsewhere.`,
-      catch: `"Sharp money" is inferred, not certain, and is often already reflected in the price. A hint, not a trade.`,
+      act: `Context and confirmation for a setup you found elsewhere.`,
+      catch: `"Sharp money" is inferred, not certain, and is often already in the price.`,
     },
     alerts: {
-      what: `Notable market <b>alerts</b> the app surfaces so you don't miss unusual activity.`,
-      read: `Scan for anything relevant to names you're already watching.`,
-      act: `Awareness — follow up on a real signal tab before acting on any alert.`,
-      catch: `Alerts flag activity, not opportunity — always confirm before trading.`,
+      what: `Notable market <b>alerts</b> the app surfaces — sharp-money flags and stance flips — plus the sound and notification settings.`,
+      read: `Scan for anything relevant to names you are already watching.`,
+      act: `Awareness only: follow up on a real signal tab before acting on any alert.`,
+      catch: `Alerts flag activity, not opportunity.`,
     },
     cfl: {
-      what: `The app's <b>report card on itself</b>: big movers it missed (and the exact pipeline stage responsible), picks that flopped (and why), and how much advance warning existed.`,
-      read: `"Preventable" means a fixable stage lost the winner (screener, ranking, timing, display). "Unforeseeable" means no supported evidence existed before the move — no honest system would have caught it.`,
-      act: `Nothing to trade here. Use it to understand WHICH component needs work — e.g. if most misses are "ranked below the cut", ranking is the bottleneck, not discovery.`,
-      catch: `Historical sweeps can't see delisted stocks (survivorship), so past miss rates are estimates. Probabilities are deliberately withheld until enough graded history exists.`,
-    },
-    catalyst: {
-      what: `An event-conditioned <b>ranking</b> experiment: fresh earnings or guidance events, observed for one full post-event session, then ranked for the next five trading sessions against the stock's own SECTOR benchmark, after costs.`,
-      read: `Scores are ORDINAL — a ranking model's relevance value. They are not expected returns and not probabilities, and no percentage is shown for one anywhere on the board. The limitations panel is the point of the page as much as the ranking is.`,
-      act: `Nothing. This is research/shadow at weight 0. The promotion gates panel lists exactly what would have to be true before it could count for anything.`,
-      catch: `Two hard limits. The historical consensus behind the surprise features is a vendor snapshot taken AFTER the events, so that evidence is exploratory and cannot support promotion. And there is no signed customer opening option flow, so the arm that would test it reports INSUFFICIENT_DATA — which is not a finding that the signal is worthless.`,
+      what: `The app's <b>report card on itself</b>: big movers it missed (and the pipeline stage responsible), picks that flopped (and why), and how much advance warning existed.`,
+      read: `"Preventable" means a fixable stage lost the winner; "Unforeseeable" means no supported evidence existed before the move.`,
+      act: `Nothing to trade here; use it to see which component needs work.`,
+      catch: `Historical sweeps cannot see delisted stocks, so past miss rates are estimates.`,
     },
     psrl: {
-      what: `Stocks in <b>persistent</b> uptrends — gradual staircases rather than one-day jumps — compared against SPY and their own sector after adjusting for beta, so market passengers don't masquerade as leaders.`,
-      read: `Four arrows per stock: price trend, vs market, vs sector, and trajectory (is the leadership strengthening or fading). "Jump-plateau" flags a one-day repricing that then went nowhere. Retained names stay listed with the reason they fell out.`,
-      act: `Shadow research only — zero weight, never a buy signal. Scores are EVIDENCE scores, not probabilities of profit; nothing here is calibrated yet.`,
-      catch: `Everything on this board is price/volume evidence — the same underlying paths the momentum screeners read, so agreement between them is NOT independent confirmation. Sector labels are today's, not historical.`,
+      what: `Stocks in <b>persistent</b> uptrends — gradual staircases rather than one-day jumps — compared against the market and their sector after adjusting for beta.`,
+      read: `Four arrows per stock: price trend, versus market, versus sector, and whether the leadership is strengthening or fading.`,
+      act: `Research only, never a buy signal; the scores are evidence scores, not probabilities.`,
+      catch: `It reads the same price paths as the momentum screens, so agreement between them is not independent confirmation.`,
     },
   };
 
@@ -477,30 +425,43 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     } catch { /* non-fatal — guide is a nicety */ }
   }
 
+  // Lane pills (Phase 2 merges): the host tab first, then every surface merged into it.
+  // Rendered whenever the active tab is a host or one of its lanes; Simple hides Expert lanes.
+  function laneStripHTML(sub) {
+    const host = MERGED_INTO[sub] || sub;
+    const lanes = (LANES_OF[host] || []).filter(s => isTabVisible(s) || s === sub);
+    if (!lanes.length) return '';
+    const pill = s => `<button class="hub-lane-btn ${s === sub ? 'active' : ''}" data-sub="${s}"${SECTION_HELP[s] ? ` title="${esc(SECTION_HELP[s])}"` : ''}>${LANE_LABEL[s] || SUB_LABEL[s] || s}</button>`;
+    return `<div class="hub-lanes" role="tablist" aria-label="Lanes">${[host, ...lanes].map(pill).join('')}</div>`;
+  }
+
   function renderHubSubnav(top, sub) {
     const el = document.getElementById('hub-subnav');
     if (!el) return;
     // Simple mode: only the curated tabs, plus the active one if the user deep-linked
     // to a hidden tab (so they can see where they are). Expert mode: the whole group
-    // under horizon dividers.
-    const group = (TAB_GROUPS[top] || []).filter(s => isTabVisible(s) || s === sub);
-    if (group.length <= 1) { el.innerHTML = ''; el.style.display = 'none'; return; }
+    // under horizon dividers. A merged lane never gets a pill of its own — its host does.
+    const navSub = MERGED_INTO[sub] || sub;
+    const group = (TAB_GROUPS[top] || []).filter(s => !MERGED_INTO[s] && (isTabVisible(s) || s === navSub));
+    const lanes = laneStripHTML(sub);
+    if (group.length <= 1 && !lanes) { el.innerHTML = ''; el.style.display = 'none'; return; }
     el.style.display = '';
     let lastHz = null;
     const showDividers = !isSimpleMode();
-    const parts = group.map(s => {
+    const parts = group.length <= 1 ? [] : group.map(s => {
       let divider = '';
       const hz = SUB_HZ[s];
       if (showDividers && hz && hz !== lastHz) { divider = `<div class="hub-sub-div">${HZ_DIVIDER[hz] || ''}</div>`; lastHz = hz; }
-      return divider + `<button class="hub-sub-btn ${s === sub ? 'active' : ''}" data-sub="${s}"${SECTION_HELP[s] ? ` title="${esc(SECTION_HELP[s])}"` : ''}>${SUB_LABEL[s] || s}</button>`;
+      return divider + `<button class="hub-sub-btn ${s === navSub ? 'active' : ''}" data-sub="${s}"${SECTION_HELP[s] ? ` title="${esc(SECTION_HELP[s])}"` : ''}>${SUB_LABEL[s] || s}</button>`;
     });
-    el.innerHTML = `<div class="hub-sub">` + parts.join('') + `</div>`;
-    el.querySelectorAll('.hub-sub-btn').forEach(b => b.onclick = () => showTab(b.dataset.sub));
+    el.innerHTML = (parts.length ? `<div class="hub-sub">` + parts.join('') + `</div>` : '') + lanes;
+    el.querySelectorAll('.hub-sub-btn, .hub-lane-btn').forEach(b => b.onclick = () => showTab(b.dataset.sub));
   }
 
   window.showTab = showTab; // let ES-module views (today.js) deep-link to a tab
   function showTab(id, opts = {}) {
     let top, sub;
+    if (RETIRED_TO[id]) id = RETIRED_TO[id];   // a removed tab's deep link / chip lands on its successor
     if (LEGACY_TOP[id]) id = LEGACY_TOP[id];
     if (TOP_TABS.includes(id)) {
       top = id;
@@ -529,18 +490,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'backtest' && typeof ensureBacktest === 'function') ensureBacktest();
     if (sub === 'custom' && typeof ensureCustom === 'function') ensureCustom();
     if (sub === 'coremo' && typeof ensureCoreMomentum === 'function') ensureCoreMomentum();
-    if (sub === 'coreperf' && typeof ensureCorePerf === 'function') ensureCorePerf();
-    if (sub === 'ghost' && typeof ensureGhost === 'function') ensureGhost();
     if (sub === 'events' && typeof ensureCern === 'function') ensureCern();
-    if (sub === 'edge' && typeof ensureEdge === 'function') ensureEdge();
-    if (sub === 'orbitlab' && typeof ensureOrbitLab === 'function') ensureOrbitLab();
-    if (sub === 'rltlab' && typeof ensureRltLab === 'function') ensureRltLab();
-    if (sub === 'peerlab' && typeof ensurePeerLab === 'function') ensurePeerLab();
     if (sub === 'gridlock' && typeof ensureGridlock === 'function') ensureGridlock();
     if (sub === 'cfl' && typeof ensureCflLab === 'function') ensureCflLab();
-    if (sub === 'silab' && typeof ensureSiLab === 'function') ensureSiLab();
     if (sub === 'psrl' && typeof ensurePsrlLab === 'function') ensurePsrlLab();
-    if (sub === 'catalyst' && typeof ensureCatalystLab === 'function') ensureCatalystLab();
     if (sub === 'tech-command' && typeof ensureTechCommand === 'function') ensureTechCommand();
     if (sub === 'evidence' && typeof ensureEvidence === 'function') ensureEvidence();
     if (sub === 'scoreboard' && typeof ensureScoreboard === 'function') ensureScoreboard();
@@ -550,40 +503,25 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (sub === 'session' && typeof ensureSessionBoard === 'function') ensureSessionBoard();
     if (sub === 'rotation' && typeof ensureRotationDW === 'function') ensureRotationDW();
     if (sub === 'fade' && typeof ensureFade === 'function') ensureFade();
-    if (sub === 'trendrider' && typeof ensureTrendRider === 'function') ensureTrendRider();
     if (sub === 'daytrade' && typeof ensureDaytrade === 'function') ensureDaytrade();
     if (sub === 'gapgo' && typeof ensureGapGo === 'function') ensureGapGo();
-    if (sub === 'ignition' && typeof ensureIgnition === 'function') ensureIgnition();
     if (sub === 'lowfloat' && typeof ensureLowFloat === 'function') ensureLowFloat();
     if (sub === 'ignitionlive' && typeof ensureIgnitionLive === 'function') ensureIgnitionLive();
     if (sub === 'breakoutradar' && typeof ensureBreakoutRadar === 'function') ensureBreakoutRadar();
     if (sub === 'movermiss' && typeof ensureMoverMiss === 'function') ensureMoverMiss();
     if (sub === 'intradayval' && typeof ensureIntradayVal === 'function') ensureIntradayVal();
-    if (sub === 'omega' && typeof ensureOmega === 'function') ensureOmega();
     if (sub === 'atlas' && typeof ensureAtlas === 'function') ensureAtlas();
     if (sub === 'swingsup' && typeof ensureSwingSup === 'function') ensureSwingSup();
     if (sub === 'premove' && typeof ensurePremove === 'function') ensurePremove();
-    if (sub === 'downday' && typeof ensureDownDay === 'function') ensureDownDay();
-    if (sub === 'gapdown' && typeof ensureGapDown === 'function') ensureGapDown();
-    if (sub === 'aligned' && typeof ensureAligned === 'function') ensureAligned();
     if (sub === 'putsell' && typeof ensurePutSell === 'function') ensurePutSell();
-    if (sub === 'coil' && typeof ensureCoil === 'function') ensureCoil();
     if (sub === 'patternradar' && typeof ensurePatternRadar === 'function') ensurePatternRadar();
-    if (sub === 'confluence' && typeof ensureConfluence === 'function') ensureConfluence();
     if (sub === 'xalerts' && typeof ensureXalerts === 'function') ensureXalerts();
-    if (sub === 'leaderboard' && typeof ensureLeaderboard === 'function') ensureLeaderboard();
-    if (sub === 'momentum' && typeof ensureMomentum === 'function') ensureMomentum();
     if (sub === 'options' && typeof ensureOptions === 'function') ensureOptions();
     if (sub === 'picks' && typeof ensurePicks === 'function') ensurePicks();
     if (sub === 'pulse' && typeof ensurePulse === 'function') ensurePulse();
-    if (sub === 'evolve' && typeof ensureEvolve === 'function') ensureEvolve();
     if (sub === 'ensemble' && typeof ensureEnsemble === 'function') ensureEnsemble();
-    if (sub === 'readthrough' && typeof ensureReadThrough === 'function') ensureReadThrough();
-    if (sub === 'anomaly' && typeof ensureAnomaly === 'function') ensureAnomaly();
     if (sub === 'biotech' && typeof ensureBiotech === 'function') ensureBiotech();
-    if (sub === 'secondwave' && typeof ensureSecondWave === 'function') ensureSecondWave();
     if (sub === 'crossasset' && typeof ensureCrossAsset === 'function') ensureCrossAsset();
-    if (sub === 'toneshift' && typeof ensureToneShift === 'function') ensureToneShift();
     if (sub === 'gameplan' && typeof ensureGamePlan === 'function') ensureGamePlan();
     if (sub === 'brief' && typeof ensureBrief === 'function') ensureBrief();
     if (sub === 'forecast' && typeof ensureForecast === 'function') ensureForecast();
@@ -618,7 +556,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // you whether today's tape FITS the screener you're looking at (condition-aware
   // per screener): trend/breakout/momentum favor trending tapes; mean-reversion
   // (Fade) favors choppy tapes — the opposite.
-  const SCREENER_STYLE = { screener: 'breakout', custom: 'momentum', coremo: 'momentum', daytrade: 'momentum', confluence: 'adaptive', ghost: 'breakout', trendrider: 'trend', fade: 'meanrev' };
+  const SCREENER_STYLE = { screener: 'breakout', custom: 'momentum', coremo: 'momentum', daytrade: 'momentum', fade: 'meanrev' };
   const STYLE = {
     breakout: { favor: 'trending', name: 'breakouts', good: 'have the wind at their back', bad: 'fail more often (false breakouts) — be selective' },
     momentum: { favor: 'trending', name: 'momentum setups', good: 'tend to follow through', bad: 'stall and reverse — be selective, tighten stops' },
@@ -665,7 +603,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   // Deep links / notification clicks (e.g. /#momentum or /#rotation)
   window.addEventListener('hashchange', () => {
-    const id = (location.hash || '').replace('#', '');
+    const raw = (location.hash || '').replace('#', '');
+    const id = RETIRED_TO[raw] || raw;
     if (SECTION_IDS.includes(id) || TOP_TABS.includes(id)) showTab(id);
   });
 
@@ -3062,7 +3001,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (isMain && generatedAt) screenerGenTime.textContent = `Updated ${stampText(generatedAt)}`;
       if (metaEl) metaEl.textContent = `· ${scannedCount || 0} scanned · ${results.length} passed the 4-filter gate · ${breakoutCount || 0} breaking out${narrativeEnabled ? '' : ' · narrative offline'}`;
       if (cap) scrCaps[scope] = cap;
-      if (scope === 'large') { lastRegime = data.regime || null; renderRotation(rotation); renderRotationTrend(data.rotationHistory); renderRegime(lastRegime); renderMomentumRegime(); }
+      if (scope === 'large') { lastRegime = data.regime || null; renderRotation(rotation); renderRotationTrend(data.rotationHistory); renderRegime(lastRegime); }
       scrRaw[scope] = results;
       if (scope === 'large') setSectorTickers(results);
       rankAndRender(scope);
@@ -3154,11 +3093,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const momActionLabel = (buy) => (momTradeEligible
     ? (buy ? '⚡ STRONG BUY' : '⚡ STRONG SELL')
     : (buy ? '🔬 RESEARCH · strong up-momentum' : '🔬 RESEARCH · strong down-momentum'));
-
-  function renderMomentumRegime() {
-    const el = document.getElementById('momentum-regime');
-    if (el) el.innerHTML = regimeBannerHTML(lastRegime);
-  }
 
   function renderRotation(rotation) {
     const el = document.getElementById('screener-rotation');
@@ -4241,9 +4175,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     screener: { level: 'confirm', one: `Breakouts have no standalone edge in 5y tests — the ${L('regime', 'regime')} + ${L('tape', 'tape')} gates do the real work. Use it to find candidates, not as a buy signal.` },
     custom: { level: 'noedge', one: `Demoted to a zero-weight frozen benchmark (2026-08): its historical weight search was never trial-ledgered, so past performance claims don't count as evidence. The ${L('regime', 'regime')} gate is the proven lever — see the Maturity tab for the live grade.` },
     daytrade: { level: 'confirm', one: `A ${L('regime', 'regime')}-gated movers watchlist, not a win-rate edge. Large-cap ${L('momentum', 'momentum')} doesn't beat SPY; small-cap explosive is positive-expectancy but wins <50% (a few big runners carry it).` },
-    confluence: { level: 'confirm', one: `No strategy or ${L('confluence', 'confluence')} combination has confidently beaten the market in this app's tests (and measured redundancy says agreement doesn't pay). A confirmation overlay — see the Scoreboard for the live record.` },
-    ghost: { level: 'noedge', one: `An early-${L('accumulation', 'accumulation')} watchlist, demoted to shadow (2026-08): its forecasts are ~0.96-correlated with the Breakout screener's, so it adds no independent evidence, and its historical insider pillar had a look-ahead now being re-run. Context, not a signal.` },
-    trendrider: { level: 'building', one: `The "stand down when red" timing held across multiple independent selloffs in research — the project's strongest finding — but Trend Rider itself is shadow / weight-0 with no promotion artifact. Green = riding ${L('beta', 'beta')}, not stock-picking skill: it tells you WHEN, not WHAT.` },
     fade: { level: 'building', one: `A choppy/neutral-tape ${L('meanrev', 'mean-reversion')} read. Governance approves it only as an AVOID filter (shadow, zero weight, no borrow feed for real shorts); the live ${L('backtest', 'track record')} is still building — see the Scoreboard's Fade section.` },
     forecast: { level: 'building', one: `AI ${L('forecast', 'falsifiable forecasts')} on the market, ${L('tape', 'tape')}/${L('regime', 'regime')}-aware and auto-graded against real prices — no self-scoring. Short-term prediction is hard; expect the live accuracy to sit near a coin flip. Educational, not a signal.` },
     crowd: { level: 'confirm', one: `A ${L('predmarket', 'prediction-market')} sentiment radar (Kalshi + Polymarket) — flags unusual volume and sharp odds swings on macro/equity contracts. It shows what the crowd is suddenly repricing (often confirming news), not a tradeable edge. The volume baseline sharpens over the first few days.` },
@@ -4377,12 +4308,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     });
   }
   document.getElementById('quickhit-refresh-btn')?.addEventListener('click', () => { quickHitLoaded = false; ensureQuickHit(); });
-  let leaderboardLoaded = false;
-  function ensureLeaderboard() {
-    const el = document.getElementById('leaderboard-container'); if (!el || leaderboardLoaded) return;
-    leaderboardLoaded = true;
-    loadLeaderboard(el).then(() => el.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.go))));
-  }
   function ensureToday() { if (!todayLoaded) { todayLoaded = true; runTodayUI(); } }
   async function runTodayUI() {
     const el = document.getElementById('today-container');
@@ -4462,7 +4387,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
   document.getElementById('today-refresh-btn')?.addEventListener('click', runTodayUI);
   document.getElementById('opp-refresh-btn')?.addEventListener('click', () => { opportunitiesLoaded = false; ensureOpportunities(); });
-  document.getElementById('leaderboard-refresh-btn')?.addEventListener('click', () => { leaderboardLoaded = false; ensureLeaderboard(); });
 
   // ── 🧭 PREDICTION BRIEF — synthesis lives server-side in lib/brief.js (single
   // source of truth, shared with the validation cron). The UI just renders op=brief.
@@ -4546,17 +4470,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // Haiku + web_search ~30-45s, refine: Fable ~35s) — far past the 20s default, which aborted
   // every cold load into "Could not load Market Pulse". Uses the shared HEAVY budget.
 
-  // 🔥 Momentum Ignition — acceleration-ranked momentum view (loadIgnition renders op=ignition).
-  let ignitionLoaded = false;
-  function ensureIgnition() {
-    if (!ignitionLoaded) {
-      ignitionLoaded = true;
-      const btn = document.getElementById('ignition-refresh-btn');
-      if (btn) btn.addEventListener('click', () => loadIgnition(document.getElementById('ignition-container')));
-    }
-    loadIgnition(document.getElementById('ignition-container'));
-  }
-
   // ── The four new same-session sections (public/js/lowfloat.js renders; the server scores) ──
   // Each is lazy: nothing fetches until its tab is opened, because each read runs the staged
   // pipeline (a full-universe bulk quote snapshot plus a bounded five-minute chart fan-out).
@@ -4603,17 +4516,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   function ensureIntradayVal() { _lowFloatLoaders.intradayval(); }
   function ensureSessionBoard() { _lowFloatLoaders.session(); _lowFloatLoaders.mybook(); }
 
-  // 💠 OMEGA-SWING — 5–10 day momentum continuation (loadOmega renders op=omega).
-  let omegaLoaded = false;
-  function ensureOmega() {
-    if (!omegaLoaded) {
-      omegaLoaded = true;
-      const btn = document.getElementById('omega-refresh-btn');
-      if (btn) btn.addEventListener('click', () => loadOmega(document.getElementById('omega-container')));
-    }
-    loadOmega(document.getElementById('omega-container'));
-  }
-
   // 🛰 ATLAS-X — SHADOW / weight-0 swing research workspace (loadAtlas renders op=atlasx).
   // Cannot originate or affect any live trade; entry-lane candidates + episode lanes + evidence panel.
   let atlasLoaded = false;
@@ -4652,45 +4554,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     loadPremove(document.getElementById('premove-container'));
   }
 
-  // 🛰️ ORBIT (shadow) — read-only Research Lab panel over the ORBIT + ORBIT-ML shadow
-  // systems (loadOrbitLab renders op=orbit/orbithealth/orbitml/orbitmlhealth). Weight-0,
-  // never affects the live rank — honest track-record accrual only.
-  let orbitLabLoaded = false;
-  function ensureOrbitLab() {
-    if (!orbitLabLoaded) {
-      orbitLabLoaded = true;
-      const btn = document.getElementById('orbitlab-refresh-btn');
-      if (btn) btn.addEventListener('click', () => loadOrbitLab(document.getElementById('orbitlab-container')));
-    }
-    loadOrbitLab(document.getElementById('orbitlab-container'));
-  }
-
-  // 🧭 RLT (shadow) — read-only Research Lab panel over the Relative Leadership
-  // Transition shadow system (loadRltLab renders op=rlt). Weight-0, never affects
-  // the live rank — honest transition-inventory + abstention display only.
-  let rltLabLoaded = false;
-  function ensureRltLab() {
-    if (!rltLabLoaded) {
-      rltLabLoaded = true;
-      const btn = document.getElementById('rltlab-refresh-btn');
-      if (btn) btn.addEventListener('click', () => loadRltLab(document.getElementById('rltlab-container')));
-    }
-    loadRltLab(document.getElementById('rltlab-container'));
-  }
-
-  // 🕸 Peer Propagation (shadow) — read-only Research Lab panel (loadPeerLab
-  // renders op=peerprop + the cached walk-forward report). Weight-0, never
-  // affects the live rank — early/confirming propagation inventory only.
-  let peerLabLoaded = false;
-  function ensurePeerLab() {
-    if (!peerLabLoaded) {
-      peerLabLoaded = true;
-      const btn = document.getElementById('peerlab-refresh-btn');
-      if (btn) btn.addEventListener('click', () => loadPeerLab(document.getElementById('peerlab-container')));
-    }
-    loadPeerLab(document.getElementById('peerlab-container'));
-  }
-
   // ⚡ GRIDLOCK (shadow) — physical-constraint & marginal-beneficiary board
   // (loadGridlock renders op=gridlock). Weight-0, never affects the live rank.
   let gridlockLoaded = false;
@@ -4717,19 +4580,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     loadCflLab(document.getElementById('cfl-container'));
   }
 
-  // 📉 Short Interest Overlay (shadow) — read-only Research Lab panel (loadSiLab
-  // renders op=sistatus / siwf / sisnapshot). Weight-0 experiment readout; never
-  // a buy signal, never affects the live OMEGA rank.
-  let siLabLoaded = false;
-  function ensureSiLab() {
-    if (!siLabLoaded) {
-      siLabLoaded = true;
-      const btn = document.getElementById('silab-refresh-btn');
-      if (btn) btn.addEventListener('click', () => loadSiLab(document.getElementById('silab-container')));
-    }
-    loadSiLab(document.getElementById('silab-container'));
-  }
-
   // 🪜 Persistent Trends (shadow) — read-only PSRL board (loadPsrlLab renders
   // op=psrl / psrldetail). Weight-0 continuity + relative-leadership evidence;
   // never a buy signal, never affects the live rank.
@@ -4741,20 +4591,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       if (btn) btn.addEventListener('click', () => loadPsrlLab(document.getElementById('psrl-container')));
     }
     loadPsrlLab(document.getElementById('psrl-container'));
-  }
-
-  // ⚡ CATALYST–FLOW RANKER (research/shadow) — read-only board over op=catalystflow.
-  // The serving layer only ever READS a published artifact, so opening this tab cannot
-  // trigger training or a recompute; with nothing published it renders its own
-  // "not published" state rather than an empty ranking that looks like a result.
-  let catalystLabLoaded = false;
-  function ensureCatalystLab() {
-    if (!catalystLabLoaded) {
-      catalystLabLoaded = true;
-      const btn = document.getElementById('catalyst-refresh-btn');
-      if (btn) btn.addEventListener('click', () => renderCatalystLab(document.getElementById('catalyst-container')));
-    }
-    renderCatalystLab(document.getElementById('catalyst-container'));
   }
 
   // 🖥 TECHNOLOGY COMMAND CENTER — reads the versioned op=techcommand projection.
@@ -4783,16 +4619,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     loadEnsemble(document.getElementById('ensemble-container'));
   }
 
-  // 🧬 EVOLVE — adaptive pre-move discovery (loadEvolve renders the op=evolve payload).
-  let evolveLoaded = false;
-  function ensureEvolve() {
-    if (!evolveLoaded) {
-      evolveLoaded = true;
-      const btn = document.getElementById('evolve-refresh-btn');
-      if (btn) btn.addEventListener('click', () => loadEvolve(document.getElementById('evolve-container')));
-    }
-    loadEvolve(document.getElementById('evolve-container'));
-  }
   async function runPulseUI(force) {
     const el = document.getElementById('pulse-container');
     if (!el) return;
@@ -5043,10 +4869,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (rb) rb.onclick = () => runPulseUI(true);
   }
 
-  // ── 🔗 READ-THROUGH — second-order beneficiaries of today's gappers (server-side
-  // lib/readthrough-routes.js via Fable 5). "Who benefits and hasn't moved yet?" — a
-  // relational lead-lag a per-stock model can't see. Names that already repriced today
-  // are demoted (the edge is the lag). A LEAD to forward-track, NOT a buy signal.
   // ── Predict-tab feedback loop (Layer 1 + 2, server: lib/calibration.js) ──────────────
   // op=calibration grades every CLASS of each novel screener by its live track record —
   // 1-week forward EXCESS vs its own sector ETF, Wilson-bounded so small samples can't lie.
@@ -5175,126 +4997,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const q = quotes[(el.dataset.ptick || '').toUpperCase()];
       if (q) el.innerHTML = predictPriceHTML(q);
     }
-  }
-
-  let readthroughLoaded = false;
-  function ensureReadThrough() { if (!readthroughLoaded) { readthroughLoaded = true; runReadThroughUI(false); } }
-  async function runReadThroughUI(force) {
-    const el = document.getElementById('readthrough-container');
-    if (!el) return;
-    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Rebuilding the read-through graph… <span class="dt-dim">(Fable 5 reasons the beneficiaries — can take ~60s)</span>' : 'Loading read-through graph…'}</p></div>`;
-    try {
-      // Two-stage: a manual Refresh first regenerates the raw Fable graph (Stage 1, slow),
-      // then re-enriches (Stage 2). A normal open just hits the fast serve/enrich path.
-      if (force) await fetchJSON('/api/tracker?op=readthroughtick').catch(() => {});
-      const [p] = await Promise.all([
-        fetchJSON('/api/tracker?op=readthrough' + (force ? '&force=1' : '')),
-        loadCalibration(),
-      ]);
-      renderReadThrough(p);
-    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Read-Through.</p></div>`; }
-  }
-  const RT_LINK = { supplier: ['🔧', 'Supplier'], customer: ['🛒', 'Customer'], tollbooth: ['🛣️', 'Toll-booth'], substitute: ['🔀', 'Substitute'], input_cost: ['⛽', 'Input cost'], partner: ['🤝', 'Partner'] };
-  function renderReadThrough(p) {
-    const el = document.getElementById('readthrough-container');
-    if (!el) return;
-    if (!p || !p.ok || !(p.items || []).length) {
-      const why = p && p.error ? ' — ' + esc(p.error) : (p && !(p.items || []).length ? ' — no read-throughs from the latest gappers yet' : '');
-      el.innerHTML = `<div class="mom-status error"><p>Read-Through is warming up${why}. It builds off the day's Gap & Go movers — try Refresh in a moment.</p></div>`;
-      return;
-    }
-    const gt = document.getElementById('readthrough-gen-time');
-    if (gt && p.generatedAt) gt.textContent = `· ${p.triggerDate ? 'from ' + esc(p.triggerDate) + ' gappers · ' : ''}updated ${p.ageMins != null && p.ageMins < 90 ? (p.ageMins + 'm ago') : new Date(p.generatedAt).toLocaleString()}`;
-    const dots = n => '●'.repeat(Math.max(0, Math.min(5, n))) + '○'.repeat(5 - Math.max(0, Math.min(5, n)));
-    const trig = (p.triggers || []).map(t => `<span class="pulse-tk">$${esc(t.ticker)}${t.gapPct != null ? ' +' + t.gapPct + '%' : ''}</span>`).join(' ');
-    const card = it => {
-      const [le, ll] = RT_LINK[it.link_type] || RT_LINK.partner;
-      const mv = it.moved || {};
-      const { dim, feat, c } = calibState('ReadThrough', it, mv.alreadyMoved === false);
-      const tape = mv.alreadyMoved === true
-        ? `<span class="rt-tape rt-moved" title="Already moved ${mv.movedPct}% today — likely priced in">⚪ moved ${mv.movedPct > 0 ? '+' : ''}${mv.movedPct}%</span>`
-        : mv.alreadyMoved === false
-          ? `<span class="rt-tape rt-fresh" title="Hasn't repriced yet (${mv.movedPct != null ? mv.movedPct + '% today' : 'flat'})">🟢 not yet moved${mv.movedPct != null ? ' (' + (mv.movedPct > 0 ? '+' : '') + mv.movedPct + '%)' : ''}</span>`
-          : `<span class="rt-tape rt-unknown" title="Tape unavailable">◽ tape n/a</span>`;
-      return `<div class="pulse-card${dim ? ' rt-dim' : ''}${feat ? ' calib-feat' : ''}">
-        <div class="pulse-top">
-          <span class="pulse-head"><b>$${esc(it.beneficiary_ticker)}</b> ${esc(it.beneficiary_name || '')}</span>
-          ${tape}
-        </div>
-        ${priceBar(it.beneficiary_ticker)}
-        ${c ? `<div class="pulse-calib">${calibBadge(c)}</div>` : ''}
-        <div class="pulse-meta">
-          <span class="rt-link" title="${esc(ll)} relationship">${le} ${esc(ll)}</span>
-          <span class="rt-from">← $${esc(it.trigger_ticker)}</span>
-          <span class="rt-direct" title="Directness of the link (5 = single-name dependency)">${dots(it.directness)}</span>
-        </div>
-        <div class="pulse-idea"><b>Link:</b> ${esc(it.mechanism)}</div>
-        <div class="pulse-why">${esc(it.thesis)}</div>
-        ${it.caution ? `<div class="pulse-caution">⚠️ ${esc(it.caution)}</div>` : ''}
-      </div>`;
-    };
-    el.innerHTML = `
-      <div class="dt-note" style="border-left-color:#14b8a6"><b>🔗 Second-order read-throughs.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND} ${convictionLine('ReadThrough')}</div>
-      ${trig ? `<div class="rt-triggers">Off today's movers: ${trig}</div>` : ''}
-      <div class="pulse-grid">${calibSort('ReadThrough', p.items).map(card).join('')}</div>`;
-    hydratePredictPrices(el);
-    const rb = document.getElementById('readthrough-refresh-btn');
-    if (rb) rb.onclick = () => runReadThroughUI(true);
-  }
-
-  // ── 🕵️ STEALTH (ANOMALY-FIRST) — names moving up on volume with NO news; an AI
-  // investigator (server-side lib/anomaly-routes.js, Sonnet 5 + web search) classifies
-  // each as ACCUMULATION (no catalyst found — possible stealth buying), EXPLAINED (a
-  // public reason exists — priced), or NOISE. A LEAD to forward-track, not a buy signal.
-  let anomalyLoaded = false;
-  function ensureAnomaly() { if (!anomalyLoaded) { anomalyLoaded = true; runAnomalyUI(false); } }
-  async function runAnomalyUI(force) {
-    const el = document.getElementById('anomaly-container');
-    if (!el) return;
-    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Re-scanning for unexplained movers & investigating… <span class="dt-dim">(the AI web-searches each — ~50s)</span>' : 'Loading the anomaly scan…'}</p></div>`;
-    try {
-      if (force) await fetchJSON('/api/tracker?op=anomalytick').catch(() => {});
-      const [p] = await Promise.all([fetchJSON('/api/tracker?op=anomaly'), loadCalibration()]);
-      renderAnomaly(p);
-    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the Stealth scan.</p></div>`; }
-  }
-  const ANOM_CLASS = { ACCUMULATION: ['🕵️', 'var(--green)', 'Accumulation'], EXPLAINED: ['📰', 'var(--text-dim)', 'Explained'], NOISE: ['🌫️', 'var(--text-dim)', 'Noise'] };
-  function renderAnomaly(p) {
-    const el = document.getElementById('anomaly-container');
-    if (!el) return;
-    if (!p || !p.ok || !(p.items || []).length) {
-      const why = p && p.error ? ' — ' + esc(p.error) : (p && p.ok ? ' — no unexplained movers on the latest tape' : '');
-      el.innerHTML = `<div class="mom-status error"><p>Stealth scan is warming up${why}. It looks for names moving on volume with no news — try Refresh in a moment.</p></div>`;
-      return;
-    }
-    const gt = document.getElementById('anomaly-gen-time');
-    if (gt && p.generatedAt) gt.textContent = `· ${p.asOf ? 'as of ' + esc(p.asOf) + ' · ' : ''}updated ${p.ageMins != null && p.ageMins < 90 ? (p.ageMins + 'm ago') : new Date(p.generatedAt).toLocaleString()}`;
-    const dots = n => '●'.repeat(Math.max(0, Math.min(5, n))) + '○'.repeat(5 - Math.max(0, Math.min(5, n)));
-    const cand = t => (p.candidates || []).find(c => c.ticker === t) || {};
-    const card = it => {
-      const [ce, cc, cl] = ANOM_CLASS[it.classification] || ANOM_CLASS.NOISE;
-      const c = cand(it.ticker);
-      const move = c.pct5d != null ? `<span class="anom-move">+${c.pct5d}% / ${c.relVol}x vol</span>` : '';
-      const { dim, feat, c: cal } = calibState('Anomaly', it, it.classification === 'ACCUMULATION');
-      return `<div class="pulse-card${dim ? ' rt-dim' : ''}${feat ? ' calib-feat' : ''}">
-        <div class="pulse-top">
-          <span class="pulse-head"><b>$${esc(it.ticker)}</b> ${move}</span>
-          <span class="anom-class" style="color:${cc}" title="${esc(cl)}">${ce} ${esc(cl)} <span class="anom-conf" title="Confidence">${dots(it.confidence)}</span></span>
-        </div>
-        ${priceBar(it.ticker)}
-        ${cal ? `<div class="pulse-calib">${calibBadge(cal)}</div>` : ''}
-        <div class="pulse-idea"><b>${it.classification === 'ACCUMULATION' ? 'No catalyst found:' : 'Reason:'}</b> ${esc(it.reason_found)}</div>
-        <div class="pulse-why">${esc(it.thesis)}</div>
-        ${it.caution ? `<div class="pulse-caution">⚠️ ${esc(it.caution)}</div>` : ''}
-      </div>`;
-    };
-    el.innerHTML = `
-      <div class="dt-note" style="border-left-color:#8b5cf6"><b>🕵️ Unexplained movers.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND} ${convictionLine('Anomaly')}</div>
-      <div class="anom-meta">Scanned the tape → ${p.detected != null ? p.detected + ' movers, ' : ''}${p.noNews != null ? p.noNews + ' with no news' : ''} → investigated ${(p.items || []).length}.</div>
-      <div class="pulse-grid">${calibSort('Anomaly', p.items).map(card).join('')}</div>`;
-    hydratePredictPrices(el);
-    const rb = document.getElementById('anomaly-refresh-btn');
-    if (rb) rb.onclick = () => runAnomalyUI(true);
   }
 
   // ── 🧬 BIOTECH RADAR — biotech names that just started running (micro→large), scored 0–100
@@ -5471,61 +5173,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     </div>`;
   }
 
-  // ── 🌊 SECOND WAVE — first-leg movers the crowd hasn't piled into yet; an AI forecasts
-  // a reflexive SECOND wave (server-side lib/secondwave-routes.js, Sonnet 5 + web search).
-  // PRIMED = fresh story, crowd light; EARLY = needs a trigger; FADED = already crowded.
-  let secondwaveLoaded = false;
-  function ensureSecondWave() { if (!secondwaveLoaded) { secondwaveLoaded = true; runSecondWaveUI(false); } }
-  async function runSecondWaveUI(force) {
-    const el = document.getElementById('secondwave-container');
-    if (!el) return;
-    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Re-scanning first-leg movers & forecasting second waves… <span class="dt-dim">(the AI gauges the crowd — ~50s)</span>' : 'Loading the second-wave scan…'}</p></div>`;
-    try {
-      if (force) await fetchJSON('/api/tracker?op=secondwavetick').catch(() => {});
-      const [p] = await Promise.all([fetchJSON('/api/tracker?op=secondwave'), loadCalibration()]);
-      renderSecondWave(p);
-    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the Second Wave scan.</p></div>`; }
-  }
-  const SW_CLASS = { PRIMED: ['🌊', 'var(--green)', 'Primed'], EARLY: ['🌱', '#f59e0b', 'Early'], FADED: ['🥱', 'var(--text-dim)', 'Faded'] };
-  function renderSecondWave(p) {
-    const el = document.getElementById('secondwave-container');
-    if (!el) return;
-    if (!p || !p.ok || !(p.items || []).length) {
-      const why = p && p.error ? ' — ' + esc(p.error) : (p && p.ok ? ' — no first-leg movers on the latest tape' : '');
-      el.innerHTML = `<div class="mom-status error"><p>Second Wave is warming up${why}. It looks for early movers the crowd hasn’t found yet — try Refresh in a moment.</p></div>`;
-      return;
-    }
-    const gt = document.getElementById('secondwave-gen-time');
-    if (gt && p.generatedAt) gt.textContent = `· ${p.asOf ? 'as of ' + esc(p.asOf) + ' · ' : ''}updated ${p.ageMins != null && p.ageMins < 90 ? (p.ageMins + 'm ago') : new Date(p.generatedAt).toLocaleString()}`;
-    const dots = n => '●'.repeat(Math.max(0, Math.min(5, n))) + '○'.repeat(5 - Math.max(0, Math.min(5, n)));
-    const cand = t => (p.candidates || []).find(c => c.ticker === t) || {};
-    const card = it => {
-      const [ce, cc, cl] = SW_CLASS[it.classification] || SW_CLASS.EARLY;
-      const c = cand(it.ticker);
-      const move = c.ret10 != null ? `<span class="anom-move">+${c.ret10}% / ${c.relVol}x vol</span>` : '';
-      const { dim, feat, c: cal } = calibState('SecondWave', it, it.classification === 'PRIMED');
-      return `<div class="pulse-card${dim ? ' rt-dim' : ''}${feat ? ' calib-feat' : ''}">
-        <div class="pulse-top">
-          <span class="pulse-head"><b>$${esc(it.ticker)}</b> ${move}</span>
-          <span class="anom-class" style="color:${cc}" title="${esc(cl)}">${ce} ${esc(cl)} <span class="anom-conf" title="Virality potential">${dots(it.virality)}</span></span>
-        </div>
-        ${priceBar(it.ticker)}
-        ${cal ? `<div class="pulse-calib">${calibBadge(cal)}</div>` : ''}
-        <div class="pulse-idea"><b>Catalyst:</b> ${esc(it.catalyst)}</div>
-        <div class="pulse-meta"><span class="sw-crowd">Crowd: ${esc(it.crowd_state || '—')}</span></div>
-        <div class="pulse-why">${esc(it.thesis)}</div>
-        ${it.caution ? `<div class="pulse-caution">⚠️ ${esc(it.caution)}</div>` : ''}
-      </div>`;
-    };
-    el.innerHTML = `
-      <div class="dt-note" style="border-left-color:#0ea5e9"><b>🌊 Reflexive second waves.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND} ${convictionLine('SecondWave')}</div>
-      <div class="anom-meta">${p.detected != null ? 'Found ' + p.detected + ' first-leg movers → ' : ''}forecast ${(p.items || []).length}.</div>
-      <div class="pulse-grid">${calibSort('SecondWave', p.items).map(card).join('')}</div>`;
-    hydratePredictPrices(el);
-    const rb = document.getElementById('secondwave-refresh-btn');
-    if (rb) rb.onclick = () => runSecondWaveUI(true);
-  }
-
   // ── 🌐 CROSS-ASSET — US stocks levered to a move in another asset (commodity / overnight
   // foreign market / crypto / rates) they haven't caught up to. Server-side (Haiku 5 + web
   // search) sweeps the tells; our tape confirms the stock is still lagging. LEAD = lagging.
@@ -5576,56 +5223,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     hydratePredictPrices(el);
     const rb = document.getElementById('crossasset-refresh-btn');
     if (rb) rb.onclick = () => runCrossAssetUI(true);
-  }
-
-  // ── 🎚️ TONE SHIFT — earnings-call language DELTA vs the prior quarter (server-side
-  // lib/toneshift-routes.js, Haiku 5 + web search). BRIGHTENING = more confident than last
-  // quarter; DARKENING = more cautious. A slower swing-horizon lead, forward-tracked.
-  let toneshiftLoaded = false;
-  function ensureToneShift() { if (!toneshiftLoaded) { toneshiftLoaded = true; runToneShiftUI(false); } }
-  async function runToneShiftUI(force) {
-    const el = document.getElementById('toneshift-container');
-    if (!el) return;
-    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>${force ? 'Comparing recent calls to last quarter’s tone… <span class="dt-dim">(~45s)</span>' : 'Loading the tone-shift scan…'}</p></div>`;
-    try {
-      if (force) await fetchJSON('/api/tracker?op=toneshifttick').catch(() => {});
-      const [p] = await Promise.all([fetchJSON('/api/tracker?op=toneshift'), loadCalibration()]);
-      renderToneShift(p);
-    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the Tone Shift scan.</p></div>`; }
-  }
-  const TS_CLASS = { BRIGHTENING: ['📈', 'var(--green)', 'Brightening'], STABLE: ['➖', 'var(--text-dim)', 'Stable'], DARKENING: ['📉', 'var(--red)', 'Darkening'] };
-  function renderToneShift(p) {
-    const el = document.getElementById('toneshift-container');
-    if (!el) return;
-    if (!p || !p.ok || !(p.items || []).length) {
-      const why = p && p.error ? ' — ' + esc(p.error) : (p && p.ok ? ' — no recent reporters to compare yet' : '');
-      el.innerHTML = `<div class="mom-status error"><p>Tone Shift is warming up${why}. It compares recent earnings calls to last quarter — try Refresh in a moment.</p></div>`;
-      return;
-    }
-    const gt = document.getElementById('toneshift-gen-time');
-    if (gt && p.generatedAt) gt.textContent = `· ${p.asOf ? 'as of ' + esc(p.asOf) + ' · ' : ''}updated ${p.ageMins != null && p.ageMins < 90 ? (p.ageMins + 'm ago') : new Date(p.generatedAt).toLocaleString()}`;
-    const dots = n => '●'.repeat(Math.max(0, Math.min(5, n))) + '○'.repeat(5 - Math.max(0, Math.min(5, n)));
-    const card = it => {
-      const [ce, cc, cl] = TS_CLASS[it.shift] || TS_CLASS.STABLE;
-      const { dim, feat, c: cal } = calibState('ToneShift', it, it.shift === 'BRIGHTENING');
-      return `<div class="pulse-card${dim ? ' rt-dim' : ''}${feat ? ' calib-feat' : ''}">
-        <div class="pulse-top">
-          <span class="pulse-head"><b>$${esc(it.ticker)}</b></span>
-          <span class="anom-class" style="color:${cc}" title="${esc(cl)}">${ce} ${esc(cl)} <span class="anom-conf">${dots(it.confidence)}</span></span>
-        </div>
-        ${priceBar(it.ticker)}
-        ${cal ? `<div class="pulse-calib">${calibBadge(cal)}</div>` : ''}
-        <div class="pulse-idea"><b>Change:</b> ${esc(it.change)}</div>
-        <div class="pulse-why">${esc(it.thesis)}</div>
-        ${it.caution ? `<div class="pulse-caution">⚠️ ${esc(it.caution)}</div>` : ''}
-      </div>`;
-    };
-    el.innerHTML = `
-      <div class="dt-note" style="border-left-color:#a855f7"><b>🎚️ Earnings tone shifts.</b> ${esc(p.disclaimer || '')} ${p.stale ? '<b>(showing last snapshot — refresh to update)</b>' : ''} ${CALIB_LEGEND} ${convictionLine('ToneShift')}</div>
-      <div class="pulse-grid">${calibSort('ToneShift', p.items).map(card).join('')}</div>`;
-    hydratePredictPrices(el);
-    const rb = document.getElementById('toneshift-refresh-btn');
-    if (rb) rb.onclick = () => runToneShiftUI(true);
   }
 
   // ── 🗞️ DAILY GAME PLAN — news + sentiment + the app's own signals synthesized
@@ -6107,7 +5704,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // on (Research Lab, or an archived tab), land on the group's first visible tab.
     if (typeof showTab === 'function') {
       if (uiMode === 'simple' && currentTop === 'lab') showTab('trade');
-      else if (uiMode === 'simple' && hubSub[currentTop] && !SIMPLE_TABS.has(hubSub[currentTop])) showTab(currentTop);
+      else if (uiMode === 'simple' && hubSub[currentTop] && !isTabVisible(hubSub[currentTop])) showTab(currentTop);
       else showTab(hubSub[currentTop] || currentTop);
     }
   });
@@ -6123,236 +5720,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (arr) arr.style.transform = open ? '' : 'rotate(180deg)';
   });
 
-  // ── Ghost Accumulation Index (GAI) — quiet-accumulation screener ──────────
-  // Purely presentational: the 6-pillar scoring runs server-side in lib/ghost.js
-  // and ships on each candidate as c.ghost. No scorer duplicated here → no drift.
-  let ghostLoaded = false, ghostLast = null;
-  const GHOST_PILLAR_ORDER = ['RM', 'AF', 'AV', 'SF', 'BONUS', 'IN'];
-  const GHOST_PILLAR_SHORT = { RM: '① Rel. strength', AF: '② Accum. footprint', AV: '③ Accum. vacuum', SF: '④ Smart flow', BONUS: '⑤ Catalyst', IN: '⑥ Insider' };
-  // Plain-English hovers for each Ghost pillar (novice investor).
-  const GHOST_PILLAR_HELP = {
-    RM: 'Relative strength — is the stock quietly outperforming the market? Higher = leading.',
-    AF: 'Accumulation footprint — steady buying pressure (more up-volume than down-volume) even without a breakout yet.',
-    AV: 'Accumulation vacuum — a quiet, low-supply base. (Deliberately low-weighted — the app’s research found this factor weak.)',
-    SF: 'Smart flow — up/down volume and volume-adjusted signs of informed buying.',
-    BONUS: 'Catalyst — a fundamental or news reason for the accumulation (earnings acceleration, story).',
-    IN: 'Insider — real open-market buying by company insiders (Form 4 filings). A genuine confirmation flag.',
-  };
-  const GHOST_RG_LABEL = { 'risk-on': 'Risk-On', 'neutral': 'Neutral', 'risk-off': 'Risk-Off' };
-  const GHOST_TIER_CSS = { GHOST: 'apex', STALKING: 'loaded', WATCH: 'watch' }; // reuse existing card colors
-
-  async function fetchGhostScope(scope) {
-    try { return await fetchJSON('/api/screener?scope=' + scope); }
-    catch { return { error: 'fetch failed' }; }
-  }
-
-  function ensureGhost() { if (!ghostLoaded) { ghostLoaded = true; runGhost(); } }
-
-  async function runGhost() {
-    const scopeSel = document.getElementById('gh-scope').value;
-    const container = document.getElementById('ghost-container');
-    const btn = document.getElementById('ghost-refresh-btn');
-    container.innerHTML = skeletonGrid(6);
-    btn.disabled = true;
-    try {
-      // Large is always fetched — it carries the regime read used for the strip.
-      // 'all' now includes the free full-market 'expanded' scope.
-      const fetchScopes = scopeSel === 'all' ? ['large', 'small', 'micro', 'expanded']
-        : scopeSel === 'large' ? ['large'] : ['large', scopeSel];
-      const datas = await Promise.all(fetchScopes.map(fetchGhostScope));
-      const byScope = {}; fetchScopes.forEach((s, i) => byScope[s] = datas[i]);
-      const large = byScope.large;
-      if (!large || large.error) {
-        container.innerHTML = `<div class="mom-status error"><p>${esc((large && large.error) || 'Screener unavailable')}</p></div>`;
-        return;
-      }
-
-      const wanted = scopeSel === 'all' ? ['large', 'small', 'micro', 'expanded'] : [scopeSel];
-      let cands = [];
-      // Prefer ghostTop — the FULL scanned cross-section's accumulation names (not
-      // just the breakout candidates). Falls back to results for older responses.
-      wanted.forEach(s => {
-        const d = byScope[s]; if (!d) return;
-        const src = Array.isArray(d.ghostTop) && d.ghostTop.length ? d.ghostTop
-          : (Array.isArray(d.results) ? d.results.filter(c => c.ghost) : []);
-        cands.push(...src.map(c => ({ ...c, _scope: s })));
-      });
-
-      const seen = {}, deduped = [];
-      cands.filter(c => c.ghost && c.ghost.tier !== 'PASS')
-        .sort((a, b) => b.ghost.score - a.ghost.score)
-        .forEach(c => { if (!seen[c.ticker]) { seen[c.ticker] = 1; deduped.push(c); } });
-
-      ghostLast = { list: deduped, meta: large.ghost || {}, large };
-      renderGhost(ghostLast);
-      const gt = document.getElementById('ghost-gen-time');
-      if (large.generatedAt) gt.textContent = `Updated ${stampText(large.generatedAt)}`;
-      const rg = (large.ghost && large.ghost.regime) || 'neutral';
-      document.getElementById('ghost-meta').textContent = `· ${deduped.length} names scored · ${GHOST_RG_LABEL[rg]} weights · 6-pillar quiet-accumulation`;
-    } catch {
-      container.innerHTML = `<div class="mom-status error"><p>Could not run the Ghost model. Please try again.</p></div>`;
-    } finally { btn.disabled = false; }
-  }
-
-  function renderGhost(snap) {
-    const { list, meta } = snap;
-    renderGhostStrip(meta);
-    renderGhostModelPanel(meta);
-
-    const container = document.getElementById('ghost-container');
-    const tierFilter = document.getElementById('gh-tier').value;
-    let show = list;
-    if (tierFilter === 'ghost') show = list.filter(c => c.ghost.tier === 'GHOST');
-    else if (tierFilter === 'stalking') show = list.filter(c => c.ghost.tier !== 'WATCH');
-
-    if (!show.length) {
-      const why = !meta.regime ? '' : meta.killSwitch ? ' — the kill switch is on in this Risk-Off tape, so every tier is downgraded a notch' : '';
-      container.innerHTML = `<div class="mom-status"><p>No names cleared the Ghost model${why}. Ghost re-ranks the breakout-screen candidate pool through an accumulation lens, so a quiet tape can legitimately show nothing. Try a broader scope or looser tier filter.</p></div>`;
-      return;
-    }
-    const groups = [
-      ['GHOST', '👻 Ghost', 'Broad accumulation — ≥3 strong pillars, quietly being bought'],
-      ['STALKING', '🥷 Stalking', 'Building a position — strong but not yet confirmed across pillars'],
-      ['WATCH', '👁 Watch', 'On the radar — early accumulation footprints'],
-    ];
-    container.innerHTML = '';
-    groups.forEach(([tier, name, sub]) => {
-      const items = show.filter(c => c.ghost.tier === tier);
-      if (!items.length) return;
-      const head = document.createElement('div');
-      head.className = 'cx-tier-head ' + (GHOST_TIER_CSS[tier] || '');
-      head.innerHTML = `<span class="cx-tier-name">${name}</span><span class="cx-tier-sub">${items.length} · ${sub}</span>`;
-      container.appendChild(head);
-      const grid = document.createElement('div');
-      grid.className = 'scr-grid';
-      items.forEach((c, i) => grid.appendChild(buildGhostCard(c, meta, i)));
-      container.appendChild(grid);
-    });
-    attachTimingLights(container, show.map(c => ({ ticker: c.ticker, stop: c.levels && c.levels.stop, target: c.levels && (c.levels.resistance ?? c.levels.target), trigger: c.levels && c.levels.entry })), 'ghost');
-  }
-
-  function buildGhostCard(c, meta, idx) {
-    const g = c.ghost, pl = g.pillars, tier = g.tier;
-    const up = (c.changePct ?? 0) >= 0;
-    const weights = meta.weights || {};
-    const tierLabel = { GHOST: 'Ghost', STALKING: 'Stalking', WATCH: 'Watch' }[tier];
-    const scopeTag = c._scope && c._scope !== 'large' ? ` · ${c._scope} cap` : '';
-
-    const pill = (k) => {
-      const w = weights[k] != null ? `<span class="cx-pill-wt">w${Math.round(weights[k] * 100)}</span>` : '';
-      return `<div class="cx-pill"${GHOST_PILLAR_HELP[k] ? ` title="${esc(GHOST_PILLAR_HELP[k])}"` : ''}><div class="cx-pill-top"><span>${GHOST_PILLAR_SHORT[k]} ${w}</span><b>${pl[k]}</b></div><div class="cx-pill-track"><div class="cx-pill-fill" style="width:${pl[k]}%"></div></div></div>`;
-    };
-
-    // Insider line — the genuinely new signal; surface the raw net when present.
-    const ins = c.insider;
-    let insLine = '';
-    if (ins && !ins.empty && (ins.buys.tx || ins.sells.tx)) {
-      const netUp = (ins.net.value || 0) >= 0;
-      const fmt = v => '$' + (Math.abs(v) >= 1e6 ? (Math.abs(v) / 1e6).toFixed(1) + 'M' : Math.round(Math.abs(v) / 1e3) + 'K');
-      insLine = `<div class="cx-narrative">🏛 Insiders (90d): <b style="color:${netUp ? 'var(--green)' : 'var(--red)'}">${netUp ? '+' : '−'}${fmt(ins.net.value)} net</b> · ${ins.buys.tx} buys / ${ins.sells.tx} sells${ins.buys.insiders >= 2 && netUp ? ' · cluster buy' : ''}</div>`;
-    }
-
-    const lv = c.levels || {};
-    const levelsHtml = lv.entry != null
-      ? `<div class="alert-targets">
-          <div class="at-box"><div class="at-label">${c.status === 'Breakout' ? 'Entry' : 'Trigger'}</div><div class="at-val entry">$${lv.entry}</div></div>
-          <div class="at-box"><div class="at-label">${targetLabel(lv)}</div><div class="at-val target">$${lv.resistance ?? lv.target}</div></div>
-          <div class="at-box"><div class="at-label">Stop</div><div class="at-val stop">$${lv.stop}</div></div>
-        </div>${rrLineHTML(lv)}` : '';
-
-    const card = document.createElement('div');
-    card.className = `cx-card ${GHOST_TIER_CSS[tier] || ''} fade-in`;
-    card.dataset.ticker = c.ticker;
-    card.style.animationDelay = `${idx * 45}ms`;
-    card.innerHTML = `
-      <div class="cx-top">
-        <div>
-          <div class="cx-tk-row"><span class="cx-ticker" data-live="${esc(c.ticker)}">${esc(c.ticker)}</span><span class="cx-tierbadge ${GHOST_TIER_CSS[tier] || ''}">${tierLabel}</span>${whyNowBadge(c)}</div>
-          <div class="cx-company">${esc(c.company || c.ticker)}${c.sector ? ` · ${esc(c.sector)}` : ''}${scopeTag}${c.theme ? ` · ${esc(c.theme)}` : ''}</div>
-        </div>
-        <div class="cx-score-col">
-          <div class="cx-score">${L('accumulation', g.score + '<small>/100</small>')}</div>
-          <div class="cx-price">$${esc(c.price)}</div>
-          <div class="cx-chg ${up ? 'up' : 'down'}">${c.changePct != null ? (up ? '▲ +' : '▼ ') + c.changePct + '%' : ''}</div>
-        </div>
-      </div>
-      <div class="cx-pillars">
-        ${GHOST_PILLAR_ORDER.map(pill).join('')}
-      </div>
-      <div class="cx-weak" style="border:0;color:var(--text-dim)">${g.strongPillars}/6 pillars strong (≥65)</div>
-      ${insLine}
-      ${levelsHtml}
-      ${chartToggleMarkup()}`;
-    wireChartToggle(card, c.ticker);
-    return card;
-  }
-
-  function renderGhostStrip(meta) {
-    const el = document.getElementById('ghost-strip');
-    if (!el) return;
-    const rg = meta.regime || 'neutral';
-    const w = meta.weights || {};
-    const wstr = GHOST_PILLAR_ORDER.map(k => w[k] != null ? Math.round(w[k] * 100) : '—').join('/');
-    const ks = meta.killSwitch ? `<span class="cx-pending">⚠ kill switch ON · tiers downgraded</span>` : '';
-    const mac = meta.macro;
-    const macChip = mac ? `<span class="cx-ver" title="Macro risk ${mac.macroRisk}/100 · VIX ${mac.vix.level} (${mac.vix.pctile}th pctile, ${mac.vix.rising ? 'rising' : 'falling'}) · HYG/LQD credit ${mac.credit.belowSma ? 'below' : 'above'} 50d trend (${mac.credit.trend20 > 0 ? '+' : ''}${mac.credit.trend20}% 20d)">🌡 Macro ${mac.macroRisk}/100 · VIX ${mac.vix.level}${mac.riskOff ? ' · RISK-OFF' : mac.riskOn ? ' · risk-on' : ' · neutral'}</span>` : '';
-    el.innerHTML =
-      `<span class="cx-badge ${rg.replace('-', '_')}"><span class="cx-dot"></span>${GHOST_RG_LABEL[rg]} regime</span>` +
-      `<span class="cx-preset">Weights <b>${wstr}</b></span>` + macChip +
-      `<span class="cx-ver">Ghost v3 · static priors (Phase 1)</span>` + ks;
-  }
-
-  function renderGhostModelPanel(meta) {
-    const body = document.getElementById('gh-model-body');
-    if (!body) return;
-    const labels = meta.pillarLabels || {};
-    const w = meta.weights || {};
-    const rows = GHOST_PILLAR_ORDER.map(k =>
-      `<tr><td>${GHOST_PILLAR_SHORT[k]} — ${esc(labels[k] || k)}</td><td class="active">${w[k] != null ? Math.round(w[k] * 100) + '%' : '—'}</td></tr>`).join('');
-    body.innerHTML = `
-      <div class="cx-mp-sec">
-        <h4>What Ghost looks for</h4>
-        <p class="cx-mp-p">Apex hunts <i>confirmed breakouts</i>. Ghost hunts the opposite end: stocks being <b>quietly accumulated before</b> the move — rising relative strength on heavy up-volume, a tightening supply vacuum, and (the new lever) <b>insider buying</b>. Each candidate is graded 0–100 on six pillars, blended by the active regime's weights. <b>Ghost</b> = score ≥80 with ≥3 strong pillars; <b>Stalking</b> = ≥65, ≥2 strong; <b>Watch</b> = ≥50.</p>
-      </div>
-      <div class="cx-mp-sec">
-        <h4>Pillar weights · ${GHOST_RG_LABEL[meta.regime || 'neutral']} regime</h4>
-        <table class="cx-preset-table"><thead><tr><th>Pillar</th><th class="active">Weight</th></tr></thead><tbody>${rows}</tbody></table>
-      </div>
-      ${meta.macro ? `<div class="cx-mp-sec">
-        <h4>Macro regime layer (VIX + credit)</h4>
-        <p class="cx-mp-p">The regime no longer relies on the slow S&amp;P-vs-200-day read alone. A <b>macro risk score (${meta.macro.macroRisk}/100)</b> blends <b>VIX</b> (${meta.macro.vix.level}, ${meta.macro.vix.pctile}th percentile of the last year, ${meta.macro.vix.rising ? 'rising' : 'falling'}) with the <b>HYG/LQD credit spread</b> (high-yield vs investment-grade — ${meta.macro.credit.belowSma ? 'below' : 'above'} its 50-day trend, ${meta.macro.credit.trend20 > 0 ? '+' : ''}${meta.macro.credit.trend20}% over 20d). Vol spikes and credit cracking lead the index, so this catches risk-off <i>earlier</i>. Risk-off (score ≥55, VIX ≥28, or a vol spike at the extreme) trips the <b>kill switch</b> — every Ghost tier drops a notch. Current read: <b>${meta.macro.riskOff ? 'RISK-OFF' : meta.macro.riskOn ? 'risk-on' : 'neutral'}</b>.</p>
-      </div>` : ''}
-      <div class="cx-mp-sec">
-        <h4>Honest caveats</h4>
-        <p class="cx-mp-p"><b>Accumulation Vacuum (③) is deliberately starved.</b> This app's own multi-session research found base-tightness / VCP / volume-dry-up have ~zero forward-return edge, so the pillar exists for completeness but carries the lowest weight. The adaptive engine (Phase 2) can raise it only if it earns its keep on resolved picks.</p>
-        <p class="cx-mp-p"><b>Insider (⑥) is the one untested, genuinely new factor</b> — net open-market buys over 90 days, cluster buys flagged. It's why Ghost isn't just a re-skin of Apex.</p>
-        <p class="cx-mp-p"><b>Universe coverage:</b> Ghost currently re-ranks the breakout-screen's candidate pool through an accumulation lens — it does not yet independently scan the full universe for quiet pre-breakout names (that needs a heavier dedicated pass). Same pragmatic constraint Apex lives under.</p>
-        <p class="cx-mp-p"><b>Not yet learning:</b> the regime weights above are static priors. The champion/challenger adaptive engine that tunes them is Phase 2 — it only activates once the signal ledger has ~40 resolved Ghost picks (≈2–3 months), so it can't promote anything on noise.</p>
-      </div>`;
-  }
-
-  // Ghost — How-to-use modal
-  (() => {
-    const modal = document.getElementById('gh-help-modal');
-    if (!modal) return;
-    const open = () => { modal.hidden = false; document.body.style.overflow = 'hidden'; };
-    const close = () => { modal.hidden = true; document.body.style.overflow = ''; };
-    document.getElementById('gh-help-btn')?.addEventListener('click', open);
-    document.getElementById('gh-help-close')?.addEventListener('click', close);
-    modal.addEventListener('click', e => { if (e.target === modal) close(); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) close(); });
-  })();
-
-  document.getElementById('ghost-refresh-btn').addEventListener('click', runGhost);
-  document.getElementById('gh-scope').addEventListener('change', runGhost);
-  document.getElementById('gh-tier').addEventListener('change', () => { if (ghostLast) renderGhost(ghostLast); });
-  document.getElementById('gh-model-toggle').addEventListener('click', () => {
-    const b = document.getElementById('gh-model-body');
-    const open = b.style.display !== 'none';
-    b.style.display = open ? 'none' : 'block';
-    const arr = document.querySelector('#gh-model-toggle .ct-arrow');
-    if (arr) arr.style.transform = open ? '' : 'rotate(180deg)';
-  });
+  // Plain-English label per CERN forced-flow event type — the ONE map app.js uses wherever a
+  // CERN row is labelled outside cern.js (today the Scoreboard's CERN tiers). Every type the
+  // engine can emit must be here, including the two ARK shadow types from PR #438, or the
+  // Scoreboard shows a raw ARK_NET_BUY once those rows accrue (test/cern-ark.test.js pins it).
+  const CERN_LBL = { FIRE_SALE: '🔥 ETF fire-sale', FORCED_DOWNGRADE: '📉 Forced downgrade', INDEX_DELETE: '🗑 Index deletion', INDEX_ADD_FADE: '➕ Index add (fade)', LOCKUP_EXPIRY: '🔓 Lockup expiry', TAX_LOSS: '🧾 Tax-loss selling', MARGIN_SPIRAL: '⚠ Margin spiral', ARK_NET_BUY: '🏹 ARK net buying (shadow)', ARK_NET_SELL: '🏹 ARK net selling (shadow)' };
 
   // ── CERN — forced-flow event engine. The whole view lives in ./cern.js (a
   // novice-first rewrite); this only wires the tab hook and the refresh button.
@@ -6377,88 +5749,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) close(); });
   })();
   document.getElementById('events-refresh-btn')?.addEventListener('click', refreshCern);
-
-  // ── EDGE BOOK — two orthogonal sleeves: conviction longs + CERN forced-flow ──
-  let edgeLoaded = false;
-  function ensureEdge() { if (!edgeLoaded) { edgeLoaded = true; runEdge(); } }
-
-  async function runEdge() {
-    const el = document.getElementById('edge-container');
-    if (!el) return;
-    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading the Edge Book…</p></div>`;
-    try {
-      const [book, scr, cern] = await Promise.all([
-        fetchJSON('/api/tracker?op=edgebook').catch(() => null),
-        fetchJSON('/api/screener?scope=large').catch(() => null),
-        fetchJSON('/api/tracker?op=cern').catch(() => null),
-      ]);
-      renderEdge(book, scr, cern);
-    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the Edge Book.</p></div>`; }
-  }
-
-  function renderEdge(book, scr, cern) {
-    const el = document.getElementById('edge-container');
-    if (!el) return;
-    const conv = (scr && scr.conviction) || {};
-    const regime = conv.regime || '—';
-    const canLong = !!conv.longOk;
-
-    // Sleeve A — live top-conviction longs from the screener.
-    const aLive = ((scr && scr.results) || []).filter(c => c.conviction && c.conviction.sleeveA)
-      .sort((a, b) => b.conviction.score - a.conviction.score);
-    const aCards = aLive.length ? aLive.map(c => `
-      <div class="bt-ic-row"><span><b>${esc(c.ticker)}</b> <span style="color:var(--text-dim)">${esc((c.company || '').slice(0, 22))}</span></span>
-        <span>conv <b>${c.conviction.score.toFixed(1)}</b></span><span>pctile ${c.conviction.pctile}</span></div>`).join('')
-      : `<div class="bt-ic-row"><span style="color:var(--text-dim)">${canLong ? 'No top-quintile conviction names right now.' : 'Regime gate is CLOSED — no new longs in risk-off.'}</span></div>`;
-
-    // Sleeve B — live CERN forced-flow decisions (TRADE / PROBE).
-    const bLive = ((cern && cern.open) || []).filter(o => o.action === 'TRADE' || o.action === 'PROBE');
-    const bCards = bLive.length ? bLive.map(o => `
-      <div class="bt-ic-row"><span><b>${esc(o.symbol)}</b> <span style="color:var(--text-dim)">${esc(cernEventName(o.type))}</span></span>
-        <span>${esc(o.side)} · ${esc(o.action)}</span><span>P ${Math.round((o.pProfit || 0) * 100)}%</span></div>`).join('')
-      : `<div class="bt-ic-row"><span style="color:var(--text-dim)">No live forced-flow signals — CERN is mostly logging/probing while its posteriors mature.</span></div>`;
-
-    // Tracking — realized beat-SPY per sleeve + the cross-sleeve correlation (the thesis).
-    const byS = Object.fromEntries(((book && book.sleeves) || []).map(s => [s.sleeve, s]));
-    const statRow = (label, s) => {
-      if (!s) return `<div class="bt-ic-row"><span>${label}</span><span style="color:var(--text-dim)">—</span><span></span></div>`;
-      const br = s.beatSpyRate != null ? `${Math.round(s.beatSpyRate * 100)}% <span style="color:var(--text-dim)">(LB ${Math.round(s.wilsonLo * 100)}%)</span>` : '<span style="color:var(--text-dim)">pending</span>';
-      const ex = s.avgExcessVsSpy != null ? `${s.avgExcessVsSpy > 0 ? '+' : ''}${s.avgExcessVsSpy}%` : '—';
-      return `<div class="bt-ic-row"><span>${label} <span style="color:var(--text-dim)">${s.total} logged · ${s.resolved} resolved</span></span><span>beat SPY ${br}</span><span>avg ${ex}</span></div>`;
-    };
-    const cs = (book && book.crossSleeve) || {};
-    const corrTxt = cs.correlation != null
-      ? `Cross-sleeve correlation <b>${cs.correlation}</b> over ${cs.pairedDates} paired days — the overlay thesis wants this near 0 (uncorrelated streams diversify).`
-      : `Cross-sleeve correlation: <b>accruing</b> (${cs.pairedDates || 0} paired days; needs ≥8). This is the number that proves — or kills — the overlay.`;
-
-    el.innerHTML = `
-      <div class="bt-note">A <b>paper</b> two-sleeve book (both sleeves registry-shadow, zero weight). <b>Sleeve A</b> = regime-gated <b>conviction longs</b> (a frozen shadow benchmark — logged for measurement, not validated). <b>Sleeve B</b> = <b>CERN forced-flow</b> reversion (unproven until its κ-posteriors ship). They harvest different names — the win, if any, would be at the <b>portfolio</b> level.</div>
-      <div class="bt-eff" style="background:${canLong ? '#16241a' : '#241616'};border-color:${canLong ? '#2e6b3e' : '#6b2e2e'}">
-        <div class="bt-eff-sub">Regime: <b>${esc(regime)}</b> — long gate is <b>${canLong ? 'OPEN ✓' : 'CLOSED ✗ (risk-off: no new longs)'}</b>.</div>
-      </div>
-      <div class="bt-eff">
-        <div class="bt-eff-head">🅰 Sleeve A · Conviction longs <span style="color:var(--text-dim);font-weight:400">(top quintile · registry shadow, zero weight)</span></div>
-        ${aCards}
-      </div>
-      <div class="bt-eff">
-        <div class="bt-eff-head">🅱 Sleeve B · CERN forced-flow <span style="color:var(--text-dim);font-weight:400">(TRADE / PROBE, live)</span></div>
-        ${bCards}
-      </div>
-      <div class="bt-eff">
-        <div class="bt-eff-head">📈 Paper track record <span style="color:var(--text-dim);font-weight:400">(beat-SPY, ${(book && book.horizonDays) || 21}-day)</span></div>
-        ${statRow('🅰 Conviction', byS.A)}
-        ${statRow('🅱 Forced-flow', byS.B)}
-        <div class="bt-eff-sub" style="margin-top:8px">${corrTxt}</div>
-      </div>
-      <div class="chart-disclaimer">⚠ Paper book — accumulating evidence. Real capital only once each sleeve clears its gate and the correlation confirms diversification. Not financial advice.</div>`;
-
-    const meta = document.getElementById('edge-meta');
-    if (meta) meta.textContent = `· ${aLive.length} conviction · ${bLive.length} forced-flow · paper`;
-    const gt = document.getElementById('edge-gen-time');
-    if (gt && book && book.generatedAt) gt.textContent = stampText(book.generatedAt);
-  }
-
-  document.getElementById('edge-refresh-btn')?.addEventListener('click', runEdge);
 
   // ── Overheated (self-improving inverted-V fade engine) ──────────────────────
   // Novice-first: the engine flags names that spiked then started rolling over and,
@@ -6555,99 +5845,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
   const _coremoBtn = document.getElementById('coremo-refresh-btn');
   if (_coremoBtn) _coremoBtn.addEventListener('click', () => { coremoCore = null; runCoreMomentum(); });
-
-  // ── Core Performance — quarterly realized track record vs IWM ──
-  let coreperfLoaded = false;
-  function ensureCorePerf() { if (!coreperfLoaded) { coreperfLoaded = true; runCorePerf(); } }
-  async function runCorePerf() {
-    const cont = document.getElementById('coreperf-container');
-    const time = document.getElementById('coreperf-gen-time');
-    if (cont) cont.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading the Core Momentum track record…</p></div>`;
-    let d; try { d = await fetchJSON('/api/tracker?op=coreperf'); } catch { d = null; }
-    renderCorePerf(cont, d);
-    if (time) time.textContent = 'updated ' + timeAgo(new Date());
-  }
-  function renderCorePerf(cont, d) {
-    if (!cont) return;
-    if (!d || d.ok === false) { cont.innerHTML = `<div class="mom-status"><p>Core Performance isn't available yet (needs the Blob store + the daily cron). See CORE-MOMENTUM.md.</p></div>`; return; }
-    const pct = x => x == null ? '—' : (x >= 0 ? '+' : '') + (x * 100).toFixed(1) + '%';
-    const col = x => x == null ? '' : `color:${x >= 0 ? 'var(--green,#10d98a)' : 'var(--red,#ef4444)'}`;
-    const intro = `<div class="cx-strip" style="margin-bottom:10px">
-      <b>What this is.</b> The track record of the <b>Core Momentum</b> sleeve (registry: shadow, zero weight) — each quarterly cohort logged at rebalance, scored on its forward outcomes (+target / −stop / ~63-session time exit) vs <b>IWM</b> (Russell 2000, the small-cap benchmark).
-      <span style="color:#8a93a6">The headline is the <b>daily mark-to-market portfolio NAV</b> — cash + every open position marked at each day's close + realized exits, net of per-side costs — and it <b>fails closed</b> (shows a coverage gap instead of a number) when any required mark is missing. The resolved-only compound and per-quarter table are diagnostics: they ignore open positions. Entries are logged reference prices, not verified fills (basis disclosed by the API). No forward return is promised.</span></div>`;
-    if (d.empty || !d.quarters || !d.quarters.length) {
-      cont.innerHTML = intro + `<div class="mom-status"><p>${esc(d.note || 'No cohorts logged yet — the track record begins at the first quarterly rebalance.')}</p></div>`;
-      return;
-    }
-    const c = d.cumulative || {}, t = d.totals || {};
-    // PORTFOLIO NAV lane — the only number allowed to headline "since inception".
-    // It marks every open position daily and fails closed on missing marks; the old
-    // resolved-only compound is kept below strictly as a relabeled diagnostic.
-    const nav = d.nav || null;
-    const navHead = (nav && nav.available)
-      ? `<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px;font-size:0.8rem">
-        <div><div style="color:#8a93a6;font-size:0.62rem">SINCE INCEPTION — PORTFOLIO NAV (marked daily, cost-net)</div><b style="${col(nav.totals.navReturnNetPendingExit)};font-size:1.1rem">${pct(nav.totals.navReturnNetPendingExit)}</b></div>
-        <div><div style="color:#8a93a6;font-size:0.62rem">IWM NAV (same days)</div><b style="${col(nav.totals.benchReturn)};font-size:1.1rem">${pct(nav.totals.benchReturn)}</b></div>
-        <div><div style="color:#8a93a6;font-size:0.62rem">EXCESS vs IWM</div><b style="${col(nav.totals.excess)};font-size:1.1rem">${pct(nav.totals.excess)}</b></div>
-        <div><div style="color:#8a93a6;font-size:0.62rem">MAX DRAWDOWN</div><b style="color:var(--red,#ef4444)">${pct(nav.totals.maxDrawdown)}</b></div>
-        <div><div style="color:#8a93a6;font-size:0.62rem">OPEN / CLOSED</div><b>${nav.totals.openPositions} / ${nav.totals.closedPositions}</b></div></div>`
-        + (!nav.complete ? `<div class="cx-strip" style="margin-bottom:10px;font-size:0.72rem;border-color:var(--amber,#f59e0b)"><b>⚠️ NAV coverage gap (fail-closed):</b> marked only through <b>${esc(nav.throughDate || '—')}</b> — ${(nav.coverage?.gaps || []).slice(0, 4).map(g => `${esc(g.ticker)} (${esc(g.why || 'missing mark')})`).join('; ')}${(nav.coverage?.gaps || []).length > 4 ? ` +${nav.coverage.gaps.length - 4} more` : ''}. Days after the gap are withheld, never guessed.</div>` : '')
-      : `<div class="cx-strip" style="margin-bottom:10px;font-size:0.74rem;border-color:var(--red,#ef4444)"><b>⛔ Portfolio NAV unavailable (fail-closed):</b> ${esc(nav && nav.reason || 'NAV ledger not computed')}${nav && nav.coverage && nav.coverage.gaps && nav.coverage.gaps.length ? ` — ${nav.coverage.gaps.slice(0, 4).map(g => `${esc(g.ticker)}: ${esc(g.why || 'missing mark')}`).join('; ')}` : ''}. No since-inception portfolio return is shown without full daily marks.</div>`;
-    const summary = navHead
-      + `<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px;font-size:0.8rem">
-      <div><div style="color:#8a93a6;font-size:0.62rem">RESOLVED-ONLY COMPOUND (diagnostic — ignores open positions)</div><b style="${col(c.strategyReturn)}">${pct(c.strategyReturn)}</b></div>
-      <div><div style="color:#8a93a6;font-size:0.62rem">IWM (same windows)</div><b style="${col(c.benchReturn)}">${pct(c.benchReturn)}</b></div>
-      <div><div style="color:#8a93a6;font-size:0.62rem">WIN RATE (resolved)</div><b>${t.winRate == null ? '—' : (t.winRate * 100).toFixed(0) + '%'}</b></div>
-      <div><div style="color:#8a93a6;font-size:0.62rem">RESOLVED / OPEN</div><b>${t.resolved} / ${t.open}</b></div>
-      <div><div style="color:#8a93a6;font-size:0.62rem">REALIZED QTRS</div><b>${c.realizedQuarters || 0}</b></div></div>`
-      + (d.mtm ? `<div class="cx-strip" style="margin-bottom:10px;font-size:0.74rem"><b>Three lanes, kept separate:</b>
-      ① resolved-trade avg (net) <b style="${col(t.meanReturnNet)}">${pct(t.meanReturnNet)}</b>
-      · ② open-position MTM avg (net) <b style="${col(d.mtm.openAvgNet)}">${pct(d.mtm.openAvgNet)}</b> (${d.mtm.openMarked}/${d.mtm.openN} marked)
-      · ③ portfolio NAV return <b style="${nav && nav.available ? col(nav.totals.navReturnNetPendingExit) : ''}">${nav && nav.available ? pct(nav.totals.navReturnNetPendingExit) : 'unavailable'}</b>
-      <span style="color:#8a93a6">(one ${t.costPct != null ? t.costPct.toFixed(2) + '%' : ''} round trip per trade${d.mtm.openUnmarked ? `; ${d.mtm.openUnmarked} open names unmarked — counted, not dropped` : ''})</span></div>` : '');
-    const STAT = { open: '<span style="color:#8a93a6">○ open</span>', partial: '<span style="color:#f0a832">◐ partial</span>', closed: '<span style="color:#10d98a">● closed</span>' };
-    const rows = d.quarters.slice().reverse().map(q => `<tr>
-      <td><b>${esc(q.quarter)}</b><div style="font-size:0.6rem;color:#8a93a6">${esc(q.logDate || '')}</div></td>
-      <td style="text-align:right">${q.n}</td>
-      <td style="text-align:right;color:#8a93a6">${q.resolved}/${q.open}</td>
-      <td style="text-align:right">${q.winRate == null ? '—' : (q.winRate * 100).toFixed(0) + '%'}</td>
-      <td style="text-align:right;${col(q.meanReturn)}">${pct(q.meanReturn)}</td>
-      <td style="text-align:right;color:#8a93a6">${pct(q.benchReturn)}</td>
-      <td style="text-align:right;${col(q.excess)}">${pct(q.excess)}</td>
-      <td style="text-align:right">${STAT[q.status] || q.status}</td>
-    </tr>`).join('');
-    cont.innerHTML = intro + summary + coreperfChart(d.quarters) + `<div style="overflow-x:auto"><table class="data-table" style="width:100%;font-size:0.74rem">
-      <thead><tr><th>Quarter</th><th style="text-align:right">#</th><th style="text-align:right">res/open</th><th style="text-align:right">win</th><th style="text-align:right">return</th><th style="text-align:right">IWM</th><th style="text-align:right">excess</th><th style="text-align:right">status</th></tr></thead>
-      <tbody>${rows}</tbody></table></div>
-      <p style="font-size:0.62rem;color:#8a93a6;margin-top:8px">Quarter rows = equal-weight realized return of that quarter's <i>resolved</i> picks (a diagnostic view — a quarter stays "open/partial" until its ~63-session windows elapse). The since-inception headline above is the daily-marked portfolio NAV, never a compound of partial-quarter resolved-only averages.</p>`;
-  }
-  // Responsive SVG: per-quarter realized return (Core) vs IWM, around a zero baseline.
-  function coreperfChart(quarters) {
-    const R = (quarters || []).filter(q => q.meanReturn != null);
-    if (!R.length) return `<div class="cx-strip" style="margin-bottom:12px;color:#8a93a6">📈 The performance chart appears once a quarter's positions resolve (forward windows are ~3 months).</div>`;
-    const W = Math.max(360, R.length * 110 + 60), H = 220, padL = 46, padR = 14, padT = 18, padB = 34;
-    const plotH = H - padT - padB, zeroY = padT + plotH / 2, halfH = plotH / 2, plotW = W - padL - padR;
-    let maxAbs = 0.05; R.forEach(q => { maxAbs = Math.max(maxAbs, Math.abs(q.meanReturn || 0), Math.abs(q.benchReturn || 0)); });
-    const gw = plotW / R.length, y = v => zeroY - (v / maxAbs) * halfH;
-    const bar = (cx, bw, v, fill) => { if (v == null) return ''; const yy = y(v), top = Math.min(yy, zeroY), h = Math.max(1, Math.abs(yy - zeroY)); return `<rect x="${(cx - bw / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1" fill="${fill}"/>`; };
-    const fmtp = v => (v >= 0 ? '+' : '') + (v * 100).toFixed(0) + '%';
-    let bars = '', labels = '';
-    R.forEach((q, i) => {
-      const c0 = padL + i * gw + gw / 2, bw = Math.min(22, gw * 0.28);
-      bars += bar(c0 - bw * 0.62, bw, q.meanReturn, q.meanReturn >= 0 ? '#10d98a' : '#ef4444');
-      bars += bar(c0 + bw * 0.62, bw, q.benchReturn, '#5b6472');
-      labels += `<text x="${c0.toFixed(1)}" y="${H - padB + 14}" text-anchor="middle" font-size="10" fill="#8a93a6">${esc(q.quarter)}</text>`;
-    });
-    const grid = `<line x1="${padL}" y1="${zeroY}" x2="${W - padR}" y2="${zeroY}" stroke="#3a4150"/>`
-      + `<text x="${padL - 6}" y="${padT + 4}" text-anchor="end" font-size="9" fill="#8a93a6">${fmtp(maxAbs)}</text>`
-      + `<text x="${padL - 6}" y="${zeroY + 3}" text-anchor="end" font-size="9" fill="#8a93a6">0</text>`
-      + `<text x="${padL - 6}" y="${H - padB}" text-anchor="end" font-size="9" fill="#8a93a6">${fmtp(-maxAbs)}</text>`;
-    const legend = `<rect x="${padL}" y="3" width="9" height="9" fill="#10d98a"/><text x="${padL + 13}" y="11" font-size="10" fill="#cbd2dd">Core</text>`
-      + `<rect x="${padL + 50}" y="3" width="9" height="9" fill="#5b6472"/><text x="${padL + 63}" y="11" font-size="10" fill="#cbd2dd">IWM</text>`;
-    return `<div style="margin-bottom:12px"><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;font-family:inherit" role="img" aria-label="Quarterly Core vs IWM returns">${grid}${bars}${labels}${legend}</svg></div>`;
-  }
-  const _coreperfBtn = document.getElementById('coreperf-refresh-btn');
-  if (_coreperfBtn) _coreperfBtn.addEventListener('click', () => runCorePerf());
 
   let fadeLoaded = false;
   function ensureFade() { if (!fadeLoaded) { fadeLoaded = true; runFade(); } }
@@ -6756,132 +5953,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
 
   document.getElementById('fade-refresh-btn')?.addEventListener('click', runFade);
-
-  // ── Trend Rider (trend-following + momentum + market-climate traffic light) ──
-  // The light is the star: validated that forward returns in green >> red. The
-  // basket is "what to ride when it's green." Self-learning (per-stock trend
-  // quality) drops names that stop trending; track record proves the light live.
-  let trendRiderLoaded = false;
-  function ensureTrendRider() { if (!trendRiderLoaded) { trendRiderLoaded = true; runTrendRider(); } }
-  async function runTrendRider() {
-    const el = document.getElementById('trendr-container');
-    if (!el) return;
-    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Reading the market climate…</p></div>`;
-    try {
-      const [t, book] = await Promise.all([
-        fetchJSON('/api/tracker?op=trend').catch(() => null),
-        fetchJSON('/api/tracker?op=trendbook').catch(() => null),
-      ]);
-      renderTrendRider(t, book);
-    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Trend Rider.</p></div>`; }
-  }
-
-  const TR_LIGHT = {
-    green: ['#22c55e', 'GREEN', 'Favorable — ride trends'],
-    yellow: ['#eab308', 'YELLOW', 'Mixed — be selective, size down'],
-    red: ['#ef4444', 'RED', 'Stand down — avoid new trend longs'],
-  };
-  // Plain-English "what to do right now" per light colour.
-  const TR_NOW = {
-    green: ['Ride trends', 'The market climate favors trend-following — pick names from the ride list below.'],
-    yellow: ['Be selective', 'Mixed climate — take only the strongest trends and size down.'],
-    red: ['Stand down', "Don't add new trend longs — protect capital and wait for the light to turn green."],
-  };
-
-  function renderTrendRider(t, book) {
-    const el = document.getElementById('trendr-container');
-    if (!el) return;
-    if (!t || !t.ok) { el.innerHTML = `<div class="mom-status error"><p>Trend Rider unavailable.</p></div>`; return; }
-    const L = t.light || {}; const col = L.color || 'yellow';
-    const [c, lbl, desc] = TR_LIGHT[col] || TR_LIGHT.yellow;
-    const cmp = L.components || {};
-
-    // The big traffic light.
-    const lamp = clr => `<div class="tr-lamp" style="background:${col === clr ? TR_LIGHT[clr][0] : '#1b2740'};box-shadow:${col === clr ? '0 0 18px ' + TR_LIGHT[clr][0] : 'none'}"></div>`;
-    const lightHtml = `<div class="tr-light-wrap">
-      <div class="tr-light">${lamp('red')}${lamp('yellow')}${lamp('green')}</div>
-      <div class="tr-light-info">
-        <div class="tr-light-status" style="color:${c}">${lbl}</div>
-        <div class="tr-light-desc">${desc}</div>
-        <div class="tr-light-score">climate score <b>${L.score ?? '—'}</b>/100</div>
-        <div class="tr-light-cmp">
-          <span class="${cmp.spyAbove200 ? 'on' : 'off'}">SPY ${cmp.spyAbove200 ? '>' : '<'} 200DMA</span>
-          <span class="${cmp.ma200Rising ? 'on' : 'off'}">200DMA ${cmp.ma200Rising ? 'rising' : 'flat/falling'}</span>
-          <span class="${(cmp.efficiency || 0) >= 0.3 ? 'on' : 'off'}">trend efficiency ${cmp.efficiency ?? '—'}</span>
-          <span class="${(cmp.breadth || 0) >= 0.5 ? 'on' : 'off'}">breadth ${Math.round((cmp.breadth || 0) * 100)}%</span>
-          <span class="${cmp.regime === 'risk-on' ? 'on' : cmp.regime === 'risk-off' ? 'off' : ''}">${cmp.regime || '—'}</span>
-        </div>
-      </div></div>`;
-
-    // Easy-to-follow how-to caption — what the light is and what to do right now.
-    const [nowLbl, nowDesc] = TR_NOW[col] || TR_NOW.yellow;
-    const howToHtml = `<div class="tr-howto">
-      <div class="tr-howto-head">📖 How to use this tab</div>
-      <div class="tr-howto-now" style="color:${c};border-color:${c}55;background:${c}14">Right now → <b>${lbl}: ${nowLbl}.</b> ${nowDesc}</div>
-      <ol>
-        <li><b>Read the light first.</b> It scores today's whole-market climate 0–100 for trend-following — it tells you <i>when</i> to ride trends, not which single stock will win.</li>
-        <li><b>Act on the colour.</b> <b style="color:${TR_LIGHT.green[0]}">Green</b> = ride · <b style="color:${TR_LIGHT.yellow[0]}">Yellow</b> = be selective, size down · <b style="color:${TR_LIGHT.red[0]}">Red</b> = stand down on new longs.</li>
-        <li><b>Pick from the ride list.</b> When green or yellow, choose from the diversified top-momentum names below (capped at 3 per sector).</li>
-        <li><b>Hold &amp; trail.</b> Stay in while a name holds above its trailing 50DMA; the engine automatically drops names that stop trending.</li>
-      </ol>
-    </div>`;
-
-    // Live track record by light color (the proof).
-    let trackHtml = '';
-    if (book && book.resolved >= 10) {
-      const row = (name, s) => s && s.n ? `<div class="bt-ic-row"><span>${name} <span style="color:var(--text-dim)">${s.n} picks</span></span><span>avg ${s.avgRet > 0 ? '+' : ''}${s.avgRet}%</span><span>${L('beatRate', 'beat SPY')} ${s.beatRate}% <span style="color:var(--text-dim)">(${L('wilsonLB', 'LB')} ${s.wilsonLo}%)</span></span></div>` : '';
-      trackHtml = `<div class="rot-panel"><div class="rot-head">📊 Live track record — does the light work?</div>
-        <div class="rot-sub">Forward ${book.note.includes('21') ? '~1-month' : ''} returns of logged picks, split by the light when they were picked. Green should beat red.</div>
-        ${row('🟢 Green', book.byClimate.green)}${row('🟡 Yellow', book.byClimate.yellow)}${row('🔴 Red', book.byClimate.red)}
-        <div class="bt-ic-row" style="border-top:1px solid var(--border);margin-top:4px"><span><b>All picks</b></span><span></span><span>${book.resolved} resolved · ${book.stillOpen} open</span></div></div>`;
-    } else {
-      trackHtml = `<div class="rot-panel rot-panel-pending"><div class="rot-head">📊 Live track record — building…</div><div class="rot-sub">${book ? `${book.stillOpen || 0} picks logged, ${book.resolved || 0} resolved.` : ''} Each pick is scored ~1 month later; this fills in automatically. Until then, the back-test showed green picks beat red by a wide margin (and red underperformed SPY by ~12% out-of-sample).</div></div>`;
-    }
-
-    // The basket (only meaningful when not red).
-    const basket = t.basket || [];
-    let basketHtml;
-    if (col === 'red') {
-      basketHtml = `<div class="rot-panel"><div class="rot-head">🛑 Basket suppressed</div><div class="rot-sub">The climate is red — historically the worst time to add trend longs (they underperformed SPY ~12% out-of-sample). The engine shows no new ride list. Protect capital; wait for the light to turn.</div></div>`;
-    } else {
-      const rows = basket.slice(0, 15).map((b, i) => `<div class="bt-ic-row">
-        <span><b data-live="${esc(b.ticker)}">${esc(b.ticker)}</b> <span style="color:var(--text-dim)">${esc(b.sector || '')}</span></span>
-        <span>mom ${b.mom > 0 ? '+' : ''}${b.mom}%</span>
-        <span>$${b.price} <span style="color:var(--text-dim)">trail ${b.trailStop}</span></span></div>`).join('');
-      basketHtml = `<div class="rot-panel"><div class="rot-head">🏇 Ride list — top trends ${col === 'yellow' ? '(size down — yellow)' : ''}</div>
-        <div class="rot-sub">Confirmed uptrends (above a rising 200DMA &amp; 50DMA) with the strongest 12-1 momentum, capped at 3 per sector for diversification. Trend-follow: ride while above the trailing 50DMA; the learner drops names that stop trending.</div>
-        ${rows || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No qualifying uptrends right now.</span></div>'}</div>`;
-    }
-
-    // 🚀 Fresh momentum movers — the recent-thrust lane (validated large-cap momentum signal).
-    const movers = t.movers || [];
-    const mb = book && book.movers;
-    let moversTrack = '';
-    if (mb && mb.n >= 8) {
-      const good = mb.avgExc >= 0;
-      moversTrack = ` <span style="color:${good ? 'var(--green)' : 'var(--amber,#f59e0b)'}">Live: ${mb.n} resolved · avg exc ${mb.avgExc > 0 ? '+' : ''}${mb.avgExc}% · ${mb.beatRate}% beat SPY.</span>`;
-    } else {
-      moversTrack = ` <span style="color:var(--text-dim)">Live tracking (excess vs SPY) accrues via the cron${mb && mb.stillOpen ? ` — ${mb.stillOpen} open` : ''}.</span>`;
-    }
-    const moverRows = movers.slice(0, 12).map(m => `<div class="bt-ic-row">
-        <span><b data-live="${esc(m.ticker)}">${esc(m.ticker)}</b> <span style="color:var(--text-dim)">${esc(m.sector || '')}</span></span>
-        <span>5d ${m.ret5 > 0 ? '+' : ''}${m.ret5}% · RS +${m.rs}</span>
-        <span>$${m.price} <span style="color:var(--text-dim)">score ${m.score}</span></span></div>`).join('');
-    const moversHtml = `<div class="rot-panel"><div class="rot-head">🚀 Fresh momentum movers <span class="dt-dim">(new)</span></div>
-      <div class="rot-sub">Large/mid-cap names ($150M+ daily $-vol) in an established uptrend (above the 50 &amp; 200-DMA) making a <b>fresh 5-day thrust</b> (8–30%) while leading SPY — the recent-mover complement to the 12-month ride list above. Backtested <b>+4.96%/21d excess vs SPY</b> (54% win, $150M+ tier).${moversTrack}</div>
-      ${moverRows || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No fresh large-cap momentum movers right now.</span></div>'}</div>`;
-
-    el.innerHTML = `${lightHtml}${howToHtml}${basketHtml}${moversHtml}${trackHtml}
-      <div class="fade-caveats"><b>How to use.</b> Trend-following works when markets trend and fails when they chop or fall. The light blends SPY's trend, how <i>clean</i> the trend is (efficiency), market breadth, and the risk regime. <b>Green/Yellow</b> = the climate that historically rewarded riding trends; <b>Red</b> = stand down.
-      <br><b>Honest caveat.</b> This is a market-timing + trend-capture system, not a stock-alpha engine — the research-supported lever is the <b>timing light</b> (when to be on vs off — still shadow, graded prospectively), not beating the market on selection. The basket largely captures the uptrend (beta) when it's safe to. Research, not financial advice.</div>`;
-
-    const meta = document.getElementById('trendr-meta');
-    if (meta) meta.textContent = `· light ${lbl} · ${basket.length} names in the ride list`;
-    const gt = document.getElementById('trendr-gen-time');
-    if (gt && t.generatedAt) gt.textContent = stampText(t.generatedAt);
-  }
-
-  document.getElementById('trendr-refresh-btn')?.addEventListener('click', runTrendRider);
 
   // ── Day Trade (momentum / relative-volume movers, regime-gated, self-learning) ──
   let daytradeLoaded = false, dtListTimer = null, dtRevalidating = false;
@@ -7668,10 +6739,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // continue). The first deflation-surviving event edge; ORB entry plan attached.
   let gapgoLoaded = false;
   function ensureGapGo() { if (!gapgoLoaded) { gapgoLoaded = true; runGapGoUI(); } }
-  let downdayLoaded = false;
-  function ensureDownDay() { if (!downdayLoaded) { downdayLoaded = true; runDownDayUI(); } }
-  let gapdownLoaded = false;
-  function ensureGapDown() { if (!gapdownLoaded) { gapdownLoaded = true; runGapDownUI(); } }
   let ggSkipFade = false; try { ggSkipFade = localStorage.getItem('ggSkipFade') === '1'; } catch {}
   // Gap-cause badge (research/27 pilot): offering/M&A FADE (red), FDA/guidance/contract
   // CONTINUE (green), else neutral. No badge for newsless gaps (the common case).
@@ -7685,88 +6752,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const color = c[1] === 'fade' ? '#ef4444' : c[1] === 'cont' ? '#22c55e' : 'var(--text-dim)';
     return ` <span class="gg-cause" style="color:${color};border:1px solid ${color}44;border-radius:4px;padding:1px 5px;font-size:0.6rem;font-weight:800">${c[0]}</span>`;
   }
-  // ── 🎯 Dual Confirmed — buy on BOTH horizons (trend-continuation) ────────────
-  let alignedLoaded = false;
-  function ensureAligned() { if (!alignedLoaded) { alignedLoaded = true; runAlignedUI(); } }
-  async function runAlignedUI() {
-    const el = document.getElementById('aligned-container');
-    if (!el) return;
-    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning for names that are a buy on both horizons…</p></div>`;
-    try {
-      const [t, book] = await Promise.all([
-        fetchJSON('/api/tracker?op=aligned'),
-        fetchJSON('/api/tracker?op=alignedbook').catch(() => null),
-      ]);
-      renderAligned(t, book);
-    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Dual Confirmed.</p></div>`; }
-  }
-  function alignedBookPanel(book) {
-    if (!book || !book.ok) return '';
-    const row = (lbl, s) => !s || !s.n ? '' : `<div class="bt-ic-row"><span>${lbl}</span><span><b>${s.avgExc >= 0 ? '+' : ''}${s.avgExc}%</b> avg excess · ${s.beatRate}% beat (Wilson ${s.wilsonLo}%) · n=${s.n}</span></div>`;
-    const rows = row('Overall', book.overall) + row('STRONG (conv ≥80)', book.byTier && book.byTier.STRONG) + row('GOOD (conv 60–79)', book.byTier && book.byTier.GOOD);
-    return `<div class="rot-panel" style="margin-top:14px"><div class="rot-head">📋 Live forward track record <span class="dt-dim">(self-validation)</span></div>
-      <div class="rot-sub">${esc(book.note || '')}</div>
-      ${rows || `<div class="bt-ic-row"><span style="color:var(--text-dim)">${book.resolved || 0} resolved · ${book.open || 0} open — accrues as picks mature (~${book.horizon} sessions after each is logged).</span></div>`}</div>`;
-  }
-  function renderAligned(t, book) {
-    const el = document.getElementById('aligned-container');
-    if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Dual Confirmed unavailable.</p></div>`; return; }
-    const gt = document.getElementById('aligned-gen-time');
-    if (gt) gt.textContent = t.generatedAt ? stampText(t.generatedAt) : '';
-    const picks = t.picks || [];
-    if (!picks.length) {
-      el.innerHTML = `<div class="dt-note">No names are aligned on both horizons right now — that's normal in a mixed or choppy tape, where short-term and long-term signals disagree. This list fills when strong long-term trends also flash a fresh short-term buy. <span class="dt-dim">(${t.scanned || 0} scanned)</span></div>` + alignedBookPanel(book);
-      return;
-    }
-    const convClass = c => c >= 80 ? 'hi' : c >= 60 ? 'mid' : 'lo';
-    const priceHtml = p => {
-      const shown = p.regularPrice ?? p.price;
-      if (shown == null) return '';
-      const hasPct = p.changePct != null && !Number.isNaN(parseFloat(p.changePct));
-      const up = hasPct ? parseFloat(p.changePct) >= 0 : true;
-      const chg = hasPct ? `<span class="al-chg ${up ? 'up' : 'down'}">${up ? '▲ +' : '▼ '}${p.changePct}% today</span>` : '';
-      let ah = '';
-      if (p.afterHours) {
-        const ahUp = parseFloat(p.afterHours.changePct) >= 0;
-        const tag = p.afterHours.session === 'pre' ? 'PRE' : 'AH';
-        ah = `<span class="al-ah ${ahUp ? 'up' : 'down'}">${tag} $${p.afterHours.price} ${ahUp ? '+' : ''}${p.afterHours.changePct}%</span>`;
-      }
-      return `<div class="al-price"><span class="al-px">$${shown}</span>${chg}${ah}</div>`;
-    };
-    const lvHtml = lv => (lv && (lv.entry || lv.stop || lv.target)) ? `
-      <div class="al-levels">
-        ${lv.entry != null ? `<span><i>Entry</i>$${lv.entry}</span>` : ''}
-        ${lv.stop != null ? `<span><i>Stop</i>$${lv.stop}</span>` : ''}
-        ${(lv.target ?? lv.resistance) != null ? `<span><i>Target</i>$${lv.target ?? lv.resistance}</span>` : ''}
-      </div>` : '';
-    const card = p => `
-      <div class="dt-card al-card" data-ticker="${esc(p.ticker)}">
-        <div class="al-top">
-          <span class="al-tk">${esc(p.ticker)}</span>
-          <span class="al-co">${esc(p.company || '')}</span>
-          <span class="al-conv ${convClass(p.conviction)}" title="Conviction — 50% long-term trend strength + 50% short-term signal">${p.conviction}</span>
-          <button class="dt-chart-btn" data-chart-toggle title="Show live chart &amp; dual read">📈</button>
-        </div>
-        ${priceHtml(p)}
-        <div class="al-horizons">
-          <span class="al-h up">⏱ Short-term <b>Bullish</b> · ${esc(p.stAction.replace('_', ' '))} ${p.stConf}/10</span>
-          <span class="al-h up">📈 Long-term <b>Bullish</b> · score +${p.ltScore}${p.group ? ` · ${esc(p.group)}` : ''}</span>
-        </div>
-        <div class="al-reasons">${[...(p.stReasons || []), ...(p.ltReasons || [])].slice(0, 3).map(esc).join(' · ')}</div>
-        ${lvHtml(p.levels)}
-        <div class="dt-chart-panel" data-chart-panel style="display:none"></div>
-      </div>`;
-    const scanNote = t.stage === 'full-market' ? `<div class="dt-dim" style="font-size:0.68rem;margin-bottom:8px">Full-market scan · ${t.scanned || 0} names → ${t.longTermBullish || 0} long-term bullish → ${t.qualified || 0} confirmed on both horizons</div>` : '';
-    el.innerHTML = scanNote + `<div class="al-grid">${picks.map(card).join('')}</div>` + alignedBookPanel(book);
-    el.querySelectorAll('.dt-card[data-ticker]').forEach(cardEl => {
-      const tk = cardEl.dataset.ticker;
-      const btn = cardEl.querySelector('[data-chart-toggle]');
-      if (btn) btn.addEventListener('click', () => toggleChart(cardEl, tk));
-    });
-    attachTimingLights(el, picks.map(p => ({ ticker: p.ticker, stop: p.levels && p.levels.stop, target: p.levels && (p.levels.target ?? p.levels.resistance), trigger: p.levels && p.levels.entry })), 'aligned');
-  }
-  document.getElementById('aligned-refresh-btn')?.addEventListener('click', runAlignedUI);
-
   // ── 💰 Options Moves — put-selling setups ───────────────────────────────────
   let putsellLoaded = false;
   function ensurePutSell() { if (!putsellLoaded) { putsellLoaded = true; runPutSellUI(); } }
@@ -7985,236 +6970,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     });
   })();
 
-  // ── 🪁 Down-Day Mode (what to trade when the tape is red) ───────────────────
-  // Routes each name to the play that fits a red tape — an oversold-bounce LONG
-  // (V-Reversal, validated red-tape-specific edge) or an overheated/rollover SHORT —
-  // and LEADS with the honest reality that chasing strength on down days loses.
-  async function runDownDayUI() {
-    const el = document.getElementById('downday-container');
-    if (!el) return;
-    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Reading the tape…</p></div>`;
-    try {
-      const [t, book] = await Promise.all([
-        fetchJSON('/api/tracker?op=downday'),
-        fetchJSON('/api/tracker?op=downdaybook').catch(() => null),
-      ]);
-      renderDownDay(t, book);
-    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Down-Day Mode.</p></div>`; }
-  }
-  function renderDownDay(t, book) {
-    const el = document.getElementById('downday-container');
-    if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Down-Day Mode unavailable.</p></div>`; return; }
-    document.getElementById('dd-gen-time') && (document.getElementById('dd-gen-time').textContent = t.generatedAt ? stampText(t.generatedAt) : '');
-    const cfg = t.config || {}, rl = t.reality || {}, tape = t.tape || {};
-
-    // Tape banner — is the market red / risk-off right now?
-    const sevColor = { heavy: '#ef4444', moderate: '#f59e0b', light: '#eab308', calm: '#22c55e' }[tape.severity] || '#94a3b8';
-    const tapeBanner = `<div class="rot-panel" style="border-color:${sevColor}55;background:${sevColor}0d">
-      <div class="rot-head" style="color:${sevColor}">${tape.down ? '🩸' : '🟢'} Tape: SPY ${tape.spyChangePct >= 0 ? '+' : ''}${tape.spyChangePct}% today · regime ${esc(tape.regime)} ${tape.down ? `<span style="text-transform:uppercase">— ${esc(tape.severity)} red</span>` : '— not red'}</div>
-      <div class="rot-sub">${tape.down
-        ? `Down-Day Mode is <b>live</b> — ${esc(tape.reason)}. This is when the reversion/short plays below have their edge.`
-        : `The tape is <b>not red right now</b> (${esc(tape.reason)}). These plays are red-tape-specific — on a green tape the oversold-bounce edge disappears. Come back when the market sells off.`}</div>
-    </div>`;
-
-    // The honest reality panel — the centerpiece. Chasing strength on red days loses.
-    const reality = `<div class="rot-panel" style="border-color:#8b5cf655;background:#8b5cf60d">
-      <div class="rot-head" style="color:#a78bfa">🎯 The honest reality of down days <span class="dt-dim">(backtested)</span></div>
-      <div class="rot-sub">
-        <div class="dt-note" style="border-left-color:#ef4444"><b>❌ Don't chase the names holding up green.</b> On red days those "leaders" win only <b>~${rl.leaderWinPct}%</b> at the tradeable next open and <b>${esc(rl.leaderVerdict)}</b> over the next 2–3 sessions. Buying strength into a red tape is negative selection — that's <i>why</i> down days feel hard.</div>
-        <div class="dt-note" style="border-left-color:#22c55e"><b>✅ What pays instead: reversion.</b> A capitulation → turn (oversold bounce) earns <b>+${rl.bounceEmergingExcessH3}%/3d</b> (EMERGING) to <b>+${rl.bounceWatchExcessH3}%/3d</b> (WATCH, fresh turns) excess vs SPY <b>on red days</b> — but <b>${rl.bounceNormalDayExcessH3}%</b> on normal days. The edge only exists when the whole market puked. Earlier/less-confirmed turns bounce more.</div>
-        <div class="dt-dim" style="font-size:12px">Evidence: ${esc(rl.source || '')}. ${esc(cfg.caveat || '')}</div>
-      </div>
-    </div>`;
-
-    const tierBadge = tier => {
-      const m = { WATCH: ['#eab308', 'fresh turn'], EMERGING: ['#22c55e', 'turning'], CONFIRMED: ['#3b82f6', 'confirmed (late)'] };
-      const c = m[tier] || ['#94a3b8', tier];
-      return `<span class="dt-tier-b" style="background:${c[0]}22;color:${c[0]};border-color:${c[0]}55" title="${tier}">${esc(tier)} · ${c[1]}</span>`;
-    };
-    // Research-control chip (server-labeled): rows served OUTSIDE the validated red-tape
-    // sleeve are controls, not recommendations — say so on the card, not just the banner.
-    const controlChip = r => r.researchControl
-      ? ` <span class="dt-tier-b" style="background:#94a3b822;color:#94a3b8;border-color:#94a3b855" title="${esc(r.controlReason || 'research control')}">🔬 research control</span>`
-      : '';
-    const longCard = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
-        <div class="dt-card-top">
-          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> ${tierBadge(r.tier)}${controlChip(r)}</span>
-          <span class="dt-now"><b data-dd-price>$${r.price}</b> <span data-dd-change class="dt-dim">prev close</span></span>
-        </div>
-        <div class="dt-card-sub"><b style="color:#22c55e">🔄 Oversold bounce</b> <span class="dt-dim">· dropped ${r.geometry.dropPct}% into RSI ${r.geometry.rsiAtPivot} · up ${r.geometry.rallyOffLowPct}% off the low · score ${r.downScore}/100</span></div>
-        <div class="dt-card-plan">📈 <b>Long</b> near <b>$${r.signals.entry}</b> &nbsp;·&nbsp; 🛑 Stop <b>$${r.signals.stop}</b> <span class="dt-dim">(−${r.signals.riskPct}%, below the V-low)</span> &nbsp;·&nbsp; 🏁 Target <b>$${r.signals.target}</b> <span class="dt-dim">R:R 1:${r.signals.rr}</span></div>
-        <div class="dt-note">${esc(r.signals.note || '')}</div>
-        <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
-        <div class="chart-panel" data-chart-panel style="display:none"></div>
-      </div>`;
-    const shortCard = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
-        <div class="dt-card-top">
-          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> ${tierBadge(r.tier)}${controlChip(r)}</span>
-          <span class="dt-now"><b data-dd-price>$${r.price}</b> <span data-dd-change class="dt-dim">prev close</span></span>
-        </div>
-        <div class="dt-card-sub"><b style="color:#ef4444">📉 Overheated / rollover</b> <span class="dt-dim">· ran ${r.geometry.risePct}% into RSI ${r.geometry.rsiAtPivot} · off the high ${r.geometry.dropOffHighPct}% · score ${r.score}/100</span>${r.learnedExcess != null ? ` <span class="dt-tier-b" title="Fade-engine per-stock learned edge (${r.nPriors || 0} priors). Positive = this name has historically reverted after such tops.${r.drifted ? ' ⚠ DRIFTED — the edge stopped working; deprioritized.' : ''}" style="background:${r.drifted ? '#94a3b822;color:#94a3b8' : (r.learnedExcess > 0 ? '#22c55e22;color:#22c55e' : '#ef444422;color:#ef4444')}">🧠 ${r.learnedExcess > 0 ? '+' : ''}${r.learnedExcess}%${r.drifted ? ' drift' : ''}</span>` : ''}</div>
-        <div class="dt-card-plan">📉 <b>Short</b> near <b>$${r.signals.entry}</b> &nbsp;·&nbsp; 🛑 Stop <b>$${r.signals.stop}</b> <span class="dt-dim">(+${r.signals.riskPct}%, above the peak)</span> &nbsp;·&nbsp; 🏁 Target <b>$${r.signals.target}</b> <span class="dt-dim">R:R 1:${r.signals.rr}</span></div>
-        <div class="dt-note">${esc(r.signals.note || '')}</div>
-        <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
-        <div class="chart-panel" data-chart-panel style="display:none"></div>
-      </div>`;
-    const panel = (title, sub, rows, cardFn, empty) => `<div class="rot-panel"><div class="rot-head">${title}</div><div class="rot-sub">${sub}</div>${(rows || []).map(cardFn).join('') || `<div class="bt-ic-row"><span style="color:var(--text-dim)">${empty}</span></div>`}</div>`;
-
-    const bounces = panel('🔄 Oversold Bounce <span class="dt-dim">(long — reversion)</span>',
-      'Capitulation → turn. Research read (registry: shadow) — the exact-contract matched-control test did NOT promote this; only the sharp V-reversal shape showed promise historically, and its supporting report is being re-generated. Honor the stop.',
-      t.bounces, longCard, 'No clean oversold-bounce setups right now.');
-
-    // 🎁 Forced-Selling Reversion (CERN long reversions) — a different, event-driven long.
-    const CERN_LBL = { FIRE_SALE: '🔥 ETF fire-sale', FORCED_DOWNGRADE: '📉 Forced downgrade', INDEX_DELETE: '🗑 Index deletion', LOCKUP_EXPIRY: '🔓 Lockup expiry', TAX_LOSS: '🧾 Tax-loss selling', MARGIN_SPIRAL: '⚠ Margin spiral', ARK_NET_BUY: '🏹 ARK net buying (shadow)', ARK_NET_SELL: '🏹 ARK net selling (shadow)' };
-    const revCard = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
-        <div class="dt-card-top">
-          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> <span class="dt-tier-b" style="background:#a78bfa22;color:#a78bfa;border-color:#a78bfa55">${esc(CERN_LBL[r.type] || r.type)}</span>${controlChip(r)}</span>
-          <span class="dt-now"><b data-dd-price>$${r.entry != null ? (+r.entry).toFixed(2) : '—'}</b> <span data-dd-change class="dt-dim">prev close</span></span>
-        </div>
-        <div class="dt-card-sub"><b style="color:#22c55e">🎁 Forced-selling reversion</b> <span class="dt-dim">· mechanical selling overshot → tends to revert${r.pProfit != null ? ` · ${Math.round(r.pProfit * 100)}% model win-prob` : ''}${r.horizon ? ` · ~${r.horizon}d hold` : ''}</span></div>
-        ${r.stop != null && r.target != null ? `<div class="dt-card-plan">📈 <b>Long</b> near <b>$${(+r.entry).toFixed(2)}</b> &nbsp;·&nbsp; 🛑 Stop <b>$${(+r.stop).toFixed(2)}</b> &nbsp;·&nbsp; 🏁 Target <b>$${(+r.target).toFixed(2)}</b></div>` : ''}
-        <div class="dt-note">CERN forced-flow signal — see the ⚡ Events (CERN) tab for the full model, posteriors, and track record.</div>
-      </div>`;
-    const reversion = panel('🎁 Forced-Selling Reversion <span class="dt-dim">(long — CERN forced-flow)</span>',
-      'When an ETF fire-sale or an analyst downgrade forces mechanical selling, the name overshoots below its peers and tends to revert. Live CERN signals — a different, event-driven long that fits a red tape.',
-      t.reversion, revCard, 'No active forced-selling reversion signals right now.');
-
-    const fades = panel('📉 Overheated / Short <span class="dt-dim">(the mirror — fade a blow-off top)</span>',
-      'Blow-off top rolling over, ranked by pattern score. The 🧠 learned-edge chip is ANNOTATION (the learner is graded close-to-close, so it may sink drifted names but not rank the list). Shorting is harder; CONFIRMED rollovers are the more reliable ones.',
-      t.fades, shortCard, 'No overheated rollovers right now.');
-
-    // Sit-out honesty when nothing qualifies.
-    const nBounce = (t.counts && t.counts.bounces) || 0, nFade = (t.counts && t.counts.fades) || 0, nRev = (t.counts && t.counts.reversion) || 0;
-    const sitOut = (nBounce + nFade + nRev === 0)
-      ? `<div class="dt-note" style="border-left-color:#94a3b8"><b>🪑 Sit out is a position.</b> No reversion or fade setup fits right now, and momentum longs don't work on a red tape. Preserving capital on a hostile day IS the winning move — wait for a clean bounce or for the tape to turn.</div>`
-      : `<div class="dt-note" style="border-left-color:#94a3b8"><b>🪑 Sit out is always on the menu.</b> These are modest, selective edges. If nothing looks clean, standing aside on a red day beats forcing a trade.</div>`;
-
-    // Forward track record of the bounce longs (self-validation).
-    let bookPanel = '';
-    if (book && book.ok) {
-      const row = (lbl, s) => !s || !s.n ? '' : `<div class="bt-ic-row"><span>${lbl}</span><span><b>${s.avgExc >= 0 ? '+' : ''}${s.avgExc}%</b> avg excess · ${s.beatRate}% beat (Wilson ${s.wilsonLo}%) · n=${s.n}</span></div>`;
-      const rows = row('Overall', book.overall)
-        + row('WATCH (fresh turn)', book.byTier && book.byTier.WATCH)
-        + row('EMERGING', book.byTier && book.byTier.EMERGING)
-        + row('CONFIRMED (late)', book.byTier && book.byTier.CONFIRMED);
-      bookPanel = `<div class="rot-panel"><div class="rot-head">📋 Live forward track record <span class="dt-dim">(bounce longs, red-tape only)</span></div>
-        <div class="rot-sub">${esc(book.note || '')}</div>
-        ${rows || `<div class="bt-ic-row"><span style="color:var(--text-dim)">${book.resolved || 0} resolved · ${book.stillOpen || 0} open — accrues on red days (~${t.horizon} sessions to mature).</span></div>`}</div>`;
-    }
-
-    el.innerHTML = tapeBanner + reality + bounces + reversion + fades + sitOut + bookPanel;
-    el.querySelectorAll('.dt-card[data-ticker]').forEach(cardEl => {
-      const btn = cardEl.querySelector('[data-chart-toggle]');
-      if (btn) btn.addEventListener('click', () => toggleChart(cardEl, cardEl.dataset.ticker));
-    });
-    startDownDayPrices([...new Set([...(t.bounces || []), ...(t.reversion || []), ...(t.fades || [])].map(p => p.ticker))]);
-  }
-  let ddPriceTimer = null;
-  function startDownDayPrices(tickers) {
-    if (ddPriceTimer) { clearInterval(ddPriceTimer); ddPriceTimer = null; }
-    if (!tickers.length) return;
-    const upd = async () => {
-      try {
-        const data = await fetchLivePrices(tickers);
-        if (!Object.keys(data).length) return;
-        document.querySelectorAll('#downday .dt-card[data-ticker]').forEach(cardEl => {
-          const q = data[cardEl.dataset.ticker]; if (!q) return;
-          const v = livePriceLabel(q);
-          const pe = cardEl.querySelector('[data-dd-price]'), ce = cardEl.querySelector('[data-dd-change]');
-          if (pe && v.price != null && pe.textContent !== '$' + v.price) { pe.textContent = '$' + v.price; pe.classList.remove('price-flash'); void pe.offsetWidth; pe.classList.add('price-flash'); }
-          if (ce) { ce.textContent = v.text; ce.style.color = v.up ? 'var(--green)' : 'var(--red)'; }
-        });
-      } catch {}
-    };
-    upd(); ddPriceTimer = setInterval(upd, 30 * 1000);
-  }
-  document.getElementById('dd-refresh-btn')?.addEventListener('click', runDownDayUI);
-
-  // ── 🐻 Gap-Down Continuation (short — the mirror of Gap & Go) ────────────────
-  async function runGapDownUI() {
-    const el = document.getElementById('gapdown-container');
-    if (!el) return;
-    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning today's gap-downs…</p></div>`;
-    try {
-      const [t, book] = await Promise.all([
-        fetchJSON('/api/tracker?op=gapdown'),
-        fetchJSON('/api/tracker?op=gapdownbook').catch(() => null),
-      ]);
-      renderGapDown(t, book);
-    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Gap-Down.</p></div>`; }
-  }
-  function renderGapDown(t, book) {
-    const el = document.getElementById('gapdown-container');
-    if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Gap-Down unavailable.</p></div>`; return; }
-    document.getElementById('gd-gen-time') && (document.getElementById('gd-gen-time').textContent = t.generatedAt ? stampText(t.generatedAt) : '');
-    const cfg = t.config || {};
-    const evidence = `<div class="rot-panel" style="border-color:#ef444455;background:#ef44440d">
-      <div class="rot-head" style="color:#ef4444">🐻 ${esc(cfg.name || 'Gap-Down Continuation')} — validated short edge (mirror of Gap & Go)</div>
-      <div class="rot-sub">
-        <ul style="margin:6px 0 6px 18px;padding:0">${(cfg.rules || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
-        <b style="color:#22c55e">✓ Evidence.</b> ${esc(cfg.evidence || '')}<br>
-        <b style="color:#f59e0b">⚠️ Caveat.</b> ${esc(cfg.caveat || '')}
-      </div>
-    </div>`;
-    const frictions = `<div class="dt-note" style="border-left-color:#f59e0b"><b>⚠ Shorting is harder than buying.</b> The net edge after borrow + slippage is thin (~+0.2–0.6%), and the biggest gross edge is in small names that are the hardest/priciest to borrow. Prefer liquid names you can actually short, size small, and confirm the intraday break of the opening-range low — don't chase the gap-down open.</div>`;
-    const filtered = t.counts && t.counts.earningsExcluded
-      ? `<div class="dt-note"><b>⏭️ ${t.counts.earningsExcluded} earnings gap-down${t.counts.earningsExcluded === 1 ? '' : 's'} filtered out.</b> Earnings gaps may be a one-time repricing that doesn't continue — this trades the unscheduled catalyst gap-down only.</div>`
-      : `<div class="dt-note"><b>⏭️ Earnings gap-downs are filtered out</b> — unscheduled catalyst gap-downs only.</div>`;
-    const card = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
-        <div class="dt-card-top">
-          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span>${r.actionable === false ? ' <span class="dt-tier-b" style="background:#f59e0b22;color:#f59e0b" title="Borrow availability/fee is unknown to this app, so this is a research/watch lead, not an actionable short. Verify borrow with your broker first.">👁 WATCH ONLY</span>' : ''}${r.earningsCheck === 'unknown' ? ' <span class="dt-tier-b" title="Earnings adjacency unverified — check for a scheduled report">? ER</span>' : ''}</span>
-          <span class="dt-now"><b data-gd-price>$${r.last}</b> <span data-gd-change class="dt-dim">prev close</span></span>
-        </div>
-        <div class="dt-card-sub"><b style="color:#ef4444">▼ gap ${r.gapPct}%</b> <span class="dt-dim">· RVOL ${r.relVol}×${r.excessPct != null ? ' · vs SPY ' + (r.excessPct >= 0 ? '+' : '') + r.excessPct + '%' : ''} · continuation ${r.continuationScore}/100</span></div>
-        <div class="dt-card-plan">📉 <b>${r.actionable === false ? 'Short setup (watch)' : 'Short'} below</b> <b>$${r.plan.trigger}</b> <span class="dt-dim">(OR low)</span> &nbsp;·&nbsp; 🛑 Stop <b>$${r.plan.stop}</b> <span class="dt-dim">(+${r.plan.riskPct}%, 2.5×ATR above)</span> &nbsp;·&nbsp; 🏁 Target <b>$${r.plan.target}</b> <span class="dt-dim">1:${r.plan.rr}</span></div>
-        <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
-        <div class="chart-panel" data-chart-panel style="display:none"></div>
-      </div>`;
-    const list = (title, rows, sub) => `<div class="rot-panel"><div class="rot-head">${title}</div><div class="rot-sub">${sub}</div>${(rows || []).map(card).join('') || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No qualifying gap-downs right now — selective, event-driven; empty on quiet days.</span></div>'}</div>`;
-    const strong = list('🔴 STRONG — gap ≤ −5% <span class="dt-dim">(largest-gap tier · watch-only shadow)</span>', t.strong, 'Big unscheduled gap-downs. Research backtest only (short excess +1.0%/3d, win 55%, 3 years) — shorts stay watch-only until observed borrow and verified intraday execution exist. Ranked by gap size (bigger = more continuation).');
-    const moderate = list('🟠 MODERATE — gap −3 to −5%', t.moderate, 'Smaller gap-downs — positive but weaker than the ≤−5% tier.');
-    let bookPanel = '';
-    if (book && book.ok) {
-      const row = (lbl, s) => !s || !s.n ? '' : `<div class="bt-ic-row"><span>${lbl}</span><span><b>${s.avgExc >= 0 ? '+' : ''}${s.avgExc}%</b> avg short excess · ${s.beatRate}% paid (Wilson ${s.wilsonLo}%) · n=${s.n}</span></div>`;
-      const rows = row('Overall', book.overall) + row('STRONG (≤−5%)', book.byTier && book.byTier.STRONG) + row('MODERATE (−3 to −5%)', book.byTier && book.byTier.MODERATE);
-      bookPanel = `<div class="rot-panel"><div class="rot-head">📋 Live forward track record <span class="dt-dim">(short, self-validation)</span></div>
-        <div class="rot-sub">${esc(book.note || '')}</div>
-        ${rows || `<div class="bt-ic-row"><span style="color:var(--text-dim)">${book.resolved || 0} resolved · ${book.stillOpen || 0} open — accrues ~${t.horizon} sessions after each tick.</span></div>`}</div>`;
-    }
-    el.innerHTML = evidence + frictions + filtered + strong + moderate + bookPanel;
-    el.querySelectorAll('.dt-card[data-ticker]').forEach(cardEl => {
-      const btn = cardEl.querySelector('[data-chart-toggle]');
-      if (btn) btn.addEventListener('click', () => toggleChart(cardEl, cardEl.dataset.ticker));
-    });
-    startGapDownPrices([...new Set([...(t.strong || []), ...(t.moderate || [])].map(p => p.ticker))]);
-  }
-  let gdPriceTimer = null;
-  function startGapDownPrices(tickers) {
-    if (gdPriceTimer) { clearInterval(gdPriceTimer); gdPriceTimer = null; }
-    if (!tickers.length) return;
-    const upd = async () => {
-      try {
-        const data = await fetchLivePrices(tickers);
-        if (!Object.keys(data).length) return;
-        document.querySelectorAll('#gapdown .dt-card[data-ticker]').forEach(cardEl => {
-          const q = data[cardEl.dataset.ticker]; if (!q) return;
-          const v = livePriceLabel(q);
-          const pe = cardEl.querySelector('[data-gd-price]'), ce = cardEl.querySelector('[data-gd-change]');
-          if (pe && v.price != null && pe.textContent !== '$' + v.price) { pe.textContent = '$' + v.price; pe.classList.remove('price-flash'); void pe.offsetWidth; pe.classList.add('price-flash'); }
-          if (ce) { ce.textContent = v.text; ce.style.color = v.up ? 'var(--green)' : 'var(--red)'; }
-        });
-      } catch {}
-    };
-    upd(); gdPriceTimer = setInterval(upd, 30 * 1000);
-  }
-  document.getElementById('gd-refresh-btn')?.addEventListener('click', runGapDownUI);
-
-  // ── 🧬 Coil Radar (pre-explosion: quiet, coiled names BEFORE the move) ──────
-  // Flags volatility-contracted, volume-dried-up, NOT-already-run-up names and
-  // attaches an EMPIRICALLY-CALIBRATED probability of an abnormal upside break.
-  let coilLoaded = false, coilScope = 'all';
-  function ensureCoil() { if (!coilLoaded) { coilLoaded = true; runCoilUI(); } }
-
   // ── Chart Pattern Radar (op=patterns) — STATEFUL EPISODES, SHADOW ──
   // The radar reads PERSISTED pattern episodes (frozen triggers, real state machine),
   // grouped into one primary action-board bucket each. Actions are position-aware
@@ -8412,217 +7167,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     }
     btn.disabled = false;
   }
-  async function runCoilUI() {
-    const el = document.getElementById('coil-container');
-    if (!el) return;
-    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Scanning for coiled setups…</p></div>`;
-    try {
-      const [t, book] = await Promise.all([
-        fetchJSON(`/api/tracker?op=coil&scope=${coilScope}&limit=24`),
-        fetchJSON('/api/tracker?op=coilbook').catch(() => null),
-      ]);
-      renderCoil(t, book);
-    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Coil Radar.</p></div>`; }
-  }
-  function coilTrackPanel(book) {
-    if (!book || !book.ok || !book.resolved) {
-      const open = book && book.open ? book.open : 0;
-      return `<div class="dt-note" style="border-left-color:#a855f7"><b>📊 Self-validation ledger.</b> Picks are logged daily and auto-graded after ~${book && book.horizonDays || 10} sessions. ${open ? open + ' logged, none matured yet — check back in ~2 weeks.' : 'No picks logged yet — the daily cron starts the track record.'}</div>`;
-    }
-    const rows = (book.byBand || []).map(b =>
-      `<tr><td style="text-transform:capitalize">${esc(b.band)}</td><td style="text-align:right">${b.n}</td><td style="text-align:right">${b.predictedPct}%</td><td style="text-align:right"><b>${b.realizedPct}%</b></td></tr>`).join('');
-    return `<div class="rot-panel" style="border-color:#a855f755;background:#a855f70d">
-      <div class="rot-head" style="color:#c084fc">📊 Self-validation — predicted vs realized (out-of-sample)</div>
-      <div class="rot-sub">${book.resolved} picks auto-graded over ~${book.horizonDays} sessions (${book.open} still open). Model predicted <b>${book.predictedBreakPct}%</b> would make an abnormal break; <b>${book.realizedBreakPct}%</b> actually did <span class="dt-dim">(95% CI ${book.realizedCi.lo}–${book.realizedCi.hi}%)</span>. Honest, not curve-fit.
-        <table style="width:100%;margin-top:8px;font-size:.86em;border-collapse:collapse"><thead><tr style="color:var(--text-dim)"><th style="text-align:left">Coil band</th><th style="text-align:right">n</th><th style="text-align:right">predicted</th><th style="text-align:right">realized</th></tr></thead><tbody>${rows}</tbody></table>
-      </div></div>`;
-  }
-  function coilBandColor(band) { return band === 'high' ? '#a855f7' : band === 'elevated' ? '#8b5cf6' : band === 'normal' ? '#6b7280' : '#4b5563'; }
-  function renderCoil(t, book) {
-    const el = document.getElementById('coil-container');
-    if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Coil Radar unavailable.</p></div>`; return; }
-    const gen = document.getElementById('coil-gen-time'); if (gen && t.generatedAt) gen.textContent = '· ' + new Date(t.generatedAt).toLocaleString();
-    const scopeBtns = ['all', 'small', 'large', 'micro'].map(s =>
-      `<button class="hub-sub-btn ${s === t.scope ? 'active' : ''}" data-coil-scope="${s}" style="margin-right:6px">${s === 'all' ? 'All caps' : s === 'small' ? 'Small-cap' : s === 'large' ? 'Large-cap' : 'Micro-cap'}</button>`).join('');
-    const howto = `<div class="tr-howto">
-      <div class="tr-howto-head">📖 What this is — in plain English</div>
-      <ol>
-        <li><b>The idea.</b> Most screeners show stocks <b>already moving</b>. This shows the opposite: <b>quiet, "coiled" stocks BEFORE they explode</b> — volatility squeezed, volume dried up, price flat (not already run up).</li>
-        <li><b>The %.</b> Each name shows the <b>historical decile base rate of an abnormal upside break in ~${t.horizonDays} sessions</b> — an empirical rate from a ~2-year study of today's universe (overall base rate ~${t.baseRatePct}%), <b>not a hyped "80%" and not a calibrated live probability</b> (the study is survivorship-unsafe and carries no per-decile sample size). Top-decile coils break ~1.9× as often as the least-coiled.</li>
-        <li><b>How to use it.</b> A coil says a name is <b>primed</b>, not that it <i>will</i> pop — the trigger is usually news/earnings this price model can't see. Use it as a <b>watchlist</b>: set alerts, confirm the breakout on a chart, then act. This is a watchlist, not advice.</li>
-      </ol></div>`;
-    const card = r => `<div class="dt-card" data-ticker="${esc(r.ticker)}">
-        <div class="dt-card-top">
-          <span><span class="coil-rank" title="Rank by coil strength — the validated break-likelihood signal">#${r.rank}</span> <b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span></span>
-          <span class="dt-now"><span class="dt-dim" style="font-size:.8em">coil</span> <b style="color:#c084fc">${r.coilScore != null ? r.coilScore.toFixed(2) : ''}</b></span>
-        </div>
-        <div class="dt-card-sub" style="display:flex;align-items:center;gap:8px;margin:4px 0 6px">
-          <span style="font-size:1.4em;font-weight:800;color:${coilBandColor(r.band)}">${r.abnormalExpansionPct != null ? r.abnormalExpansionPct : r.explodeProbPct}%</span>
-          <span class="dt-dim">historical rate of an <b>abnormal move</b> (~${t.horizonDays}d, decile base rate — not a calibrated probability) · ${r.lift}× base · <b style="color:${coilBandColor(r.band)}">${esc((r.band || '').toUpperCase())} coil</b> (D${r.decile || ''}/10)</span>
-        </div>
-        <div class="dt-card-plan">📈 <b>Breakout plan</b> <span class="dt-dim">(buy the break, not the quiet)</span> — now <b data-dt-price>$${r.price}</b> <span data-dt-change class="dt-dim">prev close</span> &nbsp;·&nbsp; enter above <b>$${r.entry}</b> &nbsp;·&nbsp; 🛑 stop <b>$${r.stop}</b> <span class="dt-dim">(−${r.riskPct}%)</span> &nbsp;·&nbsp; 🎯 target <b>$${r.target}</b> <span class="dt-dim">(+${r.rewardPct}%, R:R 1:${r.rr})</span></div>
-        ${r.executable ? `<div class="dt-card-sub" style="margin-top:4px" title="Executable trade-plan odds from a transparent barrier model — UNCALIBRATED (not a validated win rate). Kept separate from the abnormal-move base rate above, which is an empirical study number.">
-          <span class="dt-dim">🎲 <b>trade-plan odds</b> (uncalibrated model): fill ${Math.round(r.executable.pTrigger * 100)}% · target-before-stop <b>${Math.round(r.executable.pTargetBeforeStopGivenFill * 100)}%</b> · net exp. <b>${r.executable.expectedNetR >= 0 ? '+' : ''}${r.executable.expectedNetR}R</b> ${r.executable.expectedNetR < 0 ? '<span style="color:#f87171">(negative after costs)</span>' : ''}</span>
-        </div>` : `<div class="dt-card-sub" style="margin-top:4px"><span class="dt-dim">🎲 Probability unavailable — evidence building (no calibrated trade-plan model for this name)</span></div>`}
-        <div class="dt-card-sub"><span class="dt-dim">squeeze ${r.metrics.squeezePctile}th pctile · vol ${r.metrics.hvPctile}th pctile · base ${r.metrics.rangeTightPct}% · ATR ${r.metrics.atrRatio}× · 20d ${r.metrics.ret20Pct >= 0 ? '+' : ''}${r.metrics.ret20Pct}%</span></div>
-        ${(r.reasons || []).length ? `<ul class="coil-reasons" style="margin:6px 0 0 16px;padding:0;font-size:.86em;color:var(--text-dim,#9ca3af)">${r.reasons.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
-      </div>`;
-    const bt = t.systemBacktest;
-    const btPanel = bt ? `<div class="dt-note" style="border-left-color:#22c55e;margin-top:10px"><b>📈 Backtested system (${esc(bt.scope)}, ~2y point-in-time).</b> Trading the actual plan (enter on the break, stop, target): <b>${bt.triggerRatePct}%</b> of picks trigger; of those, <b>${bt.winRatePct}%</b> hit target, averaging <b>${bt.avgRPerEntered >= 0 ? '+' : ''}${bt.avgRPerEntered}R per entered trade</b>. ${esc(bt.verdict)}.</div>` : '';
-    const caveat = `<div class="dt-note" style="border-left-color:#a855f7;margin-top:10px"><b>⚠️ Honest edge.</b> ${esc(t.method ? t.method.caveat : '')} The % is a real base rate, not a promise — most of these stay quiet. <b>Enter</b> is a breakout buy-stop above the coil (not the current price); <b>target</b> is the calibrated ≥2.5σ break level. Picks are <b>ranked by coil strength</b> — validated in research only as an abnormal-expansion detector, not as a trade system (realized trade R ≈ break-even). I tested ranking by Expected-R / reward:risk and <b>dropped it — it backtested inverted</b> (tight high-R:R stops get whipsawed → worst realized trades). Paper-track before sizing.</div>`;
-    el.innerHTML = `${howto}
-      ${coilTrackPanel(book)}
-      <div style="margin:10px 0">${scopeBtns}</div>
-      <div class="rot-panel" style="border-color:#a855f755;background:#a855f70d">
-        <div class="rot-head" style="color:#c084fc">🧬 ${t.namesScanned} names scanned · the most-coiled ${t.picks.length}, ranked #1..N by coil strength</div>
-        <div class="rot-sub">Ranked by <b>coil strength</b> — the signal validated to concentrate breaks. The % is the historical decile base rate of an <b>abnormal</b> upside break (≥2.5× its own volatility) in ~${t.horizonDays} sessions — an empirical study number, not a calibrated live probability. Each card shows the breakout plan (enter / stop / target).</div>
-      </div>
-      <div class="dt-grid" style="margin-top:10px">${(t.picks || []).map(card).join('')}</div>
-      ${btPanel}
-      ${caveat}`;
-    el.querySelectorAll('[data-coil-scope]').forEach(b => b.addEventListener('click', () => { coilScope = b.getAttribute('data-coil-scope'); runCoilUI(); }));
-    // Pre-breakout names → time the ENTRY relative to the breakout trigger (+ VWAP/trend).
-    attachTimingLights(el, (t.picks || []).map(r => ({ ticker: r.ticker, trigger: r.entry })), 'coil');
-    // Live current price + how it's trading today (cards ship with the EOD daily close).
-    startCoilPrices([...new Set((t.picks || []).map(r => r.ticker))]);
-  }
-  let coilPriceTimer = null;
-  function startCoilPrices(tickers) {
-    if (coilPriceTimer) { clearInterval(coilPriceTimer); coilPriceTimer = null; }
-    if (!tickers.length) return;
-    const upd = async () => {
-      try {
-        const data = await fetchLivePrices(tickers);
-        if (!Object.keys(data).length) return;
-        document.querySelectorAll('#coil .dt-card[data-ticker]').forEach(cardEl => {
-          const q = data[cardEl.dataset.ticker]; if (!q) return;
-          const v = livePriceLabel(q);
-          const pe = cardEl.querySelector('[data-dt-price]'), ce = cardEl.querySelector('[data-dt-change]');
-          if (pe && v.price != null && pe.textContent !== '$' + v.price) { pe.textContent = '$' + v.price; pe.classList.remove('price-flash'); void pe.offsetWidth; pe.classList.add('price-flash'); }
-          if (ce) { ce.textContent = v.text; ce.style.color = v.up ? 'var(--green)' : 'var(--red)'; }
-        });
-      } catch {}
-    };
-    upd(); coilPriceTimer = setInterval(upd, 30 * 1000);
-  }
-  document.getElementById('coil-refresh-btn')?.addEventListener('click', runCoilUI);
-
-  // ── Confluence (5 classic strategies agree, regime-gated, self-learning) ──
-  const CFL_STRAT = { ema: '9/21 EMA', supertrend: 'Supertrend', rsi: 'RSI dip', macd: 'MACD', priceAction: 'Structure' };
-  let confluenceLoaded = false;
-  function ensureConfluence() { if (!confluenceLoaded) { confluenceLoaded = true; runConfluenceUI(); } }
-  async function runConfluenceUI() {
-    const el = document.getElementById('cfl-container');
-    if (!el) return;
-    el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Running 5-strategy scan…</p></div>`;
-    try {
-      const [t, book] = await Promise.all([
-        fetchJSON('/api/tracker?op=confluence'),
-        fetchJSON('/api/tracker?op=confluencebook').catch(() => null),
-      ]);
-      renderConfluence(t, book);
-    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Confluence.</p></div>`; }
-  }
-  function renderConfluence(t, book) {
-    const el = document.getElementById('cfl-container');
-    if (!el || !t || !t.ok) { if (el) el.innerHTML = `<div class="mom-status error"><p>Confluence unavailable.</p></div>`; return; }
-    const REG = { 'risk-on': ['#22c55e', 'RISK-ON', 'Trends favored'], neutral: ['#eab308', 'NEUTRAL', 'Be selective'], 'risk-off': ['#ef4444', 'RISK-OFF', 'Stand down — trend signals fail here'] };
-    const [rc, rlbl, rdesc] = REG[t.regime] || REG.neutral;
-    const banner = `<div class="rot-panel" style="border-color:${rc}55"><div class="rot-head" style="color:${rc}">Regime: ${rlbl}</div><div class="rot-sub">${rdesc}. A name lists when <b>≥${t.minBull} of 5</b> classic strategies agree it's bullish. Horizon ~${t.horizon} sessions.</div></div>`;
-    // Condition-aware: which strategies suit today's tape (the top-trader edge).
-    const COND = { trending: ['📈', 'Trending tape', 'Trend strategies (EMA · Supertrend · MACD · Structure) are in their element — they get full weight; RSI dip is down-weighted.'], choppy: ['🌊', 'Choppy / ranging tape', 'Mean-reversion (RSI dip) is in its element — it gets full weight; trend strategies are down-weighted.'], mixed: ['🤝', 'Mixed tape', 'No tape clearly favors any strategy — all weighted equally.'], riskoff: ['🛑', 'Risk-off', 'Stand down on new longs.'] };
-    const [ci, clbl, cdesc] = COND[t.condition] || COND.mixed;
-    const condBanner = `<div class="dt-note"><b>${ci} ${clbl}.</b> ${cdesc} <span class="dt-dim">★ = strategy in its element. (Validated: each strategy does better in its favorable tape; condition-matching raises the floor toward breakeven — not a confident edge, but the right way to use them.)</span></div>`;
-
-    const howto = `<div class="tr-howto">
-      <div class="tr-howto-head">📖 What this is — in plain English</div>
-      <ol>
-        <li><b>5 classic strategies vote.</b> 9/21-EMA trend · Supertrend · RSI dip-buy · MACD · price-structure. A name shows up only when <b>${t.minBull}+ agree</b> it's bullish — that's "confluence."</li>
-        <li><b>Self-learning.</b> Each strategy's weight and each stock's tilt adjust from real outcomes over time (see the weights panel). The engine leans toward what's actually working.</li>
-        <li><b>Each card</b> shows the agreeing strategies, a 📈 chart, and a trade plan (↩️ pullback / 🎯 breakout entry, 🛑 stop, 🏁 target). Size by risk: shares ≈ (1% of account) ÷ (Entry − Stop).</li>
-        <li><b>Honest truth (5y backtest below):</b> these well-known signals — alone or in confluence — <b>do not beat the market</b> (~48% win rate). Use this as a <b>confirmation / watchlist</b> overlay, not a buy button. The live track record is the number to trust.</li>
-      </ol>
-    </div>`;
-
-    // Self-improving: per-strategy learned weights + realized edge.
-    const we = (t.strategyEdge || []).map(s => {
-      const w = (t.weights || {})[s.strategy];
-      return `<div class="bt-ic-row"><span>${esc(CFL_STRAT[s.strategy] || s.strategy)}</span><span>weight ${w != null ? w : '—'}×</span><span>edge ${s.ewmaExc > 0 ? '+' : ''}${s.ewmaExc}% <span style="color:var(--text-dim)">(${s.n})</span></span></div>`;
-    }).join('');
-    const weightsPanel = `<div class="rot-panel expert-only"><div class="rot-head">🧠 Self-learning — strategy weights</div><div class="rot-sub">Weights start at 1× and drift with each strategy's realized forward edge. (Thin until picks resolve.)</div>${we}</div>`;
-
-    const card = r => {
-      const badges = (r.bull || []).map(s => { const m = (r.matched || []).includes(s); return `<span class="chip ${m ? 'cyan' : 'gray'}">${m ? '★ ' : ''}${esc(CFL_STRAT[s] || s)}</span>`; }).join(' ');
-      // Independent-evidence flag (family-v1): agreement across families beats piling
-      // votes on one factor. Single-family "confluence" is flagged as one dressed-up signal.
-      const famChip = r.familyBullCount == null ? ''
-        : (r.singleFamily
-          ? `<span class="chip amber" title="These strategies agree but they're all the SAME factor (${esc((r.familyBull || []).join(', '))}) — one confirmation dressed up as several. Ranked below genuinely independent agreement.">⚠ 1 family</span>`
-          : `<span class="chip green" title="Independent evidence families agreeing: ${esc((r.familyBull || []).join(', '))}. Cross-family confirmation (trend + mean-reversion) is stronger than more correlated trend votes.">✓ ${r.familyBullCount} indep. families</span>`);
-      const pb = r.pullback;
-      return `<div class="dt-card" data-ticker="${esc(r.ticker)}">
-        <div class="dt-card-top">
-          <span><b>${esc(r.ticker)}</b> <span class="dt-sec">${esc(r.sector || '')}</span> <span class="dt-dim">${L('confluence', r.score + '/' + r.maxScore)}</span></span>
-          <span class="dt-now"><b data-dt-price>$${r.last}</b> <span data-dt-change class="dt-dim">prev close</span></span>
-        </div>
-        <div class="dt-card-sub">${badges} ${famChip} <span class="dt-dim">${r.excess21d != null ? '· ' + L('relStrength', '1mo vs SPY') + ' ' + (r.excess21d > 0 ? '+' : '') + r.excess21d + '%' : ''}${r.beta != null ? ' · ' + L('beta', 'β') + ' ' + r.beta : ''}</span></div>
-        ${pb ? `<div class="dt-card-plan">↩️ <b>${L('pullback', 'Pullback')}</b> <b>$${pb.entry}</b> · 🛑 ${L('stop', '<b>$' + pb.stop + '</b>')} <span class="dt-dim">(−${pb.riskPct}%)</span> · 🏁 ${L('target', '<b>$' + pb.target + '</b>')} <span class="dt-dim">${L('rr', 'R:R')} 1:${pb.rr}</span></div>` : ''}
-        <div class="dt-card-plan">🎯 <b>${L('pullback', 'Breakout')}</b> <b>$${r.entry}</b> · 🛑 ${L('stop', '<b>$' + (r.stop != null ? r.stop : '—') + '</b>')}${r.riskPct != null ? ` <span class="dt-dim">(−${r.riskPct}%)</span>` : ''} · 🏁 ${L('target', '<b>$' + (r.target != null ? r.target : '—') + '</b>')}${r.rr ? ` <span class="dt-dim">${L('rr', 'R:R')} 1:${r.rr}</span>` : ''}</div>
-        <button class="chart-toggle" data-chart-toggle>📈 Live chart &amp; signals <span class="ct-arrow">▾</span></button>
-        <div class="chart-panel" data-chart-panel style="display:none"></div>
-      </div>`;
-    };
-    let picksPanel;
-    if (t.riskOff) picksPanel = `<div class="rot-panel"><div class="rot-head">🛑 Risk-off — list suppressed</div><div class="rot-sub">Trend/confluence signals underperform in risk-off (the app's most consistent research finding). Stand down on new longs.</div></div>`;
-    else {
-      const relaxNote = t.relaxed && t.count ? `<div class="rot-sub" style="color:var(--amber)">No strong 4/5 confluence today — showing moderate <b>3/5</b> agreement (the ledger's bar). Weaker signal; confirm on the chart.</div>` : '';
-      picksPanel = `<div class="rot-panel"><div class="rot-head">⚙️ Confluence longs (${t.count})</div><div class="rot-sub">Ranked by <b>independent-family</b> agreement (trend + mean-reversion count more than piling on correlated trend votes) + the per-stock learner. Chips = strategies that agree; the family chip flags single-factor "confluence."</div>${relaxNote}${(t.picks || []).map(card).join('') || '<div class="bt-ic-row"><span style="color:var(--text-dim)">No names at ≥3/5 agreement right now.</span></div>'}</div>`;
-    }
-
-    let track;
-    if (book && book.resolved >= 10) {
-      const row = (n, s) => s && s.n ? `<div class="bt-ic-row"><span>${n} <span style="color:var(--text-dim)">${s.n}</span></span><span>exc ${s.avgExc > 0 ? '+' : ''}${s.avgExc}%</span><span>${L('beatRate', 'beat')} ${s.beatRate}% <span style="color:var(--text-dim)">(${L('wilsonLB', 'LB')} ${s.wilsonLo}%)</span></span></div>` : '';
-      track = `<div class="rot-panel"><div class="rot-head">📊 Live track record — forward ${t.horizon}-session excess vs SPY</div>${row('All confluence', book.overall)}${Object.keys(book.byStrategy || {}).map(s => row(CFL_STRAT[s] || s, book.byStrategy[s])).join('')}<div class="bt-ic-row" style="border-top:1px solid var(--border);margin-top:4px"><span></span><span></span><span>${book.resolved} resolved · ${book.stillOpen} open</span></div></div>`;
-    } else {
-      track = `<div class="rot-panel rot-panel-pending"><div class="rot-head">📊 Live track record — building…</div><div class="rot-sub">${book ? `${book.stillOpen || 0} open, ${book.resolved || 0} resolved` : ''}. Each pick scored ~${t.horizon} sessions later; accrues via the daily cron.</div></div>`;
-    }
-
-    el.innerHTML = banner + condBanner + howto + weightsPanel + picksPanel + track +
-      `<div class="fade-caveats"><b>Honest validation</b> (5y, fwd ${t.horizon}-session excess vs SPY): confluence (≥3/5 agree) averaged −0.2% with a ~48% win rate. I then <b>tested every sensible improvement</b> — regime gating, a relative-strength filter, fresh-trigger-only, and taking only the top-momentum names — and the best stack (4/5 + relative-strength + regime + top-20%) only reached ~breakeven (+0.1% out-of-sample) with a <b>still-sub-50% win rate</b> (Wilson LB 44%). <b>No combination confidently beats the market</b> — the efficient-market reality for well-known indicators. So treat this as a <b>multi-strategy confirmation/watchlist</b> tool, not an edge. What it adds: one place to see when classic signals align, a self-learning weight on each, and a live track record. Confirm on the chart. Research, not advice.</div>`;
-
-    el.querySelectorAll('.dt-card[data-ticker]').forEach(cardEl => {
-      const tk = cardEl.dataset.ticker;
-      const btn = cardEl.querySelector('[data-chart-toggle]');
-      if (btn) btn.addEventListener('click', () => toggleChart(cardEl, tk));
-    });
-    startConfluencePrices([...new Set((t.picks || []).map(r => r.ticker))]);
-    if (!t.riskOff) attachTimingLights(el, (t.picks || []).map(r => ({ ticker: r.ticker, stop: r.stop, target: r.target, trigger: r.entry })), 'confluence');
-    const meta = document.getElementById('cfl-meta');
-    if (meta) meta.textContent = `· ${t.regime} · ${t.count || 0} confluence longs`;
-    const gt = document.getElementById('cfl-gen-time');
-    if (gt && t.generatedAt) gt.textContent = stampText(t.generatedAt);
-  }
-  let cflPriceTimer = null;
-  function startConfluencePrices(tickers) {
-    if (cflPriceTimer) { clearInterval(cflPriceTimer); cflPriceTimer = null; }
-    if (!tickers.length) return;
-    const upd = async () => {
-      try {
-        const data = await fetchLivePrices(tickers);
-        if (!Object.keys(data).length) return;
-        document.querySelectorAll('#confluence .dt-card[data-ticker]').forEach(cardEl => {
-          const q = data[cardEl.dataset.ticker]; if (!q) return;
-          const v = livePriceLabel(q);
-          const pe = cardEl.querySelector('[data-dt-price]'), ce = cardEl.querySelector('[data-dt-change]');
-          if (pe && v.price != null && pe.textContent !== '$' + v.price) { pe.textContent = '$' + v.price; pe.classList.remove('price-flash'); void pe.offsetWidth; pe.classList.add('price-flash'); }
-          if (ce) { ce.textContent = v.text; ce.style.color = v.up ? 'var(--green)' : 'var(--red)'; }
-        });
-      } catch {}
-    };
-    upd(); cflPriceTimer = setInterval(upd, 30 * 1000);
-  }
-  document.getElementById('cfl-refresh-btn')?.addEventListener('click', runConfluenceUI);
-
   // ── Trade Alerts — source-aware swing-research (SHADOW; social posts are leads, not facts) ──
   // Four decision views (Actionable / Wait / Crowded-Late / Contradictions) + an Account
   // Scoreboard, mirroring the Options four-view pattern. Reads the v2 payload from
@@ -8943,63 +7487,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
   document.getElementById('xalerts-refresh-btn')?.addEventListener('click', fetchXalerts);
 
-  // ── Momentum Alerts ──
-  const momentumContainer  = document.getElementById('momentum-container');
-  const momentumRefreshBtn = document.getElementById('momentum-refresh-btn');
-  const momentumGenTime    = document.getElementById('momentum-gen-time');
-  const momentumMeta       = document.getElementById('momentum-meta');
-
-  momentumRefreshBtn.addEventListener('click', fetchMomentum);
-  // Lazy-load: only start polling when the Momentum tab opens.
-  let momentumLoaded = false;
-  function ensureMomentum() { if (momentumLoaded) return; momentumLoaded = true; fetchMomentum(); setInterval(fetchMomentum, 5 * 60 * 1000); }
-
-  async function fetchMomentum() {
-    momentumRefreshBtn.disabled = true;
-    momentumContainer.innerHTML = skeletonGrid(4);
-    try {
-      const data = await fetchJSON('/api/momentum');
-      if (data.error) { showMomError(data.error); return; }
-      renderMomentum(data);
-    } catch { showMomError('Could not load momentum data. Please try again.'); }
-    finally { momentumRefreshBtn.disabled = false; }
-  }
-
-  function renderMomentum(data) {
-    let { strongBuys = [], strongSells = [], scannedCount, universeCount, excludedExtended = 0, generatedAt, degraded, universeNote } = data;
-    // Registry state for this strategy, from the payload (api/momentum.js). Momentum is
-    // registered `shadow`, so the action badge drops its buy/sell imperative and the
-    // push notification is suppressed entirely. Defaults to NOT eligible so an older
-    // cached payload without the field fails closed rather than shouting STRONG BUY.
-    momTradeEligible = data.tradeEligible === true;
-    // Hide tiers disabled on the scoreboard (kept logged + scored server-side).
-    if (isSignalDisabled('momentum', 'StrongBuy'))  strongBuys = [];
-    if (isSignalDisabled('momentum', 'StrongSell')) strongSells = [];
-    renderMomentumRegime(); // show the bearish-regime warning banner if applicable
-    if (generatedAt) momentumGenTime.textContent = `Updated ${stampText(generatedAt)}`;
-    // momentum-v2: the universe is price/volume-discovered (discovery + screeners) — social
-    // attention is only an annotation. Same-session read; scores are heuristic ranks.
-    momentumMeta.textContent = degraded
-      ? `· price/volume universe unavailable — honest empty board (never social-only)`
-      : `· ${scannedCount || 0} of ${universeCount || scannedCount || 0} price/volume-discovered names deep-scanned · same-session read · early movers only`
-        + (excludedExtended ? ` · ${excludedExtended} extended filtered` : '');
-    if (degraded && universeNote) momentumMeta.title = universeNote;
-
-    const cols = document.createElement('div');
-    cols.className = 'mom-columns';
-    cols.appendChild(buildMomColumn('buy', strongBuys));
-    cols.appendChild(buildMomColumn('sell', strongSells));
-
-    momentumContainer.innerHTML = '';
-    momentumContainer.appendChild(cols);
-
-    // Seed signal state + badges (and surface flips into Strong as alerts)
-    [...strongBuys, ...strongSells].forEach(c => handleSignalUpdate(c.ticker, c.action));
-
-    // Live (after-hours-aware) price updates for every listed ticker
-    startLivePrices([...strongBuys, ...strongSells].map(c => c.ticker));
-  }
-
   // ── Signal Scoreboard (realized forward returns + enable/disable) ──────────
   const scoreboardContainer  = document.getElementById('scoreboard-container');
   const scoreboardRefreshBtn = document.getElementById('scoreboard-refresh-btn');
@@ -9015,7 +7502,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     EV_STRONG: '🧾 Strong change', EV_MODERATE: '🧾 Moderate change', EV_WEAK: '🧾 Weak change',
     Actionable: '✅ Actionable (all gates passed)', Tracked: '👀 Tracked (a gate failed — reason logged)',
     STRONG: '🔴 Strong (≥5% gap)', MODERATE: '🟠 Moderate (3–5% gap)',
-    INDEX_DELETE: 'Index Delete', INDEX_ADD_FADE: 'Index Add (fade)', LOCKUP_EXPIRY: 'Lockup Expiry', TAX_LOSS: 'Tax-Loss Selling', FIRE_SALE: 'Fire Sale', MARGIN_SPIRAL: 'Margin Spiral', FORCED_DOWNGRADE: 'Forced Downgrade',
+    ...CERN_LBL,   // CERN event types incl. the ARK shadow pair — one shared map, see its definition
     Bullish: '📈 Bullish tone', Neutral: '➖ Neutral tone', Bearish: '📉 Bearish tone',
     Sticky: '📈 Sticky attention', Fast: '⚡ Fast hype',
     Fresh: '🟢 Fresh (not yet moved)', Moved: '⚪ Moved (priced in)', Unknown: '◽ Unknown',
@@ -9099,7 +7586,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     try { localStorage.setItem('disabledSignals', JSON.stringify([...set])); } catch {}
     if (lastScoreboard) renderScoreboard(lastScoreboard);
     // Apply immediately to the affected section.
-    if (section === 'momentum' && typeof fetchMomentum === 'function') fetchMomentum();
     if (section === 'screener') ['large', 'small', 'micro'].forEach(s => rankAndRender(s));
   }
 
@@ -10013,35 +8499,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const baselinesRefreshBtn = document.getElementById('baselines-refresh-btn');
   if (baselinesRefreshBtn) baselinesRefreshBtn.addEventListener('click', () => loadBaselines(true));
 
-  function buildMomColumn(side, list) {
-    const buy = side === 'buy';
-    // 2:1 reward-to-risk floor — an empty column is the honest state.
-    const gated = rrGate(list);
-
-    const col = document.createElement('div');
-    col.className = 'mom-col';
-
-    const head = document.createElement('div');
-    head.className = 'mom-col-head ' + side;
-    head.innerHTML = `${buy ? '⚡ Strong Buy' : '⚡ Strong Sell'}<span class="cnt">${gated.items.length}</span>`;
-    col.appendChild(head);
-
-    const body = document.createElement('div');
-    body.className = 'mom-col-body';
-    if (!gated.items.length) {
-      const empty = document.createElement('div');
-      empty.className = 'mom-col-empty';
-      empty.textContent = gated.abstained
-        ? `No signals clear the 2:1 reward-to-risk floor (${gated.belowFloor} below the bar).`
-        : (buy ? 'No strong buy signals right now.' : 'No strong sell signals right now.');
-      body.appendChild(empty);
-    } else {
-      gated.items.forEach((c, idx) => body.appendChild(buildMomCard(c, side, idx)));
-    }
-    col.appendChild(body);
-    return col;
-  }
-
   function buildMomCard(c, side, idx) {
     const buy = side === 'buy';
     const chg = c.regChangePct;
@@ -10373,12 +8830,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       }));
     } finally { polling = false; }
   }
-  setTimeout(pollSignals, 6000);                 // seed baseline shortly after load (no alerts)
-  setInterval(pollSignals, 120 * 1000);          // then re-check every 2 min
+  // OPT-IN (Phase 2 boot hygiene): the flip watcher used to poll up to 12 /api/chart reads
+  // every two minutes for every visitor. It now runs only once the user has turned the bell
+  // (notifications) or the chime on — the two surfaces a flip can actually reach them through.
+  const flipAlertsWanted = () => notifyEnabled || (soundEnabled && localStorage.getItem('alertsMuted') === '0');
+  const pollSignalsIfWanted = () => { if (flipAlertsWanted()) pollSignals(); };
+  setTimeout(pollSignalsIfWanted, 6000);          // seed baseline shortly after load (no alerts)
+  setInterval(pollSignalsIfWanted, 120 * 1000);   // then re-check every 2 min
 
-  // Sound + Notification toggles, dropped into the Momentum header next to Refresh
+  // Sound + Notification toggles, dropped into the Alerts header next to Refresh (the
+  // Momentum tab that used to host them was retired 2026-10-02; Alerts carries the flips).
   (function setupAlertToggles() {
-    const refresh = document.getElementById('momentum-refresh-btn');
+    const refresh = document.getElementById('alerts-refresh-btn');
     if (!refresh) return;
 
     // ── Sound toggle ──
@@ -10723,10 +9186,6 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const indicators = { ema9: I.ema9, ema21: I.ema21, ema50: I.ema50, vwap: source === 'yahoo' ? I.vwap : null };
     mountCandles(host, { candles, indicators, signals, events: opts.events || [], levels: opts.levels || null })
       .catch(() => { host.innerHTML = '<div class="chart-err">Chart unavailable.</div>'; });
-  }
-
-  function showMomError(msg) {
-    momentumContainer.innerHTML = `<div class="mom-status error"><p>${esc(msg)}</p></div>`;
   }
 
 

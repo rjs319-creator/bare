@@ -31,8 +31,5 @@ test('slimRltBoard passes non-objects through (error envelopes are untouched)', 
   assert.equal(slimRltBoard(null), null);
 });
 
-test('the lab only reads fields the slim payload carries', () => {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'rlt-lab.js'), 'utf8');
-  for (const k of RLT_SLIM_OMIT) assert.doesNotMatch(src, new RegExp(`\\bd\\.${k}\\b`), `rlt-lab.js reads d.${k}, which the default op=rlt no longer carries`);
-  assert.match(src, /op=rlt'/);
-});
+// The Leadership lab TAB (public/js/rlt-lab.js) was retired 2026-10-02 (rlt-leadership-transition
+// no-edge); op=rlt's slim default payload is pinned above and still feeds atlasx/pulse/pulse2.

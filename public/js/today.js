@@ -20,8 +20,10 @@ const STATE = {
   extended: ['🟡', 'Extended', 'st-amber'], failed: ['❌', 'Failed', 'st-red'],
   expired: ['⏰', 'Expired', 'st-red'], resolved: ['🏁', 'Resolved', 'st-grey'],
 };
-const SRC_TAB = { screener: 'screener', gapgo: 'gapgo', daytrade: 'daytrade', coil: 'coil', coremo: 'coremo', biotech: 'biotech', gapdown: 'gapdown',
-  readthrough: 'readthrough', anomaly: 'anomaly', secondwave: 'secondwave', crossasset: 'crossasset', toneshift: 'toneshift' };
+// Retired tabs (coil, gapdown, readthrough, anomaly, secondwave, toneshift — 2026-10-02 Phase 2)
+// fall through to the app's RETIRED_TO redirect inside showTab, so a source chip still lands
+// on a live surface; only the tabs that still exist are mapped here.
+const SRC_TAB = { screener: 'screener', gapgo: 'gapgo', daytrade: 'daytrade', coremo: 'coremo', biotech: 'biotech', crossasset: 'crossasset' };
 
 // Evidence grade per source (section → {icon,label,grade}), from op=maturity. Lets
 // every card carry the EARNED trust grade next to its raw score — the honest read
@@ -468,7 +470,7 @@ export function renderCommandCenter(container, p) {
   // (Quick Hit / Opportunities / Edge Book / Game Plan) are one tap away as drill-downs,
   // not competing landing pages (#1 consolidation).
   html += `<div class="td-related expert-only"><span class="td-dim">Also explore:</span>`
-    + [['quickhit', '⚡ Quick Hit'], ['opportunities', '⭐ Opportunities'], ['edge', '📓 Edge Book'], ['gameplan', '🗞️ Game Plan']]
+    + [['quickhit', '⚡ Quick Hit'], ['opportunities', '⭐ Opportunities'], ['gameplan', '🗞️ Game Plan'], ['brief', '🧭 Brief']]
       .map(([t, l]) => `<button class="td-rel" data-go="${t}">${l}</button>`).join('') + `</div>`;
 
   // ACTIONABLE LANE — evidence-cleared strategies ONLY (fail-closed, boost-free merge).

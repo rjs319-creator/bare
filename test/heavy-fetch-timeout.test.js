@@ -35,11 +35,7 @@ const HEAVY_SITES = [
   ['app.js', 'op=pulserefine'],
   ['today.js', 'op=today'],
   ['atlas.js', 'op=atlasx'],
-  ['omega-swing.js', 'op=omega'],
   ['swing-supervisor.js', 'op=swingmonitor'],
-  ['ignition.js', 'op=ignition'],
-  ['evolve.js', 'op=evolve'],
-  ['leaderboard.js', 'op=scoreboard'],
 ];
 
 // Optional overlays sharing a Promise.all with a primary payload — these must stay BOUNDED,
@@ -48,7 +44,6 @@ const HEAVY_SITES = [
 const OPTIONAL_SITES = [
   ['today.js', 'op=maturity'],
   ['today.js', 'op=challenger'],
-  ['leaderboard.js', 'op=leaderboard'],
 ];
 
 for (const [file, op] of HEAVY_SITES) {

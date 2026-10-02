@@ -65,8 +65,8 @@ test('OMEGA annotation is weight-0, fail-soft, and labeled as correlated evidenc
 });
 
 test('UI fully registered without displacing the pinned lab tail', () => {
-  assert.match(APP, /'rltlab', 'psrl', 'gridlock'/, 'psrl in TAB_GROUPS.lab, neighbor-pinned (outside the cfl-test triplet)');
-  assert.match(APP, /'peerlab'\]/, 'peerlab stays the last lab entry (peerprop test pin)');
+  assert.match(APP, /'cfl', 'psrl', 'gridlock'/, 'psrl in TAB_GROUPS.lab, neighbor-pinned');
+  assert.match(APP, /'gridlock'\]/, 'gridlock closes the lab list (peerlab tab retired 2026-10-02)');
   assert.match(APP, /psrl: '🪜 Persistent Trends \(shadow\)'/, 'SUB_LABEL entry');
   assert.match(APP, /psrl: 'Persistent Trends —/, 'SECTION_HELP entry');
   assert.match(APP, /import \{ loadPsrlLab \} from '\.\/psrl-lab\.js'/, 'module import');

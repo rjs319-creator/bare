@@ -118,9 +118,11 @@ test('the momentum action badge drops its imperative when the strategy is not cl
 });
 
 test('momentum trade-eligibility fails closed in the client', () => {
-  // An older cached payload without the field must not shout STRONG BUY.
+  // The Momentum tab was retired 2026-10-02; nothing sets the flag any more, so it stays at its
+  // fail-closed default and the live-price updater keeps the RESEARCH wording (never STRONG BUY).
   assert.match(APP, /let momTradeEligible = false;/);
-  assert.match(APP, /momTradeEligible = data\.tradeEligible === true;/);
+  assert.doesNotMatch(APP, /momTradeEligible = true/, 'no code path may clear the flag without a registry read');
+  assert.doesNotMatch(APP, /momTradeEligible = data\.tradeEligible === true;/, 'the retired renderer must not come back');
 });
 
 test('the push notification is suppressed entirely for an uncleared strategy', () => {
