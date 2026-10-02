@@ -36,6 +36,8 @@ function deps(over = {}) {
     liveStatus: ({ row, quote }) => { calls.live++; return { status: quote && quote.preMarketPrice > (row && row.entry) ? 'triggered' : 'not-triggered', pct: { toEntry: 1, toStop: -5, toTarget: 14 }, vwap: null, orb: null, relVol: null, dayRangePct: null, note: null }; },
     fetchIntradayBatch: async (tickers) => { calls.bars.push(tickers); return tickers.map((t) => ({ ok: true, ticker: t, bars: [] })); },
     universe: () => ['ABC', 'GAPR', 'ZZZ'],
+    // Official earnings calendar (lib/nasdaq-calendar) — injected so no test reaches the network.
+    fetchEarningsToday: async (etDate) => ({ ok: true, date: etDate, source: 'nasdaq', tickers: ['IOVA'] }),
     ...over,
   };
   return { d, calls };
@@ -58,8 +60,13 @@ test('runSessionBoard: builds from injected sources, grades, persists, session-a
   assert.ok(tickers.includes('ABC') && tickers.includes('IOVA') && tickers.includes('GAPR'));
   assert.equal(p.items.find((i) => i.ticker === 'ABC').live.status, 'triggered');
   assert.ok(p.items.every((i) => i.grade.letter !== 'A'), 'paper governance caps at B');
-  assert.deepEqual(p.sources.map((s) => s.source).sort(), ['daytrade', 'governance', 'market', 'premarket', 'scoreboard', 'today']);
+  assert.deepEqual(p.sources.map((s) => s.source).sort(), ['calendar', 'daytrade', 'governance', 'market', 'premarket', 'scoreboard', 'today']);
   assert.ok(p.sources.every((s) => s.ok === true));
+  // earnings-today from the official calendar: flag + checklist row on the reporting name only
+  assert.equal(p.items.find((i) => i.ticker === 'IOVA').flags.earningsToday, true);
+  assert.equal(p.items.find((i) => i.ticker === 'ABC').flags.earningsToday, false);
+  assert.equal(p.items.find((i) => i.ticker === 'IOVA').checks.find((c) => c.key === 'earningsToday').ok, false);
+  assert.deepEqual(p.calendar, { date: p.calendar.date, source: 'nasdaq', earningsCount: 1, onBoard: ['IOVA'] });
   assert.equal(res._headers['Cache-Control'], 's-maxage=60, stale-while-revalidate=120');
   // premarket: the snapshot covers the board names PLUS the universe pools
   assert.deepEqual([...calls.premarket[0]].sort(), ['ABC', 'GAPR', 'IOVA', 'ZZZ']);

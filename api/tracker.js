@@ -200,6 +200,10 @@ const PRIVILEGED_OPS = new Set([
   // 'arktick' fetches the six ARK holdings CSVs and writes ark/* snapshots + the trades doc
   // op=cerntick ingests (lib/ark-routes.js). Cron/manual-with-bearer only; op=ark stays public.
   'arktick',
+  // FINRA DAILY SHORT-VOLUME feature feed — downloads ≤5 FINRA CDN files and writes the
+  // per-day shards + CAS-appends the rolling doc (shortvol/*). Cron/manual-with-bearer
+  // only; op=shortvol (read) stays public.
+  'shortvoltick',
   // STOCKTWITS BULL-RATIO FLAG shadow logger/resolver — writes the snapshot + write-once
   // prospective ledger (stbull/v1/*) and spends a StockTwits fan-out / a ≤60-name candle
   // fan-out. Cron/manual-with-bearer only; op=stbull (read) stays public.
@@ -606,6 +610,9 @@ async function handleRequest(req, res) {
   if (req.query.op === 'insiderclustertick') return require('../lib/insider-cluster-routes').runInsiderClusterTick(req, res);
   if (req.query.op === 'ark') return require('../lib/ark-routes').runArk(req, res);
   if (req.query.op === 'arktick') return require('../lib/ark-routes').runArkTick(req, res);
+  // FINRA REG SHO DAILY SHORT VOLUME — feature feed + weight-0 decile hypothesis cohorts.
+  if (req.query.op === 'shortvol') return require('../lib/finra-shortvol-routes').runShortVol(req, res);
+  if (req.query.op === 'shortvoltick') return require('../lib/finra-shortvol-routes').runShortVolTick(req, res);
   if (req.query.op === 'stbull') return require('../lib/stbull-routes').runStbull(req, res);
   if (req.query.op === 'stbulltick') return require('../lib/stbull-routes').runStbullTick(req, res);
   if (req.query.op === 'stbullresolve') return require('../lib/stbull-routes').runStbullResolve(req, res);
