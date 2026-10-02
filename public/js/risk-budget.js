@@ -105,15 +105,89 @@ export function capacity({ notionalUsd, advUsd }) {
   };
 }
 
-/** One call for an alerts decision card. Pure. */
-export function sizeAlertDecision(dec, budget) {
+/**
+ * Hard position cap — the SAME number lib/omega-sizing (MAX_POSITION_PCT), lib/position-sizing
+ * and lib/risk-kelly enforce; test/risk-kelly.test.js pins them to one value. The server also
+ * serves it per lane (`maxPositionFraction`); whichever is SMALLER wins, so a corrupted or
+ * stale server value can never loosen the cap from the browser.
+ */
+export const MAX_POSITION_FRACTION = 0.20;
+const DRAWDOWN_THRESHOLDS = [0.10, 0.20];
+
+/** P(maxDD > threshold) from the served percentile table of 20-trade max drawdown in R. */
+export function drawdownExceedProbability(quantilesR, thresholdFrac, riskPerTradeFrac) {
+  if (!Array.isArray(quantilesR) || !quantilesR.length || !(riskPerTradeFrac > 0) || !(thresholdFrac > 0)) return null;
+  const limitR = thresholdFrac / riskPerTradeFrac;
+  const exceeding = quantilesR.filter(q => isNum(q) && q > limitR).length;
+  return round(exceeding / quantilesR.length, 3);
+}
+
+function effectiveCap(lane) {
+  const served = lane && isNum(lane.maxPositionFraction) && lane.maxPositionFraction > 0 ? +lane.maxPositionFraction : MAX_POSITION_FRACTION;
+  return Math.min(served, MAX_POSITION_FRACTION);
+}
+
+/**
+ * Lane sizing — quarter Kelly, vol-target and drawdown odds for the decision's lane, from the
+ * SERVED per-lane evidence (op=alerts `sizing`, built on the grade cron by lib/alerts-sizing).
+ * The browser does no statistics here: it scales a served fraction by the budget, takes the
+ * minimum of Kelly / vol-target / hard cap, and reads drawdown odds off a served percentile
+ * table at the reader's own risk per trade. Fail-closed at every step.
+ */
+export function laneSizing({ budget, sizing, dec }) {
+  if (!budgetIsSet(budget)) return unavailable('no risk budget set — Kelly and drawdown odds need your account size and risk per trade');
+  const laneKey = dec && dec.sizingLane;
+  if (!sizing || !sizing.lanes) return unavailable('lane sizing not served yet — it is built on the nightly grade');
+  if (!laneKey || !sizing.lanes[laneKey]) return unavailable(`no graded record for lane ${laneKey || '(unknown)'} — size unevaluated`);
+  const lane = sizing.lanes[laneKey];
+  const n = lane.inputs && isNum(lane.inputs.n) ? lane.inputs.n : 0;
+  if (!isNum(lane.kelly) || !isNum(lane.kellyFractional) || lane.size === null || !isNum(lane.size)) {
+    const noEdge = isNum(lane.kelly) && lane.kelly <= 0;
+    const reason = noEdge
+      ? `no size — this lane has no measured edge (Kelly ${round(lane.kelly, 2)} over ${n} graded episodes)`
+      : (lane.reason || 'lane sizing unavailable');
+    return { ...unavailable(reason), noEdge, laneKey, n };
+  }
+  if (!(lane.kelly > 0) || !(lane.kellyFractional > 0)) {
+    return { ...unavailable(`no size — this lane has no measured edge (Kelly ${round(lane.kelly, 2)} over ${n} graded episodes)`), noEdge: true, laneKey, n };
+  }
+  const cap = effectiveCap(lane);
+  const vol = dec.volTarget && isNum(dec.volTarget.fraction) && dec.volTarget.fraction > 0 ? +dec.volTarget.fraction : null;
+  const caps = [['kelly', +lane.kellyFractional], ['max-position', cap]];
+  if (vol != null) caps.push(['vol-target', vol]);
+  const binding = caps.reduce((m, c) => (c[1] < m[1] ? c : m), caps[0]);
+  const fraction = Math.min(Math.max(binding[1], 0), cap);
+  if (!(fraction > 0)) return unavailable('lane size collapsed to zero under the caps');
+  const riskFrac = budget.riskPctPerTrade / 100;
+  const q = lane.drawdown && Array.isArray(lane.drawdown.quantilesR) ? lane.drawdown.quantilesR : null;
+  const [p10, p20] = DRAWDOWN_THRESHOLDS.map(t => (q ? drawdownExceedProbability(q, t, riskFrac) : null));
+  return {
+    available: true,
+    laneKey, n,
+    fraction,
+    notionalUsd: round(budget.equityUsd * fraction),
+    bindingConstraint: binding[0],
+    kellyPct: round(lane.kelly * 100, 1),
+    kellyFractionalPct: round(lane.kellyFractional * 100, 1),
+    kellyFractionUsed: isNum(lane.kellyFractionUsed) ? lane.kellyFractionUsed : 0.25,
+    volTargetPct: vol != null ? round(vol * 100, 1) : null,
+    realizedVol20d: isNum(dec.realizedVol20d) ? round(dec.realizedVol20d, 1) : null,
+    capPct: round(cap * 100, 0),
+    drawdown: q ? { p10, p20, trades: lane.drawdown.trades, n: lane.drawdown.n } : null,
+    note: 'Quarter Kelly over the lane\'s graded record, under the hard position cap and a 25% vol target. Arithmetic over served evidence — not a recommendation.',
+  };
+}
+
+/** One call for an alerts decision card. Pure. `sizing` is the served op=alerts lane doc. */
+export function sizeAlertDecision(dec, budget, sizing = null) {
+  const lane = laneSizing({ budget, sizing, dec });
   const entry = dec && (dec.trigger != null ? dec.trigger : dec.priceNow);
   const size = shareSize({ budget, entry, invalidation: dec && dec.invalidation, side: dec && dec.side });
-  if (!size.available) return { size, capacity: unavailable('no size to evaluate capacity against') };
+  if (!size.available) return { size, capacity: unavailable('no size to evaluate capacity against'), lane };
   // The server publishes measured dollar ADV on the liquidity component.
   const liq = dec && dec.execution && dec.execution.components && dec.execution.components.liquidity;
   const advUsd = liq && liq.state === 'MEASURED' && isNum(liq.value) ? liq.value : null;
-  return { size, capacity: capacity({ notionalUsd: size.notionalUsd, advUsd }) };
+  return { size, capacity: capacity({ notionalUsd: size.notionalUsd, advUsd }), lane };
 }
 
 /**

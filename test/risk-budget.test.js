@@ -172,3 +172,105 @@ test('no budget ⇒ options size unevaluated', async () => {
   assert.equal(size.available, false);
   assert.match(size.reason, /no risk budget/i);
 });
+
+// ── Lane sizing (Kelly / vol-target / drawdown) — arithmetic over SERVED lane evidence ──────
+// The server (lib/alerts-sizing via op=alerts `sizing`) computes Kelly and the drawdown
+// percentile table; the client only scales by the budget and applies the SAME hard cap.
+const LANE_EDGE = {
+  inputs: { n: 60, winRate: 0.6, avgWin: 0.04, avgLoss: -0.02, cost: 0, rMultiples: [], rN: 60 },
+  size: 0.2, reason: null, kelly: 20, kellyFractional: 5, kellyFractionUsed: 0.25, bindingConstraint: 'max-position',
+  maxPositionFraction: 0.2,
+  // 101 percentiles of 20-trade max drawdown in R: 0..20R linearly
+  drawdown: { trades: 20, paths: 2000, seed: 1, n: 60, quantilesR: Array.from({ length: 101 }, (_, i) => i * 0.2), probabilities: [] },
+};
+const LANE_NO_EDGE = { inputs: { n: 40, winRate: 0.4, avgWin: 0.01, avgLoss: -0.03, cost: 0, rMultiples: [], rN: 40 }, size: null, reason: 'no measured edge', kelly: -46.67, kellyFractional: null, maxPositionFraction: 0.2, drawdown: null };
+const SIZING = { version: 'alerts-sizing-v1', lanes: { 'long:5': LANE_EDGE, 'short:5': LANE_NO_EDGE } };
+const DEC = { side: 'long', intendedHorizon: 'swing', sizingLane: 'long:5', realizedVol20d: 50, volTarget: { fraction: 0.2, rawFraction: 0.5, capped: true, targetVolPct: 25, realizedVol20d: 50 } };
+
+test('laneSizing refuses without a budget, without served sizing, and for an unknown lane', async () => {
+  const R = await load();
+  assert.equal(R.laneSizing({ budget: {}, sizing: SIZING, dec: DEC }).available, false);
+  const noDoc = R.laneSizing({ budget: B, sizing: null, dec: DEC });
+  assert.equal(noDoc.available, false);
+  assert.match(noDoc.reason, /not served yet/);
+  const noLane = R.laneSizing({ budget: B, sizing: SIZING, dec: { ...DEC, sizingLane: 'long:21' } });
+  assert.equal(noLane.available, false);
+  assert.match(noLane.reason, /no graded record/);
+});
+
+test('laneSizing: Kelly ≤ 0 renders "no size — this lane has no measured edge" and no dollars', async () => {
+  const R = await load();
+  const r = R.laneSizing({ budget: B, sizing: SIZING, dec: { ...DEC, side: 'short', sizingLane: 'short:5' } });
+  assert.equal(r.available, false);
+  assert.equal(r.noEdge, true);
+  assert.match(r.reason, /no size — this lane has no measured edge/);
+  assert.equal(r.notionalUsd, undefined);
+});
+
+test('laneSizing: edge lane sizes at min(quarter Kelly, vol-target, hard cap) × equity with drawdown odds', async () => {
+  const R = await load();
+  const r = R.laneSizing({ budget: B, sizing: SIZING, dec: DEC });
+  assert.equal(r.available, true);
+  assert.equal(r.fraction, 0.2);                       // cap binds (quarter Kelly = 500%)
+  assert.equal(r.notionalUsd, 20000);                  // 20% of $100k
+  assert.equal(r.kellyFractionalPct, 500);
+  assert.equal(r.volTargetPct, 20);
+  assert.equal(r.bindingConstraint, 'max-position');
+  // budget risks 0.5%/trade: 10% DD = 20R → 0 of 101 percentiles exceed; 20% = 40R → 0
+  assert.equal(r.drawdown.p10, 0);
+  assert.equal(r.drawdown.p20, 0);
+  const r2 = R.laneSizing({ budget: { equityUsd: 100000, riskPctPerTrade: 2 }, sizing: SIZING, dec: DEC });
+  // 2%/trade: 10% DD = 5R → percentiles > 5R are 26..100 = 75 of 101
+  assert.ok(Math.abs(r2.drawdown.p10 - 75 / 101) < 0.011, `p10 `);   // served at 3dp; one-percentile tolerance
+  assert.ok(Math.abs(r2.drawdown.p20 - 50 / 101) < 0.011, `p20 `);
+});
+
+test('laneSizing: vol-target binds below the lane Kelly when the name is wild', async () => {
+  const R = await load();
+  const dec = { ...DEC, realizedVol20d: 250, volTarget: { fraction: 0.1, rawFraction: 0.1, capped: false, targetVolPct: 25, realizedVol20d: 250 } };
+  const r = R.laneSizing({ budget: B, sizing: SIZING, dec });
+  assert.equal(r.fraction, 0.1);
+  assert.equal(r.bindingConstraint, 'vol-target');
+  assert.equal(r.notionalUsd, 10000);
+  const noVol = R.laneSizing({ budget: B, sizing: SIZING, dec: { ...DEC, realizedVol20d: null, volTarget: null } });
+  assert.equal(noVol.volTargetPct, null);
+  assert.equal(noVol.fraction, 0.2);
+});
+
+test('sizeAlertDecision carries the lane sizing alongside the risk-derived size', async () => {
+  const R = await load();
+  const dec = { ...DEC, trigger: 100, invalidation: 95, execution: { components: { liquidity: { state: 'MEASURED', value: 5e7 } } } };
+  const out = R.sizeAlertDecision(dec, B, SIZING);
+  assert.equal(out.size.shares, 100);
+  assert.equal(out.lane.available, true);
+  const legacy = R.sizeAlertDecision(dec, B);
+  assert.equal(legacy.lane.available, false, 'two-argument callers still work');
+});
+
+test('GOVERNANCE (client): no rendered lane size exceeds the hard cap for any served input', async () => {
+  const R = await load();
+  let s = 11; const rnd = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+  const hostile = [NaN, Infinity, -Infinity, null, undefined, -1, 0, 5, 1e9, '0.3'];
+  const pick = (a) => a[Math.floor(rnd() * a.length)];
+  let published = 0;
+  for (let i = 0; i < 3000; i++) {
+    const hostileTurn = rnd() < 0.2;
+    const lane = {
+      ...LANE_EDGE,
+      size: hostileTurn ? pick(hostile) : rnd() * 3,            // a corrupted server size is still capped
+      kelly: hostileTurn ? pick(hostile) : (rnd() - 0.3) * 10,
+      kellyFractional: hostileTurn ? pick(hostile) : rnd() * 3,
+      maxPositionFraction: hostileTurn ? pick(hostile) : 0.2,
+      drawdown: rnd() < 0.5 ? LANE_EDGE.drawdown : null,
+    };
+    const dec = { ...DEC, volTarget: rnd() < 0.3 ? null : { fraction: hostileTurn ? pick(hostile) : rnd() * 2 } };
+    const budget = { equityUsd: rnd() * 1e6 + 1, riskPctPerTrade: rnd() * 5 + 0.01 };
+    const r = R.laneSizing({ budget, sizing: { lanes: { 'long:5': lane } }, dec });
+    if (!r.available) { assert.equal(typeof r.reason, 'string'); continue; }
+    published++;
+    assert.ok(r.fraction > 0 && r.fraction <= R.MAX_POSITION_FRACTION + 1e-12, `fraction ${r.fraction} exceeds cap`);
+    assert.ok(r.notionalUsd <= budget.equityUsd * R.MAX_POSITION_FRACTION + 0.01, 'notional exceeds cap');
+    assert.ok(lane.kelly > 0, 'published implies positive served Kelly');
+  }
+  assert.ok(published > 300, `published branch exercised (${published})`);
+});
