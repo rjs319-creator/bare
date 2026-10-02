@@ -40,7 +40,7 @@ test('workflow knobs: 22:05 UTC + three retry schedules (same ET session), fail-
   for (const c of crons) assert.ok(c.hour >= 22 || c.hour < 4, `${c.hour}:${c.min} UTC would be the next ET session date`);
   assert.equal((WF.match(/\n      fail-fast: false\n/g) || []).length, 2, 'both chain jobs keep going when one root fails');
   // Width 2, not 4: on 2026-10-02 five chains died together in one co-located OOM kill.
-  assert.match(WF, /max-parallel: 2/);
+  assert.match(WF, /max-parallel: 1/);
   assert.equal((WF.match(/\n    timeout-minutes: 12\n/g) || []).length, 2, 'both chain jobs are capped at 12 minutes (two 290 s attempts + the 75 s crash backoff)');
   assert.match(WF, /\n  chains:\n    needs: \[preflight, spine\]\n    if: \$\{\{ !cancelled\(\) && needs\.preflight\.outputs\.skip != 'true' \}\}/, 'the rest waits for the decision spine, survives its failure, and skips a covered night');
   assert.match(WF, /\n  summary:[\s\S]*needs: \[preflight, spine, chains\]\n    if: \$\{\{ always\(\) && needs\.preflight\.outputs\.skip != 'true' \}\}/, 'the summary records cancelled/timed-out jobs too, unless the night was skipped');
