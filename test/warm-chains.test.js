@@ -343,8 +343,12 @@ test('dispatchDelayMs: the first wave dispatches immediately, later waves are ga
   // invocations with it. Waves are the fix — wave membership must be stable arithmetic.
   const { dispatchDelayMs, DISPATCH_WAVE_SIZE, DISPATCH_WAVE_GAP_MS } = WC;
   for (let i = 0; i < DISPATCH_WAVE_SIZE; i++) assert.equal(dispatchDelayMs(i), 0, `index ${i} is wave 0`);
-  assert.equal(dispatchDelayMs(DISPATCH_WAVE_SIZE), DISPATCH_WAVE_GAP_MS);
-  assert.equal(dispatchDelayMs(2 * DISPATCH_WAVE_SIZE), 2 * DISPATCH_WAVE_GAP_MS);
+  // Wave i starts at i × the EFFECTIVE gap (the nominal gap, compressed only once the root
+  // count would push the last wave past LAST_WAVE_CEILING_MS).
+  const gap = WC.effectiveWaveGapMs();
+  assert.ok(gap > 0 && gap <= DISPATCH_WAVE_GAP_MS);
+  assert.equal(dispatchDelayMs(DISPATCH_WAVE_SIZE), gap);
+  assert.equal(dispatchDelayMs(2 * DISPATCH_WAVE_SIZE), 2 * gap);
   // Monotone: a later chain never dispatches before an earlier one.
   for (let i = 1; i < WC.ROOT_CHAINS.length; i++) {
     assert.ok(dispatchDelayMs(i) >= dispatchDelayMs(i - 1), `delay must be monotone at ${i}`);
@@ -352,9 +356,37 @@ test('dispatchDelayMs: the first wave dispatches immediately, later waves are ga
 });
 
 test('dispatchDelayMs: every root chain is dispatched well inside warm\'s 280s drain', () => {
-  const last = dispatchDelayLast();
-  assert.ok(last <= 90000, `last wave at ${last}ms leaves too little of the 280s drain to hear reports`);
-  function dispatchDelayLast() { return WC.dispatchDelayMs(WC.ROOT_CHAINS.length - 1); }
+  // The INVARIANT, not a constant: the last wave lands at or under LAST_WAVE_CEILING_MS for
+  // the CURRENT root count. Until 2026-10-02 this was a literal `<= 90000` with a fixed 9s
+  // gap, so the 44th root sat exactly on the ceiling and the 45th would have failed every
+  // copy of this pin (insider-cluster-wiring, filing-redflags-routes, tracker-memory-headroom).
+  const last = WC.dispatchDelayMs(WC.ROOT_CHAINS.length - 1);
+  assert.ok(last <= WC.LAST_WAVE_CEILING_MS, `last wave at ${last}ms leaves too little of the 280s drain to hear reports`);
+  assert.ok(WC.LAST_WAVE_CEILING_MS <= 90000, 'the ceiling itself must stay well inside the 280s drain');
+});
+
+test('dispatchDelayMs: the wave gap compresses so the last wave fits the ceiling for ANY root count', () => {
+  // The in-process dispatcher is the fallback when WARM_CHAINS_INPROCESS is flipped back on.
+  // It must keep working as roots are added: the gap shrinks (never grows) while the wave
+  // WIDTH — the OOM lesson, how many land on one instance at once — is untouched.
+  for (let rootCount = 1; rootCount <= 200; rootCount++) {
+    const last = WC.dispatchDelayMs(rootCount - 1, { rootCount });
+    assert.ok(last <= WC.LAST_WAVE_CEILING_MS, `${rootCount} roots: last wave at ${last}ms breaks the ceiling`);
+    const gap = WC.effectiveWaveGapMs({ rootCount });
+    assert.ok(gap <= WC.DISPATCH_WAVE_GAP_MS, `${rootCount} roots: gap ${gap}ms exceeds the nominal gap`);
+    assert.ok(gap >= 0 && Number.isInteger(gap), `${rootCount} roots: gap must be a non-negative integer`);
+    for (let i = 0; i < WC.DISPATCH_WAVE_SIZE; i++) assert.equal(WC.dispatchDelayMs(i, { rootCount }), 0, `${rootCount} roots: index ${i} stays in wave 0`);
+    for (let i = 1; i < rootCount; i++) assert.ok(WC.dispatchDelayMs(i, { rootCount }) >= WC.dispatchDelayMs(i - 1, { rootCount }), 'monotone');
+  }
+  // Below the ceiling the nominal gap is used unchanged: 44 roots is the historical 4 × 9s
+  // schedule (last wave at 90s), so today's production timing is byte-identical.
+  assert.equal(WC.effectiveWaveGapMs({ rootCount: 44 }), 9000);
+  assert.equal(WC.dispatchDelayMs(43, { rootCount: 44 }), 90000);
+  // One more root compresses the gap instead of breaking the pin.
+  assert.ok(WC.effectiveWaveGapMs({ rootCount: 45 }) < 9000);
+  assert.ok(WC.dispatchDelayMs(44, { rootCount: 45 }) <= WC.LAST_WAVE_CEILING_MS);
+  // Few roots: a single wave never needs a gap at all.
+  assert.equal(WC.dispatchDelayMs(3, { rootCount: 4 }), 0);
 });
 
 test('dispatchDelayMs: degenerate options never divide by zero or go negative', () => {

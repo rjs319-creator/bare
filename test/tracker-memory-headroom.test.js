@@ -39,12 +39,12 @@ test('flattening the wave does NOT slow the average dispatch rate', () => {
   // 8 chains / 20s and 4 chains / 10s are the same names-per-second; only the
   // instantaneous peak differs. Slowing the rate would push the last wave past
   // warm's drain and reintroduce "dispatched but never heard from".
-  const ratePerSec = WC.DISPATCH_WAVE_SIZE / (WC.DISPATCH_WAVE_GAP_MS / 1000);
+  const ratePerSec = WC.DISPATCH_WAVE_SIZE / (WC.effectiveWaveGapMs() / 1000);
   assert.ok(ratePerSec >= 0.4, `dispatch rate ${ratePerSec}/s is slower than the 8-per-20s baseline`);
 });
 
 test('every root chain still dispatches well inside warm drain after the reshape', () => {
-  assert.ok(WC.dispatchDelayMs(WC.ROOT_CHAINS.length - 1) <= 90000);
+  assert.ok(WC.dispatchDelayMs(WC.ROOT_CHAINS.length - 1) <= WC.LAST_WAVE_CEILING_MS);
 });
 
 test('the ledger spine still starts in wave 0', () => {

@@ -22,6 +22,17 @@ Proposals #2 and #3 of `docs/GITHUB-RESOURCE-SCAN-2026-10-02.md`. Shipped 2026-1
 - **timeout-minutes 6** — `CHAIN_DEADLINE_MS` is 240 s inside a 300 s function wall; the runner caps a request at 290 s and retries only a fast failure: worst path 30 + 15 + 290 s < 6 min.
 - **`needs: spine`** — in-process, `evolve`/`challenger`/`bearcase`/`swing`/`atlasx`/`maturity`/`router` raced the decision spine and accepted a one-tick-stale `op=today`. Here they wait for it. `if: !cancelled()` keeps them running when the spine fails (stale inputs are better than none; their own ledgers must still advance).
 
+## In-process fallback: the dispatch ceiling (2026-10-02)
+
+The in-process dispatcher (`WARM_CHAINS_INPROCESS` unset or `1`) is the rollback path, so it has to keep working at any root count. Until 2026-10-02 it used a fixed schedule — `DISPATCH_WAVE_SIZE` 4 × `DISPATCH_WAVE_GAP_MS` 9 s — and four tests pinned the literal `dispatchDelayMs(ROOT_CHAINS.length - 1) <= 90000`. With 44 roots the last wave sat exactly on 90 s; the 45th root would have failed every copy of the pin, which is why `redflagstick` had to become a step instead of a root.
+
+**Choice: (a) make the dispatcher scale; keep the invariant, drop the constant.**
+
+- `LAST_WAVE_CEILING_MS` (90 s) is now a named constant in `lib/warm-chains.js`, and the gap is **computed**: `effectiveWaveGapMs()` returns the nominal 9 s while the last wave fits under the ceiling, and `min(9 s, floor(ceiling / lastWaveIndex))` once it would not. Wave **width** (the OOM lever — how many invocations land on one instance at once, mirrored by the matrix's `max-parallel: 4`) never changes; only the spacing between waves compresses.
+- At the current 44 roots the schedule is byte-identical to before (4 × 9 s, last wave at 90 s). At 45 roots the gap becomes 8.1 s; at 60, 6.4 s; at 100, 3.75 s. Below ~4 s between waves the fallback is still *correct* but the arrival spikes are closer together — at that point the matrix is the real answer and a very large `ROOT_CHAINS` should prompt nesting, not more trimming.
+- The pins now assert the **invariant** (`<= WC.LAST_WAVE_CEILING_MS`) and `test/warm-chains.test.js` checks it for every root count from 1 to 200, so adding a root no longer requires touching four test files.
+- Rejected: (b) retiring the pin. Without it a flipped-back `WARM_CHAINS_INPROCESS` could silently dispatch the last roots past the drain and record them as `running-past-warm` every night.
+
 ## Dead-man semantics (no new vendor)
 
 1. **Job failure = e-mail.** GitHub e-mails the workflow's author on a failed scheduled run. Each root is its own job, so the e-mail names the chain.
