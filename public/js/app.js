@@ -1802,6 +1802,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     return '';
   }
 
+  // The quote line of the executable-liquidity read. A quote object can be present but
+  // one-sided or empty (crossed/missing bid or ask) — rendering its fields raw printed
+  // "quote undefined/undefined (undefined% of mid)" on the Options tab (site audit
+  // 2026-10-02 #7). Only a finite two-sided quote is shown; anything else says so.
+  function of2QuoteText(q) {
+    if (!q) return ' · no two-sided quote';
+    const fin = v => typeof v === 'number' && Number.isFinite(v) && v > 0;
+    const bid = q.bid, ask = q.ask;
+    if (!fin(bid) || !fin(ask)) return ' · quote unavailable';
+    const spread = Number.isFinite(Number(q.spreadPctOfMid)) ? ` (${q.spreadPctOfMid}% of mid)` : '';
+    return ` · quote ${bid}/${ask}${spread}`;
+  }
   // Contract-level executable liquidity for the contract a plan would actually name.
   function of2ExecutionHTML(c) {
     const l = c.contractLiquidity;
@@ -1814,7 +1826,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const conc = c.strikeConcentrationFullChain;
     return `<div style="font-size:0.75rem;margin-bottom:5px;line-height:1.6">
       ⚙ <b>Executable liquidity</b> on ${esc(String(ct.side || ''))} $${esc(String(ct.strike ?? '—'))} ${esc(ct.expiry || '')}: <b style="color:${col}">${esc(l.state)}</b>
-      ${q ? ` · quote ${q.bid}/${q.ask} (${q.spreadPctOfMid}% of mid)` : ' · no two-sided quote'}
+      ${of2QuoteText(q)}
       ${of2SizeText(c, sz)}
       ${l.blocking && l.blocking.length ? `<div style="color:var(--red)">⛔ ${l.blocking.map(esc).join(' · ')}</div>` : ''}
       ${l.unavailableReason ? `<div style="color:var(--amber,#f0a832)">${esc(l.unavailableReason)}</div>` : ''}
@@ -4391,7 +4403,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const cond = ok ? tape.condition : 'mixed', regime = ok ? tape.regime : 'neutral', eff = ok ? tape.efficiency : null;
     const [ci, clbl, cdesc] = TODAY_COND[cond] || TODAY_COND.mixed;
     const regLbl = (regime || '').toUpperCase();
-    const read = `<div class="rot-panel"><div class="rot-head">${ci} Today's market read</div><div class="rot-sub">The market is <b>${L('regime', regLbl)}</b> and the tape is <b>${L('tape', clbl)}</b>${eff != null ? ` <span class="dt-dim">(${L('trendEff', 'trend-eff ' + eff)})</span>` : ''}. ${cdesc}</div></div>`;
+    // The header reads the SAME served `regimeView` the command center reads (lib/regime-view):
+    // op=tape only carries the MACRO read, so it is labelled macro risk — never "the regime" —
+    // and once op=today arrives below, the governing breadth regime replaces this line.
+    const read = `<div class="rot-panel"><div class="rot-head">${ci} Today's market read</div><div class="rot-sub" id="today-regime-line">${todayRegimeLine(ok ? tape.regimeView : null, regLbl, clbl, eff)} ${cdesc}</div></div>`;
     const r = TODAY_REC[cond] || TODAY_REC.mixed;
     const rec = `<div class="dt-note" style="border-left-color:${r.col}"><b>${r.e} ${r.h}.</b> ${r.b}${r.cta ? ` <button class="today-cta" data-go="${r.cta.s}">${r.cta.l}</button>` : ''}</div>`;
     // 🪁 Red-tape nudge → Down-Day Mode (reversion longs + shorts + the honest sit-out).
@@ -4414,11 +4429,30 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = read + rec + downNudge + cc + ideas + links;
     el.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => { if (typeof showTab === 'function') showTab(b.dataset.go); }));
     el.querySelector('#today-learn')?.addEventListener('click', () => openLearn());
-    loadCommandCenter(el.querySelector('#today-cc')).then(() => {
+    loadCommandCenter(el.querySelector('#today-cc')).then((p) => {
       if (typeof startScreenerLive === 'function') startScreenerLive(el.querySelector('#today-cc')); // live prices on ticker chips
+      // Same payload, same field as the board header: the GOVERNING (breadth) regime.
+      const rv = p && p.ok && p.regimeView;
+      const line = el.querySelector('#today-regime-line');
+      if (rv && rv.governing && line) line.innerHTML = `${todayRegimeLine(rv, regLbl, clbl, eff)} ${cdesc}`;
+      const meta = document.getElementById('today-meta'); if (meta && rv && rv.governing) meta.textContent = `· ${rv.governing.label.toUpperCase()} (breadth) · ${clbl} tape`;
     });
     const gt = document.getElementById('today-gen-time'); if (gt && ok && tape.generatedAt) gt.textContent = stampText(tape.generatedAt);
-    const meta = document.getElementById('today-meta'); if (meta) meta.textContent = `· ${regLbl} · ${clbl} tape`;
+    const meta = document.getElementById('today-meta'); if (meta) meta.textContent = `· macro ${regLbl} · ${clbl} tape`;
+  }
+  // One sentence from a served regimeView. With a governing (breadth) regime: "Breadth regime
+  // is RISK-OFF (breadth 22%) · macro risk: risk-on"; macro-only (op=tape): "Macro risk reads
+  // RISK-ON". The word "regime" is reserved for the governing read.
+  function todayRegimeLine(rv, fallbackMacroLbl, clbl, eff) {
+    const tapeTxt = `the tape is <b>${L('tape', clbl)}</b>${eff != null ? ` <span class="dt-dim">(${L('trendEff', 'trend-eff ' + eff)})</span>` : ''}`;
+    if (rv && rv.governing) {
+      const b = rv.breadth || {};
+      const macro = rv.macro ? ` · <span class="dt-dim" title="${esc(rv.macro.basis || '')}">${esc(rv.macro.kind)}: ${esc(rv.macro.regime)}${rv.agree === false ? ' (disagrees — breadth governs)' : ''}</span>` : '';
+      return `${esc(b.kind || 'Breadth regime')} is <b>${L('regime', rv.governing.label.toUpperCase())}</b>${b.breadthPct != null ? ` <span class="dt-dim">(breadth ${b.breadthPct}%)</span>` : ''}${macro}, and ${tapeTxt}.`;
+    }
+    const m = rv && rv.macro;
+    const lbl = m ? m.label.toUpperCase() : fallbackMacroLbl;
+    return `<span title="${esc((m && m.basis) || 'VIX + credit')}">Macro risk</span> reads <b>${L('regime', lbl)}</b> <span class="dt-dim">(VIX + credit — the breadth regime that gates entries loads below)</span>, and ${tapeTxt}.`;
   }
   document.getElementById('today-refresh-btn')?.addEventListener('click', runTodayUI);
   document.getElementById('opp-refresh-btn')?.addEventListener('click', () => { opportunitiesLoaded = false; ensureOpportunities(); });
@@ -8183,8 +8217,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   let patternRadarLoaded = false, patternRadarView = 'all';
   // A populated radar can hold 1,000+ episodes per bucket; rendering them in one innerHTML
   // pass froze the tab on phones, so each bucket pages in PR_PAGE_SIZE-card chunks.
+  // The SERVER pages too (site audit 2026-10-02 #8: the full radar was 24.5 MB): the first
+  // load carries only each bucket's first page plus `totals`, and "show more" fetches the
+  // next page of ONE bucket (`&bucket=k&offset=n&limit=PR_PAGE_SIZE`).
   const PR_PAGE_SIZE = 30;
-  let prRadarBuckets = null;
+  let prRadarBuckets = null, prRadarTotals = null;
   const PR_ACTION_LABEL = {
     LONG_ENTRY_READY: 'Long — near trigger', LONG_TRIGGERED: 'Long entry triggered',
     SHORT_ENTRY_READY: 'Short — near trigger', SHORT_TRIGGERED: 'Short entry triggered',
@@ -8209,7 +8246,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (!el) return;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Loading pattern radar…</p></div>`;
     try {
-      const t = await fetchJSON(`/api/tracker?op=patterns&view=${patternRadarView}`, { timeoutMs: HEAVY_TIMEOUT_MS });
+      const t = await fetchJSON(`/api/tracker?op=patterns&view=${patternRadarView}&limit=${PR_PAGE_SIZE}`, { timeoutMs: HEAVY_TIMEOUT_MS });
       renderPatternRadar(t, el);
     } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load the pattern radar.</p></div>`; }
   }
@@ -8238,19 +8275,23 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       ['expired', '⌛ Expired'], ['resolved', '🏁 Resolved (target/stop)'], ['failedEarlier', '🗄 Failed Earlier'],
     ];
     prRadarBuckets = r;
+    prRadarTotals = t.totals || null;
     const body = buckets.map(([k, lbl]) => {
       const items = r[k] || [];
-      if (!items.length) return '';
+      // Heading count = the bucket's TOTAL (server-paged payload) — never the page length.
+      const total = prRadarTotals && Number.isFinite(prRadarTotals[k]) ? prRadarTotals[k] : items.length;
+      if (!total) return '';
       const collapsed = k === 'failedEarlier' || k === 'expired' || k === 'resolved';
+      const shown = Math.min(items.length, PR_PAGE_SIZE);
       const cards = items.slice(0, PR_PAGE_SIZE).map(prCard).join('');
-      const hidden = items.length - PR_PAGE_SIZE;
+      const hidden = total - shown;
       const pager = hidden > 0
-        ? `<button class="hub-sub-btn" data-pr-more="${k}" data-pr-next="${PR_PAGE_SIZE}" style="margin:6px 0">Show ${Math.min(PR_PAGE_SIZE, hidden)} more (${hidden} hidden)</button>`
+        ? `<button class="hub-sub-btn" data-pr-more="${k}" data-pr-next="${shown}" style="margin:6px 0">Show ${Math.min(PR_PAGE_SIZE, hidden)} more (${hidden} hidden)</button>`
         : '';
       const inner = `<div data-pr-cards="${k}">${cards}</div>${pager}`;
       return collapsed
-        ? `<details class="pr-bucket"><summary><h3 style="display:inline">${lbl} (${items.length})</h3></summary>${inner}</details>`
-        : `<div class="pr-bucket"><h3>${lbl} (${items.length})</h3>${inner}</div>`;
+        ? `<details class="pr-bucket"><summary><h3 style="display:inline">${lbl} (${total})</h3></summary>${inner}</details>`
+        : `<div class="pr-bucket"><h3>${lbl} (${total})</h3>${inner}</div>`;
     }).filter(Boolean).join('');
     el.innerHTML = `${prEvidenceBanner(t.evidence)}${prScanLine(t.scan)}
       <div class="hub-subnav" style="margin-bottom:10px">${filters}</div>
@@ -8269,12 +8310,26 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     }));
     scope.querySelectorAll('[data-pr-chart]').forEach(b => b.addEventListener('click', () => prLoadChart(b)));
   }
-  function prShowMore(btn, el) {
+  async function prShowMore(btn, el) {
     const k = btn.dataset.prMore;
-    const items = (prRadarBuckets && prRadarBuckets[k]) || [];
     const holder = el.querySelector(`[data-pr-cards="${k}"]`);
     const start = Number(btn.dataset.prNext) || 0;
-    const chunk = items.slice(start, start + PR_PAGE_SIZE);
+    // Server page for THIS bucket (totals-bearing payload); a legacy payload without totals
+    // falls back to slicing the full list it already carried.
+    let chunk, total;
+    if (prRadarTotals) {
+      btn.disabled = true;
+      try {
+        const j = await fetchJSON(`/api/tracker?op=patterns&view=${patternRadarView}&bucket=${k}&offset=${start}&limit=${PR_PAGE_SIZE}`, { timeoutMs: HEAVY_TIMEOUT_MS });
+        chunk = (j && j.radar && j.radar[k]) || [];
+        total = j && j.totals && Number.isFinite(j.totals[k]) ? j.totals[k] : prRadarTotals[k];
+      } catch { chunk = []; total = prRadarTotals[k]; }
+      btn.disabled = false;
+    } else {
+      const items = (prRadarBuckets && prRadarBuckets[k]) || [];
+      chunk = items.slice(start, start + PR_PAGE_SIZE);
+      total = items.length;
+    }
     if (!holder || !chunk.length) { btn.remove(); return; }
     // Build the chunk detached and wire it there — appendChild moves the nodes with their
     // listeners intact, so revealed cards behave exactly like first-page cards.
@@ -8283,7 +8338,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     prWireCards(tpl.content);
     holder.appendChild(tpl.content);
     const next = start + chunk.length;
-    const hidden = items.length - next;
+    const hidden = total - next;
     if (hidden <= 0) { btn.remove(); return; }
     btn.dataset.prNext = String(next);
     btn.textContent = `Show ${Math.min(PR_PAGE_SIZE, hidden)} more (${hidden} hidden)`;

@@ -460,7 +460,7 @@ export function renderCommandCenter(container, p) {
   // `reg` (defaulted {}) — an ok payload without a regime block must degrade, not throw
   // (renderSafely would otherwise kill the whole board over a header label).
   html += `<div class="td-head" style="border-left-color:${regCol}">`
-    + `<div class="td-regime"><b>${esc(reg.label || 'Regime unknown')}</b>${reg.breadthPct != null ? ` · breadth ${reg.breadthPct}%` : ''}${reg.condition ? ` · ${esc(reg.condition)} tape` : ''}</div>`
+    + `<div class="td-regime"><b>${esc((p.regimeView && p.regimeView.governing && p.regimeView.governing.label) || reg.label || 'Regime unknown')}</b> <span class="td-dim">(breadth regime)</span>${reg.breadthPct != null ? ` · breadth ${reg.breadthPct}%` : ''}${reg.condition ? ` · ${esc(reg.condition)} tape` : ''}${p.regimeView && p.regimeView.macro ? ` · <span class="td-dim" title="${esc(p.regimeView.note || p.regimeView.macro.basis || '')}">macro risk: ${esc(p.regimeView.macro.regime)}</span>` : ''}</div>`
     + `<div class="td-sectors"><span class="td-dim">Leading</span> ${(p.sectors?.leading || []).map(s => secChip(s, 'lead')).join('')} `
     + `<span class="td-dim">Weakening</span> ${(p.sectors?.weakening || []).map(s => secChip(s, 'weak')).join('')}</div></div>`;
 

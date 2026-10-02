@@ -1,0 +1,5 @@
+# market-news-app — the UI is an interactive app; the machine-readable feed is public.
+User-agent: *
+Allow: /
+Allow: /feed/
+Disallow: /api/
