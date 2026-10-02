@@ -18,6 +18,9 @@ private-data/
 # local analysis scratch (mover/detection back-tests)
 scratch-*
 
+# LLM golden-set eval: live results are local; only blessed baselines are committed
+research/llm-evals/results/*.latest.json
+
 # agent working dir (local, not committed)
 .agents/
 

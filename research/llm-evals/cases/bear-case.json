@@ -1,0 +1,775 @@
+{
+  "family": "bear-case",
+  "description": "Ranked setups → bear cases (lib/bearcase.js). Assertions: schema, tickers ⊆ inputs, no hedging, numbers only from the setup line, all setups covered.",
+  "fixtureNote": "FIXTURES — synthetic inputs written 2026-10-02 for regression testing. Companies, tickers, figures and headlines are fictional; nothing here is real news. Frozen: edit only via a new case id.",
+  "frozenAt": "2026-10-02",
+  "cases": [
+    {
+      "id": "bc-001",
+      "input": {
+        "signals": [
+          {
+            "ticker": "ACME",
+            "side": "long",
+            "setup": "gap-continuation",
+            "state": "ACTIONABLE",
+            "score": 82,
+            "entry": 54.2,
+            "stop": 50.1,
+            "target": 62,
+            "sector": "Industrials",
+            "evidence": {
+              "families": [
+                "earnings",
+                "analyst"
+              ]
+            },
+            "catalyst": "Q3 beat and raise"
+          },
+          {
+            "ticker": "STLR",
+            "side": "long",
+            "setup": "trend-pullback",
+            "state": "LEAD",
+            "score": 71,
+            "entry": 188,
+            "stop": 176,
+            "target": 215,
+            "sector": "Semiconductors",
+            "evidence": {
+              "families": [
+                "analyst",
+                "momentum"
+              ]
+            },
+            "catalyst": "Goldman upgrade"
+          }
+        ],
+        "regimeLabel": "risk-on",
+        "expect": {
+          "coverAll": true
+        }
+      },
+      "golden": {
+        "expectPass": true,
+        "note": "both covered, numbers from the setup lines only",
+        "output": {
+          "cases": [
+            {
+              "ticker": "ACME",
+              "bearCase": "A gap-continuation long at 54.2 after a beat-and-raise is buying the most-known good news; the 50.1 stop sits inside normal post-gap retracement so a routine fill shakes you out before the thesis is tested.",
+              "invalidation": "A close above 54.2 on the second session with volume holding would show the gap is being accepted rather than faded."
+            },
+            {
+              "ticker": "STLR",
+              "bearCase": "The setup rests on a single analyst upgrade in a crowded semiconductor trade; pullback longs into a 188 entry risk catching the first leg of a sector rotation rather than a dip.",
+              "invalidation": "Holding 176 through a down day for the sector would argue the pullback is idiosyncratic strength."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bc-002",
+      "input": {
+        "signals": [
+          {
+            "ticker": "ACME",
+            "side": "long",
+            "setup": "gap-continuation",
+            "state": "ACTIONABLE",
+            "score": 82,
+            "entry": 54.2,
+            "stop": 50.1,
+            "target": 62,
+            "sector": "Industrials",
+            "evidence": {
+              "families": [
+                "earnings"
+              ]
+            },
+            "catalyst": "Q3 beat"
+          }
+        ],
+        "regimeLabel": "risk-on"
+      },
+      "golden": {
+        "expectPass": false,
+        "note": "NEGATIVE CONTROL: unknown ticker + hedge phrase",
+        "output": {
+          "cases": [
+            {
+              "ticker": "ACME",
+              "bearCase": "It could go either way depending on the market.",
+              "invalidation": "None"
+            },
+            {
+              "ticker": "ZZZZ",
+              "bearCase": "Weak.",
+              "invalidation": "x"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bc-003",
+      "input": {
+        "signals": [
+          {
+            "ticker": "ACME",
+            "side": "long",
+            "setup": "gap-continuation",
+            "state": "ACTIONABLE",
+            "score": 82,
+            "entry": 54.2,
+            "stop": 50.1,
+            "target": 62,
+            "sector": "Industrials",
+            "evidence": {
+              "families": [
+                "earnings"
+              ]
+            },
+            "catalyst": "Q3 beat"
+          }
+        ],
+        "regimeLabel": "risk-on"
+      },
+      "golden": {
+        "expectPass": false,
+        "note": "NEGATIVE CONTROL: invents a price level not in the setup",
+        "output": {
+          "cases": [
+            {
+              "ticker": "ACME",
+              "bearCase": "The 200-day average at 47.80 is far below and the stock has never held above 58 before.",
+              "invalidation": "A close over 58."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bc-004",
+      "input": {
+        "signals": [
+          {
+            "ticker": "BRGT",
+            "side": "short",
+            "setup": "gap-down-continuation",
+            "state": "ACTIONABLE",
+            "score": 78,
+            "entry": 31.4,
+            "stop": 34.9,
+            "target": 25,
+            "sector": "Software",
+            "evidence": {
+              "families": [
+                "guidance",
+                "momentum"
+              ]
+            },
+            "catalyst": "guidance cut"
+          }
+        ],
+        "regimeLabel": "risk-off",
+        "expect": {
+          "coverAll": true
+        }
+      }
+    },
+    {
+      "id": "bc-005",
+      "input": {
+        "signals": [
+          {
+            "ticker": "NVLX",
+            "side": "long",
+            "setup": "catalyst-breakout",
+            "state": "LEAD",
+            "score": 66,
+            "entry": 22.5,
+            "stop": 18,
+            "target": 30,
+            "sector": "Biotech",
+            "evidence": {
+              "families": [
+                "regulatory"
+              ]
+            },
+            "catalyst": "FDA approval"
+          },
+          {
+            "ticker": "ORCD",
+            "side": "short",
+            "setup": "capitulation-fade",
+            "state": "LEAD",
+            "score": 60,
+            "entry": 4.1,
+            "stop": 5.2,
+            "target": 2.5,
+            "sector": "Biotech",
+            "evidence": {
+              "families": [
+                "regulatory"
+              ]
+            },
+            "catalyst": "trial halt"
+          }
+        ],
+        "regimeLabel": "neutral",
+        "expect": {
+          "coverAll": true
+        }
+      }
+    },
+    {
+      "id": "bc-006",
+      "input": {
+        "signals": [
+          {
+            "ticker": "HLVN",
+            "side": "long",
+            "setup": "trend-pullback",
+            "state": "ACTIONABLE",
+            "score": 70,
+            "entry": 61.3,
+            "stop": 57.5,
+            "target": 70,
+            "sector": "Energy",
+            "evidence": {
+              "families": [
+                "commodity",
+                "momentum"
+              ]
+            },
+            "catalyst": "OPEC+ delay"
+          }
+        ],
+        "regimeLabel": "risk-on",
+        "expect": {
+          "coverAll": true
+        }
+      }
+    },
+    {
+      "id": "bc-007",
+      "input": {
+        "signals": [
+          {
+            "ticker": "QNTM",
+            "side": "short",
+            "setup": "dilution-fade",
+            "state": "ACTIONABLE",
+            "score": 74,
+            "entry": 8.3,
+            "stop": 9.4,
+            "target": 6.5,
+            "sector": "Semiconductors",
+            "evidence": {
+              "families": [
+                "financing"
+              ]
+            },
+            "catalyst": "$150M offering"
+          }
+        ],
+        "regimeLabel": "neutral",
+        "expect": {
+          "coverAll": true
+        }
+      }
+    },
+    {
+      "id": "bc-008",
+      "input": {
+        "signals": [
+          {
+            "ticker": "MRDN",
+            "side": "long",
+            "setup": "merger-arb",
+            "state": "LEAD",
+            "score": 55,
+            "entry": 29.8,
+            "stop": 27,
+            "target": 31,
+            "sector": "Consumer Staples",
+            "evidence": {
+              "families": [
+                "m_and_a"
+              ]
+            },
+            "catalyst": "Pinewood deal"
+          }
+        ],
+        "regimeLabel": "neutral",
+        "expect": {
+          "coverAll": true
+        }
+      }
+    },
+    {
+      "id": "bc-009",
+      "input": {
+        "signals": [
+          {
+            "ticker": "CSTL",
+            "side": "long",
+            "setup": "earnings-drift",
+            "state": "ACTIONABLE",
+            "score": 80,
+            "entry": 44,
+            "stop": 40.5,
+            "target": 52,
+            "sector": "Retail",
+            "evidence": {
+              "families": [
+                "earnings",
+                "momentum"
+              ]
+            },
+            "catalyst": "comps beat"
+          },
+          {
+            "ticker": "VNTR",
+            "side": "short",
+            "setup": "labor-overhang",
+            "state": "LEAD",
+            "score": 58,
+            "entry": 12.2,
+            "stop": 13.5,
+            "target": 9.5,
+            "sector": "Airlines",
+            "evidence": {
+              "families": [
+                "labor"
+              ]
+            },
+            "catalyst": "strike vote"
+          },
+          {
+            "ticker": "AERO",
+            "side": "long",
+            "setup": "contract-breakout",
+            "state": "ACTIONABLE",
+            "score": 76,
+            "entry": 97,
+            "stop": 90,
+            "target": 115,
+            "sector": "Defense",
+            "evidence": {
+              "families": [
+                "contract"
+              ]
+            },
+            "catalyst": "$780M award"
+          }
+        ],
+        "regimeLabel": "risk-on",
+        "expect": {
+          "coverAll": true
+        }
+      }
+    },
+    {
+      "id": "bc-010",
+      "input": {
+        "signals": [
+          {
+            "ticker": "PLTX",
+            "side": "short",
+            "setup": "accounting-fade",
+            "state": "ACTIONABLE",
+            "score": 83,
+            "entry": 6.9,
+            "stop": 8.3,
+            "target": 4,
+            "sector": "Agtech",
+            "evidence": {
+              "families": [
+                "accounting",
+                "momentum"
+              ]
+            },
+            "catalyst": "restatement"
+          }
+        ],
+        "regimeLabel": "risk-off",
+        "expect": {
+          "coverAll": true
+        }
+      }
+    },
+    {
+      "id": "bc-011",
+      "input": {
+        "signals": [
+          {
+            "ticker": "TRNT",
+            "side": "long",
+            "setup": "product-cycle",
+            "state": "LEAD",
+            "score": 62,
+            "entry": 140,
+            "stop": 130,
+            "target": 165,
+            "sector": "Networking",
+            "evidence": {
+              "families": [
+                "product"
+              ]
+            },
+            "catalyst": "Trident 9 launch"
+          }
+        ],
+        "regimeLabel": "neutral",
+        "expect": {
+          "coverAll": true
+        }
+      }
+    },
+    {
+      "id": "bc-012",
+      "input": {
+        "signals": [
+          {
+            "ticker": "KINX",
+            "side": "long",
+            "setup": "bad-news-absorbed",
+            "state": "LEAD",
+            "score": 59,
+            "entry": 212,
+            "stop": 198,
+            "target": 240,
+            "sector": "Autos",
+            "evidence": {
+              "families": [
+                "operational",
+                "momentum"
+              ]
+            },
+            "catalyst": "recall + record deliveries"
+          }
+        ],
+        "regimeLabel": "risk-on",
+        "expect": {
+          "coverAll": true
+        }
+      }
+    },
+    {
+      "id": "bc-013",
+      "input": {
+        "signals": [
+          {
+            "ticker": "LUMN",
+            "side": "long",
+            "setup": "insider-cluster",
+            "state": "LEAD",
+            "score": 57,
+            "entry": 15.6,
+            "stop": 14,
+            "target": 19,
+            "sector": "Optics",
+            "evidence": {
+              "families": [
+                "insider"
+              ]
+            },
+            "catalyst": "director buying"
+          }
+        ],
+        "regimeLabel": "neutral",
+        "expect": {
+          "coverAll": true
+        }
+      }
+    },
+    {
+      "id": "bc-014",
+      "input": {
+        "signals": [
+          {
+            "ticker": "GRDN",
+            "side": "long",
+            "setup": "dividend-growth",
+            "state": "LEAD",
+            "score": 52,
+            "entry": 71,
+            "stop": 67,
+            "target": 78,
+            "sector": "Utilities",
+            "evidence": {
+              "families": [
+                "capital_return"
+              ]
+            },
+            "catalyst": "dividend hike"
+          }
+        ],
+        "regimeLabel": "risk-off",
+        "expect": {
+          "coverAll": true
+        }
+      }
+    },
+    {
+      "id": "bc-015",
+      "input": {
+        "signals": [
+          {
+            "ticker": "CNFL",
+            "side": "long",
+            "setup": "takeover-speculation",
+            "state": "LEAD",
+            "score": 48,
+            "entry": 18.9,
+            "stop": 16.5,
+            "target": 24,
+            "sector": "Media",
+            "evidence": {
+              "families": [
+                "m_and_a"
+              ]
+            },
+            "catalyst": "denied talks"
+          }
+        ],
+        "regimeLabel": "neutral",
+        "expect": {
+          "coverAll": true
+        }
+      }
+    },
+    {
+      "id": "bc-016",
+      "input": {
+        "signals": [
+          {
+            "ticker": "SBRX",
+            "side": "short",
+            "setup": "index-inclusion-fade",
+            "state": "LEAD",
+            "score": 61,
+            "entry": 27.5,
+            "stop": 29.8,
+            "target": 24,
+            "sector": "Transports",
+            "evidence": {
+              "families": [
+                "index"
+              ]
+            },
+            "catalyst": "S&P 600 add"
+          }
+        ],
+        "regimeLabel": "neutral",
+        "expect": {
+          "coverAll": true
+        }
+      }
+    },
+    {
+      "id": "bc-017",
+      "input": {
+        "signals": [
+          {
+            "ticker": "STLR",
+            "side": "long",
+            "setup": "trend-pullback",
+            "state": "ACTIONABLE",
+            "score": 79,
+            "entry": 188,
+            "stop": 176,
+            "target": 215,
+            "sector": "Semiconductors",
+            "evidence": {
+              "families": [
+                "analyst",
+                "momentum"
+              ]
+            },
+            "catalyst": "upgrade"
+          },
+          {
+            "ticker": "QNTM",
+            "side": "short",
+            "setup": "dilution-fade",
+            "state": "ACTIONABLE",
+            "score": 74,
+            "entry": 8.3,
+            "stop": 9.4,
+            "target": 6.5,
+            "sector": "Semiconductors",
+            "evidence": {
+              "families": [
+                "financing"
+              ]
+            },
+            "catalyst": "offering"
+          }
+        ],
+        "regimeLabel": "risk-on",
+        "expect": {
+          "coverAll": true
+        }
+      }
+    },
+    {
+      "id": "bc-018",
+      "input": {
+        "signals": [
+          {
+            "ticker": "ACME",
+            "side": "short",
+            "setup": "exhaustion-gap",
+            "state": "LEAD",
+            "score": 50,
+            "entry": 58.9,
+            "stop": 62,
+            "target": 52,
+            "sector": "Industrials",
+            "evidence": {
+              "families": [
+                "momentum"
+              ]
+            },
+            "catalyst": "third gap up"
+          }
+        ],
+        "regimeLabel": "risk-on",
+        "expect": {
+          "coverAll": true
+        }
+      }
+    },
+    {
+      "id": "bc-019",
+      "input": {
+        "signals": [
+          {
+            "ticker": "ORCD",
+            "side": "long",
+            "setup": "capitulation-bounce",
+            "state": "LEAD",
+            "score": 45,
+            "entry": 4.1,
+            "stop": 3.4,
+            "target": 5.5,
+            "sector": "Biotech",
+            "evidence": {
+              "families": [
+                "regulatory"
+              ]
+            },
+            "catalyst": "halt"
+          }
+        ],
+        "regimeLabel": "risk-off",
+        "expect": {
+          "coverAll": true
+        }
+      },
+      "golden": {
+        "expectPass": true,
+        "note": "honest \"evidence gives the bear nothing\" is allowed",
+        "output": {
+          "cases": [
+            {
+              "ticker": "ORCD",
+              "bearCase": "A capitulation-bounce long at 4.1 after a trial halt is a bet on reflexive mean reversion with no fundamental anchor; the distance from the 3.4 stop to the 5.5 target asks for a fast move the setup has no catalyst for.",
+              "invalidation": "A reclaim of 5.5 within a few sessions on heavy volume."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bc-020",
+      "input": {
+        "signals": [
+          {
+            "ticker": "HLVN",
+            "side": "short",
+            "setup": "management-change",
+            "state": "LEAD",
+            "score": 44,
+            "entry": 61.3,
+            "stop": 65,
+            "target": 55,
+            "sector": "Energy",
+            "evidence": {
+              "families": [
+                "management"
+              ]
+            },
+            "catalyst": "CEO exit"
+          }
+        ],
+        "regimeLabel": "neutral",
+        "expect": {
+          "coverAll": true
+        }
+      }
+    },
+    {
+      "id": "bc-021",
+      "input": {
+        "signals": [
+          {
+            "ticker": "BRGT",
+            "side": "short",
+            "setup": "gap-down-continuation",
+            "state": "ACTIONABLE",
+            "score": 78,
+            "entry": 31.4,
+            "stop": 34.9,
+            "target": 25,
+            "sector": "Software",
+            "evidence": {
+              "families": [
+                "guidance"
+              ]
+            },
+            "catalyst": "cut"
+          },
+          {
+            "ticker": "CSTL",
+            "side": "long",
+            "setup": "earnings-drift",
+            "state": "ACTIONABLE",
+            "score": 80,
+            "entry": 44,
+            "stop": 40.5,
+            "target": 52,
+            "sector": "Retail",
+            "evidence": {
+              "families": [
+                "earnings"
+              ]
+            },
+            "catalyst": "beat"
+          }
+        ],
+        "regimeLabel": "neutral",
+        "expect": {
+          "coverAll": true
+        }
+      },
+      "golden": {
+        "expectPass": false,
+        "note": "NEGATIVE CONTROL: missing a setup when coverAll is expected",
+        "output": {
+          "cases": [
+            {
+              "ticker": "BRGT",
+              "bearCase": "Shorting a 23% gap down at 31.4 is chasing; the 34.9 stop is where a dead-cat bounce typically stalls, so risk is asymmetric against you.",
+              "invalidation": "A lower low below 31.4 on day two."
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

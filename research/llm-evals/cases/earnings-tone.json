@@ -1,0 +1,252 @@
+{
+  "family": "earnings-tone",
+  "description": "Earnings-call transcript → tone score (lib/earnings-tone.js scoreTone). Assertions: schema, tone ∈ [-10,10], non-empty reason, expected sign.",
+  "fixtureNote": "FIXTURES — synthetic inputs written 2026-10-02 for regression testing. Companies, tickers, figures and headlines are fictional; nothing here is real news. Frozen: edit only via a new case id.",
+  "frozenAt": "2026-10-02",
+  "cases": [
+    {
+      "id": "et-001",
+      "input": {
+        "symbol": "ACME",
+        "transcript": "Prepared remarks — CEO: We delivered our strongest quarter ever: revenue up 24%, record backlog, and we are raising full-year guidance. Demand for our inspection robots is broadening across every vertical we serve.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: Yes — we see gross margin expanding 150 to 200 basis points as the new Austin plant ramps; we have line of sight on every component of that.",
+        "expect": {
+          "toneSign": "positive"
+        }
+      },
+      "golden": {
+        "expectPass": true,
+        "note": "confident, specific",
+        "output": {
+          "tone": 8,
+          "reason": "Management raised guidance and gave a specific 150-200bp margin bridge with named drivers."
+        }
+      }
+    },
+    {
+      "id": "et-002",
+      "input": {
+        "symbol": "BRGT",
+        "transcript": "Prepared remarks — CEO: It was a challenging quarter. Enterprise deal cycles lengthened and several large renewals slipped. We are reducing our outlook and taking a hard look at costs.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: It is difficult to say. There are a lot of moving pieces and we would rather not commit to a margin number until we have more visibility.",
+        "expect": {
+          "toneSign": "negative"
+        }
+      },
+      "golden": {
+        "expectPass": true,
+        "note": "evasive, hedged",
+        "output": {
+          "tone": -7,
+          "reason": "Guidance cut plus a CFO who declined to commit to any margin figure, citing lack of visibility."
+        }
+      }
+    },
+    {
+      "id": "et-003",
+      "input": {
+        "symbol": "HLVN",
+        "transcript": "Prepared remarks — CEO: Production was in line with plan and we returned $300 million to shareholders. The macro backdrop is uncertain but our balance sheet gives us flexibility either way.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: We expect margins roughly flat; cost inflation is offset by efficiency gains. We will update you as the year develops.",
+        "expect": {
+          "toneSign": "neutral"
+        }
+      },
+      "golden": {
+        "expectPass": true,
+        "note": "balanced",
+        "output": {
+          "tone": 1,
+          "reason": "Steady delivery and flat margin outlook, with neither strong conviction nor evasion in the answers."
+        }
+      }
+    },
+    {
+      "id": "et-004",
+      "input": {
+        "symbol": "BRGT",
+        "transcript": "Prepared remarks — CEO: It was a challenging quarter.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: It is difficult to say."
+      },
+      "golden": {
+        "expectPass": false,
+        "note": "NEGATIVE CONTROL: tone outside range",
+        "output": {
+          "tone": 14,
+          "reason": "x"
+        }
+      }
+    },
+    {
+      "id": "et-005",
+      "input": {
+        "symbol": "NVLX",
+        "transcript": "Prepared remarks — CEO: With NVX-201 approved we move from a development-stage to a commercial company. Launch is on track for Q1 and we have hired 85% of the field force.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: Launch spend will depress margins near term by design; we expect breakeven in the second half of next year and we are confident in that timeline.",
+        "expect": {
+          "toneSign": "positive"
+        }
+      }
+    },
+    {
+      "id": "et-006",
+      "input": {
+        "symbol": "ORCD",
+        "transcript": "Prepared remarks — CEO: We were deeply disappointed to discontinue the ORB-7 Phase 3 program. We are evaluating all strategic options for the company.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: We are not going to speculate on margins or runway beyond saying we have cash into the second half of next year.",
+        "expect": {
+          "toneSign": "negative"
+        }
+      }
+    },
+    {
+      "id": "et-007",
+      "input": {
+        "symbol": "CSTL",
+        "transcript": "Prepared remarks — CEO: Comparable sales grew 4.2%, our ninth straight quarter of growth, and inventory is cleaner than it has been in years.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: Gross margin should expand modestly as markdowns fall; we have planned conservatively for tariffs and still see leverage.",
+        "expect": {
+          "toneSign": "positive"
+        }
+      }
+    },
+    {
+      "id": "et-008",
+      "input": {
+        "symbol": "KINX",
+        "transcript": "Prepared remarks — CEO: Record deliveries, but the brake software recall is a setback we take seriously. The fix is already deployed over the air to 90% of affected vehicles.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: The recall cost is immaterial; margin expansion depends on the new battery supply contract which we expect to finalize this quarter.",
+        "expect": {
+          "toneSign": "positive"
+        }
+      }
+    },
+    {
+      "id": "et-009",
+      "input": {
+        "symbol": "PLTX",
+        "transcript": "Prepared remarks — CEO: We identified errors in how we recognized certain multi-year contracts and will restate. We have engaged outside counsel and a new audit committee chair.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: Until the restatement is complete we cannot provide margin guidance. We understand that is frustrating.",
+        "expect": {
+          "toneSign": "negative"
+        }
+      }
+    },
+    {
+      "id": "et-010",
+      "input": {
+        "symbol": "VNTR",
+        "transcript": "Prepared remarks — CEO: Operationally a solid quarter with a 84% load factor. The pilot negotiation is ongoing and we remain hopeful of a deal.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: Fuel is a tailwind; labor is the swing factor and we will know more once the contract is settled.",
+        "expect": {
+          "toneSign": "neutral"
+        }
+      }
+    },
+    {
+      "id": "et-011",
+      "input": {
+        "symbol": "STLR",
+        "transcript": "Prepared remarks — CEO: Data-center revenue doubled year over year and we are supply-constrained through mid next year. We have secured additional capacity with two foundry partners.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: Mix shift to data center lifts gross margin by about 300 basis points; we expect that to persist as long as supply is tight.",
+        "expect": {
+          "toneSign": "positive"
+        }
+      }
+    },
+    {
+      "id": "et-012",
+      "input": {
+        "symbol": "MRDN",
+        "transcript": "Prepared remarks — CEO: The Pinewood acquisition is strategically compelling and we expect $120 million of synergies. Base business volumes were soft.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: Margins will be diluted for two quarters during integration, then accretive; the synergy plan is detailed and we will report against it.",
+        "expect": {
+          "toneSign": "neutral"
+        }
+      }
+    },
+    {
+      "id": "et-013",
+      "input": {
+        "symbol": "QNTM",
+        "transcript": "Prepared remarks — CEO: We raised capital to fund the Ohio fab; it was dilutive but necessary. Customer qualification is progressing more slowly than we hoped.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: Honestly, margin depends on yields and yields are not where we need them yet. We are working on it.",
+        "expect": {
+          "toneSign": "negative"
+        }
+      }
+    },
+    {
+      "id": "et-014",
+      "input": {
+        "symbol": "AERO",
+        "transcript": "Prepared remarks — CEO: The Air Force award validates a decade of investment. Backlog is now 3.1 times trailing revenue.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: Program margins on this contract are standard for development phases, improving in production; we are comfortable with consensus.",
+        "expect": {
+          "toneSign": "positive"
+        }
+      }
+    },
+    {
+      "id": "et-015",
+      "input": {
+        "symbol": "TRNT",
+        "transcript": "Prepared remarks — CEO: Trident 9 is the biggest product launch in our history and preorders are ahead of plan.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: Launch quarter margins dip on ramp costs, then recover. We have been through this cycle five times.",
+        "expect": {
+          "toneSign": "positive"
+        }
+      }
+    },
+    {
+      "id": "et-016",
+      "input": {
+        "symbol": "LUMN",
+        "transcript": "Prepared remarks — CEO: Revenue was flat and we lost a mid-sized customer to a competitor. We are investing to win it back.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: We are not satisfied with margins and I would rather not put a number on the recovery timeline.",
+        "expect": {
+          "toneSign": "negative"
+        }
+      }
+    },
+    {
+      "id": "et-017",
+      "input": {
+        "symbol": "GRDN",
+        "transcript": "Prepared remarks — CEO: Rate case approved, dividend raised for the 22nd consecutive year. Nothing dramatic — that is the point.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: Regulated returns keep margins stable; we see no change.",
+        "expect": {
+          "toneSign": "neutral"
+        }
+      }
+    },
+    {
+      "id": "et-018",
+      "input": {
+        "symbol": "CNFL",
+        "transcript": "Prepared remarks — CEO: We will not comment on market speculation. The standalone plan delivered 6% subscriber growth.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: Content costs are rising faster than revenue this year; we expect that to reverse but cannot say exactly when.",
+        "expect": {
+          "toneSign": "neutral"
+        }
+      }
+    },
+    {
+      "id": "et-019",
+      "input": {
+        "symbol": "SBRX",
+        "transcript": "Prepared remarks — CEO: Index inclusion is nice but the business is what matters: volumes down 5% with the freight recession, costs down 8%.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: Margin held because we cut costs faster than volume fell. If rates recover we have significant operating leverage.",
+        "expect": {
+          "toneSign": "neutral"
+        }
+      }
+    },
+    {
+      "id": "et-020",
+      "input": {
+        "symbol": "ACME",
+        "transcript": "Prepared remarks — CEO: Strongest quarter ever.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: Margins up."
+      },
+      "golden": {
+        "expectPass": false,
+        "note": "NEGATIVE CONTROL: empty reason",
+        "output": {
+          "tone": 5,
+          "reason": ""
+        }
+      }
+    },
+    {
+      "id": "et-021",
+      "input": {
+        "symbol": "HLVN",
+        "transcript": "Prepared remarks — CEO: We missed on production due to the unplanned outage; it is fixed. We are not changing our full-year outlook.\n\nQ&A — Analyst: Can you walk us through the margin trajectory into next year?\nCFO: Q4 margins recover fully; the outage cost roughly $40 million and is behind us.",
+        "expect": {
+          "toneSign": "neutral"
+        }
+      }
+    }
+  ]
+}

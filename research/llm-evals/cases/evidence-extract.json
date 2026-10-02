@@ -1,0 +1,870 @@
+{
+  "family": "evidence-extract",
+  "description": "Headline sets → structured events (lib/evidence-extract.js). Assertions: schema, sourceIndexes ⊆ inputs, numbers verbatim in cited headlines, expected event count/type.",
+  "fixtureNote": "FIXTURES — synthetic inputs written 2026-10-02 for regression testing. Companies, tickers, figures and headlines are fictional; nothing here is real news. Frozen: edit only via a new case id.",
+  "frozenAt": "2026-10-02",
+  "cases": [
+    {
+      "id": "ee-001",
+      "input": {
+        "ticker": "ACME",
+        "company": "Acme Robotics",
+        "news": [
+          {
+            "title": "Acme Robotics beats Q3 EPS estimates by $0.12, raises FY26 revenue guidance 8%",
+            "publisher": "Reuters",
+            "datetime": "2026-09-30T09:00:00Z",
+            "url": "https://fixture.local/ee-001/0"
+          },
+          {
+            "title": "Acme shares jump 9% after third-quarter results top expectations",
+            "publisher": "CNBC",
+            "datetime": "2026-09-30T10:00:00Z",
+            "url": "https://fixture.local/ee-001/1"
+          },
+          {
+            "title": "Acme Robotics Q3: strong margins, guidance raise — analysts react",
+            "publisher": "Seeking Alpha",
+            "datetime": "2026-09-30T11:00:00Z",
+            "url": "https://fixture.local/ee-001/2"
+          },
+          {
+            "title": "3 robotics stocks to watch this week",
+            "publisher": "Motley Fool",
+            "datetime": "2026-09-29T12:00:00Z",
+            "url": "https://fixture.local/ee-001/3"
+          }
+        ],
+        "expect": {
+          "minEvents": 1,
+          "maxEvents": 2,
+          "mustIncludeType": "earnings"
+        }
+      },
+      "golden": {
+        "expectPass": true,
+        "note": "merged beat+guide, numbers verbatim, listicle dropped",
+        "output": {
+          "events": [
+            {
+              "eventType": "earnings",
+              "eventSubtype": "beat_and_raise",
+              "headline": "Acme beats Q3 and raises FY26 guidance",
+              "claim": "Acme beat Q3 EPS estimates by $0.12 and raised FY26 revenue guidance 8%",
+              "direction": "positive",
+              "affectedHorizon": "both",
+              "quantitativeMagnitude": 0.12,
+              "surpriseMagnitude": null,
+              "noveltyScore": 0.8,
+              "materialityScore": 0.8,
+              "extractionConfidence": 0.9,
+              "catalystDate": "2026-09-30",
+              "evidence": [
+                "beats Q3 EPS estimates by $0.12",
+                "raises FY26 revenue guidance 8%"
+              ],
+              "contradictions": [],
+              "sourceIndexes": [
+                0,
+                1,
+                2
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ee-002",
+      "input": {
+        "ticker": "ACME",
+        "company": "Acme Robotics",
+        "news": [
+          {
+            "title": "Acme Robotics beats Q3 EPS estimates by $0.12, raises FY26 revenue guidance 8%",
+            "publisher": "Reuters",
+            "datetime": "2026-09-30T09:00:00Z",
+            "url": "https://fixture.local/ee-002/0"
+          },
+          {
+            "title": "Acme shares jump 9% after third-quarter results top expectations",
+            "publisher": "CNBC",
+            "datetime": "2026-09-30T10:00:00Z",
+            "url": "https://fixture.local/ee-002/1"
+          }
+        ]
+      },
+      "golden": {
+        "expectPass": false,
+        "note": "NEGATIVE CONTROL: invented 15% figure and out-of-range source index",
+        "output": {
+          "events": [
+            {
+              "eventType": "earnings",
+              "claim": "Acme beat Q3 EPS by $0.12 and raised guidance 15%",
+              "direction": "positive",
+              "affectedHorizon": "swing",
+              "quantitativeMagnitude": 15,
+              "surpriseMagnitude": null,
+              "noveltyScore": 0.8,
+              "materialityScore": 0.8,
+              "sourceIndexes": [
+                0,
+                4
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ee-003",
+      "input": {
+        "ticker": "NVLX",
+        "company": "Novalux Therapeutics",
+        "news": [
+          {
+            "title": "FDA approves Novalux's NVX-201 for moderate-to-severe plaque psoriasis",
+            "publisher": "BusinessWire",
+            "datetime": "2026-09-30T09:00:00Z",
+            "url": "https://fixture.local/ee-003/0"
+          },
+          {
+            "title": "Novalux wins FDA nod for psoriasis drug, first approval for the biotech",
+            "publisher": "FiercePharma",
+            "datetime": "2026-09-30T10:00:00Z",
+            "url": "https://fixture.local/ee-003/1"
+          },
+          {
+            "title": "Novalux Therapeutics soars 42% premarket on FDA approval",
+            "publisher": "MarketWatch",
+            "datetime": "2026-09-30T11:00:00Z",
+            "url": "https://fixture.local/ee-003/2"
+          },
+          {
+            "title": "Novalux to present at Jefferies healthcare conference",
+            "publisher": "GlobeNewswire",
+            "datetime": "2026-09-24T12:00:00Z",
+            "url": "https://fixture.local/ee-003/3"
+          }
+        ],
+        "expect": {
+          "minEvents": 1,
+          "maxEvents": 2,
+          "mustIncludeType": "regulatory"
+        }
+      }
+    },
+    {
+      "id": "ee-004",
+      "input": {
+        "ticker": "BRGT",
+        "company": "Brightgate Software",
+        "news": [
+          {
+            "title": "Brightgate cuts FY26 revenue outlook to $1.1B-$1.15B from $1.25B, citing slower enterprise deals",
+            "publisher": "Reuters",
+            "datetime": "2026-09-30T09:00:00Z",
+            "url": "https://fixture.local/ee-004/0"
+          },
+          {
+            "title": "Brightgate plunges 23% after slashing full-year guidance",
+            "publisher": "Bloomberg",
+            "datetime": "2026-09-30T10:00:00Z",
+            "url": "https://fixture.local/ee-004/1"
+          },
+          {
+            "title": "Brightgate CFO: \"pipeline conversion slowed materially in September\"",
+            "publisher": "Barron's",
+            "datetime": "2026-09-30T11:00:00Z",
+            "url": "https://fixture.local/ee-004/2"
+          }
+        ],
+        "expect": {
+          "minEvents": 1,
+          "maxEvents": 2,
+          "mustIncludeType": "guidance"
+        }
+      },
+      "golden": {
+        "expectPass": true,
+        "note": "guidance cut with range copied verbatim",
+        "output": {
+          "events": [
+            {
+              "eventType": "guidance",
+              "eventSubtype": "guidance_cut",
+              "headline": "Brightgate cuts FY26 revenue outlook",
+              "claim": "Brightgate cut FY26 revenue guidance to $1.1B-$1.15B from $1.25B on slower enterprise deals",
+              "direction": "negative",
+              "affectedHorizon": "both",
+              "quantitativeMagnitude": null,
+              "surpriseMagnitude": null,
+              "noveltyScore": 0.9,
+              "materialityScore": 0.9,
+              "extractionConfidence": 0.95,
+              "catalystDate": "2026-09-30",
+              "evidence": [
+                "cuts FY26 revenue outlook to $1.1B-$1.15B from $1.25B"
+              ],
+              "contradictions": [],
+              "sourceIndexes": [
+                0,
+                1,
+                2
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ee-005",
+      "input": {
+        "ticker": "HLVN",
+        "company": "Halvern Energy",
+        "news": [
+          {
+            "title": "Halvern Energy CEO Dana Whitfield to step down; CFO named interim chief",
+            "publisher": "WSJ",
+            "datetime": "2026-09-29T09:00:00Z",
+            "url": "https://fixture.local/ee-005/0"
+          },
+          {
+            "title": "Halvern board begins search for permanent CEO after Whitfield exit",
+            "publisher": "Reuters",
+            "datetime": "2026-09-29T10:00:00Z",
+            "url": "https://fixture.local/ee-005/1"
+          },
+          {
+            "title": "Oil slips as OPEC+ signals output hike",
+            "publisher": "CNBC",
+            "datetime": "2026-09-30T11:00:00Z",
+            "url": "https://fixture.local/ee-005/2"
+          }
+        ],
+        "expect": {
+          "minEvents": 1,
+          "maxEvents": 2,
+          "mustIncludeType": "management"
+        }
+      }
+    },
+    {
+      "id": "ee-006",
+      "input": {
+        "ticker": "QNTM",
+        "company": "Quantum Fabrics",
+        "news": [
+          {
+            "title": "Quantum Fabrics prices $150 million public offering of common stock at $8.50 per share",
+            "publisher": "GlobeNewswire",
+            "datetime": "2026-09-30T09:00:00Z",
+            "url": "https://fixture.local/ee-006/0"
+          },
+          {
+            "title": "Quantum Fabrics falls 14% on dilutive share sale",
+            "publisher": "MarketWatch",
+            "datetime": "2026-09-30T10:00:00Z",
+            "url": "https://fixture.local/ee-006/1"
+          }
+        ],
+        "expect": {
+          "minEvents": 1,
+          "maxEvents": 1,
+          "mustIncludeType": "financing"
+        }
+      },
+      "golden": {
+        "expectPass": true,
+        "note": "dilution event, both figures grounded",
+        "output": {
+          "events": [
+            {
+              "eventType": "financing",
+              "eventSubtype": "equity_offering",
+              "headline": "Quantum Fabrics prices $150M stock offering",
+              "claim": "Quantum Fabrics priced a $150 million common stock offering at $8.50 per share",
+              "direction": "negative",
+              "affectedHorizon": "swing",
+              "quantitativeMagnitude": 150,
+              "surpriseMagnitude": null,
+              "noveltyScore": 0.9,
+              "materialityScore": 0.7,
+              "extractionConfidence": 0.95,
+              "catalystDate": "2026-09-30",
+              "evidence": [
+                "$150 million public offering",
+                "$8.50 per share"
+              ],
+              "contradictions": [],
+              "sourceIndexes": [
+                0,
+                1
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ee-007",
+      "input": {
+        "ticker": "MRDN",
+        "company": "Meridian Foods",
+        "news": [
+          {
+            "title": "Meridian Foods to acquire Pinewood Snacks for $2.4 billion in cash",
+            "publisher": "Reuters",
+            "datetime": "2026-09-30T09:00:00Z",
+            "url": "https://fixture.local/ee-007/0"
+          },
+          {
+            "title": "Pinewood Snacks shareholders to receive $31 per share from Meridian",
+            "publisher": "Bloomberg",
+            "datetime": "2026-09-30T10:00:00Z",
+            "url": "https://fixture.local/ee-007/1"
+          },
+          {
+            "title": "Meridian deal for Pinewood faces antitrust review, analysts say",
+            "publisher": "FT",
+            "datetime": "2026-09-30T11:00:00Z",
+            "url": "https://fixture.local/ee-007/2"
+          }
+        ],
+        "expect": {
+          "minEvents": 1,
+          "maxEvents": 2,
+          "mustIncludeType": "merger_acquisition"
+        }
+      }
+    },
+    {
+      "id": "ee-008",
+      "input": {
+        "ticker": "STLR",
+        "company": "Stellar Semiconductor",
+        "news": [
+          {
+            "title": "Stellar Semiconductor upgraded to Buy at Goldman Sachs, target raised to $210",
+            "publisher": "TheStreet",
+            "datetime": "2026-09-30T09:00:00Z",
+            "url": "https://fixture.local/ee-008/0"
+          },
+          {
+            "title": "Goldman turns bullish on Stellar Semi on AI inference demand",
+            "publisher": "CNBC",
+            "datetime": "2026-09-30T10:00:00Z",
+            "url": "https://fixture.local/ee-008/1"
+          }
+        ],
+        "expect": {
+          "minEvents": 1,
+          "maxEvents": 1,
+          "mustIncludeType": "analyst_revision"
+        }
+      }
+    },
+    {
+      "id": "ee-009",
+      "input": {
+        "ticker": "ORCD",
+        "company": "Orchid Biologics",
+        "news": [
+          {
+            "title": "Orchid Biologics halts Phase 3 trial of ORB-7 after safety signal",
+            "publisher": "BioPharma Dive",
+            "datetime": "2026-09-30T09:00:00Z",
+            "url": "https://fixture.local/ee-009/0"
+          },
+          {
+            "title": "Orchid shares crater 58% as lead drug trial stops",
+            "publisher": "MarketWatch",
+            "datetime": "2026-09-30T10:00:00Z",
+            "url": "https://fixture.local/ee-009/1"
+          },
+          {
+            "title": "Orchid Biologics: independent monitoring board recommended discontinuation",
+            "publisher": "Endpoints",
+            "datetime": "2026-09-30T11:00:00Z",
+            "url": "https://fixture.local/ee-009/2"
+          }
+        ],
+        "expect": {
+          "minEvents": 1,
+          "maxEvents": 2,
+          "mustIncludeType": "regulatory"
+        }
+      }
+    },
+    {
+      "id": "ee-010",
+      "input": {
+        "ticker": "VNTR",
+        "company": "Ventura Airlines",
+        "news": [
+          {
+            "title": "Ventura Airlines pilots vote to authorize strike as contract talks stall",
+            "publisher": "Reuters",
+            "datetime": "2026-09-28T09:00:00Z",
+            "url": "https://fixture.local/ee-010/0"
+          },
+          {
+            "title": "Ventura warns of schedule cuts if pilot strike proceeds",
+            "publisher": "AP",
+            "datetime": "2026-09-29T10:00:00Z",
+            "url": "https://fixture.local/ee-010/1"
+          },
+          {
+            "title": "Airline stocks rise on lower jet fuel prices",
+            "publisher": "CNBC",
+            "datetime": "2026-09-30T11:00:00Z",
+            "url": "https://fixture.local/ee-010/2"
+          }
+        ],
+        "expect": {
+          "minEvents": 1,
+          "maxEvents": 2,
+          "mustIncludeType": "operational"
+        }
+      }
+    },
+    {
+      "id": "ee-011",
+      "input": {
+        "ticker": "NOISE",
+        "company": "Noise Corp",
+        "news": [
+          {
+            "title": "5 dividend stocks to buy and hold forever",
+            "publisher": "Motley Fool",
+            "datetime": "2026-09-29T09:00:00Z",
+            "url": "https://fixture.local/ee-011/0"
+          },
+          {
+            "title": "Noise Corp stock edges up 0.3% in quiet trade",
+            "publisher": "MarketBeat",
+            "datetime": "2026-09-30T10:00:00Z",
+            "url": "https://fixture.local/ee-011/1"
+          },
+          {
+            "title": "Why Noise Corp is trending today",
+            "publisher": "Zacks",
+            "datetime": "2026-09-30T11:00:00Z",
+            "url": "https://fixture.local/ee-011/2"
+          }
+        ],
+        "expect": {
+          "minEvents": 0,
+          "maxEvents": 0
+        }
+      },
+      "golden": {
+        "expectPass": true,
+        "note": "honest empty — noise only",
+        "output": {
+          "events": []
+        }
+      }
+    },
+    {
+      "id": "ee-012",
+      "input": {
+        "ticker": "NOISE",
+        "company": "Noise Corp",
+        "news": [
+          {
+            "title": "5 dividend stocks to buy and hold forever",
+            "publisher": "Motley Fool",
+            "datetime": "2026-09-29T09:00:00Z",
+            "url": "https://fixture.local/ee-012/0"
+          },
+          {
+            "title": "Noise Corp stock edges up 0.3% in quiet trade",
+            "publisher": "MarketBeat",
+            "datetime": "2026-09-30T10:00:00Z",
+            "url": "https://fixture.local/ee-012/1"
+          }
+        ],
+        "expect": {
+          "minEvents": 0,
+          "maxEvents": 0
+        }
+      },
+      "golden": {
+        "expectPass": false,
+        "note": "NEGATIVE CONTROL: padded a non-event",
+        "output": {
+          "events": [
+            {
+              "eventType": "technical_confirmation",
+              "claim": "Noise Corp rose 0.3% in quiet trade",
+              "direction": "neutral",
+              "affectedHorizon": "unclear",
+              "quantitativeMagnitude": 0.3,
+              "surpriseMagnitude": null,
+              "noveltyScore": 0.1,
+              "materialityScore": 0.1,
+              "sourceIndexes": [
+                1
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ee-013",
+      "input": {
+        "ticker": "CSTL",
+        "company": "Castle Retail",
+        "news": [
+          {
+            "title": "Castle Retail same-store sales rise 4.2% in Q2, beating 2.5% consensus",
+            "publisher": "Reuters",
+            "datetime": "2026-09-30T09:00:00Z",
+            "url": "https://fixture.local/ee-013/0"
+          },
+          {
+            "title": "Castle Retail says holiday inventory is 11% leaner than last year",
+            "publisher": "WSJ",
+            "datetime": "2026-09-30T10:00:00Z",
+            "url": "https://fixture.local/ee-013/1"
+          },
+          {
+            "title": "Castle Retail reaffirms FY outlook despite tariff headwinds",
+            "publisher": "Bloomberg",
+            "datetime": "2026-09-30T11:00:00Z",
+            "url": "https://fixture.local/ee-013/2"
+          }
+        ],
+        "expect": {
+          "minEvents": 1,
+          "maxEvents": 3,
+          "mustIncludeType": "earnings"
+        }
+      }
+    },
+    {
+      "id": "ee-014",
+      "input": {
+        "ticker": "AERO",
+        "company": "Aerolith Systems",
+        "news": [
+          {
+            "title": "Aerolith wins $780 million U.S. Air Force contract for drone sensors",
+            "publisher": "Defense News",
+            "datetime": "2026-09-29T09:00:00Z",
+            "url": "https://fixture.local/ee-014/0"
+          },
+          {
+            "title": "Aerolith Systems awarded Air Force sensor contract worth up to $780M over five years",
+            "publisher": "Reuters",
+            "datetime": "2026-09-29T10:00:00Z",
+            "url": "https://fixture.local/ee-014/1"
+          }
+        ],
+        "expect": {
+          "minEvents": 1,
+          "maxEvents": 1,
+          "mustIncludeType": "operational"
+        }
+      }
+    },
+    {
+      "id": "ee-015",
+      "input": {
+        "ticker": "PLTX",
+        "company": "Plantex Agritech",
+        "news": [
+          {
+            "title": "Plantex to restate FY25 results after revenue recognition errors",
+            "publisher": "WSJ",
+            "datetime": "2026-09-30T09:00:00Z",
+            "url": "https://fixture.local/ee-015/0"
+          },
+          {
+            "title": "Plantex delays 10-K, auditor flags material weakness",
+            "publisher": "Reuters",
+            "datetime": "2026-09-30T10:00:00Z",
+            "url": "https://fixture.local/ee-015/1"
+          },
+          {
+            "title": "Plantex shares halted then resume down 31%",
+            "publisher": "MarketWatch",
+            "datetime": "2026-09-30T11:00:00Z",
+            "url": "https://fixture.local/ee-015/2"
+          }
+        ],
+        "expect": {
+          "minEvents": 1,
+          "maxEvents": 2,
+          "mustIncludeType": "regulatory"
+        }
+      }
+    },
+    {
+      "id": "ee-016",
+      "input": {
+        "ticker": "TRNT",
+        "company": "Trident Networks",
+        "news": [
+          {
+            "title": "Trident Networks launches Trident 9 router with 2x throughput of prior model",
+            "publisher": "TechCrunch",
+            "datetime": "2026-09-30T09:00:00Z",
+            "url": "https://fixture.local/ee-016/0"
+          },
+          {
+            "title": "Trident says Trident 9 ships in November, priced from $1,299",
+            "publisher": "The Verge",
+            "datetime": "2026-09-30T10:00:00Z",
+            "url": "https://fixture.local/ee-016/1"
+          }
+        ],
+        "expect": {
+          "minEvents": 1,
+          "maxEvents": 1,
+          "mustIncludeType": "product"
+        }
+      }
+    },
+    {
+      "id": "ee-017",
+      "input": {
+        "ticker": "KINX",
+        "company": "Kinetix Motors",
+        "news": [
+          {
+            "title": "Kinetix recalls 210,000 vehicles over brake software fault",
+            "publisher": "Reuters",
+            "datetime": "2026-09-30T09:00:00Z",
+            "url": "https://fixture.local/ee-017/0"
+          },
+          {
+            "title": "Kinetix says recall fix is an over-the-air update, no dealer visit needed",
+            "publisher": "AP",
+            "datetime": "2026-09-30T10:00:00Z",
+            "url": "https://fixture.local/ee-017/1"
+          },
+          {
+            "title": "Kinetix deliveries hit record 48,500 in Q3",
+            "publisher": "Bloomberg",
+            "datetime": "2026-09-28T11:00:00Z",
+            "url": "https://fixture.local/ee-017/2"
+          }
+        ],
+        "expect": {
+          "minEvents": 2,
+          "maxEvents": 3
+        }
+      }
+    },
+    {
+      "id": "ee-018",
+      "input": {
+        "ticker": "LUMN",
+        "company": "Lumina Optics",
+        "news": [
+          {
+            "title": "Lumina Optics insiders buy $4.1 million of stock in cluster of Form 4 filings",
+            "publisher": "Barron's",
+            "datetime": "2026-09-29T09:00:00Z",
+            "url": "https://fixture.local/ee-018/0"
+          },
+          {
+            "title": "Three Lumina directors purchased shares this week, filings show",
+            "publisher": "MarketWatch",
+            "datetime": "2026-09-29T10:00:00Z",
+            "url": "https://fixture.local/ee-018/1"
+          }
+        ],
+        "expect": {
+          "minEvents": 1,
+          "maxEvents": 1,
+          "mustIncludeType": "insider_activity"
+        }
+      }
+    },
+    {
+      "id": "ee-019",
+      "input": {
+        "ticker": "GRDN",
+        "company": "Gridline Utilities",
+        "news": [
+          {
+            "title": "Gridline Utilities raises quarterly dividend 6% to $0.53, authorizes $500M buyback",
+            "publisher": "BusinessWire",
+            "datetime": "2026-09-30T09:00:00Z",
+            "url": "https://fixture.local/ee-019/0"
+          },
+          {
+            "title": "Gridline boosts dividend and launches buyback",
+            "publisher": "Reuters",
+            "datetime": "2026-09-30T10:00:00Z",
+            "url": "https://fixture.local/ee-019/1"
+          }
+        ],
+        "expect": {
+          "minEvents": 1,
+          "maxEvents": 2,
+          "mustIncludeType": "capital_allocation"
+        }
+      },
+      "golden": {
+        "expectPass": true,
+        "note": "two figures, both grounded, merged into one capital-allocation event",
+        "output": {
+          "events": [
+            {
+              "eventType": "capital_allocation",
+              "eventSubtype": "dividend_and_buyback",
+              "headline": "Gridline raises dividend 6% and authorizes $500M buyback",
+              "claim": "Gridline raised its quarterly dividend 6% to $0.53 and authorized a $500M buyback",
+              "direction": "positive",
+              "affectedHorizon": "long_term",
+              "quantitativeMagnitude": 6,
+              "surpriseMagnitude": null,
+              "noveltyScore": 0.6,
+              "materialityScore": 0.5,
+              "extractionConfidence": 0.95,
+              "catalystDate": "2026-09-30",
+              "evidence": [
+                "raises quarterly dividend 6% to $0.53",
+                "authorizes $500M buyback"
+              ],
+              "contradictions": [],
+              "sourceIndexes": [
+                0,
+                1
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ee-020",
+      "input": {
+        "ticker": "CNFL",
+        "company": "Conflux Media",
+        "news": [
+          {
+            "title": "Conflux Media in talks to be acquired by Harbor Group, sources say",
+            "publisher": "Bloomberg",
+            "datetime": "2026-09-29T09:00:00Z",
+            "url": "https://fixture.local/ee-020/0"
+          },
+          {
+            "title": "Conflux denies it is in sale talks, says it remains committed to standalone plan",
+            "publisher": "Reuters",
+            "datetime": "2026-09-30T10:00:00Z",
+            "url": "https://fixture.local/ee-020/1"
+          }
+        ],
+        "expect": {
+          "minEvents": 1,
+          "maxEvents": 2
+        }
+      },
+      "golden": {
+        "expectPass": true,
+        "note": "contradiction flagged",
+        "output": {
+          "events": [
+            {
+              "eventType": "merger_acquisition",
+              "eventSubtype": "takeover_rumor",
+              "headline": "Conflux takeover talk denied by company",
+              "claim": "A report said Conflux Media is in talks to be acquired by Harbor Group; the company denied it is in sale talks",
+              "direction": "mixed",
+              "affectedHorizon": "swing",
+              "quantitativeMagnitude": null,
+              "surpriseMagnitude": null,
+              "noveltyScore": 0.7,
+              "materialityScore": 0.6,
+              "extractionConfidence": 0.7,
+              "catalystDate": "",
+              "evidence": [
+                "in talks to be acquired by Harbor Group",
+                "denies it is in sale talks"
+              ],
+              "contradictions": [
+                "Conflux denies it is in sale talks"
+              ],
+              "sourceIndexes": [
+                0,
+                1
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ee-021",
+      "input": {
+        "ticker": "ACME",
+        "company": "Acme Robotics",
+        "news": [
+          {
+            "title": "Acme Robotics beats Q3 EPS estimates by $0.12, raises FY26 revenue guidance 8%",
+            "publisher": "Reuters",
+            "datetime": "2026-09-30T09:00:00Z",
+            "url": "https://fixture.local/ee-021/0"
+          }
+        ]
+      },
+      "golden": {
+        "expectPass": false,
+        "note": "NEGATIVE CONTROL: event cites no headline",
+        "output": {
+          "events": [
+            {
+              "eventType": "earnings",
+              "claim": "Acme beat Q3 EPS estimates by $0.12",
+              "direction": "positive",
+              "affectedHorizon": "swing",
+              "quantitativeMagnitude": 0.12,
+              "surpriseMagnitude": null,
+              "noveltyScore": 0.8,
+              "materialityScore": 0.8,
+              "sourceIndexes": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ee-022",
+      "input": {
+        "ticker": "SBRX",
+        "company": "Sabre X Logistics",
+        "news": [
+          {
+            "title": "Sabre X Logistics added to S&P SmallCap 600 effective Monday",
+            "publisher": "S&P Dow Jones Indices",
+            "datetime": "2026-09-28T09:00:00Z",
+            "url": "https://fixture.local/ee-022/0"
+          },
+          {
+            "title": "Sabre X rallies 7% on index inclusion",
+            "publisher": "MarketWatch",
+            "datetime": "2026-09-28T10:00:00Z",
+            "url": "https://fixture.local/ee-022/1"
+          },
+          {
+            "title": "Trucking rates fall for fourth straight week",
+            "publisher": "FreightWaves",
+            "datetime": "2026-09-30T11:00:00Z",
+            "url": "https://fixture.local/ee-022/2"
+          }
+        ],
+        "expect": {
+          "minEvents": 1,
+          "maxEvents": 2
+        }
+      }
+    }
+  ]
+}
