@@ -942,6 +942,25 @@ async function load(ticker, silent) {
   }
 }
 
+// 🚩 filing red flags (op=redflags&symbol=): a shadow AVOID-side research chip beside the
+// ticker. Display only — it changes nothing about the read below it. Guarded so a slow
+// response for a ticker the user has already left never decorates the wrong header.
+async function loadRedflagChip(tk) {
+  let j = null;
+  try { j = await fetchJSON('/api/tracker?op=redflags&symbol=' + encodeURIComponent(tk)); } catch { return; }
+  if (!j || !j.ok || !j.active || curTicker !== tk || !body) return;
+  const head = body.querySelector('.tkl-head');
+  if (!head || head.querySelector('.tkl-redflag')) return;
+  const kinds = (j.active.flags || []).map((f) => (j.flags && j.flags[f] && j.flags[f].label) || f);
+  const chip = document.createElement('span');
+  chip.className = 'tkl-redflag cx-tierbadge';
+  chip.style.cssText = 'margin-left:8px;color:var(--red,#ef4444);border-color:currentColor;font-size:12px';
+  chip.title = `${kinds.join(' · ')} — filed ${j.active.ageDays} day${j.active.ageDays === 1 ? '' : 's'} ago. `
+    + 'SHADOW AVOID research lane (weight 0): such filings are hypothesised to precede SPY-underperformance; unvalidated forward. NOT a sell or short signal; changes no rank in this app.';
+  chip.textContent = '🚩 filing red flag';
+  head.appendChild(chip);
+}
+
 export function openTickerLookup(ticker) {
   if (!overlay) return;
   const tk = (ticker || '').toUpperCase().trim();
@@ -955,6 +974,7 @@ export function openTickerLookup(ticker) {
     <div class="chart-loading"><div class="mom-spinner"></div>Loading live price, chart &amp; signal for ${esc(tk)}…</div>`;
   patterns = { ticker: tk, data: undefined };
   load(tk);
+  loadRedflagChip(tk); // 🚩 shadow filing red-flag chip in the header — once per open
   loadExtras(tk);   // options flow + social mentions — once per open, not on refresh
   loadWhyNow(tk);   // composed WHY NOW case + track record — once per open
   loadPatterns(tk); // technical structure & pattern intelligence — once per open

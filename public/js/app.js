@@ -6,6 +6,7 @@
   import { startFlowBadges, setFlowNav, FLOW_BADGE_TABS } from './flow-badge.js';
   import { startDilutionBadges, DILUTION_BADGE_TABS } from './dilution-badge.js';
   import { startDelistingBadges, DELISTING_BADGE_TABS } from './delisting-badge.js';
+  import { startRedflagBadges, REDFLAG_BADGE_TABS } from './redflag-badge.js';
   import { initCommandPalette, openPalette, revealTicker } from './command-palette.js';
   import { initServiceWorkerMessages } from './toasts.js';
 import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
@@ -597,6 +598,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     if (DILUTION_BADGE_TABS.has(sub)) startDilutionBadges(document.getElementById(sub));
     // Shadow delisting-pending flag (EDGAR Form 25 / 15 notices) — display-only avoid-flag badge.
     if (DELISTING_BADGE_TABS.has(sub)) startDelistingBadges(document.getElementById(sub));
+    // Shadow 🚩 filing red-flag AVOID chip (proposal #16) — display-only, next to the dilution badge.
+    if (REDFLAG_BADGE_TABS.has(sub)) startRedflagBadges(document.getElementById(sub));
 
     const act = document.querySelector('.mobile-top-tabs .mtt-item.active');
     if (act) act.scrollIntoView({ inline: 'center', block: 'nearest', behavior: opts.instant ? 'auto' : 'smooth' });
@@ -9004,7 +9007,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   const scoreboardMeta       = document.getElementById('scoreboard-meta');
   let   lastScoreboard       = null;
 
-  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', Biotech: '🧬 Biotech Radar (Hot vs Watch)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)', DownDay: '🪁 Down-Day Bounce (Longs)', GapDown: '🐻 Gap-Down Continuation (Shorts)', daytrade: '⚡ Day Trade (A vs B)', coil: '🧬 Coil Radar (squeeze bands)', Ignition: '🔥 Momentum Ignition (Ignition vs Watch)', OMEGA: '💠 OMEGA-Swing (Prime vs Watch)', Gridlock: '⚡ GRIDLOCK (Actionable vs Tracked)', Evidence: '🧾 Evidence / Thesis Change (Strong vs Weak)', InsiderCluster: '🧾 Insider Cluster Buys (shadow · CLUSTER vs excluded control)' };
+  const SB_SECTIONS   = { screener: '🔎 Screener', momentum: '🔥 Momentum', Ghost: '👻 Ghost Accumulation', Fade: '🔥 Overheated (Fade Shorts)', CERN: '⚡ CERN Forced-Flow Events', Tone: '🎙 Earnings-Call Tone', Attention: '📈 Attention (Sticky vs Fast)', ReadThrough: '🔗 Read-Through (Fresh vs Moved)', Anomaly: '🕵️ Stealth (Accumulation vs Explained)', Biotech: '🧬 Biotech Radar (Hot vs Watch)', SecondWave: '🌊 Second Wave (Primed vs Faded)', CrossAsset: '🌐 Cross-Asset (Lead vs Inline)', ToneShift: '🎚️ Tone Shift (Brightening vs Darkening)', DownDay: '🪁 Down-Day Bounce (Longs)', GapDown: '🐻 Gap-Down Continuation (Shorts)', daytrade: '⚡ Day Trade (A vs B)', coil: '🧬 Coil Radar (squeeze bands)', Ignition: '🔥 Momentum Ignition (Ignition vs Watch)', OMEGA: '💠 OMEGA-Swing (Prime vs Watch)', Gridlock: '⚡ GRIDLOCK (Actionable vs Tracked)', Evidence: '🧾 Evidence / Thesis Change (Strong vs Weak)', InsiderCluster: '🧾 Insider Cluster Buys (shadow · CLUSTER vs excluded control)', RedFlags: '🚩 Filing Red Flags (shadow AVOID · flag tiers vs EXCLUDED control)' };
   const SB_TIER_LABEL = { Breakout: 'Breakout', Setup: 'Setup', Early: 'Early', StrongBuy: 'Strong Buy', StrongSell: 'Strong Sell', GHOST: '👻 Ghost', STALKING: '🥷 Stalking', SHORT: 'Short', SHORT_LIGHT: 'Short (light)',
     WATCH: '👀 Watch (fresh turn)', EMERGING: '🌗 Emerging (turning)', CONFIRMED: '✅ Confirmed (late)',
     IGNITION: '🔥 Ignition (accelerating)',

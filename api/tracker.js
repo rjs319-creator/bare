@@ -215,6 +215,10 @@ const PRIVILEGED_OPS = new Set([
   // union shards (delist/<date>.json) + snapshot (delist/current.json). Cron/manual-with-bearer
   // only; op=delisting (read) stays public.
   'delistingtick',
+  // FILING RED FLAGS shadow logger (AVOID side) — EDGAR daily index + submissions JSON +
+  // ≤25 8-K primary docs + one FTS query, CAS-union day shard + rolling state
+  // (redflags/v1/*). Cron/manual-with-bearer only; op=redflags (read) stays public.
+  'redflagstick',
   // STOCKTWITS BULL-RATIO FLAG shadow logger/resolver — writes the snapshot + write-once
   // prospective ledger (stbull/v1/*) and spends a StockTwits fan-out / a ≤60-name candle
   // fan-out. Cron/manual-with-bearer only; op=stbull (read) stays public.
@@ -643,6 +647,9 @@ async function handleRequest(req, res) {
   // DELISTING-PENDING FLAG — shadow avoid-flag overlay (weight-0; EDGAR Form 25 / 15 notices).
   if (req.query.op === 'delisting') return require('../lib/edgar-delisting-routes').runDelisting(req, res);
   if (req.query.op === 'delistingtick') return require('../lib/edgar-delisting-routes').runDelistingTick(req, res);
+  // FILING RED FLAGS — AVOID-side shadow ledger + 🚩 chip snapshot (weight-0; proposal #16).
+  if (req.query.op === 'redflags') return require('../lib/filing-redflags-routes').runRedflags(req, res);
+  if (req.query.op === 'redflagstick') return require('../lib/filing-redflags-routes').runRedflagsTick(req, res);
   if (req.query.op === 'stbull') return require('../lib/stbull-routes').runStbull(req, res);
   if (req.query.op === 'stbulltick') return require('../lib/stbull-routes').runStbullTick(req, res);
   if (req.query.op === 'stbullresolve') return require('../lib/stbull-routes').runStbullResolve(req, res);
