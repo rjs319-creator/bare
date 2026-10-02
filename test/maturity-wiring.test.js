@@ -219,7 +219,7 @@ test('the PRODUCTION dateNet forwards FULL-PRECISION avgExact/seExact — p is n
 
   // The counterfactual this fix removes: strip the exact fields (the pre-fix projection)
   // and the same record scores p≈1 — the BH demote gate would silently exempt it.
-  const { avgExact, seExact, ...rounded } = dn;
+  const { avgExact, seExact, exact, ...rounded } = dn; // v2 schema: the `exact` block is the first fallback, strip it too
   const pRounded = ES.pValueOf(rounded);
   assert.ok(pRounded > 0.5, `display-rounded values must degrade to p≈1 (got ${pRounded}) — proving the exact fields are load-bearing`);
 });
