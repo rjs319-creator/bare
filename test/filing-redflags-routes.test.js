@@ -143,7 +143,7 @@ test('op=redflags: without Blob → ok:false; symbol validation rejects junk', a
   } finally { if (saved) process.env.BLOB_READ_WRITE_TOKEN = saved; }
 });
 
-test('tracker: tick is privileged, read is public, both routed; chain root registered; health mutes it as background', () => {
+test('tracker: tick is privileged, read is public, both routed; the tick is the LAST step of the dilution chain (not a 45th root)', () => {
   const src = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
   const tracker = src('api/tracker.js');
   const priv = tracker.slice(tracker.indexOf('const PRIVILEGED_OPS'), tracker.indexOf('const EXPENSIVE_OPS'));
@@ -152,10 +152,13 @@ test('tracker: tick is privileged, read is public, both routed; chain root regis
   assert.match(tracker, /op === 'redflags'\) return require\('\.\.\/lib\/filing-redflags-routes'\)\.runRedflags/);
   assert.match(tracker, /op === 'redflagstick'\) return require\('\.\.\/lib\/filing-redflags-routes'\)\.runRedflagsTick/);
   const WC = require('../lib/warm-chains');
-  assert.deepEqual(WC.CHAINS.redflags, ['op=redflagstick']);
-  assert.ok(WC.ROOT_CHAINS.includes('redflags'));
+  // ROOT_CHAINS sits at the 44-root ceiling of the ≤90s last-wave pin, so the tick is a STEP
+  // on the EDGAR sibling chain — placed last so the two cheap dilution steps never starve.
+  assert.equal(WC.CHAINS.dilution[WC.CHAINS.dilution.length - 1], 'op=redflagstick');
+  assert.equal(WC.CHAINS.redflags, undefined, 'no root of its own');
+  assert.ok(!WC.ROOT_CHAINS.includes('redflags'));
+  assert.ok(WC.ROOT_CHAINS.includes('dilution'));
   assert.ok(WC.dispatchDelayMs(WC.ROOT_CHAINS.length - 1) <= 90000, 'the last wave must still fit the drain');
-  assert.ok(require('../lib/health').BACKGROUND_CHAINS.has('redflags'));
 });
 
 test('op=redflags read: the empty state is never CDN-cached', () => {

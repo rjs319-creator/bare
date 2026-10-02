@@ -158,8 +158,7 @@ test('the banner renders the server list and no longer re-derives it', () => {
     assert.ok(BACKGROUND_CHAINS.has('alphacal'), 'warm-chains.js: archive-first collection');
     assert.ok(BACKGROUND_CHAINS.has('insidercluster'), 'insider-cluster-routes.js: "shadow route handlers (weight 0; prospective ledger only)"');
     assert.ok(BACKGROUND_CHAINS.has('forecastshadow'), 'forecast-shadow-routes.js: weight-0 prospective ledger (forecastshadow/v1/*)');
-    assert.ok(BACKGROUND_CHAINS.has('redflags'), 'filing-redflags-routes.js: "shadow route handlers (weight 0; AVOID-side prospective ledger)"');
-    assert.strictEqual(BACKGROUND_CHAINS.size, 5, 'keep this list verified — do not pad it');
+    assert.strictEqual(BACKGROUND_CHAINS.size, 4, 'keep this list verified — do not pad it');
   });
 
   test('buildHealthResponse exposes the split for the client to render', () => {

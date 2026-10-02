@@ -99,7 +99,9 @@ test('the writers are PRIVILEGED and the public read is not', () => {
 
 test('the nightly chain runs tick before resolve as its own root', () => {
   const wc = read('lib/warm-chains.js');
-  assert.match(wc, /dilution: \['op=dilutiontick', 'op=dilutionresolve'\]/);
+  // The red-flag tick (lib/filing-redflags-routes) rides this chain as its THIRD step — after
+  // both dilution steps so it can never starve them (see lib/warm-chains.js).
+  assert.match(wc, /dilution: \['op=dilutiontick', 'op=dilutionresolve', 'op=redflagstick'\]/);
 });
 
 test('every rendered string is shadow-honest: unvalidated, not a sell signal, no rank effect', () => {
