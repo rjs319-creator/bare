@@ -1,0 +1,4 @@
+# research/106-transcripts-ingest.py — defeatbeta earnings-call transcripts (HTTP range reads).
+# Python >= 3.10. DuckDB scans the symbol column; pyarrow reads only the needed row groups.
+duckdb==1.5.6
+pyarrow==25.0.1

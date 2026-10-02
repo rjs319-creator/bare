@@ -1,0 +1,139 @@
+{
+ "version": "transcripts-ingest-v1",
+ "generatedAt": "2026-10-02T08:55:40+00:00",
+ "source": "https://huggingface.co/datasets/defeatbeta/yahoo-finance-data/resolve/main/data/US/stock_earning_call_transcripts.parquet",
+ "license": "defeatbeta/yahoo-finance-data: no license statement; Yahoo-scraped; personal research use only \u2014 never redistributed or served",
+ "file": {
+  "bytes": 2273619760,
+  "rowGroups": 1195,
+  "rows": 238901
+ },
+ "symbolsRequested": 20,
+ "symbolsFound": 17,
+ "rowGroupsRead": 19,
+ "httpRequests": 21,
+ "bytesRead": 42171018,
+ "elapsedS": 9.1,
+ "perSymbol": {
+  "AAPL": {
+   "transcripts": 84,
+   "paragraphs": 6714,
+   "firstFiscal": "2005Q4",
+   "lastFiscal": "2026Q3"
+  },
+  "ABBV": {
+   "transcripts": 54,
+   "paragraphs": 3522,
+   "firstFiscal": "2013Q1",
+   "lastFiscal": "2026Q2"
+  },
+  "ABOS": {
+   "transcripts": 19,
+   "paragraphs": 718,
+   "firstFiscal": "2021Q4",
+   "lastFiscal": "2026Q2"
+  },
+  "ABSI": {
+   "transcripts": 11,
+   "paragraphs": 690,
+   "firstFiscal": "2021Q3",
+   "lastFiscal": "2026Q2"
+  },
+  "ACAD": {
+   "transcripts": 65,
+   "paragraphs": 4791,
+   "firstFiscal": "2007Q3",
+   "lastFiscal": "2026Q2"
+  },
+  "ACLS": {
+   "transcripts": 61,
+   "paragraphs": 3746,
+   "firstFiscal": "2007Q4",
+   "lastFiscal": "2026Q2"
+  },
+  "ACN": {
+   "transcripts": 77,
+   "paragraphs": 5921,
+   "firstFiscal": "2007Q1",
+   "lastFiscal": "2026Q4"
+  },
+  "ACRS": {
+   "transcripts": 15,
+   "paragraphs": 568,
+   "firstFiscal": "2016Q3",
+   "lastFiscal": "2024Q1"
+  },
+  "ADBE": {
+   "transcripts": 84,
+   "paragraphs": 6218,
+   "firstFiscal": "2005Q4",
+   "lastFiscal": "2026Q3"
+  },
+  "ADI": {
+   "transcripts": 78,
+   "paragraphs": 6687,
+   "firstFiscal": "2006Q3",
+   "lastFiscal": "2026Q3"
+  },
+  "ADMA": {
+   "transcripts": 27,
+   "paragraphs": 1006,
+   "firstFiscal": "2019Q4",
+   "lastFiscal": "2026Q2"
+  },
+  "ADSK": {
+   "transcripts": 79,
+   "paragraphs": 7174,
+   "firstFiscal": "2006Q4",
+   "lastFiscal": "2027Q2"
+  },
+  "ADTX": {
+   "transcripts": 0,
+   "paragraphs": 0,
+   "firstFiscal": null,
+   "lastFiscal": null
+  },
+  "AGEN": {
+   "transcripts": 61,
+   "paragraphs": 2561,
+   "firstFiscal": "2008Q4",
+   "lastFiscal": "2025Q2"
+  },
+  "AISP": {
+   "transcripts": 0,
+   "paragraphs": 0,
+   "firstFiscal": null,
+   "lastFiscal": null
+  },
+  "AITX": {
+   "transcripts": 0,
+   "paragraphs": 0,
+   "firstFiscal": null,
+   "lastFiscal": null
+  },
+  "AKAM": {
+   "transcripts": 83,
+   "paragraphs": 7613,
+   "firstFiscal": "2005Q4",
+   "lastFiscal": "2026Q2"
+  },
+  "ALKS": {
+   "transcripts": 64,
+   "paragraphs": 4243,
+   "firstFiscal": "2008Q3",
+   "lastFiscal": "2026Q2"
+  },
+  "ALLO": {
+   "transcripts": 30,
+   "paragraphs": 1882,
+   "firstFiscal": "2018Q4",
+   "lastFiscal": "2026Q2"
+  },
+  "ALNY": {
+   "transcripts": 67,
+   "paragraphs": 5485,
+   "firstFiscal": "2007Q4",
+   "lastFiscal": "2026Q2"
+  }
+ }
+}

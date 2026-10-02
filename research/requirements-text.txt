@@ -1,0 +1,6 @@
+# research/105-lazy-prices.py — "Lazy Prices" 10-K/10-Q text change (edgartools, MIT).
+# Python >= 3.10. The Loughran-McDonald master dictionary CSV is NOT a pip dependency:
+# download it from https://sraf.nd.edu/loughranmcdonald-master-dictionary/ into research/data
+# (non-commercial terms; never commit) and pass --lm <path>.
+edgartools==5.59.1
+pandas==3.0.6

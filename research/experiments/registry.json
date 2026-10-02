@@ -3133,6 +3133,37 @@
       "parentExperimentId": "catalyst-flow-ranker-2026-08"
     },
     {
+      "recordedAt": "2026-09-02T03:30:00.000Z",
+      "id": "cfr-prospective-2026-09",
+      "hypothesis": "The cross-sectional ridge residual-return point forecast (the `ridge` arm of cfr-walkforward-2026-08) carries positive per-date rank IC against realized frozen-beta residual returns on LIVE, survivorship-free data at horizons 1/3/5/10.",
+      "family": "swing-ranking",
+      "frozenConfig": {
+        "id": "cfr-prospective-2026-09",
+        "family": "swing-ranking",
+        "declaredBeforeReadingResults": true,
+        "lane": "forecastshadow/v1/prospective/* write-once ledger (lib/forecast-shadow.js FROZEN, lib/forecast-shadow-routes.js CFG_OVERRIDES)",
+        "arms": {
+          "primary": "ridge-point: board ordered by expectedResidualReturn — CONFIRMS the benchmarked `ridge` arm (best measured: rank IC +0.0192 at h=5, 90% CI [0.0057,0.0308], NW t=2.49; data cutoff 2026-07-06)",
+          "secondary": "ridge-xs: the rankerScore ordering runInference serves at capability tier 5 (no Python sidecar). Never executed in the benchmark — FIRST prospective evidence, separately gated"
+        },
+        "universe": "lib/universe.js LARGE candidates; gates ADV >= $20M, >= 300 history sessions; realized size recorded per shard (~510)",
+        "inference": "trainSessions 500, dateStride 5, research/88 fold geometry (embargo maxH+2, minTrainSessions 100, testSessions 25, innerFolds 3)",
+        "outcome": "residual-mkt-sector-v1 via lib/forecast/targets.neutralize; raw leg next-open fill to decision+h close (targets.forwardWindow); betaMarket/betaSector/betaSectorMarket FROZEN in the write-once shard at decision time and never recomputed at resolution",
+        "metric": "per-decision-date Spearman rank IC (average-rank ties) of each arm ordering vs realized residuals, eligible rows only",
+        "prospectiveGate": "per arm family: minResolvedDates=80 per horizon, FDR alpha=0.1 across the 4 horizons within the family, CI = widest of Newey-West t and seeded moving-block bootstrap clear of zero, >= 3/4 positive blocks; promotion is a manual reviewed registry change and starts as annotation only",
+        "power": "with ~510 names/date the per-date IC sampling s.e. is ~0.044; at 80 dates the mean s.e. is <= ~0.01 before NW inflation, sized to detect the benchmarked ~0.02 effect",
+        "book": "descriptive-only carried top-20 equal-weight book, noTradeBand 2.0, cost 0.5*sum|dw|*roundTrip — explicitly NOT the gate (the benchmark already showed after-cost long-only is beta-dominated)",
+        "providerSplit": "benchmark: FMP research snapshot (cutoff 2026-07-06); this ledger: live Yahoo bars via lib/screener fetchDailyHistory (stooq fallback) — a declared data-source change between the confirming and prospective evidence",
+        "prior": "MODERATE for the primary arm (walk-forward OOS rank IC positive with controls at zero, 8 folds, leakage audits clean); NONE for ridge-xs"
+      },
+      "codeVersion": "forecast-shadow-v1",
+      "result": {
+        "verdict": "COLLECTING",
+        "note": "prospective ledger opened 2026-09; no outcomes read yet"
+      },
+      "immutable": true
+    },
+    {
       "recordedAt": "2026-08-29T23:19:12.954Z",
       "id": "cfr-walkforward-2026-08",
       "hypothesis": "A cross-fitted LightGBM meta-ranker over a Ridge/AR baseline (plus foundation-model forecasters when available) ranks 1/3/5/10-session market- and sector-neutralized residual returns better than the baseline and the negative controls, after costs, out of sample.",
@@ -40570,34 +40601,129 @@
       "parentExperimentId": "vcp-template-swing-incremental-2026-08"
     },
     {
-      "recordedAt": "2026-09-02T03:30:00.000Z",
-      "id": "cfr-prospective-2026-09",
-      "hypothesis": "The cross-sectional ridge residual-return point forecast (the `ridge` arm of cfr-walkforward-2026-08) carries positive per-date rank IC against realized frozen-beta residual returns on LIVE, survivorship-free data at horizons 1/3/5/10.",
-      "family": "swing-ranking",
+      "recordedAt": "2026-10-02T08:58:03.153Z",
+      "id": "wiki-attention-reversal-2026-10",
+      "hypothesis": "Top-decile 7-day Wikipedia pageview z-spike with |5-session return| < 1 ATR → negative 21-session cost-net SPY-excess from the next open.",
       "frozenConfig": {
-        "id": "cfr-prospective-2026-09",
-        "family": "swing-ranking",
-        "declaredBeforeReadingResults": true,
-        "lane": "forecastshadow/v1/prospective/* write-once ledger (lib/forecast-shadow.js FROZEN, lib/forecast-shadow-routes.js CFG_OVERRIDES)",
-        "arms": {
-          "primary": "ridge-point: board ordered by expectedResidualReturn — CONFIRMS the benchmarked `ridge` arm (best measured: rank IC +0.0192 at h=5, 90% CI [0.0057,0.0308], NW t=2.49; data cutoff 2026-07-06)",
-          "secondary": "ridge-xs: the rankerScore ordering runInference serves at capability tier 5 (no Python sidecar). Never executed in the benchmark — FIRST prospective evidence, separately gated"
+        "study": "wiki-attention-reversal-2026-10",
+        "attention": {
+          "window": 7,
+          "baseline": 60,
+          "decile": 0.1,
+          "minZ": 0
         },
-        "universe": "lib/universe.js LARGE candidates; gates ADV >= $20M, >= 300 history sessions; realized size recorded per shard (~510)",
-        "inference": "trainSessions 500, dateStride 5, research/88 fold geometry (embargo maxH+2, minTrainSessions 100, testSessions 25, innerFolds 3)",
-        "outcome": "residual-mkt-sector-v1 via lib/forecast/targets.neutralize; raw leg next-open fill to decision+h close (targets.forwardWindow); betaMarket/betaSector/betaSectorMarket FROZEN in the write-once shard at decision time and never recomputed at resolution",
-        "metric": "per-decision-date Spearman rank IC (average-rank ties) of each arm ordering vs realized residuals, eligible rows only",
-        "prospectiveGate": "per arm family: minResolvedDates=80 per horizon, FDR alpha=0.1 across the 4 horizons within the family, CI = widest of Newey-West t and seeded moving-block bootstrap clear of zero, >= 3/4 positive blocks; promotion is a manual reviewed registry change and starts as annotation only",
-        "power": "with ~510 names/date the per-date IC sampling s.e. is ~0.044; at 80 dates the mean s.e. is <= ~0.01 before NW inflation, sized to detect the benchmarked ~0.02 effect",
-        "book": "descriptive-only carried top-20 equal-weight book, noTradeBand 2.0, cost 0.5*sum|dw|*roundTrip — explicitly NOT the gate (the benchmark already showed after-cost long-only is beta-dominated)",
-        "providerSplit": "benchmark: FMP research snapshot (cutoff 2026-07-06); this ledger: live Yahoo bars via lib/screener fetchDailyHistory (stooq fallback) — a declared data-source change between the confirming and prospective evidence",
-        "prior": "MODERATE for the primary arm (walk-forward OOS rank IC positive with controls at zero, 8 folds, leakage audits clean); NONE for ridge-xs"
+        "quietFilter": {
+          "returnSessions": 5,
+          "atrSessions": 14,
+          "maxAtrMultiple": 1
+        },
+        "horizons": [
+          5,
+          21,
+          63
+        ],
+        "primary": {
+          "variant": "quiet",
+          "H": 21
+        },
+        "variants": [
+          "quiet",
+          "all"
+        ],
+        "cooldownSessions": 21,
+        "placeboShiftDays": 30,
+        "universe": {
+          "minAdv": 2000000,
+          "maxNames": 2000,
+          "minBars": 280
+        },
+        "eligibility": {
+          "minPriorBars": 60,
+          "minClose": 2
+        },
+        "blocks": 4,
+        "fdrAlpha": 0.1,
+        "gates": {
+          "minEvents": 100,
+          "minDates": 40,
+          "minT": 2,
+          "minNegativeBlocks": 3
+        },
+        "expectedDirection": "negative"
       },
-      "codeVersion": "forecast-shadow-v1",
+      "dataSnapshot": {
+        "cacheDir": "/Users/ravishah/worktrees/gs-research/research/data/cache",
+        "pageviewsDir": "/Users/ravishah/worktrees/gs-research/research/data/wiki-pageviews",
+        "priced": 785,
+        "withPageviews": 594,
+        "firstSession": "2016-10-03",
+        "lastSession": "2026-10-01"
+      },
+      "codeVersion": "wiki-attention-v1",
+      "variationsAttempted": 6,
       "result": {
-        "verdict": "COLLECTING",
-        "note": "prospective ledger opened 2026-09; no outcomes read yet"
+        "primary": {
+          "id": "event:quiet@21",
+          "arm": "event",
+          "variant": "quiet",
+          "H": 21,
+          "n": 15534,
+          "dates": 2412,
+          "mean": 0.161,
+          "t": 0.75,
+          "p": 0.45498793476474386,
+          "ci95": {
+            "lo": 0,
+            "hi": 0.01
+          },
+          "effectiveN": 761,
+          "blockMeans": [
+            0.028,
+            0.535,
+            -0.431,
+            0.078
+          ],
+          "negativeBlocks": 1,
+          "medianPct": -0.468,
+          "q": 0.9184
+        },
+        "placebo": {
+          "id": "placebo:quiet@21",
+          "arm": "placebo",
+          "variant": "quiet",
+          "H": 21,
+          "n": 15372,
+          "dates": 1897,
+          "mean": -0.114,
+          "t": -0.54,
+          "p": 0.5868942992171591,
+          "ci95": {
+            "lo": -0.01,
+            "hi": 0
+          },
+          "effectiveN": 569,
+          "blockMeans": [
+            0.124,
+            0.099,
+            -0.453,
+            -0.392
+          ],
+          "negativeBlocks": 2,
+          "medianPct": -0.659,
+          "q": 0.9184
+        },
+        "verdict": {
+          "verdict": "not-confirmed",
+          "reason": "mean not negative; t 0.75 > −2; q 0.9184 > 0.1; 1/4 negative blocks; placebo |-0.114| ≥ ½ |0.161|"
+        }
       },
+      "artifact": {
+        "file": "/Users/ravishah/worktrees/gs-research/research/data-derived/wiki-attention/summary.json",
+        "sha256": "7467c16cc7ac1a6a6523884808aa1123327f9915ae7256c27f33ffd776584a06",
+        "bytes": 8219
+      },
+      "decision": "not-confirmed",
+      "reason": "mean not negative; t 0.75 > −2; q 0.9184 > 0.1; 1/4 negative blocks; placebo |-0.114| ≥ ½ |0.161|",
       "immutable": true
     }
   ]

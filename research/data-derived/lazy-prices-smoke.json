@@ -1,0 +1,27 @@
+{
+ "version": "lazy-prices-v1",
+ "generatedAt": "2026-10-02T08:57:23+00:00",
+ "tickers": [
+  "AAPL"
+ ],
+ "lm": "absent \u2014 LM word-share deltas skipped (download the CSV from sraf.nd.edu; non-commercial terms; keep under research/data)",
+ "pull": {
+  "tickers": 1,
+  "filings": 0,
+  "saved": 0,
+  "noText": 0,
+  "errors": [
+   {
+    "ticker": "AAPL",
+    "error": "[Errno 8] nodename nor servname provided, or not known"
+   }
+  ]
+ },
+ "score": {
+  "pairsScored": 0,
+  "cosine": null,
+  "jaccard": null,
+  "lmAvailable": false,
+  "rows": []
+ }
+}
