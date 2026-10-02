@@ -293,3 +293,34 @@ test('production decision sources never import govdemand', () => {
     assert.ok(!/require\(['"][^'"]*govdemand/.test(src), `${f} must not import govdemand`);
   }
 });
+
+// ── 2026-10-02 site audit: op=govdemandtick hit the 300s function wall and persisted NOTHING ──
+const GD = require('../lib/govdemand-routes');
+// The provider phases after the collect were count-bounded but not time-bounded; every write
+// sits at the end of the tick, so a slow USAspending night replayed the same cursor batch.
+test('makeTickBudget: exhausts at the limit and stays exhausted (a phase cannot sneak one more call in)', () => {
+  let t = 1000;
+  const b = GD.makeTickBudget(5000, () => t);
+  assert.equal(b.limitMs, 5000);
+  assert.equal(b.exhausted(), false);
+  t = 5999; assert.equal(b.exhausted(), false); assert.equal(b.elapsedMs(), 4999);
+  t = 6000; assert.equal(b.exhausted(), true);
+  t = 6001; assert.equal(b.exhausted(), true);
+});
+
+test('TICK_BUDGET_MS leaves the 300s function wall real headroom for persistence', () => {
+  assert.ok(GD.TICK_BUDGET_MS <= 180000 && GD.TICK_BUDGET_MS >= 60000, `got ${GD.TICK_BUDGET_MS}`);
+});
+
+test('every provider phase after the collect is guarded by the tick budget (source pin)', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'govdemand-routes.js'), 'utf8');
+  const tick = src.slice(src.indexOf('async function runGovDemandTick('), src.indexOf('// 6) Predictions'));
+  // cadence refresh, trailing revenue, lazy price gate (ticker candles + SPY) — each skips once spent
+  assert.match(tick, /for \(const r of staleTickers\) \{\s*\n\s*if \(budget\.exhausted\(\)\) \{ skipped\.cadence\+\+; continue; \}/);
+  assert.match(tick, /for \(const t of staleRevenue\) \{\s*\n\s*if \(budget\.exhausted\(\)\) \{ skipped\.revenue\+\+; continue; \}/);
+  assert.match(tick, /if \(budget\.exhausted\(\)\) \{ skipped\.price\+\+; return null; \}/);
+  assert.match(tick, /if \(!spyCandles && !budget\.exhausted\(\)\)/);
+  // and the response says what was skipped, so a starved tick is visible, not silent
+  const tail = src.slice(src.indexOf('// 7) Persist'), src.indexOf('// ── op=govdemandresolve'));
+  assert.match(tail, /budget: \{ limitMs: budget\.limitMs, elapsedMs: budget\.elapsedMs\(\), exhausted: budget\.exhausted\(\), skipped \}/);
+});

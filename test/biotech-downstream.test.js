@@ -61,3 +61,16 @@ test('logged picks[] shape stays apex/calibration-compatible', () => {
   assert.equal(pick.bench, 'XBI');
   assert.ok(['Hot', 'Emerging', 'Watch'].includes(pick.tier));
 });
+
+// 2026-10-02 site audit: the wire item dropped the engine's measured liquidity, so the
+// pre-ranking data gate (dollarVolOf) saw "liquidity data on only 0% of rows" and op=today
+// refused every Biotech entry as degraded data.
+test('toWireItem carries avgDollarVol so the data gate can see biotech liquidity', () => {
+  const { dollarVolOf } = require('../lib/data-gates');
+  const item = toWireItem(hotCandidate());
+  assert.equal(item.avgDollarVol, 4e7);
+  assert.equal(dollarVolOf(item), 4e7);
+  // Falls back to the engine's measured liquidity block; null (never 0) when unknown.
+  assert.equal(toWireItem({ liquidity: { avgDollarVol: 123 } }).avgDollarVol, 123);
+  assert.equal(toWireItem({}).avgDollarVol, null);
+});
