@@ -1,0 +1,160 @@
+name: Nightly chains (warm roots as a matrix)
+
+# EXTERNAL DISPATCHER for the warm root chains (lib/warm-chains.js ROOT_CHAINS).
+#
+# Until now api/warm.js dispatched all ~41 roots from inside the 22:00 UTC Vercel cron
+# invocation: staggered waves of 4 every 9 s, then a 280 s drain to HEAR their reports. Two
+# structural problems came with that:
+#   • every root ran CONCURRENTLY once dispatched (the waves only spread the starts), so the
+#     peak was 30-40 simultaneous /api/tracker invocations — the Fluid-instance OOM kills of
+#     2026-08-07 → 08-19 and the FMP burst-429s that exiled evidencetick/revarchive to
+#     evidence-tick.yml;
+#   • a chain that outlived the drain was "running-past-warm": its outcome reached op=health
+#     only if its own invocation survived to persist warm/chains/<name>.json. Nothing e-mailed
+#     anyone when it did not.
+#
+# Here each root is ONE matrix job calling the SAME single-chain endpoint
+# (op=warmchain&name=<root>, which runs the chain's ordered steps inside its own tracker
+# invocation — ordering still lives in the callee, nothing changes server-side):
+#   • max-parallel: 4 — at most four chain invocations (plus their step children) in flight,
+#     which is the in-process WAVE width, now held for the whole night instead of only at the
+#     start. Total wall time grows (~15-30 min) but the peak that OOM-killed co-tenants is gone.
+#   • fail-fast: false — one red chain never cancels the rest.
+#   • timeout-minutes: 6 — a chain's deadline is 240 s inside a 300 s function wall
+#     (CHAIN_DEADLINE_MS / vercel.json); the runner's single-request cap is 290 s and it
+#     retries only a FAST failure (<30 s), so the worst path (30 + 15 + 290 s) fits.
+#   • a failed job = a red run = GitHub e-mails the workflow owner. That is the dead-man
+#     alarm, with no new vendor. The `summary` job POSTs the per-chain outcome to
+#     op=chainsummary (chains/<date>.json) so op=health / the UI banner can show WHICH chains
+#     failed — and can tell when NO night was recorded at all (the only failure an e-mail
+#     cannot deliver, because nothing ran to fail).
+#
+# SCHEDULE — 22:05 UTC, daily (the Vercel cron is daily: `0 22 * * *` in vercel.json).
+# warm's first two steps are the cache warms (PATHS: backtests, screeners incl. the candle
+# caches, sectors, optionsflow — ~22-30 s on three workers — plus the 3M/6M screener extras in
+# the background), and those must land BEFORE `ledger`: op=track snapshots the Screener +
+# Momentum picks from exactly those caches, and several roots (cfl, ephemeral, psrl) read the
+# candle caches the screener warm rebuilds. The in-process dispatcher started wave 0 ~25 s in.
+# GitHub's schedule lands 3-15 min late in practice, so `5 22` gives a hard floor of ≥5 min
+# after the cron fired. With max-parallel 4 the run can overlap 22:30 (evidence-tick.yml, which
+# relies on FMP being quiet); the FMP-heavy roots run in ROOT_CHAINS order (ticks1 early,
+# altprobes mid-run, alphacal later) — if evidencetick's noNews 429s reappear, move those roots
+# earlier in ROOT_CHAINS (the matrix preserves the module's order) rather than retiming this cron.
+#
+# ORDERING — `spine` (ledger → @decision → @reprime, the day's picks + decision snapshot + the
+# re-primed op=today) runs FIRST; every other root `needs: spine`. In-process, the other roots
+# raced the spine and several (evolve, challenger, bearcase, swing, atlasx, maturity, router)
+# accepted reading a one-tick-stale op=today / scoreboard as a trade-off. Here they simply wait.
+# A failed spine does NOT skip the rest (`if: !cancelled()`): their inputs are then stale, not
+# absent, and their own ledgers must still advance.
+#
+# The matrices below are GENERATED from lib/warm-chains.js by scripts/gen-nightly-matrix.js
+# and pinned by test/nightly-chains-matrix.test.js (spine ∪ chains == ROOT_CHAINS, in order).
+# Adding a root to ROOT_CHAINS without re-running the generator fails CI.
+#
+# CUTOVER (docs/nightly-chains-matrix.md): api/warm.js keeps dispatching in-process until the
+# Vercel env var WARM_CHAINS_INPROCESS=0 is set. Run this workflow by hand once
+# (workflow_dispatch, optionally `only=maturity,bearcase` — cheap idempotent roots) and check
+# op=health `chains.source == "github-matrix"` before flipping the env var.
+#
+# One-time setup: repo secret CRON_SECRET (same value as the Vercel Production env var) —
+# already required by daytrade-scan.yml / evidence-tick.yml. Without it every job skips with
+# a warning (exit 0) instead of failing red every night.
+
+on:
+  schedule:
+    - cron: '5 22 * * *'
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Comma-separated root chains to run (default: all). First verification: e.g. 'maturity,bearcase'. A filtered run is recorded with source 'manual'."
+        required: false
+        default: ''
+
+env:
+  APP_URL: https://market-news-app-chi.vercel.app
+  OUT_DIR: .nightly
+
+concurrency:
+  group: nightly-chains
+  cancel-in-progress: false
+
+jobs:
+  spine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        # BEGIN GENERATED matrix:spine (scripts/gen-nightly-matrix.js — do not edit by hand)
+        chain: [ledger]
+        # END GENERATED matrix:spine
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Run chain ${{ matrix.chain }}
+        if: github.event.inputs.only == '' || contains(format(',{0},', github.event.inputs.only), format(',{0},', matrix.chain))
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: node scripts/run-nightly-chain.js "${{ matrix.chain }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chain-${{ matrix.chain }}
+          path: .nightly/${{ matrix.chain }}.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  chains:
+    needs: spine
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        # BEGIN GENERATED matrix:chains (scripts/gen-nightly-matrix.js — do not edit by hand)
+        chain: [capture, ticks1, ticks2, ticks3, aligned, universe, pulse, router, maturity, researchgrade, evolve, swing, atlasx, rlt, altprobes, govdemand, gridlock, swingsearch, pattern, patternresearch, cfl, psrl, peerprop, expgap, pitdata, alphacal, gexa, vrp, ephemeral, optionsv2, pulse2, omegaab, swingverify, dilution, techev, stbull, bearcase, forecastshadow, insidercluster, challenger]
+        # END GENERATED matrix:chains
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Run chain ${{ matrix.chain }}
+        if: github.event.inputs.only == '' || contains(format(',{0},', github.event.inputs.only), format(',{0},', matrix.chain))
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: node scripts/run-nightly-chain.js "${{ matrix.chain }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chain-${{ matrix.chain }}
+          path: .nightly/${{ matrix.chain }}.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  summary:
+    # Always runs — a cancelled or timed-out chain job is exactly what must be recorded.
+    needs: [spine, chains]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: chain-*
+          merge-multiple: true
+          path: .nightly
+      - name: Post the per-night chain summary (op=chainsummary)
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          ONLY: ${{ github.event.inputs.only }}
+        run: node scripts/nightly-chains-summary.js

@@ -52,6 +52,9 @@ const PRIVILEGED_OPS = new Set([
   // 'warmchain' runs ledger WRITES and expensive rebuilds (op=redundancy&force=1 refetches
   // candles for every ticker in the ledger history) — cron-only, never public.
   'warmchain',
+  // 'chainsummary' is the per-night chains record POSTed by the GitHub nightly-chains
+  // matrix (writes chains/<date>.json, read by op=health) — bearer-only, never public.
+  'chainsummary',
   'alertsassess', 'alertsgrade', 'alignedlog', 'apexlog', 'archive', 'attentiontick',
   'brieftick', 'cerntick', 'coiltick', 'confluencetick', 'corebuild', 'corelog',
   'crowdtick', 'daytradetick', 'downdaytick', 'dualreadlog', 'dualreadtune', 'edgelog',
@@ -698,6 +701,8 @@ async function handleRequest(req, res) {
   // Ordered cron work, run in ITS OWN invocation (see lib/warm-chains.js — a .then()
   // chain inside api/warm.js dies when warm returns at its 55s ceiling).
   if (req.query.op === 'warmchain') return require('../lib/warm-chains-routes').runWarmChain(req, res);
+  // Per-night chain outcome record from .github/workflows/nightly-chains.yml (POST, bearer).
+  if (req.query.op === 'chainsummary') return require('../lib/chain-summary-routes').runChainSummary(req, res);
   // 🔥 Momentum Ignition — one acceleration-ranked view over the momentum scanners.
   if (req.query.op === 'ignition') return require('../lib/ignition-routes').runIgnition(req, res);
   if (req.query.op === 'ignitionlog') return require('../lib/ignition-routes').runIgnitionLog(req, res);
