@@ -229,3 +229,16 @@ test('classifyEarnings: binary inside window, scheduled beyond, passed if negati
   assert.equal(N.classifyEarnings(5, null, 'intraday').kind, 'scheduled');      // intraday window 3, 5>3 → scheduled
   assert.equal(N.classifyEarnings(2, null, 'intraday').kind, 'binary');         // 2 <= 3 → binary
 });
+
+// ── regimeView rides on op=today (site audit 2026-10-02 #6) ──────────────────────────────
+test('buildToday serves regimeView: breadth governs, the tape macro read is labelled, disagreement is stated', () => {
+  const { buildToday } = require('../lib/decision-routes');
+  const off = { ...SCREENER, regime: { ...SCREENER.regime, bearish: true, riskOn: false, breadthPct: 22 } };
+  const p = buildToday({ screener: off, tape: { ok: true, regime: 'risk-on', macro: { regime: 'risk-on', macroRisk: 18, vix: { level: 15 } } }, sectors: {}, scoreboard: null });
+  assert.equal(p.regime.label, 'Risk-off');
+  assert.equal(p.regimeView.governing.label, p.regime.label);
+  assert.equal(p.regimeView.breadth.breadthPct, 22);
+  assert.equal(p.regimeView.macro.regime, 'risk-on');
+  assert.equal(p.regimeView.agree, false);
+  assert.match(p.regimeView.note, /breadth regime governs/);
+});

@@ -4401,7 +4401,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const cond = ok ? tape.condition : 'mixed', regime = ok ? tape.regime : 'neutral', eff = ok ? tape.efficiency : null;
     const [ci, clbl, cdesc] = TODAY_COND[cond] || TODAY_COND.mixed;
     const regLbl = (regime || '').toUpperCase();
-    const read = `<div class="rot-panel"><div class="rot-head">${ci} Today's market read</div><div class="rot-sub">The market is <b>${L('regime', regLbl)}</b> and the tape is <b>${L('tape', clbl)}</b>${eff != null ? ` <span class="dt-dim">(${L('trendEff', 'trend-eff ' + eff)})</span>` : ''}. ${cdesc}</div></div>`;
+    // The header reads the SAME served `regimeView` the command center reads (lib/regime-view):
+    // op=tape only carries the MACRO read, so it is labelled macro risk — never "the regime" —
+    // and once op=today arrives below, the governing breadth regime replaces this line.
+    const read = `<div class="rot-panel"><div class="rot-head">${ci} Today's market read</div><div class="rot-sub" id="today-regime-line">${todayRegimeLine(ok ? tape.regimeView : null, regLbl, clbl, eff)} ${cdesc}</div></div>`;
     const r = TODAY_REC[cond] || TODAY_REC.mixed;
     const rec = `<div class="dt-note" style="border-left-color:${r.col}"><b>${r.e} ${r.h}.</b> ${r.b}${r.cta ? ` <button class="today-cta" data-go="${r.cta.s}">${r.cta.l}</button>` : ''}</div>`;
     // 🪁 Red-tape nudge → Down-Day Mode (reversion longs + shorts + the honest sit-out).
@@ -4424,11 +4427,30 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = read + rec + downNudge + cc + ideas + links;
     el.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => { if (typeof showTab === 'function') showTab(b.dataset.go); }));
     el.querySelector('#today-learn')?.addEventListener('click', () => openLearn());
-    loadCommandCenter(el.querySelector('#today-cc')).then(() => {
+    loadCommandCenter(el.querySelector('#today-cc')).then((p) => {
       if (typeof startScreenerLive === 'function') startScreenerLive(el.querySelector('#today-cc')); // live prices on ticker chips
+      // Same payload, same field as the board header: the GOVERNING (breadth) regime.
+      const rv = p && p.ok && p.regimeView;
+      const line = el.querySelector('#today-regime-line');
+      if (rv && rv.governing && line) line.innerHTML = `${todayRegimeLine(rv, regLbl, clbl, eff)} ${cdesc}`;
+      const meta = document.getElementById('today-meta'); if (meta && rv && rv.governing) meta.textContent = `· ${rv.governing.label.toUpperCase()} (breadth) · ${clbl} tape`;
     });
     const gt = document.getElementById('today-gen-time'); if (gt && ok && tape.generatedAt) gt.textContent = stampText(tape.generatedAt);
-    const meta = document.getElementById('today-meta'); if (meta) meta.textContent = `· ${regLbl} · ${clbl} tape`;
+    const meta = document.getElementById('today-meta'); if (meta) meta.textContent = `· macro ${regLbl} · ${clbl} tape`;
+  }
+  // One sentence from a served regimeView. With a governing (breadth) regime: "Breadth regime
+  // is RISK-OFF (breadth 22%) · macro risk: risk-on"; macro-only (op=tape): "Macro risk reads
+  // RISK-ON". The word "regime" is reserved for the governing read.
+  function todayRegimeLine(rv, fallbackMacroLbl, clbl, eff) {
+    const tapeTxt = `the tape is <b>${L('tape', clbl)}</b>${eff != null ? ` <span class="dt-dim">(${L('trendEff', 'trend-eff ' + eff)})</span>` : ''}`;
+    if (rv && rv.governing) {
+      const b = rv.breadth || {};
+      const macro = rv.macro ? ` · <span class="dt-dim" title="${esc(rv.macro.basis || '')}">${esc(rv.macro.kind)}: ${esc(rv.macro.regime)}${rv.agree === false ? ' (disagrees — breadth governs)' : ''}</span>` : '';
+      return `${esc(b.kind || 'Breadth regime')} is <b>${L('regime', rv.governing.label.toUpperCase())}</b>${b.breadthPct != null ? ` <span class="dt-dim">(breadth ${b.breadthPct}%)</span>` : ''}${macro}, and ${tapeTxt}.`;
+    }
+    const m = rv && rv.macro;
+    const lbl = m ? m.label.toUpperCase() : fallbackMacroLbl;
+    return `<span title="${esc((m && m.basis) || 'VIX + credit')}">Macro risk</span> reads <b>${L('regime', lbl)}</b> <span class="dt-dim">(VIX + credit — the breadth regime that gates entries loads below)</span>, and ${tapeTxt}.`;
   }
   document.getElementById('today-refresh-btn')?.addEventListener('click', runTodayUI);
   document.getElementById('opp-refresh-btn')?.addEventListener('click', () => { opportunitiesLoaded = false; ensureOpportunities(); });

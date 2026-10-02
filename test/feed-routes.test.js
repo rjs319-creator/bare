@@ -179,3 +179,15 @@ test('markdown table cells are pipe-safe', () => {
   }));
   assert.doesNotMatch(md, /Weird\|Sector/, 'raw pipes would break the table layout');
 });
+
+// ── the feed's regime is the MACRO read and says so (site audit 2026-10-02 #6) ─────────────
+test('feed labels its regime as the macro (VIX + credit) read in JSON and markdown', async () => {
+  const model = FEED.buildFeedModel({ board: BOARD_EMPTY.payload, radar: RADAR_EMPTY, now: new Date('2026-08-11T01:00:00Z') });
+  assert.equal(model.regime, 'risk-off');
+  assert.match(model.regimeBasis, /macro \(VIX \+ credit\)/);
+  assert.equal(model.regimeView.macro.regime, 'risk-off');
+  assert.equal(model.regimeView.governing, null);          // the feed has no breadth read and does not claim one
+  const md = FEED.renderFeedMarkdown(model);
+  assert.match(md, /Macro risk \(VIX \+ credit\): risk-off/);
+  assert.doesNotMatch(md, /Market regime:/);
+});
