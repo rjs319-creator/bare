@@ -3,7 +3,9 @@
 // Run ONE warm root chain from GitHub Actions (.github/workflows/nightly-chains.yml).
 //
 //   node scripts/run-nightly-chain.js <chain>
-//   env: APP_URL (default prod), CRON_SECRET (bearer; absent → graceful skip), OUT_DIR (.nightly)
+//   env: APP_URL (default prod), CRON_SECRET (bearer; absent → graceful skip), OUT_DIR (.nightly),
+//        ALREADY_OK (comma list from the preflight job: chains an earlier run of the SAME night
+//        already completed — the runner exits 0 with status `already-ok` without a request)
 //
 // Hits the existing single-chain endpoint op=warmchain&name=<chain> — the same call
 // api/warm.js made in-process — and writes a compact result JSON the summary job folds
@@ -119,10 +121,26 @@ function writeResult(outDir, r) {
   return file;
 }
 
+const parseList = (v) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean);
+
+// A chain the preflight found already ok for this ET session (an earlier schedule, a manual
+// dispatch, or a retry schedule got to it): report it as such so the summary still covers
+// every root, and do not re-run the work — the ops are idempotent per day but not free.
+function alreadyOkResult(chain, now = Date.now) {
+  const at = new Date(now()).toISOString();
+  return { chain, ok: true, status: 'already-ok', attempts: 0, httpStatus: null, complete: true, failed: [], skipped: [], elapsedMs: 0, startedAt: at, finishedAt: at, error: null };
+}
+
 async function main(argv = process.argv, env = process.env) {
   const chain = String(argv[2] || '').trim();
   if (!chain) { process.stderr.write('usage: run-nightly-chain.js <chain>\n'); return 2; }
   const outDir = env.OUT_DIR || DEFAULT_OUT_DIR;
+  if (parseList(env.ALREADY_OK).includes(chain)) {
+    const r = alreadyOkResult(chain);
+    writeResult(outDir, r);
+    process.stdout.write(`::notice title=chain ${chain} already-ok::completed by an earlier run of this night — not re-run\n`);
+    return 0;
+  }
   const secret = env.CRON_SECRET || '';
   if (!secret) {
     const r = { chain, ok: true, status: 'skipped:no-secret', attempts: 0, failed: [], skipped: [], startedAt: new Date().toISOString(), finishedAt: new Date().toISOString() };
@@ -142,5 +160,5 @@ if (require.main === module) {
   main().then((code) => process.exit(code), (e) => { process.stderr.write(`::error::${errText(e)}\n`); process.exit(1); });
 }
 
-module.exports = { attemptOnce, gradeAttempt, shouldRetry, runChain, annotations, writeResult, chainUrl, main,
+module.exports = { attemptOnce, gradeAttempt, shouldRetry, runChain, annotations, writeResult, chainUrl, alreadyOkResult, main,
   MAX_ATTEMPTS, REQUEST_TIMEOUT_MS, FAST_FAIL_MS, RETRY_DELAY_MS, RETRY_STATUSES, DEFAULT_OUT_DIR };

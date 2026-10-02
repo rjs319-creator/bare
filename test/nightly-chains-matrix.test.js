@@ -31,18 +31,32 @@ test('matrix: the generator reports the workflow current (--check), and would re
   assert.throws(() => GEN.applyGenerated('jobs: {}', 'spine', ['x']), /missing the generated block/);
 });
 
-test('workflow knobs: 22:05 UTC daily, fail-fast off, max-parallel 4, 6-minute jobs, ordered spine, always-on summary', () => {
+test('workflow knobs: 22:05 UTC + three retry schedules (same ET session), fail-fast off, max-parallel 4, 6-minute jobs, ordered spine, always-on summary', () => {
   assert.match(WF, /cron: '5 22 \* \* \*'/, 'runs after the 22:00 UTC Vercel cron has warmed the caches');
+  // Retry schedules: GitHub delays this repo's schedules by hours (2026-10-02). Every one must
+  // land before 04:00 UTC so lib/chain-summary.js keys it to the same ET session date.
+  const crons = [...WF.matchAll(/- cron: '(\d+) (\d+) \* \* \*'/g)].map((m) => ({ min: +m[1], hour: +m[2] }));
+  assert.deepEqual(crons, [{ min: 5, hour: 22 }, { min: 40, hour: 22 }, { min: 20, hour: 23 }, { min: 0, hour: 1 }]);
+  for (const c of crons) assert.ok(c.hour >= 22 || c.hour < 4, `${c.hour}:${c.min} UTC would be the next ET session date`);
   assert.equal((WF.match(/\n      fail-fast: false\n/g) || []).length, 2, 'both chain jobs keep going when one root fails');
   assert.match(WF, /max-parallel: 4/);
   assert.equal((WF.match(/\n    timeout-minutes: 6\n/g) || []).length, 2, 'both chain jobs are capped at 6 minutes');
-  assert.match(WF, /\n  chains:\n    needs: spine\n    if: \$\{\{ !cancelled\(\) \}\}/, 'the rest waits for the decision spine but survives its failure');
-  assert.match(WF, /\n  summary:[\s\S]*needs: \[spine, chains\]\n    if: always\(\)/, 'the summary records cancelled/timed-out jobs too');
+  assert.match(WF, /\n  chains:\n    needs: \[preflight, spine\]\n    if: \$\{\{ !cancelled\(\) && needs\.preflight\.outputs\.skip != 'true' \}\}/, 'the rest waits for the decision spine, survives its failure, and skips a covered night');
+  assert.match(WF, /\n  summary:[\s\S]*needs: \[preflight, spine, chains\]\n    if: \$\{\{ always\(\) && needs\.preflight\.outputs\.skip != 'true' \}\}/, 'the summary records cancelled/timed-out jobs too, unless the night was skipped');
   assert.match(WF, /run: node scripts\/run-nightly-chain\.js "\$\{\{ matrix\.chain \}\}"/);
   assert.match(WF, /run: node scripts\/nightly-chains-summary\.js/);
   assert.match(WF, /pattern: chain-\*/); assert.match(WF, /merge-multiple: true/);
   assert.match(WF, /concurrency:\n  group: nightly-chains\n  cancel-in-progress: false/);
   assert.match(WF, /workflow_dispatch:/);
+});
+
+test('preflight job: idempotence gate — needs nothing, fails open, feeds skip/already_ok to every chain job', () => {
+  assert.match(WF, /\n  preflight:\n(?:(?!\n  \w).)*?outputs:\n      skip: \$\{\{ steps\.probe\.outputs\.skip \}\}\n      already_ok: \$\{\{ steps\.probe\.outputs\.already_ok \}\}/s);
+  assert.match(WF, /run: node scripts\/nightly-chains-preflight\.js/);
+  assert.match(WF, /\n  spine:\n    needs: preflight\n    if: \$\{\{ !cancelled\(\) && needs\.preflight\.outputs\.skip != 'true' \}\}/, 'a failed preflight (!cancelled) still runs the night');
+  assert.equal((WF.match(/ALREADY_OK: \$\{\{ needs\.preflight\.outputs\.already_ok \}\}/g) || []).length, 2, 'both chain jobs pass the already-ok set to the runner');
+  assert.match(WF, /FORCE: \$\{\{ github\.event\.inputs\.force \}\}/);
+  assert.match(WF, /\n      force:\n/, 'workflow_dispatch exposes force');
 });
 
 test('runner contract: bearer header against the single-chain endpoint, graceful skip without the secret', () => {

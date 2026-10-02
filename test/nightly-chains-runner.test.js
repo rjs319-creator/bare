@@ -71,6 +71,23 @@ test('main: without CRON_SECRET writes a skipped:no-secret result, warns, exits 
   assert.equal(r.status, 'skipped:no-secret'); assert.equal(r.ok, true);
 });
 
+test('main: a chain named in ALREADY_OK is reported already-ok (ok, no request, exit 0) — the preflight found it done tonight', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nightly-'));
+  const prevFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error('must not fetch'); };
+  try {
+    const code = await RUN.main(['node', 'x', 'maturity'], { OUT_DIR: dir, CRON_SECRET: 's3cret', ALREADY_OK: ' ledger, maturity ' });
+    assert.equal(code, 0);
+    const r = JSON.parse(fs.readFileSync(path.join(dir, 'maturity.json'), 'utf8'));
+    assert.equal(r.status, 'already-ok'); assert.equal(r.ok, true); assert.equal(r.attempts, 0);
+    // It round-trips through the summary + the server validator as an ok chain.
+    const CS = require('../lib/chain-summary');
+    const p = SUM.buildSummaryPayload([r], { expected: ['maturity'], now: Date.parse(r.finishedAt) });
+    const v = CS.normalizeChainSummary(p, { now: Date.parse(r.finishedAt), roots: ['maturity'] });
+    assert.equal(v.error, null); assert.equal(v.value.chains.maturity.ok, true); assert.equal(v.value.chains.maturity.status, 'already-ok');
+  } finally { globalThis.fetch = prevFetch; }
+});
+
 // ── summary ──────────────────────────────────────────────────────────────────
 const NOW = Date.parse('2026-10-02T22:40:00Z');
 const res = (chain, over = {}) => ({ chain, ok: true, status: 'ok', httpStatus: 200, attempts: 1, complete: true, failed: [], skipped: [], elapsedMs: 1000, startedAt: '2026-10-02T22:06:00Z', finishedAt: '2026-10-02T22:08:00Z', ...over });
