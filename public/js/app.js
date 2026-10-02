@@ -9006,6 +9006,25 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     return (g.byRegime && g.byRegime[sbRegime]) || {};
   }
 
+  // "vs factors" line (SHADOW, weight 0) from the sibling `factorAlpha` block of
+  // op=scoreboard. All-regimes only (the block is not regime-split). Empty string when
+  // the block is absent; an explicit "—" when the lane exists but has < 60 dates.
+  const SB_FF_SOURCE = { ff: 'Fama-French 5 + momentum (Dartmouth, ~1-month lag)', proxy: 'style-ETF proxies (SPY, IWM−SPY, IWD−IWF, MTUM−SPY, QUAL−SPY) — live month not yet covered by the French data' };
+  function sbFactorLine(g, hk, lb) {
+    const block = lastScoreboard && lastScoreboard.factorAlpha;
+    if (!block || !block.groups || sbRegime !== 'all') return '';
+    const cell = (block.groups[`${g.section}:${g.tier}:${g.scope || ''}`] || {})[hk];
+    if (!cell) return '';
+    const shadow = `SHADOW (weight 0) — affects no grade or ranking until the preregistered six-month review (${esc((block.gate && block.gate.shadowUntil) || '2027-04-02')}).`;
+    if (cell.insufficient) {
+      return `<div class="sb-h-ff na" title="Factor-adjusted alpha needs ≥ ${block.gate ? block.gate.minDates : 60} independent decision dates for a stable multi-factor fit; this lane has ${cell.n}. ${shadow}">vs factors: —</div>`;
+    }
+    const up = cell.alpha >= 0;
+    const src = SB_FF_SOURCE[cell.source] || cell.source;
+    const tip = `vs factors = this lane's cost-net ${lb} return minus what its exposure to the market, size, value, profitability, investment and momentum factors would have earned over the same window (ridge-shrunk betas, HAC t-stat). 'vs S&P' assumes a market beta of exactly 1 and credits any small-cap / value / momentum tilt as skill; this line removes that. Source: ${src}. n=${cell.n} dates · t ${cell.t ?? '—'} · q ${cell.q ?? '—'}${cell.passesGate ? ' · passes the shadow gate (α ≥ 0, q ≤ 0.10)' : ''}. ${shadow}`;
+    return `<div class="sb-h-ff ${up ? 'up' : 'down'}" title="${esc(tip)}">vs factors ${up ? '+' : ''}${cell.alpha}% <span class="sb-h-ff-src">${cell.source === 'ff' ? 'FF' : 'proxy'} · shadow</span></div>`;
+  }
+
   function getDisabledSignals() {
     try { const a = JSON.parse(localStorage.getItem('disabledSignals')); return Array.isArray(a) ? a : []; } catch { return []; }
   }
@@ -9082,6 +9101,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const secUp = s.avgSecExcess != null && s.avgSecExcess >= 0;
       const secLine = s.avgSecExcess == null ? ''
         : `<div class="sb-h-sec ${secUp ? 'up' : 'down'}" title="Average return minus the pick's own SECTOR ETF (XLK, XLF, XBI…) over the same ${lb} window — 'did it beat its peers', not just the market. Strips out sector beta so a hot-sector tailwind isn't mistaken for stock-selection skill. Beat rate = share that outran their sector.">vs sector ${secUp ? '+' : ''}${s.avgSecExcess}% · beat ${s.beatSecRate}%</div>`;
+      // Factor-adjusted line (SHADOW, weight 0): the lane's cost-net return regressed on
+      // Fama-French 5 + momentum (or style-ETF proxies for the live month) over the same
+      // window — alpha = what the factors cannot explain. Sibling block, all-regimes only.
+      const ffLine = sbFactorLine(g, k, lb);
       // Realistic-entry line: what you'd actually get entering the NEXT session's open
       // (you can't trade the close you screen on), plus the entry drag vs that close.
       // Only present on sleeves whose picks had no logged entry price.
@@ -9098,7 +9121,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         // and is therefore too narrow.
         ? `Mean ${up ? '+' : ''}${s.avg}% · median ${s.median > 0 ? '+' : ''}${s.median}% · 10%-trimmed ${s.trimmedAvg > 0 ? '+' : ''}${s.trimmedAvg}%${s.avgCI ? ` · ${s.avgCI.level || 95}% CI [${s.avgCI.lo}, ${s.avgCI.hi}]${s.avgCI.basis === 'date-clustered' ? ` (date-clustered${Number.isFinite(s.avgCI.effectiveN) ? `, ${s.avgCI.effectiveN} effective dates` : ''})` : ' (pick-level — same-day picks not independent, interval too narrow)'}${s.avgCI.lo > 0 ? ' — above zero' : s.avgCI.hi < 0 ? ' — below zero' : ' — spans zero'}` : ''}`
         : `Mean return ${lb} after the pick`;
-      return `<div class="sb-h"><div class="sb-h-lb" title="${esc(SB_HZ_HELP)}">${lb}</div><div class="sb-h-ret ${up ? 'up' : 'down'}" title="${esc(distTip)}">${up ? '+' : ''}${s.avg}%</div><div class="sb-h-sub">${s.winRate}% win · n=${s.n}</div>${exLine}${netLine}${secLine}${realLine}</div>`;
+      return `<div class="sb-h"><div class="sb-h-lb" title="${esc(SB_HZ_HELP)}">${lb}</div><div class="sb-h-ret ${up ? 'up' : 'down'}" title="${esc(distTip)}">${up ? '+' : ''}${s.avg}%</div><div class="sb-h-sub">${s.winRate}% win · n=${s.n}</div>${exLine}${netLine}${secLine}${ffLine}${realLine}</div>`;
     }).join('');
     const HZ_FALLBACK = ['20d', '1m', '10d', '5d', '1d', '3m'];
     const hzKey = HZ_FALLBACK.find(k => h[k] && h[k].n) || null;
