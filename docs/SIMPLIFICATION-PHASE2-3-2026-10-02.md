@@ -177,7 +177,10 @@ Re-measure after the deferred items with the same probes.
 
 ## 5. Verification
 
-- `npm run check` green; full `npm test` green (see PR).
+- `npm run check` green; full `npm test` 0 failures on the rebased tree (see PR). `CERN_LBL`
+  (the CERN event-type label map, incl. the ARK shadow pair) now lives once at module level in
+  `app.js` and feeds the Scoreboard's CERN tier labels; its old copy was inside the retired
+  Down-Day renderer.
 - `drive-app` against a local static server proxying `/api` to production: today,
   daytrade, rotation, scoreboard, events (the five destinations) plus session,
   ignitionlive, news, pulse, sectors, evidence — 0 console errors, 0 render hazards.
