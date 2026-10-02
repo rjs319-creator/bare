@@ -95,12 +95,15 @@ function freshScreener(fetchImpl, logged) {
   const httpPath = require.resolve('../lib/http');
   const logPath = require.resolve('../lib/log');
   const screenerPath = require.resolve('../lib/screener');
+  // lib/http-memo sits between the screener and lib/http; reload it too so its
+  // fetchWithTimeout binding is the stub, and so no earlier test's memo entry leaks in.
+  const memoPath = require.resolve('../lib/http-memo');
 
   const realHttp = require('../lib/http');
   const origLoad = Module._load;
   const origFallback = process.env.DAILY_FALLBACK;
   process.env.DAILY_FALLBACK = 'off';   // read at module load, below
-  for (const p of [httpPath, logPath, screenerPath]) delete require.cache[p];
+  for (const p of [httpPath, logPath, memoPath, screenerPath]) delete require.cache[p];
 
   Module._load = function (request, parent, isMain) {
     const resolved = (() => { try { return Module._resolveFilename(request, parent, isMain); } catch { return null; } })();
@@ -118,7 +121,7 @@ function freshScreener(fetchImpl, logged) {
     Module._load = origLoad;
     if (origFallback === undefined) delete process.env.DAILY_FALLBACK;
     else process.env.DAILY_FALLBACK = origFallback;
-    for (const p of [httpPath, logPath, screenerPath]) delete require.cache[p];
+    for (const p of [httpPath, logPath, memoPath, screenerPath]) delete require.cache[p];
   }
 }
 
