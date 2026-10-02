@@ -1,0 +1,88 @@
+name: Paper execution (Alpaca paper ledger)
+
+# EXTERNAL SCHEDULER for the Alpaca PAPER execution ledger (docs/paper-execution.md).
+# Vercel Hobby has no intraday cron, so GitHub Actions plays scheduler — the same pattern
+# as daytrade-scan.yml / evidence-tick.yml.
+#
+#   • 13:35 UTC weekdays → op=paperopen: pull today's Session Board, plan one 1-share order
+#     per A/B row at the FROZEN entry/stop/target, place what is not placed yet (idempotent
+#     via client_order_id = <snapshotId>:<rowId>), write paper-exec/<date>.json.
+#     13:35 UTC is 09:35 ET only in EDT; in EST it is 08:35 ET and the op self-skips
+#     (`market-premarket`). Every poll below calls paperopen FIRST, so the 14:35 UTC poll
+#     places the day's orders in winter. Nothing is ever placed outside the regular session.
+#   • every 30 min, 14:05 → 20:05 UTC weekdays → op=paperpoll: list the day's orders, arm
+#     OCO exits for filled stop_limit (breakout) parents, merge fills union-monotonically.
+#   • 19:50 UTC weekdays → op=paperpoll&flatten=1: close still-open INTRADAY rows at market
+#     (their horizon is the session); swing/position rows keep their GTC brackets.
+#     19:50 UTC is 15:50 EDT / 14:50 EST — inside the session in both.
+#
+# HONESTY: GitHub cron is best-effort (3-15 min late, occasionally dropped). The ledger
+# records every poll's timestamp, so coverage claims stay factual; the ops are idempotent
+# so a late or doubled trigger is harmless.
+#
+# DORMANT until the Vercel env has ALPACA_KEY_ID / ALPACA_SECRET_KEY / ALPACA_PAPER=1: the
+# ops answer ok:true skipped:true and this workflow stays green. The ONLY secret this
+# workflow needs is CRON_SECRET (already required by daytrade-scan.yml); the Alpaca keys
+# live in Vercel, never here.
+
+on:
+  schedule:
+    - cron: '35 13 * * 1-5'        # open (EDT); self-skips premarket in EST
+    - cron: '5,35 14-19 * * 1-5'   # polls every 30 min through the session
+    - cron: '50 19 * * 1-5'        # flatten intraday rows before the close
+    - cron: '5 20 * * 1-5'         # final poll after the close
+  workflow_dispatch:
+    inputs:
+      flatten:
+        description: "Set to 1 to also flatten still-open intraday rows"
+        required: false
+        default: ''
+
+env:
+  APP_URL: https://market-news-app-chi.vercel.app
+
+concurrency:
+  group: paper-exec
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Place (idempotent) then poll the paper ledger
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          FLATTEN: ${{ github.event.schedule == '50 19 * * 1-5' && '1' || github.event.inputs.flatten }}
+        run: |
+          set -uo pipefail
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "::warning::CRON_SECRET repo secret not set — skipping paper execution. Add it (repo Settings → Secrets and variables → Actions) with the same value as the Vercel Production CRON_SECRET."
+            exit 0
+          fi
+          failures=0
+          call() {   # call <label> <url>
+            local label="$1" url="$2" code
+            code=$(curl -sS -o "/tmp/$label.json" -w '%{http_code}' --max-time 120 \
+              -H "Authorization: Bearer $CRON_SECRET" "$url")
+            [ -n "$code" ] || code=000
+            echo "--- $label (HTTP $code) ---"
+            head -c 1500 "/tmp/$label.json"; echo
+            if [ "$code" != "200" ]; then
+              echo "::error::op=$label returned HTTP $code"
+              failures=$((failures+1)); return 0
+            fi
+            if grep -q '"ok":false' "/tmp/$label.json"; then
+              echo "::error::$label reported ok:false"
+              failures=$((failures+1)); return 0
+            fi
+            if grep -q '"dormant":true' "/tmp/$label.json"; then
+              echo "::notice::$label is dormant — Alpaca paper keys not configured (see docs/paper-execution.md)"
+            fi
+            return 0
+          }
+          call paperopen "$APP_URL/api/tracker?op=paperopen"
+          FLAT=""
+          if [ "${FLATTEN:-}" = "1" ]; then FLAT="&flatten=1"; fi
+          call paperpoll "$APP_URL/api/tracker?op=paperpoll$FLAT"
+          [ "$failures" -eq 0 ] || exit 1
