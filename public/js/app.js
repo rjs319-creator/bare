@@ -1802,6 +1802,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     return '';
   }
 
+  // The quote line of the executable-liquidity read. A quote object can be present but
+  // one-sided or empty (crossed/missing bid or ask) — rendering its fields raw printed
+  // "quote undefined/undefined (undefined% of mid)" on the Options tab (site audit
+  // 2026-10-02 #7). Only a finite two-sided quote is shown; anything else says so.
+  function of2QuoteText(q) {
+    if (!q) return ' · no two-sided quote';
+    const fin = v => typeof v === 'number' && Number.isFinite(v) && v > 0;
+    const bid = q.bid, ask = q.ask;
+    if (!fin(bid) || !fin(ask)) return ' · quote unavailable';
+    const spread = Number.isFinite(Number(q.spreadPctOfMid)) ? ` (${q.spreadPctOfMid}% of mid)` : '';
+    return ` · quote ${bid}/${ask}${spread}`;
+  }
   // Contract-level executable liquidity for the contract a plan would actually name.
   function of2ExecutionHTML(c) {
     const l = c.contractLiquidity;
@@ -1814,7 +1826,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const conc = c.strikeConcentrationFullChain;
     return `<div style="font-size:0.75rem;margin-bottom:5px;line-height:1.6">
       ⚙ <b>Executable liquidity</b> on ${esc(String(ct.side || ''))} $${esc(String(ct.strike ?? '—'))} ${esc(ct.expiry || '')}: <b style="color:${col}">${esc(l.state)}</b>
-      ${q ? ` · quote ${q.bid}/${q.ask} (${q.spreadPctOfMid}% of mid)` : ' · no two-sided quote'}
+      ${of2QuoteText(q)}
       ${of2SizeText(c, sz)}
       ${l.blocking && l.blocking.length ? `<div style="color:var(--red)">⛔ ${l.blocking.map(esc).join(' · ')}</div>` : ''}
       ${l.unavailableReason ? `<div style="color:var(--amber,#f0a832)">${esc(l.unavailableReason)}</div>` : ''}
