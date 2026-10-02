@@ -1354,9 +1354,7 @@
       </div>
     </div>
     <div id="sector-heatmap-container">
-      <div class="sector-grid" style="opacity:0.3">
-        ${['SPY','QQQ','XLK','XLF','XLV','XLE','XLI','XLY','XLP','XLB','XLRE','XLU'].map(s=>`<div class="sector-tile" style="border-color:var(--border);background:var(--card)"><div class="st-sym" style="color:var(--text-dim)">${s}</div><div class="st-pct" style="color:var(--text-muted)">—</div></div>`).join('')}
-      </div>
+      <div class="mom-status"><div class="mom-spinner"></div><p>Loading today's sector performance…</p></div>
     </div>
   </section>
 

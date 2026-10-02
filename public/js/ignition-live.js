@@ -7,6 +7,7 @@
 // in-session), and per-ticker timelines from op=ignitionreplay&date=&ticker=.
 import { esc } from './format.js';
 import { fetchJSON, HEAVY_TIMEOUT_MS } from './fetch-json.js';
+import { mountCandles } from './chart-engine.js';
 
 const STATE = { data: null, sortKey: 'opportunityScore', timelines: {} };
 
@@ -139,6 +140,7 @@ function whyPanel(v) {
       <div><b>DO NOT CHASE above ${money(v.doNotChasePrice)}</b> — wait for a pullback, new base or VWAP reclaim.</div>
       <div>Supply pressure ${v.supplyPressureScore ?? '—'}/100 · turnover velocity ${v.floatTurnoverVelocityPerMin ?? '—'}/min</div>
       <div>Data: ${esc(v.dataQuality ? `${v.dataQuality.quality} (${v.dataQuality.feed})` : '—')} · ${esc(v.haltStatus || '')}</div>
+      <div id="ig-ch-${esc(v.ticker)}" class="chart-canvas-wrap" style="margin-top:6px"><button class="bt-view-btn" data-igchart="${esc(v.ticker)}">📈 Load chart · trigger / invalidation / no-chase</button></div>
     </div>
     <div><b>SCORE COMPONENTS</b><div style="font-size:.72rem;color:#64748b">${esc(comp)}</div>
       <div id="ig-tl-${esc(v.ticker)}" style="margin-top:6px"><button class="bt-view-btn" data-igtl="${esc(v.ticker)}">Load move timeline</button></div>
@@ -146,7 +148,37 @@ function whyPanel(v) {
   </div>`;
 }
 
+// Expand-card chart: the shared component with the snapshot's trigger / invalidation as
+// frozen price lines and the do-not-chase ceiling as an amber line. RENDER ONLY — every
+// level comes from the persisted view; nothing is recomputed here.
+export function ignitionChartSpec(view, data) {
+  const ind = (data && data.indicators) || {};
+  const extra = Number.isFinite(view.doNotChasePrice) ? [{ price: view.doNotChasePrice, color: '#f0a832', title: 'Do not chase' }] : [];
+  return {
+    candles: (data && data.candles) || [],
+    levels: { entry: Number.isFinite(view.trigger) ? view.trigger : null, stop: Number.isFinite(view.invalidation) ? view.invalidation : null, target: null },
+    levelTitles: { entry: 'Trigger', stop: 'Invalidation' },
+    extraLines: extra,
+    indicators: { ema9: ind.ema9, vwap: data && data.source === 'yahoo' ? ind.vwap : null },
+  };
+}
+async function loadIgnitionChart(ticker, box) {
+  const view = ((STATE.data && STATE.data.views) || []).find(v => v.ticker === ticker);
+  if (!view) return;
+  box.innerHTML = '<div class="chart-loading">Loading chart…</div>';
+  try {
+    const d = await fetchJSON(`/api/chart?ticker=${encodeURIComponent(ticker)}`);
+    await mountCandles(box, ignitionChartSpec(view, d));
+  } catch (e) { box.innerHTML = `<div class="chart-err">Chart unavailable: ${esc(String((e && e.message) || e))}</div>`; }
+}
+
 function wire(container) {
+  container.querySelectorAll('[data-igchart]').forEach(b => b.addEventListener('click', ev => {
+    ev.stopPropagation();
+    const t = b.getAttribute('data-igchart');
+    const box = document.getElementById(`ig-ch-${t}`);
+    if (box) loadIgnitionChart(t, box);
+  }));
   container.querySelectorAll('[data-igsort]').forEach(b => b.addEventListener('click', () => {
     STATE.sortKey = b.getAttribute('data-igsort');
     render(container);

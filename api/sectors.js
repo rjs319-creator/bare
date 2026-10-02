@@ -29,7 +29,8 @@ async function fetchYahoo(symbol) {
       const price = m.regularMarketPrice;
       const prev  = m.previousClose ?? m.chartPreviousClose ?? price;   // previousClose = yesterday's close; chartPreviousClose is window-relative
       const changePct = prev ? ((price - prev) / prev * 100) : 0;
-      return { price, changePct: parseFloat(changePct.toFixed(2)) };
+      const volume = Number.isFinite(m.regularMarketVolume) ? m.regularMarketVolume : null;
+      return { price, changePct: parseFloat(changePct.toFixed(2)), volume };
     } catch { /* try next host */ }
   }
   return null;
@@ -47,8 +48,9 @@ async function fetchStooq(symbol) {
     const parts = lines[1].split(',');
     const open  = parseFloat(parts[3]);
     const close = parseFloat(parts[6]);
+    const volume = parseFloat(parts[7]);
     if (!open || !close || isNaN(open) || isNaN(close)) return null;
-    return { price: close, changePct: parseFloat(((close - open) / open * 100).toFixed(2)) };
+    return { price: close, changePct: parseFloat(((close - open) / open * 100).toFixed(2)), volume: Number.isFinite(volume) ? volume : null };
   } catch { return null; }
 }
 
@@ -111,6 +113,10 @@ module.exports = async function handler(req, res) {
         name:      etf.name,
         price:     q.price.toFixed(2),
         changePct: q.changePct,
+        // Size for the sector treemap (area = today's dollar volume); null when the source
+        // had no volume, and the client falls back to equal-size chips.
+        volume:    q.volume,
+        dollarVol: Number.isFinite(q.volume) ? Math.round(q.price * q.volume) : null,
       };
     }));
 
