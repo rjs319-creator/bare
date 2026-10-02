@@ -1,11 +1,13 @@
 'use strict';
 // POLITE HTTP — one small rate-limited fetch for the research-side public APIs
 // (Wikimedia REST, Wikidata SPARQL, Yahoo chart). Wikimedia asks every client for a
-// descriptive User-Agent with a contact, so the repo's SEC-style identity string is
-// reused here. Concurrency and spacing are explicit constants; 429/5xx back off and
-// retry a bounded number of times; everything else fails closed with the status.
+// descriptive User-Agent with a contact, so the repo's ONE Wikimedia identity string
+// (lib/wikimedia-ua.js — contact via WIKIMEDIA_CONTACT) is the default here; RESEARCH_USER_AGENT
+// still overrides it for a one-off study. Concurrency and spacing are explicit constants;
+// 429/5xx back off and retry a bounded number of times; everything else fails closed.
 
-const RESEARCH_UA = process.env.RESEARCH_USER_AGENT || 'market-news-app research (contact: rjs319@gmail.com)';
+const { WIKIMEDIA_UA } = require('../../lib/wikimedia-ua');
+const RESEARCH_UA = process.env.RESEARCH_USER_AGENT || WIKIMEDIA_UA;
 const DEFAULT_MIN_SPACING_MS = 120;
 const DEFAULT_CONCURRENCY = 4;
 const MAX_RETRIES = 4;
