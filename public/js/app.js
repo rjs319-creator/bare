@@ -689,12 +689,27 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // click from the job log instead of a hunt through Vercel logs. The failed names are
     // already in `problems` (rendered below); this adds the provenance, not a second list.
     const ch = d.chains || null;
-    const chainsFrom = ch && ch.source === 'github-matrix'
-      ? ` Nightly chains ${esc(ch.date || '')} ran on GitHub${ch.runUrl ? ` — <a href="${esc(ch.runUrl)}" target="_blank" rel="noopener" style="color:inherit">open run</a>` : ''}.`
+    // Failures that landed within seconds of each other are ONE event — a shared compute
+    // instance died and took every co-located request with it — so say that instead of
+    // presenting them as N independent defects (2026-10-02: five at once).
+    const coLocated = ch && Array.isArray(ch.crashedWithPeers) && ch.crashedWithPeers.length > 1
+      ? ` ${ch.crashedWithPeers.length} of these (${esc(ch.crashedWithPeers.join(', '))}) failed together within seconds — a co-located crash, not separate defects; the next run retries them.`
       : '';
+    const chainsFrom = ch && ch.source === 'github-matrix'
+      ? ` Nightly chains ${esc(ch.date || '')} ran on GitHub${ch.runUrl ? ` — <a href="${esc(ch.runUrl)}" target="_blank" rel="noopener" style="color:inherit">open run</a>` : ''}.${coLocated}`
+      : coLocated;
+    if (ch && ch.noMatrixRun) {
+      // The dead-man for ONE night: warm handed the chains to GitHub and no FULL run has
+      // reported since. A partial (only=) run cannot clear this — on 2026-10-02 one did,
+      // and a missing night read as healthy. Say it plainly.
+      const night = ch.noMatrixRun.date || '';
+      const todayEt = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      const which = night && night !== todayEt ? `The background refresh for ${esc(night)} never ran` : `Tonight's background refresh has not run yet`;
+      warns.push(`⚠️ ${which} — the nightly chains were handed to GitHub Actions and no full run has reported. Ledgers, scoreboard and research tabs still show the previous session.`);
+    }
     if (ch && ch.missing) {
-      // The dead-man: in-process dispatch is off and NO night has reported for days. This is
-      // the one failure a job e-mail can never deliver (nothing ran to fail).
+      // The dead-man for DAYS: in-process dispatch is off and NO night has reported at all.
+      // This is the one failure a job e-mail can never deliver (nothing ran to fail).
       warns.push(`⚠️ No nightly chain summary has been posted in the last few days — the GitHub nightly-chains workflow did not run or could not report. Ledgers, scoreboard and research tabs are NOT being refreshed.`);
     }
     if (sev.data.length) {

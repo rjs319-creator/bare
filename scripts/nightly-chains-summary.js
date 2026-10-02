@@ -22,8 +22,16 @@ const { ROOT_CHAINS } = require('../lib/warm-chains');
 const DEFAULT_APP_URL = 'https://market-news-app-chi.vercel.app';
 const DEFAULT_OUT_DIR = '.nightly';
 const POST_TIMEOUT_MS = 60000;
+// CO-LOCATED CRASH: failures of DIFFERENT chains within this window of each other are one
+// event — a Fluid-compute instance hosting several heavy invocations died (OOM) and took
+// every co-located request with it (2026-10-01 insidercluster; 2026-10-02 five chains at
+// 22:56:28-33 and 23:00:23-24). Labelled so op=health can say "one shared crash", not
+// "five defects". 5 s covers the observed spread with the runner's response-latency slack.
+const PEER_CRASH_WINDOW_MS = 5000;
 
-const isoDate = (ms) => new Date(ms).toISOString().slice(0, 10);
+// Summary dates are ET SESSION dates (lib/chain-summary.js): the retry schedules run as
+// late as 01:00 UTC, which is still the same evening in New York.
+const { etDate } = require('../lib/chain-summary');
 const parseOnly = (only) => String(only || '').split(',').map((s) => s.trim()).filter(Boolean);
 
 function readResults(outDir) {
@@ -35,22 +43,47 @@ function readResults(outDir) {
 
 const NO_REPORT = { ok: false, status: 'no-report', attempts: 0, failed: [], skipped: [], error: 'no result file — job cancelled, timed out before reporting, or never started' };
 
+// Every failure instant a result carries (runner: attemptFailures / failedAt / failDetail[].at).
+function failureInstants(r) {
+  const raw = [...(Array.isArray(r.attemptFailures) ? r.attemptFailures : []), r.failedAt, ...((Array.isArray(r.failDetail) ? r.failDetail : []).map((d) => d && d.at))];
+  return [...new Set(raw.map((v) => Date.parse(v)).filter(Number.isFinite))];
+}
+
+// Pure: mark each FAILED result whose failure instant sits within PEER_CRASH_WINDOW_MS of a
+// different chain's failure. Returns new objects; ok results are untouched.
+function markPeerCrashes(results, windowMs = PEER_CRASH_WINDOW_MS) {
+  const failed = (results || []).filter((r) => r && r.ok !== true).map((r) => ({ r, at: failureInstants(r) }));
+  const peersOf = (me) => failed
+    .filter((o) => o.r.chain !== me.r.chain && o.at.some((a) => me.at.some((b) => Math.abs(a - b) <= windowMs)))
+    .map((o) => o.r.chain);
+  const marks = new Map(failed.map((me) => [me.r.chain, peersOf(me)]));
+  return (results || []).map((r) => {
+    const peers = r && marks.get(r.chain);
+    return peers && peers.length ? { ...r, crashedWithPeers: true, peers } : r;
+  });
+}
+
 // Pure: results + the expected root list → the op=chainsummary body.
 function buildSummaryPayload(results, { expected = ROOT_CHAINS, only = [], runId = null, runUrl = null, now = Date.now() } = {}) {
   const wanted = only.length ? expected.filter((c) => only.includes(c)) : expected;
-  const byChain = Object.fromEntries((results || []).map((r) => [r.chain, r]));
+  const byChain = Object.fromEntries(markPeerCrashes(results || []).map((r) => [r.chain, r]));
   const chains = Object.fromEntries(wanted.map((c) => {
     const r = byChain[c];
     if (!r) return [c, NO_REPORT];
     return [c, { ok: r.ok === true, status: r.status || (r.ok ? 'ok' : 'failed'), httpStatus: r.httpStatus ?? null, attempts: r.attempts ?? null,
-      complete: typeof r.complete === 'boolean' ? r.complete : null, failed: r.failed || [], skipped: r.skipped || [], elapsedMs: r.elapsedMs ?? null, error: r.error || null }];
+      complete: typeof r.complete === 'boolean' ? r.complete : null, failed: r.failed || [], skipped: r.skipped || [], elapsedMs: r.elapsedMs ?? null, error: r.error || null,
+      ...(r.crashedWithPeers ? { crashedWithPeers: true, peers: r.peers } : {}) }];
   }));
   const starts = Object.values(byChain).map((r) => Date.parse(r.startedAt)).filter(Number.isFinite);
   const ends = Object.values(byChain).map((r) => Date.parse(r.finishedAt)).filter(Number.isFinite);
   const startedMs = starts.length ? Math.min(...starts) : now;
   return {
-    date: isoDate(startedMs),
+    date: etDate(startedMs),
     source: only.length ? 'manual' : 'github-matrix',
+    // A filtered run reports the chains it ran and nothing about the night: op=health treats
+    // only a full run (partial:false) as covering the date. `covered` names what ran.
+    partial: only.length > 0,
+    covered: wanted,
     runId: runId == null ? null : String(runId),
     runUrl,
     startedAt: new Date(startedMs).toISOString(),
@@ -61,11 +94,13 @@ function buildSummaryPayload(results, { expected = ROOT_CHAINS, only = [], runId
 
 function stepSummaryMarkdown(payload) {
   const rows = Object.entries(payload.chains).map(([name, c]) =>
-    `| ${c.ok ? '✅' : '❌'} ${name} | ${c.status} | ${c.httpStatus ?? '—'} | ${c.attempts ?? '—'} | ${c.elapsedMs != null ? Math.round(c.elapsedMs / 1000) + 's' : '—'} | ${(c.failed || []).join(', ') || (c.error || '')} | ${(c.skipped || []).join(', ')} |`);
+    `| ${c.ok ? '✅' : c.crashedWithPeers ? '💥' : '❌'} ${name} | ${c.status} | ${c.httpStatus ?? '—'} | ${c.attempts ?? '—'} | ${c.elapsedMs != null ? Math.round(c.elapsedMs / 1000) + 's' : '—'} | ${(c.failed || []).join(', ') || (c.error || '')} | ${(c.skipped || []).join(', ')} |`);
   const failed = Object.entries(payload.chains).filter(([, c]) => !c.ok).map(([n]) => n);
+  const coLocated = Object.entries(payload.chains).filter(([, c]) => c.crashedWithPeers).map(([n]) => n);
   return [
-    `## Nightly chains ${payload.date} (${payload.source})`,
+    `## Nightly chains ${payload.date} (${payload.source}${payload.partial ? ', partial' : ''})`,
     failed.length ? `**${failed.length} failed:** ${failed.join(', ')}` : '**All chains ok.**',
+    ...(coLocated.length ? [`💥 **co-located crash** (failed within ${PEER_CRASH_WINDOW_MS / 1000} s of each other — one shared instance died, not ${coLocated.length} defects): ${coLocated.join(', ')}`] : []),
     '',
     '| chain | status | http | attempts | elapsed | failed steps / error | budget-skipped |',
     '|---|---|---|---|---|---|---|',
@@ -110,4 +145,4 @@ if (require.main === module) {
   main().then((code) => process.exit(code), (e) => { process.stderr.write(`::error::${String((e && e.message) || e)}\n`); process.exit(1); });
 }
 
-module.exports = { readResults, buildSummaryPayload, stepSummaryMarkdown, postSummary, parseOnly, main, NO_REPORT, DEFAULT_OUT_DIR };
+module.exports = { readResults, buildSummaryPayload, stepSummaryMarkdown, postSummary, parseOnly, markPeerCrashes, failureInstants, main, NO_REPORT, DEFAULT_OUT_DIR, PEER_CRASH_WINDOW_MS };

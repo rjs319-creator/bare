@@ -12,13 +12,14 @@ const WC = require('../lib/warm-chains');
 const AUTH = { ok: true, production: true, secretConfigured: true, warnings: [] };
 const FRESH = { now: Date.parse('2026-10-02T23:00:00Z'), spyDate: '2026-10-02', spyDates: ['2026-09-30', '2026-10-01', '2026-10-02'], ageDays: 0.2, auth: AUTH };
 const cleanRun = { at: '2026-10-02T22:04:00Z', ok: true, failed: [], warmFails: [], budgetSkipped: [], chainDispatchFails: [], chainSkips: [], chains: { ledger: { dispatched: true, complete: true } } };
+const okAll = () => Object.fromEntries(WC.ROOT_CHAINS.map((c) => [c, { ok: true, failed: [], skipped: [] }]));
 const summary = (over = {}) => ({ date: '2026-10-02', source: 'github-matrix', runId: '7', runUrl: 'https://github.com/o/r/actions/runs/7', finishedAt: '2026-10-02T22:41:00Z',
-  ok: false, failed: ['capture', 'challenger'], chains: { ledger: { ok: true, failed: [], skipped: [] }, capture: { ok: false, failed: ['op=archive'], skipped: [] }, challenger: { ok: false, failed: ['op=challengerlog'], skipped: [] } }, ...over });
+  ok: false, failed: ['capture', 'challenger'], chains: { ...okAll(), capture: { ok: false, failed: ['op=archive'], skipped: [] }, challenger: { ok: false, failed: ['op=challengerlog'], skipped: [] } }, ...over });
 
 test('health: a posted GitHub summary with failures → chains block, problems, healthy:false', () => {
-  const r = buildHealthResponse([cleanRun], { ...FRESH, chainSummary: summary() });
-  assert.deepEqual(r.chains, { date: '2026-10-02', ok: false, failed: ['capture', 'challenger'], skipped: [], source: 'github-matrix',
-    runUrl: 'https://github.com/o/r/actions/runs/7', at: '2026-10-02T22:41:00Z', missing: false });
+  const r = buildHealthResponse([cleanRun], { ...FRESH, chainSummary: summary({ partial: false }) });
+  assert.deepEqual(r.chains, { date: '2026-10-02', ok: false, full: true, partial: false, covered: WC.ROOT_CHAINS, failed: ['capture', 'challenger'], skipped: [], crashedWithPeers: [], source: 'github-matrix',
+    runUrl: 'https://github.com/o/r/actions/runs/7', at: '2026-10-02T22:41:00Z', missing: false, noMatrixRun: null });
   assert.equal(r.healthy, false);
   assert.ok(r.problems.includes('chain:capture') && r.problems.includes('chain:challenger'));
   // The severity split still applies: challenger is a verified shadow chain.
@@ -27,8 +28,50 @@ test('health: a posted GitHub summary with failures → chains block, problems, 
 });
 
 test('health: a clean GitHub summary keeps healthy:true and adds no problems', () => {
-  const r = buildHealthResponse([cleanRun], { ...FRESH, chainSummary: summary({ ok: true, failed: [], chains: { ledger: { ok: true, failed: [], skipped: [] } } }) });
+  const r = buildHealthResponse([cleanRun], { ...FRESH, chainSummary: summary({ partial: false, ok: true, failed: [], chains: okAll() }) });
   assert.equal(r.chains.ok, true); assert.equal(r.healthy, true); assert.deepEqual(r.problems, []);
+});
+
+// ── the dead-man that a partial run cannot satisfy (2026-10-02) ───────────────────────
+const handedOff = { ...cleanRun, at: '2026-10-02T22:00:40Z', chainsInProcess: false, chains: {} };
+const partialMorning = summary({ source: 'manual', partial: true, ok: true, failed: [], runUrl: 'https://github.com/o/r/actions/runs/6', finishedAt: '2026-10-02T13:30:00Z',
+  chains: { delisting: { ok: true, failed: [], skipped: [] }, maturity: { ok: true, failed: [], skipped: [] } } });
+const GRACE = require('../lib/chain-summary').NO_MATRIX_RUN_GRACE_MS;
+
+test('health: a partial (only=) summary alone is not a covered night — ok:false, partial:true, but no problem before the grace', () => {
+  const r = buildHealthResponse([handedOff], { ...FRESH, now: Date.parse('2026-10-02T22:30:00Z'), chainSummaries: [partialMorning], inProcessChains: false });
+  assert.equal(r.chains.ok, false); assert.equal(r.chains.partial, true); assert.equal(r.chains.full, false);
+  assert.deepEqual(r.chains.covered, ['delisting', 'maturity']); assert.deepEqual(r.chains.failed, []);
+  assert.equal(r.chains.noMatrixRun, null);
+  assert.deepEqual(r.problems, []); assert.equal(r.healthy, true, 'inside the grace window the night is simply pending');
+});
+
+test('health: 90 min after a handed-off warm with only a partial summary → chains:no-matrix-run, healthy:false, plain warning', () => {
+  const now = Date.parse(handedOff.at) + GRACE;
+  const r = buildHealthResponse([handedOff], { ...FRESH, now, chainSummaries: [partialMorning], inProcessChains: false });
+  assert.ok(r.problems.includes('chains:no-matrix-run'));
+  assert.equal(r.healthy, false);
+  assert.deepEqual(r.chains.noMatrixRun, { date: '2026-10-02', warmAt: handedOff.at, graceMs: GRACE });
+  assert.match(r.warning, /background refresh for 2026-10-02 has not run/i);
+  assert.ok(r.problemsBySeverity.data.includes('chains:no-matrix-run'), 'a missing night is user-facing, never background');
+});
+
+test('health: the full run arriving clears no-matrix-run; a full run missing a root lists that root as failed', () => {
+  const now = Date.parse(handedOff.at) + 2 * GRACE;
+  const full = summary({ partial: false, ok: true, failed: [], chains: okAll() });
+  const r = buildHealthResponse([handedOff], { ...FRESH, now, chainSummaries: [full, partialMorning], inProcessChains: false });
+  assert.equal(r.chains.noMatrixRun, null); assert.equal(r.chains.ok, true); assert.equal(r.healthy, true);
+  const { [WC.ROOT_CHAINS[1]]: dropped, ...fewer } = full.chains;
+  const r2 = buildHealthResponse([handedOff], { ...FRESH, now, chainSummaries: [{ ...full, chains: fewer }], inProcessChains: false });
+  assert.equal(r2.chains.noMatrixRun, null, 'the night ran');
+  assert.deepEqual(r2.chains.failed, [WC.ROOT_CHAINS[1]]); assert.ok(r2.problems.includes(`chain:${WC.ROOT_CHAINS[1]}`)); assert.equal(r2.healthy, false);
+});
+
+test('health: no summary at all + handed-off warm past the grace → both dead-man problems', () => {
+  const now = Date.parse(handedOff.at) + GRACE;
+  const r = buildHealthResponse([handedOff], { ...FRESH, now, chainSummaries: [], inProcessChains: false });
+  assert.ok(r.problems.includes('chains:no-summary')); assert.ok(r.problems.includes('chains:no-matrix-run'));
+  assert.equal(r.healthy, false);
 });
 
 test('health: no summary + in-process ON → the block is derived from the run record (source in-process)', () => {
@@ -78,6 +121,10 @@ test('app.js banner: reads d.chains — shows the night + run link for the GitHu
   assert.match(health, /esc\(ch\.runUrl\)/, 'the run link is escaped before it is rendered');
   assert.match(health, /if \(ch && ch\.missing\)/);
   assert.match(health, /No nightly chain summary has been posted/);
+  assert.match(health, /if \(ch && ch\.noMatrixRun\)/, 'the night-not-run dead-man has its own line');
+  assert.match(health, /ch\.crashedWithPeers/, 'co-located crashes are labelled as one event');
+  assert.match(health, /esc\(ch\.crashedWithPeers\.join/, 'chain names are escaped before rendering');
+  assert.match(health, /background refresh has not run yet/i, 'said plainly');
 });
 
 test('warm.js: in-process chain dispatch is gated by inProcessChainsEnabled and recorded as chainsInProcess', () => {

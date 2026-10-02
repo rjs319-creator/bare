@@ -3,6 +3,7 @@
 const HOST = process.env.WARM_HOST || 'market-news-app-chi.vercel.app';
 const { requireTrusted, internalHeaders } = require('../lib/auth');
 const WC = require('../lib/warm-chains');
+const { dispatchNightlyChains } = require('../lib/nightly-dispatch');
 
 const PATHS = [
   '/api/backtest?scope=large&months=6',
@@ -100,6 +101,13 @@ module.exports = async function handler(req, res) {
   // cache warms above, the AI ticks and the single kicks below are NOT part of the matrix
   // and keep running here either way. Cutover: docs/nightly-chains-matrix.md.
   const chainsInProcess = WC.inProcessChainsEnabled();
+  // DIRECT TRIGGER (lib/nightly-dispatch.js): with the chains handed to GitHub, ask GitHub to
+  // start the matrix NOW instead of trusting its `schedule:` (which lagged by hours on
+  // 2026-10-02). Runs AFTER the cache warm above because `ledger` snapshots those caches.
+  // Dormant without GITHUB_DISPATCH_TOKEN; never throws; the outcome is recorded below so
+  // op=health shows `lastRun.dispatch`. The workflow's preflight makes a dispatched run and a
+  // late scheduled run idempotent, so this can never double the night's work.
+  const dispatch = chainsInProcess ? { attempted: false, status: 'in-process', ok: false } : await dispatchNightlyChains();
   const chainKicks = (chainsInProcess ? WC.ROOT_CHAINS : []).map((name, i) => ({
     name,
     p: (async () => {
@@ -236,6 +244,8 @@ module.exports = async function handler(req, res) {
     // false = handed to the GitHub matrix (WARM_CHAINS_INPROCESS=0); op=health then reads
     // chains/<date>.json (op=chainsummary) instead of grading `chains` above.
     chainsInProcess,
+    // The workflow_dispatch POST that asked GitHub to start that matrix ({attempted, status}).
+    dispatch,
     aiTicksKicked: 6, calibKicked: true, researchKicked: true,
     elapsedMs: Date.now() - START, at: new Date().toISOString(),
   };
@@ -243,7 +253,7 @@ module.exports = async function handler(req, res) {
   // Structured run summary — survives in Vercel logs even if the health write fails.
   // Per-STEP outcomes now live in each chain's own [warmchain] <name> log line; warm only
   // knows what it dispatched and what reported back before its ceiling.
-  console.info('[warm] done', JSON.stringify({ elapsedMs: result.elapsedMs, chainsDispatched, chainsInProcess, chains: chainReports }));
+  console.info('[warm] done', JSON.stringify({ elapsedMs: result.elapsedMs, chainsDispatched, chainsInProcess, dispatch, chains: chainReports }));
 
   // Observability: persist a compact health record so failed ticks / stale data are visible (op=health).
   try { const { summarizeRun, writeHealthRun } = require('../lib/health'); await writeHealthRun(summarizeRun(result)); }
