@@ -42,7 +42,9 @@ test('app.js never pipes a payload generatedAt straight into toLocaleTimeString'
 test('app.js defines stampText and routes the generation stamps through it', () => {
   assert.match(APP, /function stampText\(ts\)/);
   const uses = (APP.match(/stampText\(/g) || []).length;
-  assert.ok(uses >= 20, `expected >=20 stampText call sites (definition + ~21 stamps), found ${uses}`);
+  // 2026-10-02: 23 tabs were retired with their stamps (momentum, coreperf, ghost, edge, …); the
+  // remaining stamps all still route through stampText — the floor tracks the surviving count.
+  assert.ok(uses >= 15, `expected >=15 stampText call sites (definition + the surviving stamps), found ${uses}`);
 });
 
 test('stampText behavior: clock-only for a same-day stamp, date + explicit age for an old one', () => {

@@ -199,7 +199,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     alerts: 'Events the app caught — sharp-money flags and stance flips — and the notification settings.',
     scoreboard: 'The track record: how every signal type actually performed against the market, after costs.',
     evidence: 'How much to trust each strategy — a grade earned from its own record.',
-    baselines: 'Does each strategy beat a dumb baseline (the market and its sector)?',
+    baselines: 'Does each strategy actually beat a DUMB baseline? Two baselines are enforced per strategy (SPY and its sector); the naive screens are shown for context and not applied as gates.',
     movermiss: 'After the close: which big movers the pipeline missed and at which stage.',
     intradayval: 'The forward record of every intraday entry template, measured from the first visible bar.',
     events: 'Forced-selling bounces — index changes, lock-ups and fire-sales — and whether the bounce pays.',
