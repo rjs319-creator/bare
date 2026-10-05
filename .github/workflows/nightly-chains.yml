@@ -43,9 +43,18 @@ name: Nightly chains (warm roots as a matrix)
 # the 22:05 nightly had not fired by 22:53. Four independent schedules are four chances to land
 # the night; the `preflight` job below makes them IDEMPOTENT — a run that finds the night
 # already covered skips every chain job and the summary (one tiny job), and a run that finds a
-# partial/red record re-runs only the chains that are not yet ok. All four land on the SAME ET
-# session date: 01:00 UTC is 21:00 EDT / 20:00 EST, well before midnight in New York (04:00
-# UTC EDT), and lib/chain-summary.js keys every record by the ET date for exactly this reason.
+# partial/red record re-runs only the chains that are not yet ok.
+#
+# THE NIGHT IS THE TARGET SESSION, not the ET calendar date. Every record is keyed by the last
+# COMPLETED NYSE regular session at run start (lib/chain-summary.js targetSession →
+# lib/market-session.js, weekend/holiday aware): all four schedules above land after the
+# close, so they share that day's session (01:00 UTC is 21:00 EDT / 20:00 EST). The ET date
+# was the key until 2026-10-02, when GitHub ran the 01:00 retry FIVE HOURS late at 06:14 UTC =
+# 02:14 ET Friday, before the session: that pre-market run (processing Thursday's done data)
+# became "Friday's" full record and Friday's real post-close runs skipped everything as
+# already-ok. Now a 02:14 ET Friday run targets Thursday (already ok → preflight skip), the
+# post-close runs target Friday, and a Saturday run targets Friday too. The preflight decides
+# the session ONCE (`session` output) and every job stamps it (TARGET_SESSION).
 # No schedule after 01:00 — later than that the next morning's premarket readers would see a
 # half-refreshed app, and the dead-man (op=health chains:no-matrix-run) has already alarmed.
 # warm's first two steps are the cache warms (PATHS: backtests, screeners incl. the candle
@@ -105,16 +114,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # IDEMPOTENCE GATE. Asks op=health (public GET, no bearer) what tonight already has and
-  # emits `skip` (a full clean run exists → every job below is skipped) and `already_ok`
-  # (chains an earlier run of this ET session completed → the runner reports them as
-  # `already-ok` without a request). Fail-OPEN: a failed probe runs everything.
+  # IDEMPOTENCE GATE. Asks op=health (public GET, no bearer) what the TARGET SESSION already
+  # has and emits `skip` (a full clean run exists → every job below is skipped), `already_ok`
+  # (chains an earlier run for this session completed → the runner reports them as
+  # `already-ok` without a request) and `session` (the night itself, stamped on every result
+  # and on the posted record). Fail-OPEN: a failed probe runs everything.
   preflight:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     outputs:
       skip: ${{ steps.probe.outputs.skip }}
       already_ok: ${{ steps.probe.outputs.already_ok }}
+      session: ${{ steps.probe.outputs.session }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -148,6 +159,7 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           ALREADY_OK: ${{ needs.preflight.outputs.already_ok }}
+          TARGET_SESSION: ${{ needs.preflight.outputs.session }}
         run: node scripts/run-nightly-chain.js "${{ matrix.chain }}"
       - uses: actions/upload-artifact@v4
         if: always()
@@ -183,6 +195,7 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           ALREADY_OK: ${{ needs.preflight.outputs.already_ok }}
+          TARGET_SESSION: ${{ needs.preflight.outputs.session }}
         run: node scripts/run-nightly-chain.js "${{ matrix.chain }}"
       - uses: actions/upload-artifact@v4
         if: always()
@@ -213,4 +226,5 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           ONLY: ${{ github.event.inputs.only }}
+          TARGET_SESSION: ${{ needs.preflight.outputs.session }}
         run: node scripts/nightly-chains-summary.js

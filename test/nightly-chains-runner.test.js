@@ -18,6 +18,7 @@ test('runChain: HTTP 200 with a clean body → ok, one attempt, bearer + x-warm 
   const fetchImpl = async (url, init) => { calls.push({ url, init }); return resp(200, { ok: true, complete: true, failed: [], skipped: [], elapsedMs: 4321 }); };
   const r = await RUN.runChain('maturity', opts(fetchImpl));
   assert.equal(r.ok, true); assert.equal(r.status, 'ok'); assert.equal(r.attempts, 1); assert.equal(r.elapsedMs, 4321); assert.equal(r.complete, true);
+  assert.equal(r.session, '2026-10-02', 'stamped with the TARGET SESSION (22:05 UTC Thursday → Thursday)'); assert.equal(r.date, '2026-10-02');
   assert.equal(calls[0].url, 'https://app.test/api/tracker?op=warmchain&name=maturity');
   assert.equal(calls[0].init.headers.authorization, 'Bearer s3cret');
   assert.equal(calls[0].init.headers['x-warm'], '1');
@@ -139,6 +140,7 @@ test('main: a chain named in ALREADY_OK is reported already-ok (ok, no request, 
     assert.equal(code, 0);
     const r = JSON.parse(fs.readFileSync(path.join(dir, 'maturity.json'), 'utf8'));
     assert.equal(r.status, 'already-ok'); assert.equal(r.ok, true); assert.equal(r.attempts, 0);
+    assert.match(r.session, /^\d{4}-\d{2}-\d{2}$/, 'already-ok results carry the session too');
     // It round-trips through the summary + the server validator as an ok chain.
     const CS = require('../lib/chain-summary');
     const p = SUM.buildSummaryPayload([r], { expected: ['maturity'], now: Date.parse(r.finishedAt) });
@@ -178,11 +180,42 @@ test('buildSummaryPayload: a filtered (workflow_dispatch only=) run expects only
 test('buildSummaryPayload: a run that starts after 00:00 UTC is dated by its ET session (same evening in New York)', () => {
   const late = res('ledger', { startedAt: '2026-10-03T01:02:00Z', finishedAt: '2026-10-03T01:05:00Z' });
   const p = SUM.buildSummaryPayload([late], { expected: ['ledger'], now: Date.parse('2026-10-03T01:06:00Z') });
-  assert.equal(p.date, '2026-10-02');
+  assert.equal(p.date, '2026-10-02'); assert.equal(p.session, '2026-10-02');
+});
+
+test('buildSummaryPayload: the record is keyed by the TARGET SESSION of the earliest start; `date` stays the ET wall-clock date (2026-10-02 defect)', () => {
+  // 06:14 UTC Friday 10-02 = 02:14 ET, pre-market: Thursday is the last completed session.
+  const premarket = res('ledger', { startedAt: '2026-10-02T06:14:00Z', finishedAt: '2026-10-02T06:20:00Z', session: '2026-10-01' });
+  const p = SUM.buildSummaryPayload([premarket], { expected: ['ledger'], now: Date.parse('2026-10-02T06:21:00Z') });
+  assert.equal(p.session, '2026-10-01'); assert.equal(p.date, '2026-10-02');
+  assert.match(SUM.stepSummaryMarkdown(p), /session 2026-10-01/);
+  // 00:28 UTC Saturday = 20:28 ET Friday, post-close → Friday's session (the night Thursday's record must not satisfy).
+  const postClose = res('ledger', { startedAt: '2026-10-03T00:28:00Z', finishedAt: '2026-10-03T00:30:00Z' });
+  assert.equal(SUM.buildSummaryPayload([postClose], { expected: ['ledger'], now: Date.parse('2026-10-03T00:31:00Z') }).session, '2026-10-02');
+  // 06:41 UTC Saturday = 02:41 ET → still Friday.
+  const sat = res('ledger', { startedAt: '2026-10-03T06:41:00Z', finishedAt: '2026-10-03T06:45:00Z' });
+  const ps = SUM.buildSummaryPayload([sat], { expected: ['ledger'], now: Date.parse('2026-10-03T06:46:00Z') });
+  assert.equal(ps.session, '2026-10-02'); assert.equal(ps.date, '2026-10-03');
+  // The preflight's session (TARGET_SESSION) wins over the clock when the workflow passes it through.
+  assert.equal(SUM.buildSummaryPayload([sat], { expected: ['ledger'], session: '2026-10-02', now: Date.parse('2026-10-03T06:46:00Z') }).session, '2026-10-02');
+  // The server validator keys the night by that session, not by date.
+  const CS = require('../lib/chain-summary');
+  const v = CS.normalizeChainSummary({ ...p, partial: false }, { now: Date.parse('2026-10-02T06:21:00Z'), roots: ['ledger'] });
+  assert.equal(v.error, null); assert.equal(v.value.session, '2026-10-01'); assert.equal(v.value.date, '2026-10-02');
+});
+
+test('main (runner): TARGET_SESSION from the preflight stamps the result; an invalid value falls back to the clock', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nightly-'));
+  await RUN.main(['node', 'x', 'maturity'], { OUT_DIR: dir, CRON_SECRET: 's3cret', ALREADY_OK: 'maturity', TARGET_SESSION: '2026-10-01' });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'maturity.json'), 'utf8')).session, '2026-10-01');
+  await RUN.main(['node', 'x', 'maturity'], { OUT_DIR: dir, CRON_SECRET: 's3cret', ALREADY_OK: 'maturity', TARGET_SESSION: 'garbage' });
+  assert.match(JSON.parse(fs.readFileSync(path.join(dir, 'maturity.json'), 'utf8')).session, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(RUN.resolveSession({ TARGET_SESSION: '2026-10-01' }, () => Date.parse('2026-10-03T00:28:00Z')), '2026-10-01');
+  assert.equal(RUN.resolveSession({}, () => Date.parse('2026-10-03T00:28:00Z')), '2026-10-02');
 });
 
 test('markPeerCrashes: failures of different chains within 5 s are one co-located crash; lone failures and ok chains are untouched', () => {
-  const T = (s) => `2026-10-02T22:56:${s}Z`;
+  const T = (s) => `2026-10-01T22:56:${s}Z`;
   const fails = (chain, ...ats) => res(chain, { ok: false, status: 'failed', failed: ['op=x'], attemptFailures: ats, failedAt: ats[ats.length - 1] });
   const marked = SUM.markPeerCrashes([fails('capture', T('28')), fails('universe', T('31')), fails('pulse', T('34')), fails('pattern', T('59')), res('ledger')]);
   const by = Object.fromEntries(marked.map((r) => [r.chain, r]));
@@ -197,7 +230,7 @@ test('markPeerCrashes: failures of different chains within 5 s are one co-locate
   const CS = require('../lib/chain-summary');
   const v = CS.normalizeChainSummary({ ...p, partial: false }, { now: NOW, roots: ['capture', 'universe', 'pulse', 'pattern', 'ledger'] });
   assert.equal(v.value.chains.capture.crashedWithPeers, true); assert.deepEqual(v.value.chains.universe.peers, ['capture', 'pulse']); assert.equal('crashedWithPeers' in v.value.chains.pattern, false);
-  assert.deepEqual(CS.chainsHealthView({ summaries: [{ ...v.value, date: '2026-10-02' }], roots: ['capture', 'universe', 'pulse', 'pattern', 'ledger'], now: NOW }).crashedWithPeers, ['capture', 'universe', 'pulse']);
+  assert.deepEqual(CS.chainsHealthView({ summaries: [{ ...v.value, date: '2026-10-01' }], roots: ['capture', 'universe', 'pulse', 'pattern', 'ledger'], now: NOW }).crashedWithPeers, ['capture', 'universe', 'pulse']);
   assert.match(SUM.stepSummaryMarkdown(p), /co-located crash[^\n]*capture, universe, pulse/);
   // Inputs are not mutated.
   assert.equal('crashedWithPeers' in fails('a', T('00')), false);

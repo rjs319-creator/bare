@@ -5,7 +5,14 @@
 //   node scripts/run-nightly-chain.js <chain>
 //   env: APP_URL (default prod), CRON_SECRET (bearer; absent → graceful skip), OUT_DIR (.nightly),
 //        ALREADY_OK (comma list from the preflight job: chains an earlier run of the SAME night
-//        already completed — the runner exits 0 with status `already-ok` without a request)
+//        already completed — the runner exits 0 with status `already-ok` without a request),
+//        TARGET_SESSION (the night, YYYY-MM-DD, decided once by the preflight; absent/invalid →
+//        computed here from the clock: lib/chain-summary.js targetSession)
+//
+// EVERY result is stamped with `session` — the TARGET SESSION (the last completed NYSE
+// session at run start), the key every nightly record is filed under — and `date`, the ET
+// wall-clock date of the run, which is informational. See lib/chain-summary.js for the
+// 2026-10-02 pre-market incident that made the distinction matter.
 //
 // Hits the existing single-chain endpoint op=warmchain&name=<chain> — the same call
 // api/warm.js made in-process — and writes a compact result JSON the summary job folds
@@ -35,6 +42,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { CHAINS } = require('../lib/warm-chains');
+const CS = require('../lib/chain-summary');
 
 const DEFAULT_APP_URL = 'https://market-news-app-chi.vercel.app';
 const DEFAULT_OUT_DIR = '.nightly';
@@ -146,9 +154,17 @@ function shouldRetry(a) {
   return RETRY_STATUSES.has(a.httpStatus);
 }
 
-async function runChain(chain, { appUrl = DEFAULT_APP_URL, secret, fetchImpl = globalThis.fetch, now = Date.now, retryDelayMs = RETRY_DELAY_MS, crashRetryDelayMs = CRASH_RETRY_DELAY_MS, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
+// The night this result belongs to: the preflight's TARGET_SESSION when the workflow passed
+// one through, else the clock's target session. Never the ET calendar date.
+function resolveSession(env = process.env, now = Date.now) {
+  const fromEnv = String(env.TARGET_SESSION || '').trim();
+  return CS.DATE_RE.test(fromEnv) ? fromEnv : CS.targetSession(now());
+}
+
+async function runChain(chain, { appUrl = DEFAULT_APP_URL, secret, fetchImpl = globalThis.fetch, now = Date.now, session = null, retryDelayMs = RETRY_DELAY_MS, crashRetryDelayMs = CRASH_RETRY_DELAY_MS, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
   if (!CHAINS[chain]) throw new Error(`unknown chain "${chain}" — not in lib/warm-chains.js CHAINS`);
-  const startedAt = new Date(now()).toISOString();
+  const startMs = now();
+  const startedAt = new Date(startMs).toISOString();
   let attempt = null;
   let grade = null;
   let attempts = 0;
@@ -165,7 +181,8 @@ async function runChain(chain, { appUrl = DEFAULT_APP_URL, secret, fetchImpl = g
     break;
   }
   return {
-    chain, ...grade, httpStatus: attempt.httpStatus, attempts, crashRetry,
+    chain, session: session || CS.targetSession(startMs), date: CS.etDate(startMs),
+    ...grade, httpStatus: attempt.httpStatus, attempts, crashRetry,
     elapsedMs: attempt.body && Number.isFinite(attempt.body.elapsedMs) ? attempt.body.elapsedMs : attempt.ms,
     // Every failure instant across attempts (ISO) — the summary job clusters these across
     // chains to label a co-located instance crash instead of N separate defects.
@@ -193,32 +210,35 @@ function writeResult(outDir, r) {
 
 const parseList = (v) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean);
 
-// A chain the preflight found already ok for this ET session (an earlier schedule, a manual
+// A chain the preflight found already ok for this session (an earlier schedule, a manual
 // dispatch, or a retry schedule got to it): report it as such so the summary still covers
-// every root, and do not re-run the work — the ops are idempotent per day but not free.
-function alreadyOkResult(chain, now = Date.now) {
-  const at = new Date(now()).toISOString();
-  return { chain, ok: true, status: 'already-ok', attempts: 0, httpStatus: null, complete: true, failed: [], skipped: [], elapsedMs: 0, startedAt: at, finishedAt: at, error: null };
+// every root, and do not re-run the work — the ops are idempotent per session but not free.
+function alreadyOkResult(chain, now = Date.now, session = null) {
+  const ms = now();
+  const at = new Date(ms).toISOString();
+  return { chain, session: session || CS.targetSession(ms), date: CS.etDate(ms), ok: true, status: 'already-ok', attempts: 0, httpStatus: null, complete: true, failed: [], skipped: [], elapsedMs: 0, startedAt: at, finishedAt: at, error: null };
 }
 
 async function main(argv = process.argv, env = process.env) {
   const chain = String(argv[2] || '').trim();
   if (!chain) { process.stderr.write('usage: run-nightly-chain.js <chain>\n'); return 2; }
   const outDir = env.OUT_DIR || DEFAULT_OUT_DIR;
+  const session = resolveSession(env);
   if (parseList(env.ALREADY_OK).includes(chain)) {
-    const r = alreadyOkResult(chain);
+    const r = alreadyOkResult(chain, Date.now, session);
     writeResult(outDir, r);
-    process.stdout.write(`::notice title=chain ${chain} already-ok::completed by an earlier run of this night — not re-run\n`);
+    process.stdout.write(`::notice title=chain ${chain} already-ok::completed by an earlier run for session ${session} — not re-run\n`);
     return 0;
   }
   const secret = env.CRON_SECRET || '';
   if (!secret) {
-    const r = { chain, ok: true, status: 'skipped:no-secret', attempts: 0, failed: [], skipped: [], startedAt: new Date().toISOString(), finishedAt: new Date().toISOString() };
+    const at = new Date().toISOString();
+    const r = { chain, session, date: CS.etDate(Date.now()), ok: true, status: 'skipped:no-secret', attempts: 0, failed: [], skipped: [], startedAt: at, finishedAt: at };
     writeResult(outDir, r);
     annotations(r).forEach((l) => process.stdout.write(l + '\n'));
     return 0;
   }
-  const r = await runChain(chain, { appUrl: env.APP_URL || DEFAULT_APP_URL, secret });
+  const r = await runChain(chain, { appUrl: env.APP_URL || DEFAULT_APP_URL, secret, session });
   const file = writeResult(outDir, r);
   process.stdout.write(JSON.stringify({ ...r, failDetail: undefined }) + '\n');
   annotations(r).forEach((l) => process.stdout.write(l + '\n'));
@@ -230,5 +250,5 @@ if (require.main === module) {
   main().then((code) => process.exit(code), (e) => { process.stderr.write(`::error::${errText(e)}\n`); process.exit(1); });
 }
 
-module.exports = { attemptOnce, gradeAttempt, shouldRetry, isPlatformCrash, stampFailDetail, failureInstants, runChain, annotations, writeResult, chainUrl, alreadyOkResult, main,
+module.exports = { attemptOnce, gradeAttempt, shouldRetry, isPlatformCrash, stampFailDetail, failureInstants, runChain, annotations, writeResult, chainUrl, alreadyOkResult, resolveSession, main,
   MAX_ATTEMPTS, REQUEST_TIMEOUT_MS, FAST_FAIL_MS, RETRY_DELAY_MS, CRASH_RETRY_DELAY_MS, RETRY_STATUSES, CRASH_STATUSES, DEFAULT_OUT_DIR };

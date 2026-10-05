@@ -65,7 +65,7 @@ test('normalizeChainSummary: a chain without an explicit ok is graded from statu
 test('chainsHealthView: a GitHub summary becomes the compact banner block', () => {
   const { value } = CS.normalizeChainSummary(payload({ partial: false }), { now: NOW });
   const v = CS.chainsHealthView({ summary: value, roots: ['ledger', 'capture'], now: NOW });
-  assert.deepEqual(v, { date: '2026-10-02', ok: false, full: true, partial: false, covered: ['ledger', 'capture'], failed: ['capture'], skipped: [], crashedWithPeers: [], source: 'github-matrix',
+  assert.deepEqual(v, { session: '2026-10-02', date: '2026-10-02', ok: false, full: true, partial: false, covered: ['ledger', 'capture'], failed: ['capture'], skipped: [], crashedWithPeers: [], source: 'github-matrix',
     runUrl: 'https://github.com/x/y/actions/runs/42', at: '2026-10-02T22:39:00.000Z', missing: false, noMatrixRun: null });
 });
 
@@ -73,7 +73,7 @@ test('chainsHealthView: falls back to the in-process run record when no summary 
   const run = { at: '2026-10-01T22:04:00Z', chainDispatchFails: ['atlasx'], lateChainFails: ['atlasx', 'swing'], chains: { atlasx: {}, swing: {}, ledger: {} } };
   const v = CS.chainsHealthView({ summary: null, run, inProcess: true });
   assert.equal(v.source, 'in-process');
-  assert.equal(v.date, '2026-10-01');
+  assert.equal(v.date, '2026-10-01'); assert.equal(v.session, '2026-10-01', 'a 22:04 UTC warm on a Thursday targets that day\'s session');
   assert.deepEqual(v.failed, ['atlasx', 'swing']);
   assert.equal(v.ok, false);
 });
@@ -263,7 +263,7 @@ test('matrixRunOverdue: fires 90 min after a chainsInProcess:false warm with no 
   assert.equal(CS.NO_MATRIX_RUN_GRACE_MS, 90 * 60 * 1000);
   assert.equal(CS.matrixRunOverdue({ run: warmRun, summaries: [], now: at + CS.NO_MATRIX_RUN_GRACE_MS - 1, roots: ROOTS }), null, 'inside the grace window');
   const tripped = CS.matrixRunOverdue({ run: warmRun, summaries: [], now: at + CS.NO_MATRIX_RUN_GRACE_MS, roots: ROOTS });
-  assert.deepEqual(tripped, { date: '2026-10-02', warmAt: warmRun.at, graceMs: CS.NO_MATRIX_RUN_GRACE_MS });
+  assert.deepEqual(tripped, { session: '2026-10-02', warmAt: warmRun.at, graceMs: CS.NO_MATRIX_RUN_GRACE_MS });
   // A partial (only=) doc for the night does NOT satisfy it — that is exactly what fooled op=health on 2026-10-02.
   assert.ok(CS.matrixRunOverdue({ run: warmRun, summaries: [partialDoc('2026-10-02')], now: at + 2 * CS.NO_MATRIX_RUN_GRACE_MS, roots: ROOTS }));
   // A legacy only= doc (no partial flag, one root) does not either.
@@ -293,9 +293,9 @@ test('matrixRunOverdue: silent when warm ran in-process, when there is no warm r
 test('chainsHealthView: carries noMatrixRun so the banner can say the night has not run', () => {
   const at = Date.parse(warmRun.at);
   const v = CS.chainsHealthView({ summaries: [partialDoc('2026-10-02')], run: warmRun, inProcess: false, now: at + 2 * CS.NO_MATRIX_RUN_GRACE_MS, roots: ROOTS });
-  assert.equal(v.noMatrixRun && v.noMatrixRun.date, '2026-10-02');
+  assert.equal(v.noMatrixRun && v.noMatrixRun.session, '2026-10-02');
   const dead = CS.chainsHealthView({ summaries: [], run: warmRun, inProcess: false, now: at + 2 * CS.NO_MATRIX_RUN_GRACE_MS, roots: ROOTS });
-  assert.equal(dead.missing, true); assert.equal(dead.noMatrixRun && dead.noMatrixRun.date, '2026-10-02');
+  assert.equal(dead.missing, true); assert.equal(dead.noMatrixRun && dead.noMatrixRun.session, '2026-10-02');
 });
 
 test('recentSummaryDates: ET dates, so a 01:00 UTC health probe still looks at the ET session it belongs to', () => {
@@ -320,4 +320,109 @@ test('mergeChainSummary: a full post replaces (keeping prior runs as provenance)
   assert.deepEqual(CS.mergeChainSummary(null, partial), partial);
   // Inputs are not mutated.
   assert.equal(full.chains.capture.ok, false);
+});
+
+// ── TARGET SESSION keying (2026-10-02/03 defect) ─────────────────────────────────────────
+// GitHub ran the `0 1 * * *` retry cron 5 h late, at 06:14 UTC = 02:14 ET Friday 10-02 — BEFORE
+// Friday's session. Keyed by the ET calendar date, that pre-market run (which processed
+// Thursday's already-done data) became the full record for "2026-10-02", so Friday's real
+// post-close runs skipped almost every chain as already-ok. Everything is now keyed by the
+// TARGET SESSION = the last completed NYSE session at run start (lib/market-session.js).
+const SIX14_FRI = Date.parse('2026-10-02T06:14:00Z');     // 02:14 ET Fri — pre-market
+const POSTCLOSE_FRI = Date.parse('2026-10-03T00:28:00Z'); // 20:28 ET Fri — after the close
+const SIX41_SAT = Date.parse('2026-10-03T06:41:00Z');     // 02:41 ET Sat
+
+test('targetSession: a pre-market run targets the PREVIOUS session; post-close and weekend runs target the day that closed', () => {
+  assert.equal(CS.etDate(SIX14_FRI), '2026-10-02', 'the ET calendar date — what the old key was');
+  assert.equal(CS.targetSession(SIX14_FRI), '2026-10-01', '02:14 ET Friday → Thursday');
+  assert.equal(CS.targetSession(POSTCLOSE_FRI), '2026-10-02', '20:28 ET Friday → Friday');
+  assert.equal(CS.targetSession(SIX41_SAT), '2026-10-02', '02:41 ET Saturday → Friday');
+  assert.equal(CS.targetSession(Date.parse('2026-10-05T22:00:00Z')), '2026-10-05', 'the 22:00 UTC Vercel cron on a weekday is after the close');
+  assert.equal(CS.targetSession(Date.parse('2026-10-02T19:59:00Z')), '2026-10-01', '15:59 ET — the session is not complete yet');
+  assert.equal(CS.targetSession(Date.parse('2026-10-02T20:00:00Z')), '2026-10-02', '16:00 ET — the bell');
+});
+
+test('targetSession: holidays resolve to the prior trading day (the market-session calendar, not a re-implementation)', () => {
+  assert.equal(CS.targetSession(Date.parse('2026-11-26T22:00:00Z')), '2026-11-25', 'Thanksgiving Thursday → Wednesday');
+  assert.equal(CS.targetSession(Date.parse('2026-09-07T22:00:00Z')), '2026-09-04', 'Labor Day Monday → the Friday before');
+  assert.equal(CS.targetSession(Date.parse('2026-09-08T02:00:00Z')), '2026-09-04', '22:00 ET Labor Day → still the Friday before');
+  assert.equal(CS.targetSession(Date.parse('2026-11-27T18:30:00Z')), '2026-11-27', 'the 13:00 ET early close counts as complete at 13:30 ET');
+});
+
+test('normalizeChainSummary: `session` is the key; `date` is the informational ET wall-clock date; a legacy body without session falls back to date', () => {
+  const premarket = CS.normalizeChainSummary(payload({ session: '2026-10-01', date: '2026-10-02', startedAt: '2026-10-02T06:14:00Z' }), { now: SIX14_FRI });
+  assert.equal(premarket.error, null);
+  assert.equal(premarket.value.session, '2026-10-01'); assert.equal(premarket.value.date, '2026-10-02');
+  const legacy = CS.normalizeChainSummary(payload({ date: '2026-10-01' }), { now: NOW });
+  assert.equal(legacy.value.session, '2026-10-01', 'legacy posters (no session) are keyed by their date'); assert.equal(legacy.value.date, '2026-10-01');
+  const noDate = CS.normalizeChainSummary(payload({ date: undefined, session: '2026-10-01' }), { now: NOW });
+  assert.equal(noDate.error, null); assert.equal(noDate.value.date, '2026-10-01', 'date defaults to the session when the poster omits it');
+  assert.equal(CS.sessionOf({ session: '2026-10-01', date: '2026-10-02' }), '2026-10-01');
+  assert.equal(CS.sessionOf({ date: '2026-10-02' }), '2026-10-02');
+  assert.equal(CS.sessionOf(null), null);
+});
+
+test('normalizeChainSummary: an explicit session must be a real trading session inside the window', () => {
+  assert.match(CS.normalizeChainSummary(payload({ session: '2026-10-03' }), { now: SIX41_SAT }).error, /session/, 'a Saturday is not a session');
+  assert.match(CS.normalizeChainSummary(payload({ session: '2026-11-26' }), { now: Date.parse('2026-11-27T00:00:00Z') }).error, /session/, 'Thanksgiving is not a session');
+  assert.match(CS.normalizeChainSummary(payload({ session: '2026/10/02' }), { now: NOW }).error, /session/);
+  assert.match(CS.normalizeChainSummary(payload({ session: '2026-09-01' }), { now: NOW }).error, /session/, 'outside the window');
+  assert.match(CS.normalizeChainSummary(payload({ session: undefined, date: undefined }), { now: NOW }).error, /session/, 'one of session/date is required');
+  assert.equal(CS.isTradingSessionDate('2026-10-01'), true); assert.equal(CS.isTradingSessionDate('2026-10-03'), false);
+  assert.equal(CS.isTradingSessionDate('2026-07-03'), false, 'observed holiday'); assert.equal(CS.isTradingSessionDate('nope'), false);
+});
+
+test('mergeChainSummary + readChainSummaries: nights are identified by session, legacy docs by their date', async () => {
+  const premarket = { session: '2026-10-01', date: '2026-10-02', source: 'github-matrix', partial: false, ok: true, failed: [], runId: 'pm', chains: fullChains, covered: ROOTS };
+  const friday = { session: '2026-10-02', date: '2026-10-02', source: 'github-matrix', partial: false, ok: true, failed: [], runId: 'fri', chains: fullChains, covered: ROOTS };
+  // Same calendar date, different sessions → the Friday record is a NEW night, not a replacement of Thursday's.
+  assert.deepEqual(CS.mergeChainSummary(premarket, friday), friday);
+  // A legacy doc keyed by date merges with a session-keyed post for the same session.
+  const legacyThu = { date: '2026-10-01', source: 'manual', partial: true, ok: true, failed: [], runId: 'l', chains: { maturity: okChain }, covered: ['maturity'] };
+  assert.deepEqual(CS.mergeChainSummary(legacyThu, premarket).priorRuns.map((p) => p.runId), ['l']);
+  // The route reads back by session key and ignores a doc whose session does not match its key.
+  const store = memStore();
+  store.docs.set('chains/2026-10-01.json', premarket);
+  store.docs.set('chains/2026-10-02.json', friday);
+  store.docs.set('chains/2026-09-30.json', { ...friday, session: '2026-10-02' });
+  const hits = await R.readChainSummaries({ store, now: () => SIX41_SAT });
+  assert.deepEqual(hits.map((d) => d.session), ['2026-10-02', '2026-10-01']);
+});
+
+test('runChainSummary: the doc is written under chains/<session>.json, never the wall-clock date', () => withSecret('s3cret', async () => {
+  const store = memStore(); const res = fakeRes();
+  await R.runChainSummary(req({ body: payload({ partial: false, session: '2026-10-01', date: '2026-10-02', startedAt: '2026-10-02T06:14:00Z' }) }), res, { store, now: () => SIX14_FRI });
+  assert.equal(res.code, 200); assert.equal(res.body.session, '2026-10-01'); assert.equal(res.body.path, 'chains/2026-10-01.json');
+  assert.ok(store.docs.has('chains/2026-10-01.json')); assert.equal(store.docs.has('chains/2026-10-02.json'), false);
+}));
+
+test('chainsHealthView: the newest SESSION wins and the block carries both session and date', () => {
+  const premarket = { session: '2026-10-01', date: '2026-10-02', source: 'github-matrix', partial: false, ok: true, failed: [], finishedAt: '2026-10-02T07:00:00Z', chains: fullChains };
+  const legacyFri = { date: '2026-10-02', source: 'github-matrix', partial: false, ok: true, failed: [], chains: fullChains };
+  const v = CS.chainsHealthView({ summaries: [premarket], roots: ROOTS, now: SIX14_FRI });
+  assert.equal(v.session, '2026-10-01'); assert.equal(v.date, '2026-10-02'); assert.equal(v.ok, true);
+  const v2 = CS.chainsHealthView({ summaries: [premarket, legacyFri], roots: ROOTS, now: SIX41_SAT });
+  assert.equal(v2.session, '2026-10-02', 'a legacy doc is its date'); assert.equal(v2.date, '2026-10-02');
+});
+
+test('matrixRunOverdue: THE 10-02 SEQUENCE — the pre-market full record does not satisfy the post-close night', () => {
+  const warmFri = { at: '2026-10-02T22:00:40Z', chainsInProcess: false, chains: {} };  // 18:00 ET Friday, after the close
+  const premarket = { session: '2026-10-01', date: '2026-10-02', source: 'github-matrix', partial: false, ok: true, failed: [], chains: fullChains };
+  const at = Date.parse(warmFri.at);
+  const tripped = CS.matrixRunOverdue({ run: warmFri, summaries: [premarket], now: at + CS.NO_MATRIX_RUN_GRACE_MS, roots: ROOTS });
+  assert.deepEqual(tripped, { session: '2026-10-02', warmAt: warmFri.at, graceMs: CS.NO_MATRIX_RUN_GRACE_MS }, 'Friday has not been covered — the 02:14 ET record is Thursday\'s');
+  const friday = { session: '2026-10-02', date: '2026-10-02', source: 'github-matrix', partial: false, ok: true, failed: [], chains: fullChains };
+  assert.equal(CS.matrixRunOverdue({ run: warmFri, summaries: [premarket, friday], now: at + 2 * CS.NO_MATRIX_RUN_GRACE_MS, roots: ROOTS }), null, 'the 20:28 ET full run covers it');
+  // Legacy doc for the same night (date only) also covers it.
+  assert.equal(CS.matrixRunOverdue({ run: warmFri, summaries: [{ ...friday, session: undefined }], now: at + 2 * CS.NO_MATRIX_RUN_GRACE_MS, roots: ROOTS }), null);
+});
+
+test('matrixRunOverdue: a weekend or holiday warm targets the previous session, which Friday\'s record already covers', () => {
+  const friday = { session: '2026-10-02', date: '2026-10-02', source: 'github-matrix', partial: false, ok: true, failed: [], chains: fullChains };
+  const warmSat = { at: '2026-10-03T22:00:40Z', chainsInProcess: false, chains: {} };
+  assert.equal(CS.matrixRunOverdue({ run: warmSat, summaries: [friday], now: Date.parse(warmSat.at) + 2 * CS.NO_MATRIX_RUN_GRACE_MS, roots: ROOTS }), null, 'Saturday 10-03: a repeat full run is a no-op and the night reads covered');
+  assert.deepEqual(CS.matrixRunOverdue({ run: warmSat, summaries: [], now: Date.parse(warmSat.at) + 2 * CS.NO_MATRIX_RUN_GRACE_MS, roots: ROOTS }).session, '2026-10-02');
+  const warmLabor = { at: '2026-09-07T22:00:40Z', chainsInProcess: false, chains: {} };
+  const laborFri = { ...friday, session: '2026-09-04', date: '2026-09-04' };
+  assert.equal(CS.matrixRunOverdue({ run: warmLabor, summaries: [laborFri], now: Date.parse(warmLabor.at) + 2 * CS.NO_MATRIX_RUN_GRACE_MS, roots: ROOTS }), null, 'Labor Day');
 });

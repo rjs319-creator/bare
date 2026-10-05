@@ -54,6 +54,9 @@ test('workflow knobs: 22:05 UTC + three retry schedules (same ET session), fail-
 test('preflight job: idempotence gate — needs nothing, fails open, feeds skip/already_ok to every chain job', () => {
   assert.match(WF, /\n  preflight:\n(?:(?!\n  \w).)*?outputs:\n      skip: \$\{\{ steps\.probe\.outputs\.skip \}\}\n      already_ok: \$\{\{ steps\.probe\.outputs\.already_ok \}\}/s);
   assert.match(WF, /run: node scripts\/nightly-chains-preflight\.js/);
+  // TARGET SESSION (2026-10-03/04): the preflight decides the night ONCE and every job keys by it.
+  assert.match(WF, /\n      session: \$\{\{ steps\.probe\.outputs\.session \}\}/, 'the preflight publishes the target session');
+  assert.equal((WF.match(/TARGET_SESSION: \$\{\{ needs\.preflight\.outputs\.session \}\}/g) || []).length, 3, 'both chain jobs and the summary stamp the preflight\'s session');
   assert.match(WF, /\n  spine:\n    needs: preflight\n    if: \$\{\{ !cancelled\(\) && needs\.preflight\.outputs\.skip != 'true' \}\}/, 'a failed preflight (!cancelled) still runs the night');
   assert.equal((WF.match(/ALREADY_OK: \$\{\{ needs\.preflight\.outputs\.already_ok \}\}/g) || []).length, 2, 'both chain jobs pass the already-ok set to the runner');
   assert.match(WF, /FORCE: \$\{\{ github\.event\.inputs\.force \}\}/);
