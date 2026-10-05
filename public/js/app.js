@@ -684,7 +684,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const list = (arr) => esc(arr.slice(0, 4).join(', ')) + (arr.length > 4 ? ` +${arr.length - 4} more` : '');
 
     // NIGHTLY CHAINS (lib/chain-summary.js). When the chains ran as the GitHub Actions
-    // matrix, the server's `chains` block carries the night's date, the failed chain
+    // matrix, the server's `chains` block carries the night's SESSION (the trading day it
+    // processed — `date` is only the wall-clock date the run happened on), the failed chain
     // NAMES and the run link — say which night and link the run, so a red banner is one
     // click from the job log instead of a hunt through Vercel logs. The failed names are
     // already in `problems` (rendered below); this adds the provenance, not a second list.
@@ -696,15 +697,17 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       ? ` ${ch.crashedWithPeers.length} of these (${esc(ch.crashedWithPeers.join(', '))}) failed together within seconds — a co-located crash, not separate defects; the next run retries them.`
       : '';
     const chainsFrom = ch && ch.source === 'github-matrix'
-      ? ` Nightly chains ${esc(ch.date || '')} ran on GitHub${ch.runUrl ? ` — <a href="${esc(ch.runUrl)}" target="_blank" rel="noopener" style="color:inherit">open run</a>` : ''}.${coLocated}`
+      ? ` Nightly chains for session ${esc(ch.session || ch.date || '')} ran on GitHub${ch.runUrl ? ` — <a href="${esc(ch.runUrl)}" target="_blank" rel="noopener" style="color:inherit">open run</a>` : ''}.${coLocated}`
       : coLocated;
     if (ch && ch.noMatrixRun) {
       // The dead-man for ONE night: warm handed the chains to GitHub and no FULL run has
       // reported since. A partial (only=) run cannot clear this — on 2026-10-02 one did,
-      // and a missing night read as healthy. Say it plainly.
-      const night = ch.noMatrixRun.date || '';
+      // and a missing night read as healthy. Say it plainly. The night is a SESSION (the
+      // trading day), so on a weekday evening it equals today's ET date ("tonight"); any
+      // other value names the session that was never processed.
+      const night = ch.noMatrixRun.session || '';
       const todayEt = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-      const which = night && night !== todayEt ? `The background refresh for ${esc(night)} never ran` : `Tonight's background refresh has not run yet`;
+      const which = night && night !== todayEt ? `The background refresh for session ${esc(night)} never ran` : `Tonight's background refresh has not run yet`;
       warns.push(`⚠️ ${which} — the nightly chains were handed to GitHub Actions and no full run has reported. Ledgers, scoreboard and research tabs still show the previous session.`);
     }
     if (ch && ch.missing) {

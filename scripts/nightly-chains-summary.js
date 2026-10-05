@@ -8,7 +8,9 @@
 //   node scripts/nightly-chains-summary.js
 //   env: APP_URL, CRON_SECRET (absent → warning, exit 0), OUT_DIR (.nightly),
 //        ONLY (comma list when the run was filtered by workflow_dispatch),
-//        GITHUB_RUN_ID / GITHUB_SERVER_URL / GITHUB_REPOSITORY (run link), GITHUB_STEP_SUMMARY
+//        TARGET_SESSION (the night, decided once by the preflight; absent → computed from the
+//        earliest chain start), GITHUB_RUN_ID / GITHUB_SERVER_URL / GITHUB_REPOSITORY (run
+//        link), GITHUB_STEP_SUMMARY
 //
 // A root chain with NO result file is recorded as `no-report` and FAILED: its job was
 // cancelled, hit timeout-minutes before writing, or never started — the loss modes a
@@ -29,9 +31,11 @@ const POST_TIMEOUT_MS = 60000;
 // "five defects". 5 s covers the observed spread with the runner's response-latency slack.
 const PEER_CRASH_WINDOW_MS = 5000;
 
-// Summary dates are ET SESSION dates (lib/chain-summary.js): the retry schedules run as
-// late as 01:00 UTC, which is still the same evening in New York.
-const { etDate } = require('../lib/chain-summary');
+// The record is keyed by its TARGET SESSION (lib/chain-summary.js): the last completed NYSE
+// session at the run's start — a 01:00 UTC retry is still that evening's session, a 02:14 ET
+// pre-market run is the PREVIOUS session (the 2026-10-02 defect), a Saturday run is Friday.
+// `date` (the ET wall-clock date of the earliest start) is kept for display only.
+const CS = require('../lib/chain-summary');
 const parseOnly = (only) => String(only || '').split(',').map((s) => s.trim()).filter(Boolean);
 
 function readResults(outDir) {
@@ -64,7 +68,7 @@ function markPeerCrashes(results, windowMs = PEER_CRASH_WINDOW_MS) {
 }
 
 // Pure: results + the expected root list → the op=chainsummary body.
-function buildSummaryPayload(results, { expected = ROOT_CHAINS, only = [], runId = null, runUrl = null, now = Date.now() } = {}) {
+function buildSummaryPayload(results, { expected = ROOT_CHAINS, only = [], runId = null, runUrl = null, session = null, now = Date.now() } = {}) {
   const wanted = only.length ? expected.filter((c) => only.includes(c)) : expected;
   const byChain = Object.fromEntries(markPeerCrashes(results || []).map((r) => [r.chain, r]));
   const chains = Object.fromEntries(wanted.map((c) => {
@@ -78,7 +82,10 @@ function buildSummaryPayload(results, { expected = ROOT_CHAINS, only = [], runId
   const ends = Object.values(byChain).map((r) => Date.parse(r.finishedAt)).filter(Number.isFinite);
   const startedMs = starts.length ? Math.min(...starts) : now;
   return {
-    date: etDate(startedMs),
+    // THE KEY: the night this run belongs to (the preflight's TARGET_SESSION when passed through).
+    session: session || CS.targetSession(startedMs),
+    // Informational: the ET calendar date the run started on.
+    date: CS.etDate(startedMs),
     source: only.length ? 'manual' : 'github-matrix',
     // A filtered run reports the chains it ran and nothing about the night: op=health treats
     // only a full run (partial:false) as covering the date. `covered` names what ran.
@@ -98,7 +105,7 @@ function stepSummaryMarkdown(payload) {
   const failed = Object.entries(payload.chains).filter(([, c]) => !c.ok).map(([n]) => n);
   const coLocated = Object.entries(payload.chains).filter(([, c]) => c.crashedWithPeers).map(([n]) => n);
   return [
-    `## Nightly chains ${payload.date} (${payload.source}${payload.partial ? ', partial' : ''})`,
+    `## Nightly chains — session ${payload.session} (${payload.source}${payload.partial ? ', partial' : ''}) · run date ${payload.date} ET`,
     failed.length ? `**${failed.length} failed:** ${failed.join(', ')}` : '**All chains ok.**',
     ...(coLocated.length ? [`💥 **co-located crash** (failed within ${PEER_CRASH_WINDOW_MS / 1000} s of each other — one shared instance died, not ${coLocated.length} defects): ${coLocated.join(', ')}`] : []),
     '',
@@ -125,7 +132,8 @@ async function main(env = process.env) {
   const outDir = env.OUT_DIR || DEFAULT_OUT_DIR;
   const runId = env.GITHUB_RUN_ID || null;
   const runUrl = runId && env.GITHUB_SERVER_URL && env.GITHUB_REPOSITORY ? `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${runId}` : null;
-  const payload = buildSummaryPayload(readResults(outDir), { only: parseOnly(env.ONLY), runId, runUrl });
+  const fromEnv = String(env.TARGET_SESSION || '').trim();
+  const payload = buildSummaryPayload(readResults(outDir), { only: parseOnly(env.ONLY), runId, runUrl, session: CS.DATE_RE.test(fromEnv) ? fromEnv : null });
   const md = stepSummaryMarkdown(payload);
   process.stdout.write(md + '\n');
   if (env.GITHUB_STEP_SUMMARY) { try { fs.appendFileSync(env.GITHUB_STEP_SUMMARY, md + '\n'); } catch { /* cosmetic */ } }

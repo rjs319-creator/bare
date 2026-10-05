@@ -18,7 +18,7 @@ const summary = (over = {}) => ({ date: '2026-10-02', source: 'github-matrix', r
 
 test('health: a posted GitHub summary with failures → chains block, problems, healthy:false', () => {
   const r = buildHealthResponse([cleanRun], { ...FRESH, chainSummary: summary({ partial: false }) });
-  assert.deepEqual(r.chains, { date: '2026-10-02', ok: false, full: true, partial: false, covered: WC.ROOT_CHAINS, failed: ['capture', 'challenger'], skipped: [], crashedWithPeers: [], source: 'github-matrix',
+  assert.deepEqual(r.chains, { session: '2026-10-02', date: '2026-10-02', ok: false, full: true, partial: false, covered: WC.ROOT_CHAINS, failed: ['capture', 'challenger'], skipped: [], crashedWithPeers: [], source: 'github-matrix',
     runUrl: 'https://github.com/o/r/actions/runs/7', at: '2026-10-02T22:41:00Z', missing: false, noMatrixRun: null });
   assert.equal(r.healthy, false);
   assert.ok(r.problems.includes('chain:capture') && r.problems.includes('chain:challenger'));
@@ -51,7 +51,7 @@ test('health: 90 min after a handed-off warm with only a partial summary → cha
   const r = buildHealthResponse([handedOff], { ...FRESH, now, chainSummaries: [partialMorning], inProcessChains: false });
   assert.ok(r.problems.includes('chains:no-matrix-run'));
   assert.equal(r.healthy, false);
-  assert.deepEqual(r.chains.noMatrixRun, { date: '2026-10-02', warmAt: handedOff.at, graceMs: GRACE });
+  assert.deepEqual(r.chains.noMatrixRun, { session: '2026-10-02', warmAt: handedOff.at, graceMs: GRACE });
   assert.match(r.warning, /background refresh for 2026-10-02 has not run/i);
   assert.ok(r.problemsBySeverity.data.includes('chains:no-matrix-run'), 'a missing night is user-facing, never background');
 });
@@ -77,7 +77,7 @@ test('health: no summary at all + handed-off warm past the grace → both dead-m
 test('health: no summary + in-process ON → the block is derived from the run record (source in-process)', () => {
   const run = { ...cleanRun, ok: false, chainDispatchFails: ['atlasx'], chains: { atlasx: { dispatched: true, httpStatus: 500 } } };
   const r = buildHealthResponse([run], { ...FRESH, chainSummary: null, inProcessChains: true });
-  assert.equal(r.chains.source, 'in-process'); assert.deepEqual(r.chains.failed, ['atlasx']); assert.equal(r.chains.date, '2026-10-02');
+  assert.equal(r.chains.source, 'in-process'); assert.deepEqual(r.chains.failed, ['atlasx']); assert.equal(r.chains.date, '2026-10-02'); assert.equal(r.chains.session, '2026-10-02');
   assert.deepEqual(r.problems, ['chain:atlasx']);
 });
 
@@ -108,6 +108,34 @@ test('warm-chains: inProcessChainsEnabled reads WARM_CHAINS_INPROCESS (default O
   for (const v of ['0', 'false', 'off', 'FALSE', ' Off ']) assert.equal(WC.inProcessChainsEnabled({ WARM_CHAINS_INPROCESS: v }), false, v);
 });
 
+// ── TARGET SESSION (2026-10-02/03): a pre-market record is the PREVIOUS night ─────────────
+test('health: THE 10-02 SEQUENCE — the 02:14 ET full record (session 10-02) does not cover Friday; the 20:28 ET run does', () => {
+  const warmFri = { ...handedOff, at: '2026-10-02T22:00:40Z' };  // 18:00 ET Friday, after the close → target session 2026-10-02
+  const premarket = summary({ partial: false, ok: true, failed: [], chains: okAll(), session: '2026-10-01', date: '2026-10-02', startedAt: '2026-10-02T06:14:00Z', finishedAt: '2026-10-02T07:10:00Z' });
+  const fresh = { ...FRESH, spyDate: '2026-10-02', spyDates: ['2026-09-30', '2026-10-01', '2026-10-02'] };
+  const now = Date.parse(warmFri.at) + GRACE;
+  const r = buildHealthResponse([warmFri], { ...fresh, now, chainSummaries: [premarket], inProcessChains: false });
+  assert.equal(r.chains.session, '2026-10-01', 'the newest record is Thursday\'s night, whatever its calendar date says');
+  assert.equal(r.chains.date, '2026-10-02');
+  assert.deepEqual(r.chains.noMatrixRun, { session: '2026-10-02', warmAt: warmFri.at, graceMs: GRACE });
+  assert.ok(r.problems.includes('chains:no-matrix-run')); assert.equal(r.healthy, false);
+  assert.match(r.warning, /background refresh for 2026-10-02 has not run/i);
+  const friday = summary({ partial: false, ok: true, failed: [], chains: okAll(), session: '2026-10-02', date: '2026-10-02', finishedAt: '2026-10-03T01:10:00Z' });
+  const r2 = buildHealthResponse([warmFri], { ...fresh, now: Date.parse('2026-10-03T06:41:00Z'), chainSummaries: [friday, premarket], inProcessChains: false });
+  assert.equal(r2.chains.session, '2026-10-02'); assert.equal(r2.chains.noMatrixRun, null); assert.equal(r2.chains.ok, true); assert.equal(r2.healthy, true);
+});
+
+test('health: a weekend warm targets Friday, which Friday\'s full record covers — a repeat full run is a no-op that still reads covered', () => {
+  const warmSat = { ...handedOff, at: '2026-10-03T22:00:40Z' };
+  const friday = summary({ partial: false, ok: true, failed: [], chains: okAll(), session: '2026-10-02', date: '2026-10-02', finishedAt: '2026-10-03T01:10:00Z' });
+  const fresh = { ...FRESH, spyDate: '2026-10-02', spyDates: ['2026-09-30', '2026-10-01', '2026-10-02'], now: Date.parse(warmSat.at) + 2 * GRACE };
+  const r = buildHealthResponse([warmSat], { ...fresh, chainSummaries: [friday], inProcessChains: false });
+  assert.equal(r.chains.noMatrixRun, null); assert.equal(r.chains.ok, true); assert.deepEqual(r.problems, []); assert.equal(r.healthy, true);
+  // A legacy doc (date only, no session) for Friday covers it the same way.
+  const { session: _s, ...legacy } = friday;
+  assert.equal(buildHealthResponse([warmSat], { ...fresh, chainSummaries: [legacy], inProcessChains: false }).chains.noMatrixRun, null);
+});
+
 // ── source pins (the client/warm wiring the pure tests cannot see) ──────────
 const fs = require('node:fs');
 const path = require('node:path');
@@ -122,6 +150,8 @@ test('app.js banner: reads d.chains — shows the night + run link for the GitHu
   assert.match(health, /if \(ch && ch\.missing\)/);
   assert.match(health, /No nightly chain summary has been posted/);
   assert.match(health, /if \(ch && ch\.noMatrixRun\)/, 'the night-not-run dead-man has its own line');
+  assert.match(health, /ch\.noMatrixRun\.session/, 'the night is named by its SESSION, not the wall-clock date');
+  assert.match(health, /esc\(ch\.session \|\| ch\.date \|\| ''\)/, 'the provenance line names the session');
   assert.match(health, /ch\.crashedWithPeers/, 'co-located crashes are labelled as one event');
   assert.match(health, /esc\(ch\.crashedWithPeers\.join/, 'chain names are escaped before rendering');
   assert.match(health, /background refresh has not run yet/i, 'said plainly');
