@@ -57,11 +57,37 @@ const RETRY_STATUSES = new Set([429, 502, 503]);
 // this delay (290 + 75 + 290 s) still fit the job's timeout-minutes: 12.
 const CRASH_RETRY_DELAY_MS = 75000;
 const CRASH_STATUSES = new Set([502, 503]);
-const CRASH_MARKER = /FUNCTION_INVOCATION_FAILED/;
+// 2026-10-08 (universe, night 2 under session keying): a chain-level crash retry did NOT
+// fire because Vercel's out-of-memory kill carries different wording from the generic
+// "FUNCTION_INVOCATION_FAILED" crash page — its own dashboard labels it "Vercel Runtime
+// Error: instance was killed because it ran out of available memory" with no shared
+// substring. Both phrasings are a dead Fluid instance, not a code defect, so both retry.
+const CRASH_MARKER = /FUNCTION_INVOCATION_FAILED|ran out of available memory|instance was killed|\bOUT_OF_MEMORY\b/i;
 const MAX_ERROR_TEXT = 200;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const errText = (e) => String((e && e.message) || e).slice(0, MAX_ERROR_TEXT);
+
+// A failure "reason" from a parsed JSON body is USUALLY a string (`{"error":"..."}`), but a
+// platform error page served as JSON (the runner sends `Accept: application/json`, and
+// Vercel's crash body can be `{"error":{"code":"...","message":"..."}}`) hands back an
+// OBJECT — and `String({...})` is the literal text "[object Object]", which is exactly what
+// happened on 2026-10-08: the real diagnostic was thrown away and op=health could only ever
+// show four meaningless words. Pull a real string out of whatever shape the reason took.
+function reasonText(x) {
+  if (x == null) return '';
+  if (typeof x === 'string') return x;
+  if (typeof x !== 'object') return String(x);
+  const msg = typeof x.message === 'string' ? x.message : (typeof x.error === 'string' ? x.error : null);
+  const code = typeof x.code === 'string' ? x.code : (typeof x.name === 'string' ? x.name : null);
+  if (msg) return code ? `${code}: ${msg}` : msg;
+  try {
+    const json = JSON.stringify(x).slice(0, MAX_ERROR_TEXT);
+    return code ? `${code}: ${json}` : json;
+  } catch {
+    return code || '[unserializable error object]';
+  }
+}
 
 function chainUrl(appUrl, chain) {
   return `${appUrl.replace(/\/$/, '')}/api/tracker?op=warmchain&name=${encodeURIComponent(chain)}`;
@@ -113,9 +139,20 @@ function stampFailDetail(body, failDetail, endMs) {
 // chain level a 502/503 can only be the platform (the chain handler itself never sends
 // them). At the STEP level a 503 is NOT a kill — the app uses it deliberately (fail-closed
 // auth, challengerlog's empty-board refusal) — so only the Vercel marker and a 502 count.
+// Text to search for the crash marker: the raw response body AND, since a JSON platform
+// error's code/message can live inside a parsed `error` object rather than loose text in
+// `raw`, the body's own error/reason field pulled through reasonText (belt-and-suspenders —
+// `raw` is the same bytes stringified-or-not, but a future response shape might not round-trip
+// the same way).
+function crashSearchText(a) {
+  const b = a && a.body && typeof a.body === 'object' ? a.body : null;
+  const bodyReason = b ? reasonText(b.error || b.reason) : '';
+  return `${(a && a.raw) || ''} ${bodyReason}`;
+}
+
 function isPlatformCrash(a, grade) {
   if (!a) return false;
-  if (a.httpStatus != null && (CRASH_STATUSES.has(a.httpStatus) || (a.httpStatus === 500 && CRASH_MARKER.test(a.raw || '')))) return true;
+  if (a.httpStatus != null && (CRASH_STATUSES.has(a.httpStatus) || (a.httpStatus === 500 && CRASH_MARKER.test(crashSearchText(a))))) return true;
   const details = (grade && grade.failDetail) || [];
   return details.some((d) => d && (d.status === 'http:502' || (d.status === 'http:500' && CRASH_MARKER.test(String(d.error || '')))));
 }
@@ -132,7 +169,8 @@ function gradeAttempt(a) {
   if (!a || a.error || a.httpStatus == null) return { ok: false, status: 'no-response', complete: null, failed: [], skipped: [], failDetail: [], error: (a && a.error) || 'no response' };
   const b = a.body && typeof a.body === 'object' ? a.body : null;
   if (a.httpStatus !== 200) {
-    const reason = (b && (b.error || b.reason)) || (a.raw ? a.raw.replace(/\s+/g, ' ').trim() : '') || `HTTP ${a.httpStatus}`;
+    const fromBody = b ? reasonText(b.error || b.reason) : '';
+    const reason = fromBody || (a.raw ? a.raw.replace(/\s+/g, ' ').trim() : '') || `HTTP ${a.httpStatus}`;
     return { ok: false, status: `http:${a.httpStatus}`, complete: false, failed: [], skipped: [], failDetail: [], error: String(reason).slice(0, MAX_ERROR_TEXT) };
   }
   const failed = b && Array.isArray(b.failed) ? b.failed : [];
@@ -144,7 +182,10 @@ function gradeAttempt(a) {
     status: failed.length ? 'failed' : 'ok',
     complete: b ? b.complete !== false : null,
     failed, skipped, failDetail,
-    error: failed.length ? `${failed[0]} ${firstDetail && firstDetail.status ? firstDetail.status : ''} ${firstDetail && firstDetail.error ? firstDetail.error : ''}`.trim().slice(0, MAX_ERROR_TEXT) : null,
+    // Template-literal interpolation of a non-string `.error` (a nested object from the
+    // app's own step reporting) would silently collapse to "[object Object]" the same way
+    // the chain-level reason did on 2026-10-08 — reasonText() keeps it readable.
+    error: failed.length ? `${failed[0]} ${firstDetail && firstDetail.status ? firstDetail.status : ''} ${firstDetail && firstDetail.error ? reasonText(firstDetail.error) : ''}`.trim().slice(0, MAX_ERROR_TEXT) : null,
   };
 }
 
@@ -250,5 +291,5 @@ if (require.main === module) {
   main().then((code) => process.exit(code), (e) => { process.stderr.write(`::error::${errText(e)}\n`); process.exit(1); });
 }
 
-module.exports = { attemptOnce, gradeAttempt, shouldRetry, isPlatformCrash, stampFailDetail, failureInstants, runChain, annotations, writeResult, chainUrl, alreadyOkResult, resolveSession, main,
+module.exports = { attemptOnce, gradeAttempt, shouldRetry, isPlatformCrash, stampFailDetail, failureInstants, runChain, annotations, writeResult, chainUrl, alreadyOkResult, resolveSession, main, reasonText,
   MAX_ATTEMPTS, REQUEST_TIMEOUT_MS, FAST_FAIL_MS, RETRY_DELAY_MS, CRASH_RETRY_DELAY_MS, RETRY_STATUSES, CRASH_STATUSES, DEFAULT_OUT_DIR };
