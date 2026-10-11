@@ -119,6 +119,47 @@ test('runChain: a 200 with an ordinary failed step (not a kill) is still never r
   assert.equal(m, 2, 'a step-level 502 is the platform and gets the one crash retry');
 });
 
+// ── THE 2026-10-08 INCIDENT: a real crash that slipped past both the marker and the
+// error-text pipeline. Vercel's out-of-memory kill (1) does not contain the literal string
+// "FUNCTION_INVOCATION_FAILED" the regex looked for, and (2) can be served as a JSON body —
+// because the runner sends `Accept: application/json` — shaped `{"error":{"code":...,
+// "message":...}}`, an OBJECT the old code handed straight to `String()`, producing the
+// literal text "[object Object]" in op=health instead of the real diagnostic.
+const OOM_JSON_BODY = { error: { code: 'FUNCTION_INVOCATION_FAILED', message: 'Vercel Runtime Error: instance was killed because it ran out of available memory' } };
+
+test('reasonText: never collapses to "[object Object]" — pulls message/code from whatever shape a reason takes', () => {
+  assert.equal(RUN.reasonText('plain string'), 'plain string');
+  assert.equal(RUN.reasonText({ message: 'boom' }), 'boom');
+  assert.equal(RUN.reasonText({ code: 'E_X', message: 'boom' }), 'E_X: boom');
+  assert.equal(RUN.reasonText({ error: 'nested string' }), 'nested string');
+  assert.match(RUN.reasonText({ weird: 'shape', n: 1 }), /"weird":"shape"/);
+  assert.equal(RUN.reasonText(null), ''); assert.equal(RUN.reasonText(undefined), '');
+  // The exact shape from the 2026-10-08 incident:
+  assert.equal(RUN.reasonText(OOM_JSON_BODY.error), 'FUNCTION_INVOCATION_FAILED: Vercel Runtime Error: instance was killed because it ran out of available memory');
+});
+
+test('runChain: a slow 500 whose JSON body is {error:{code,message}} (an OBJECT, not a string) — the 2026-10-08 universe incident — IS retried as a crash, and the surfaced error is readable, never "[object Object]"', async () => {
+  let n = 0;
+  const fetchImpl = async () => (++n === 1 ? resp(500, OOM_JSON_BODY) : resp(200, { ok: true, failed: [], skipped: [], elapsedMs: 100 }));
+  const r = await RUN.runChain('universe', opts(fetchImpl, { now: clock(RUN.FAST_FAIL_MS), crashRetryDelayMs: 0 }));
+  assert.equal(n, 2, 'the OOM-worded crash (no FUNCTION_INVOCATION_FAILED substring needed) gets the retry');
+  assert.equal(r.attempts, 2); assert.equal(r.ok, true); assert.equal(r.crashRetry, true);
+});
+
+test('runChain: a slow 500 whose JSON body is {error:{...}} and NEVER recovers — the final error is a readable string, not "[object Object]"', async () => {
+  const r = await RUN.runChain('universe', opts(async () => resp(500, OOM_JSON_BODY), { now: clock(RUN.FAST_FAIL_MS), crashRetryDelayMs: 0 }));
+  assert.equal(r.ok, false); assert.equal(r.status, 'http:500');
+  assert.doesNotMatch(r.error, /\[object Object\]/);
+  assert.match(r.error, /ran out of available memory/);
+});
+
+test('gradeAttempt: a 200 whose failed STEP carries an object `.error` (not a string) still produces a readable chain-level error, never "[object Object]"', () => {
+  const body = { ok: false, complete: true, elapsedMs: 10, failed: ['op=universecompile'], steps: [{ op: 'op=universecompile', status: 'http:500', ms: 10 }], failDetail: [{ op: 'op=universecompile', status: 'http:500', error: { code: 'E_X', message: 'nested object error' } }] };
+  const g = RUN.gradeAttempt({ httpStatus: 200, body, raw: null, error: null, endMs: 1 });
+  assert.doesNotMatch(g.error, /\[object Object\]/);
+  assert.match(g.error, /nested object error/);
+});
+
 test('runChain: an unknown chain name throws before any request', async () => {
   await assert.rejects(() => RUN.runChain('nope', opts(async () => { throw new Error('must not fetch'); })), /unknown chain/);
 });
