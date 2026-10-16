@@ -160,6 +160,30 @@ test('gradeAttempt: a 200 whose failed STEP carries an object `.error` (not a st
   assert.match(g.error, /nested object error/);
 });
 
+// ── THE 2026-10-15 INCIDENT: a THIRD distinct platform-kill wording ("500: A server error
+// has occurred" — no FUNCTION_INVOCATION_FAILED, no OOM text, nothing a regex can anchor
+// on). Chasing Vercel's exact crash-page wording is unwinnable; the durable signal is the
+// app's own invariant (api/tracker.js's top-level catch): our code NEVER returns a non-JSON
+// 500, so an unparseable 500 body can only be the platform, by elimination.
+test('runChain: a slow 500 with an UNPARSEABLE (non-JSON) body — the exact 2026-10-15 pitdata wording, no marker text at all — IS retried as a crash purely because the body is not JSON', async () => {
+  let n = 0;
+  const fetchImpl = async () => (++n === 1 ? resp(500, null, '500: A server error has occurred') : resp(200, { ok: true, failed: [], skipped: [], elapsedMs: 100 }));
+  const r = await RUN.runChain('pitdata', opts(fetchImpl, { now: clock(RUN.FAST_FAIL_MS), crashRetryDelayMs: 0 }));
+  assert.equal(n, 2, 'an unparseable 500 body gets the crash retry even with zero marker text'); assert.equal(r.crashRetry, true); assert.equal(r.ok, true);
+});
+
+test('runChain: a slow 500 whose body IS valid JSON (our own top-level catch, e.g. {error:"TypeError..."}) is NEVER treated as a platform crash by the unparseable-body rule — only the existing marker-text rule can catch it, and here it does not', async () => {
+  let n = 0;
+  const r = await RUN.runChain('ledger', opts(async () => { n++; return resp(500, { ok: false, error: 'TypeError: x is not a function' }); }, { now: clock(RUN.FAST_FAIL_MS), crashRetryDelayMs: 0 }));
+  assert.equal(n, 1, 'a parseable JSON 500 body is our own app catch, not an unparseable platform page'); assert.equal(r.crashRetry, false);
+});
+
+test('runChain: an unparseable 500 that NEVER recovers still surfaces a readable error, never "[object Object]" and never silently empty', async () => {
+  const r = await RUN.runChain('pitdata', opts(async () => resp(500, null, '500: A server error has occurred'), { now: clock(RUN.FAST_FAIL_MS), crashRetryDelayMs: 0 }));
+  assert.equal(r.ok, false); assert.equal(r.crashRetry, true);
+  assert.match(r.error, /A server error has occurred/);
+});
+
 test('runChain: an unknown chain name throws before any request', async () => {
   await assert.rejects(() => RUN.runChain('nope', opts(async () => { throw new Error('must not fetch'); })), /unknown chain/);
 });
