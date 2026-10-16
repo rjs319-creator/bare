@@ -99,13 +99,26 @@ test('a stale source cannot originate a NEW entry: eligibility fails closed with
   assert.ok(stale.reasonCodes.includes(EL.REASON_CODE.DATA_STALE));
 });
 
-test('retained picks are labeled, never silently dropped: INVALIDATED > DATA_STALE > HOLD > MONITOR', () => {
+test('retained picks are labeled, never silently dropped: INVALIDATED > DATA_STALE > TRIGGERED > MONITOR', () => {
   assert.equal(DG.retainedLabelFor({ state: 'failed' }, { ok: false }), 'INVALIDATED');
   assert.equal(DG.retainedLabelFor({ state: 'expired' }, { ok: true }), 'INVALIDATED');
   assert.equal(DG.retainedLabelFor({ state: 'ready' }, { ok: false }), 'DATA_STALE');
-  assert.equal(DG.retainedLabelFor({ state: 'triggered' }, { ok: true }), 'HOLD');
+  assert.equal(DG.retainedLabelFor({ state: 'triggered' }, { ok: true }), 'TRIGGERED');
   assert.equal(DG.retainedLabelFor({ state: 'early' }, { ok: true }), 'MONITOR');
-  for (const k of ['INVALIDATED', 'DATA_STALE', 'HOLD', 'MONITOR']) assert.ok(DG.RETAINED_LABEL_BLURB[k]);
+  for (const k of ['INVALIDATED', 'DATA_STALE', 'TRIGGERED', 'MONITOR']) assert.ok(DG.RETAINED_LABEL_BLURB[k]);
+});
+
+// Review 2026-10 (Prompt 4.3): the label is derived from the signal's lifecycle alone — no
+// position, borrow or governance input — so it may never assert a holding.
+test('a triggered signal is TRIGGERED (lifecycle), never HOLD — HOLD wording needs a position record', () => {
+  const disabledShort = { state: 'triggered', side: 'short', source: 'gapdown' };
+  assert.equal(DG.retainedLabelFor(disabledShort, null), 'TRIGGERED');
+  assert.equal(DG.retainedLabelFor({ state: 'extended', side: 'long' }, { ok: true }), 'TRIGGERED');
+  for (const st of ['triggered', 'extended', 'ready', 'early', 'failed', 'expired', undefined]) {
+    for (const gate of [null, { ok: true }, { ok: false }]) assert.notEqual(DG.retainedLabelFor({ state: st }, gate), 'HOLD');
+  }
+  assert.equal(DG.RETAINED_LABEL_BLURB.HOLD, undefined);
+  assert.ok(!/manage the existing position/i.test(Object.values(DG.RETAINED_LABEL_BLURB).join(' ')));
 });
 
 test('buildToday runs the gate BEFORE ranking and reports it on the payload', () => {
@@ -119,7 +132,7 @@ test('buildToday runs the gate BEFORE ranking and reports it on the payload', ()
   assert.deepEqual([...sources], ['daytrade']);
   // every served row still carries an honest retained label for someone already holding it
   for (const r of Object.values(p.horizons).flat()) {
-    assert.ok(['MONITOR', 'HOLD', 'INVALIDATED', 'DATA_STALE'].includes(r.retainedLabel));
+    assert.ok(['MONITOR', 'TRIGGERED', 'INVALIDATED', 'DATA_STALE'].includes(r.retainedLabel));
   }
 });
 

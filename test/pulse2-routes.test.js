@@ -87,6 +87,24 @@ test('clock separation survives the payload assembly (no doc → honest unavaila
   assert.equal(c.marketDataFreshness, 'UNAVAILABLE');
 });
 
+test('dataMode is "complete" when both documents are present and undegraded — and it is not a liveness claim', () => {
+  const { buildPayloadClocks } = require('../lib/pulse2-routes');
+  // A Saturday read of Friday's documents: complete data, market closed.
+  const c = buildPayloadClocks({
+    narrativesDoc: { generatedAt: '2026-10-02T20:00:00.000Z', sourceCoverageAsOf: '2026-10-02T20:00:00.000Z' },
+    marketStateDoc: { state: { marketDataAsOf: '2026-10-02T19:55:00.000Z' }, coverage: { intradayCount: 12, degraded: false } },
+    now: new Date('2026-10-03T16:00:00Z'),
+  });
+  assert.equal(c.dataMode, 'complete');
+  assert.notEqual(c.marketDataFreshness, 'LIVE');
+  const d = buildPayloadClocks({
+    narrativesDoc: null,
+    marketStateDoc: { state: { marketDataAsOf: '2026-10-02T19:55:00.000Z' }, coverage: { intradayCount: 12, degraded: false } },
+    now: new Date('2026-10-03T16:00:00Z'),
+  });
+  assert.equal(d.dataMode, 'degraded');
+});
+
 // ── #9/#10: time-of-day relative volume + PIT bar hygiene (reused primitives) ──
 test('#9: morning relative volume compares SAME-TIME-OF-DAY cumulative volume, not full prior days', () => {
   const { timeOfDayRelVol } = require('../lib/intraday-features');

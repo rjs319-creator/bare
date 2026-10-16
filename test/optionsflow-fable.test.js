@@ -94,7 +94,8 @@ test('tickerBlock / contractLine render without throwing on sparse data', () => 
   assert.match(block, /\$NVDA/);
   assert.match(block, /EARNINGS in 4d/);
   assert.match(block, /abnormal vs its OWN norm/);
-  assert.match(block, /bought@ask/);
+  assert.match(block, /last@ask/);        // where the LAST print sat — not "bought"
+  assert.match(block, /high-turnover/);   // never "sweep" to the model
   const prompt = f.buildAnalysisPrompt([row]);
   assert.match(prompt, /submit_flow_analysis/);
 });

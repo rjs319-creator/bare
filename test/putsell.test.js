@@ -29,7 +29,8 @@ test('finalizePutSell: drops a junk IV reading and flags it unreliable', () => {
   const out = finalizePutSell({ price: 14, cautions: [] }, { atmIV: 0.02 });
   assert.equal(out.atmIV, null);
   assert.equal(out.ivUnreliable, true);
-  assert.equal(out.ivLevel, undefined);
+  assert.equal(out.ivLevel, 'unknown');          // richness is UNKNOWN, said explicitly
+  assert.equal(out.premiumRichness, 'unknown');
   const ok = finalizePutSell({ price: 14, cautions: [] }, { atmIV: 0.45 });
   assert.equal(ok.atmIV, 0.45);
   assert.equal(ok.ivLevel, 'moderate');

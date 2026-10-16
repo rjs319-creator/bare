@@ -105,7 +105,14 @@ const TIERS = ['Breakout', 'Setup', 'Early'];
 // v2: entries fill at the NEXT session's open (+ entry-side slippage) instead of the
 // signal-day close — the signal is only known after that close. Reported numbers moved with
 // this bump; the execution policy is echoed in every response.
-const BACKTEST_VERSION = 'backtest-exec-v2';
+// v3: barrier fills follow the ONE documented gap policy (lib/outcome.js resolveTrade,
+// lib/paper-portfolio resolveExit): a session that OPENS beyond a barrier fills at the OPEN,
+// not at the barrier (a gap through the stop realises the gap; a gap past the target realises
+// the better open). A trade that history ends before resolving is OPEN — it is reported, not
+// closed at the last close and scored as a win/loss. A benchmark date the SPY series lacks
+// makes alpha UNAVAILABLE (excluded and counted), not equal to the raw return.
+const BACKTEST_VERSION = 'backtest-exec-v3';
+const FILL_POLICY_NOTE = 'backtest-exec-v3: gap-through barriers fill at the session open (stop realises the gap; target realises the better open), immature trades are left open and not scored, and missing benchmark dates make alpha unavailable rather than equal to the raw return. Figures produced under backtest-exec-v2 or earlier used barrier-price fills and are not comparable.';
 const tierForScope = (scope) => scope === 'micro' ? 'micro' : scope === 'small' ? 'small' : 'liquid';
 
 // Defect-2 honesty stamp: this endpoint replays raw chart patterns ticker-by-ticker,
@@ -144,20 +151,47 @@ function simAtrTrade(c, closes, highs, lows, atr, i, tier) {
   const fi = fill.fillIdx, last = c.length - 1;
   const entry = fill.fillPrice;
   const stop = entry - STOP_ATR * atr, target = entry + TGT_ATR * atr;
-  let r = null, exitDate = null, hold = 0, won = false;
+  let r = null, exitDate = null, hold = 0, won = false, gapThrough = false;
   for (let h = 0; h < MAX_HOLD && fi + h <= last; h++) {
     const j = fi + h; hold = h + 1;
-    if (lows[j] <= stop) { r = (stop - entry) / entry; exitDate = c[j].date; won = false; break; }   // stop first (conservative)
-    if (highs[j] >= target) { r = (target - entry) / entry; exitDate = c[j].date; won = true; break; }
+    const open = Number.isFinite(c[j].open) ? c[j].open : null;
+    // GAP-THROUGH (same policy as lib/outcome.js resolveTrade / paper-portfolio resolveExit): a
+    // bar that opens beyond the barrier cannot fill AT the barrier — the open is the first price.
+    if (lows[j] <= stop) {
+      const x = open != null && open < stop ? open : stop;
+      gapThrough = x !== stop; r = (x - entry) / entry; exitDate = c[j].date; won = false; break;   // stop first (conservative)
+    }
+    if (highs[j] >= target) {
+      const x = open != null && open > target ? open : target;
+      gapThrough = x !== target; r = (x - entry) / entry; exitDate = c[j].date; won = true; break;
+    }
   }
-  if (r == null) { const j = Math.min(fi + MAX_HOLD - 1, last); r = (closes[j] - entry) / entry; exitDate = c[j].date; hold = j - fi + 1; won = r > 0; }
+  if (r == null) {
+    // IMMATURE: history ends before the time-stop. The trade is OPEN — marked to the last
+    // close for the reader, never closed and scored (the old code scored it as a win/loss).
+    if (fi + MAX_HOLD - 1 > last) {
+      return { open: true, fillDate: c[fi].date, entry, stop, target, markDate: c[last].date,
+        markR: (closes[last] - entry) / entry, hold: last - fi + 1 };
+    }
+    const j = fi + MAX_HOLD - 1; r = (closes[j] - entry) / entry; exitDate = c[j].date; hold = MAX_HOLD; won = r > 0;
+  }
   // EXIT-LEG friction (graduation-league EA-6): planFill charged only the entry side
   // ("the exit leg is charged at resolution, never here") — but nothing ever charged
   // it, so every trade, barrier or timeout, exited friction-free. One per-side
   // spread+slippage haircut at exit closes the half-round-trip gap.
   r -= perSideSlippagePct(tier);
   won = r > 0;
-  return { fillDate: c[fi].date, entry, stop, target, r, exitDate, hold, won };
+  return { fillDate: c[fi].date, entry, stop, target, r, exitDate, hold, won, gapThrough };
+}
+
+// Benchmark excess over the trade's OWN holding interval, matched by DATE (fill → exit). A
+// missing SPY bar on either date makes the excess UNAVAILABLE with a reason — it is never
+// quietly replaced by the raw return (which reads as "beat a flat market").
+function benchmarkExcess(r, spyByDate, fillDate, exitDate) {
+  if (!spyByDate) return { excess: null, reason: 'benchmark-unavailable' };
+  const sE = spyByDate[fillDate], sX = spyByDate[exitDate];
+  if (!sE || !sX || !(sE.close > 0) || !Number.isFinite(sX.close)) return { excess: null, reason: 'missing-benchmark-date' };
+  return { excess: r - (sX.close / sE.close - 1), reason: null };
 }
 
 // One position's return on day D (prev day P), from close map cm. The fix for audit #6:
@@ -239,6 +273,7 @@ function agg(ts) {
   const n = ts.length;
   if (!n) return { n: 0 };
   const wins = ts.filter(x => x.won), losses = ts.filter(x => !x.won);
+  const withBench = ts.filter(x => Number.isFinite(x.excess));
   const sumWin = wins.reduce((a, x) => a + x.r, 0), sumLoss = Math.abs(losses.reduce((a, x) => a + x.r, 0));
   let eq = 1, peak = 1, mdd = 0;
   [...ts].sort((a, b) => a.date < b.date ? -1 : 1).forEach(x => { eq *= (1 + x.r); peak = Math.max(peak, eq); mdd = Math.min(mdd, (eq - peak) / peak); });
@@ -246,7 +281,10 @@ function agg(ts) {
     n,
     winRate: Math.round((wins.length / n) * 100),
     avgReturn: +(mean(ts.map(x => x.r)) * 100).toFixed(2),
-    avgAlpha: +(mean(ts.map(x => x.excess)) * 100).toFixed(2),
+    // Alpha only over rows that HAVE a matched benchmark; the rest are counted, not assumed.
+    avgAlpha: withBench.length ? +(mean(withBench.map(x => x.excess)) * 100).toFixed(2) : null,
+    alphaN: withBench.length,
+    benchmarkMissing: n - withBench.length,
     profitFactor: sumLoss > 0 ? +(sumWin / sumLoss).toFixed(2) : (sumWin > 0 ? 99 : 0),
     avgWin: +(mean(wins.map(x => x.r)) * 100).toFixed(2),
     avgLoss: +(mean(losses.map(x => x.r)) * 100).toFixed(2),
@@ -314,7 +352,7 @@ async function backtestMode(req, res) {
     const spy = await fetchSPY();
     const spyClose = {}; if (spy) for (const d in spy.byDate) spyClose[d] = spy.byDate[d].close;
     const trades = [];   // { tier, date, r, excess, won, hold, regime, feat }
-    let names = 0, instances = 0;
+    let names = 0, instances = 0, openTrades = 0, benchmarkMissing = 0;
     // Data coverage of the re-added delisted names — quantifies the survivorship gap honestly
     // (a delisted name with no free candle data still cannot be traded, so we count it).
     const addedSet = new Set((pit && pit.addedFull) || []);
@@ -344,20 +382,21 @@ async function backtestMode(req, res) {
         // ── Simulate the trade with a realistic next-open entry (+ slippage) ──
         const sim = simAtrTrade(c, closes, highs, lows, atr, i, tierForScope(scope));
         if (!sim) continue;   // could not fill (signal on the last bar) — not a trade
+        if (sim.open) { openTrades++; continue; }   // immature: reported, never scored
         instances++; any = true;
         const { r, exitDate, hold, won, fillDate } = sim;
 
-        // ── Benchmark (SPY from the FILL date over the holding window) → alpha ──
-        let excess = r;
-        const sE = spy && spy.byDate[fillDate], sX = spy && spy.byDate[exitDate];
-        if (sE && sX && sE.close > 0) excess = r - (sX.close / sE.close - 1);
+        // ── Benchmark (SPY over the fill→exit interval, matched by date) → alpha ──
+        const { excess, reason: benchmarkReason } = benchmarkExcess(r, spy && spy.byDate, fillDate, exitDate);
+        if (excess == null) benchmarkMissing++;
+        const sE = spy && spy.byDate[fillDate];
         // ── Regime at entry (SPY above/below its 200-DMA on the fill date) ──
         let regime = 'unknown';
         if (sE && sE.sma200 != null) regime = sE.close > sE.sma200 ? 'on' : 'off';
 
         // exitDate is carried so the IS/OOS embargo can be computed from the ACTUAL label
         // span rather than an assumed worst case — see splitWithEmbargo.
-        trades.push({ tier: e.status, date: c[i].date, exitDate, r, excess, won, hold, regime, feat: e.feat });
+        trades.push({ tier: e.status, date: c[i].date, exitDate, r, excess, benchmarkReason, won, hold, regime, feat: e.feat, gapThrough: sim.gapThrough });
       }
       if (any) names++;
     });
@@ -371,11 +410,14 @@ async function backtestMode(req, res) {
     };
 
     // ── Walk-forward edge validation (alpha lift, in-sample → out-of-sample) ──
+    // Alpha statistics run on the rows that HAVE a matched benchmark (the rest are counted).
+    const hasBench = x => Number.isFinite(x.excess);
     const { IS, OOS, splitDate, embargoUntil, embargoedN } = splitWithEmbargo(trades);
-    const baseIS = mean(IS.map(x => x.excess)), baseOOS = mean(OOS.map(x => x.excess));
+    const ISb = IS.filter(hasBench), OOSb = OOS.filter(hasBench);
+    const baseIS = mean(ISb.map(x => x.excess)), baseOOS = mean(OOSb.map(x => x.excess));
     const efficacy = {
       metric: 'alpha',
-      baseline: { is: +(baseIS * 100).toFixed(2), oos: +(baseOOS * 100).toFixed(2), n: trades.length, isN: IS.length, oosN: OOS.length },
+      baseline: { is: +(baseIS * 100).toFixed(2), oos: +(baseOOS * 100).toFixed(2), n: trades.length, isN: ISb.length, oosN: OOSb.length, benchmarkMissing },
       splitDate,
       // Stated on the response because these numbers are NOT comparable with any figure
       // produced before the embargo existed — the OOS cohort is a different cohort.
@@ -387,7 +429,7 @@ async function backtestMode(req, res) {
         note: `Each trade's label runs up to ${MAX_HOLD} sessions past its signal, so a purely chronological cut leaves in-sample outcomes overlapping out-of-sample entries. The gap removes that overlap. Figures from before this change measured a leaking boundary and are not comparable.`,
       },
       features: FEATURES.map(([key, label, fn]) => {
-        const isS = IS.filter(fn), oosS = OOS.filter(fn);
+        const isS = ISb.filter(fn), oosS = OOSb.filter(fn);
         const isLift = +((mean(isS.map(x => x.excess)) - baseIS) * 100).toFixed(2);
         const oosLift = +((mean(oosS.map(x => x.excess)) - baseOOS) * 100).toFixed(2);
         const oosWin = oosS.length ? Math.round((oosS.filter(x => x.won).length / oosS.length) * 100) : 0;
@@ -397,9 +439,9 @@ async function backtestMode(req, res) {
 
     // ── Learned factor model: train on in-sample, validate out-of-sample ──
     let model = null;
-    if (IS.length >= 100 && OOS.length >= 50) {
-      const isS = IS.map(t => ({ x: featVec(t), y: t.excess > 0 ? 1 : 0 }));
-      const oosS = OOS.map(t => ({ x: featVec(t), y: t.excess > 0 ? 1 : 0, excess: t.excess }));
+    if (ISb.length >= 100 && OOSb.length >= 50) {
+      const isS = ISb.map(t => ({ x: featVec(t), y: t.excess > 0 ? 1 : 0 }));
+      const oosS = OOSb.map(t => ({ x: featVec(t), y: t.excess > 0 ? 1 : 0, excess: t.excess }));
       const lr = trainLogistic(isS);
       const predict = x => { let z = lr.b; for (let j = 0; j < x.length; j++) z += lr.w[j] * x[j]; return 1 / (1 + Math.exp(-z)); };
       const scored = oosS.map(s => ({ p: predict(s.x), y: s.y, excess: s.excess })).sort((a, b) => b.p - a.p);
@@ -425,9 +467,12 @@ async function backtestMode(req, res) {
     res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
     return res.json({
       scope, months, names, instances,
+      // Trades history ended before resolving: reported, NOT scored into any figure above.
+      openTrades,
+      benchmarkMissing,
       universe: { source: pit && pit.applied ? 'point-in-time (augmented)' : 'present-day static', size: [...new Set(list)].length, survivorshipSafe: false },
       pit: pitOut,
-      exits: { stopATR: STOP_ATR, targetATR: TGT_ATR, maxHold: MAX_HOLD },
+      exits: { stopATR: STOP_ATR, targetATR: TGT_ATR, maxHold: MAX_HOLD, fillPolicy: FILL_POLICY_NOTE },
       execution: { policy: POLICIES.NEXT_OPEN_PLUS_SLIPPAGE, entry: 'next-open+slippage', tier: tierForScope(scope), policyVersion: EXECUTION_POLICY_VERSION },
       version: BACKTEST_VERSION,
       ...LIVE_PARITY_STAMP,
@@ -459,6 +504,7 @@ async function portfolioMode(req, res) {
     const startDate = axis[0];
 
     const entries = [], closeMaps = {};
+    let openPositions = 0;
     await mapLimit([...new Set(list)], 16, async (t) => {
       const data = await fetchDailyHistory(t);
       if (!data) return;
@@ -480,6 +526,9 @@ async function portfolioMode(req, res) {
         // its exit date comes from the same ATR stop/target scan off the realistic entry.
         const sim = simAtrTrade(c, closes, highs, lows, atr, i, tierForScope(scope));
         if (!sim) continue;
+        // An OPEN position is held and marked to the last close (no exit leg charged); its
+        // "exit" is the mark date so the daily path stops there. It is counted separately.
+        if (sim.open) { openPositions++; entries.push({ name: t, entryDate: sim.fillDate, exitDate: sim.markDate, tier: e.status, entry: sim.entry, r: sim.markR, open: true }); continue; }
         entries.push({ name: t, entryDate: sim.fillDate, exitDate: sim.exitDate, tier: e.status, entry: sim.entry, r: sim.r });
       }
     });
@@ -507,6 +556,7 @@ async function portfolioMode(req, res) {
     res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
     return res.json({
       scope, months, maxPos, trades: accepted.length, signals: entries.length,
+      openPositions: accepted.filter(p => p.open).length, openSignals: openPositions,
       universe: { source: pit && pit.applied ? 'point-in-time (augmented)' : 'present-day static', size: [...new Set(list)].length, survivorshipSafe: false },
       pit: pitOut,
       execution: { policy: POLICIES.NEXT_OPEN_PLUS_SLIPPAGE, entry: 'next-open+slippage', tier: tierForScope(scope), policyVersion: EXECUTION_POLICY_VERSION },
@@ -516,7 +566,12 @@ async function portfolioMode(req, res) {
         totalReturn: +((eq - 1) * 100).toFixed(1), cagr: cagr(eq), sharpe: sharpe(dr), maxDD: +(mdd * 100).toFixed(1), exposure: +(exposSum / nDays * 100).toFixed(0),
         spyReturn: +((seq - 1) * 100).toFixed(1), spyCagr: cagr(seq), spySharpe: sharpe(sdr), spyMaxDD: +(smdd * 100).toFixed(1),
       },
-      accounting: { entry: 'fill-day open→close included; barrier exits realized at the stop/target price (not the close)', reconciliation: port.reconciliation },
+      accounting: {
+        method: 'daily-rebalanced equal-weight return composite (1/maxPos per held position, renormalized when more are held) — NOT a cash ledger: there is no cash balance, position quantities or cash+positions=NAV identity here; see lib/paper-portfolio (House Book) for that accounting',
+        entry: 'fill-day open→close included; barrier exits realized at the fill the gap policy allows (barrier price, or the session open when the bar gaps through it); open positions marked to the last close',
+        fillPolicy: FILL_POLICY_NOTE,
+        reconciliation: port.reconciliation,
+      },
       curve: sample(curve), spyCurve: sample(scurve),
       generatedAt: new Date().toISOString(),
     });
@@ -559,6 +614,9 @@ module.exports = function handler(req, res) {
 };
 // Exposed for tests — the next-open trade simulator and version marker.
 module.exports.simAtrTrade = simAtrTrade;
+module.exports.benchmarkExcess = benchmarkExcess;
+module.exports.agg = agg;
+module.exports.FILL_POLICY_NOTE = FILL_POLICY_NOTE;
 module.exports.resolvePitUniverse = resolvePitUniverse;
 module.exports.simulatePortfolio = simulatePortfolio;
 module.exports.positionDailyReturn = positionDailyReturn;

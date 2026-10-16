@@ -124,8 +124,11 @@ test('toastForSwMessage maps a push and an update activation to toasts and ignor
 // ── today ───────────────────────────────────────────────────────────────────────────
 test('today.js wraps op=today in the last-good layer, renders the strip and keeps a stale board out of the instant-paint cache', () => {
   const src = R('today.js');
-  assert.match(src, /import \{ withLastGood, lastGoodStripHTML \} from '\.\/last-good\.js'/);
-  assert.match(src, /withLastGood\('today', \(\) => fetchJSON\('\/api\/tracker\?op=today', \{ timeoutMs: HEAVY_TIMEOUT_MS \}\)\)/);
+  // review 2026-10: the import also carries asOfLabel/snapshotAsOfMs (A3/A4), and op=today opts
+  // into passLegitEmpty so a clean ok:true empty board is shown as empty (A10 caveat 2).
+  assert.match(src, /import \{ withLastGood, lastGoodStripHTML, asOfLabel, snapshotAsOfMs \} from '\.\/last-good\.js'/);
+  assert.match(src, /withLastGood\('today', \(\) => fetchJSON\('\/api\/tracker\?op=today', \{ timeoutMs: HEAVY_TIMEOUT_MS \}\), \{ passLegitEmpty: true \}\)/);
+  assert.match(src, /at: snapshotAsOfMs\(p\)/, 'the instant-paint cache ages from the board\'s generatedAt, not arrival');
   assert.match(src, /lastGoodStripHTML\(p/);
   assert.match(src, /if \(p && p\.ok && !p\.stale\) \{/, 'only a fresh board is written to the localStorage instant-paint cache');
   assert.match(src, /<table class="td-redunp-tbl sortable">/);

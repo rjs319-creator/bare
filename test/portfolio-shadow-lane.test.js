@@ -140,10 +140,16 @@ test('daily log row carries the compact shadow record on the SAME opportunity-lo
   // Arrange — a store that captures writes; ?log=1 triggers the existing daily log path.
   const store = require('../lib/store');
   const origHas = store.hasStore, origRead = store.readJSON, origWrite = store.writeJSON;
+  const origReadState = store.readState, origGuarded = store.writeGuarded, origUpdate = store.updateJSON;
   const writes = {};
   store.hasStore = () => true;
   store.readJSON = async () => null;
   store.writeJSON = async (path, doc) => { writes[path] = doc; };
+  // Durable-state audit (2026-10): the origins doc is read as STATE and the opportunity log is
+  // a compare-and-swap update — both still land as writes on the SAME doc families.
+  store.readState = async () => ({ status: 'missing', value: null, etag: null });
+  store.writeGuarded = async (path, doc) => { writes[path] = doc; };
+  store.updateJSON = async (path, mutate, opts) => { const next = mutate((opts && opts.initial) || { days: [] }); writes[path] = next; return { written: true, value: next }; };
   const origFetch = global.fetch;
   global.fetch = async () => { throw new Error('offline'); };
   let out = null;
@@ -153,6 +159,7 @@ test('daily log row carries the compact shadow record on the SAME opportunity-lo
   } finally {
     global.fetch = origFetch;
     store.hasStore = origHas; store.readJSON = origRead; store.writeJSON = origWrite;
+    store.readState = origReadState; store.writeGuarded = origGuarded; store.updateJSON = origUpdate;
   }
 
   // Assert — the rolling opportunity log's daily row gained the additive shadow field.

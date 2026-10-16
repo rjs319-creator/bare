@@ -100,7 +100,11 @@ test('playbook: every line carries an explicit basis tag; measured levels come f
   assert.match(pb.nextDecisionPoint.text, /QQQ opening-range 401 \/ 399/);
   assert.equal(pb.nextDecisionPoint.basis, 'MEASURED');
   assert.equal(pb.freshOpportunities[0].basis, 'VERIFIED_FACT');
-  assert.equal(pb.upcomingEventRisk[0].basis, 'VERIFIED_FACT');
+  // A bare string carries no evidence of its own, so it can never be a verified fact
+  // (per-item badge rules: test/pulse2-event-verification.test.js).
+  assert.equal(pb.upcomingEventRisk[0].basis, 'EDITORIAL_SUMMARY');
+  assert.match(pb.upcomingEventRisk[0].text, /CPI release/);
+  assert.ok(M.BASIS.includes(pb.upcomingEventRisk[0].basis));
 });
 
 test('playbook: no fabricated levels — without an unbroken range the decision point is honest prose', () => {

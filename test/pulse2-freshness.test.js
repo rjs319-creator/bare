@@ -432,10 +432,10 @@ test('source metadata is escaped (no raw HTML injection through titles or URLs)'
 test('the narrative snapshot age is labeled as a narrative update, not story age', async () => {
   const R = await loadRender();
   const html = R.renderHealthStrip(
-    { dataMode: 'live', modelVersion: 'x', narrativeAgeMinutes: 160, nextNarrativeRefreshAt: '2026-08-11T19:00:00.000Z' },
+    { dataMode: 'complete', modelVersion: 'x', narrativeAgeMinutes: 160, nextNarrativeRefreshAt: '2026-08-11T19:00:00.000Z' },
     [], null, { status: 'HIT', ttlSeconds: 60 });
   assert.match(html, /narrative updated 160m ago/);
   assert.match(html, /next update/);
-  assert.match(html, /cache HIT/);
+  assert.match(html, /narrative snapshot: cached/);   // the cache state names WHAT is cached (review 2026-10 A6)
   assert.ok(!/stories 160m old/.test(html));
 });

@@ -20,6 +20,11 @@
       --text:       #c0d0e8;
       --text-dim:   #4d6688;
       --text-muted: #1e2d44;
+      /* Supporting text that must still be READ (lane contracts, reasons, as-of stamps, empty
+         states). --text-muted measures ~1.4:1 and --text-dim ~3.2:1 on these backgrounds;
+         --text-2 measures 7.4 / 7.2 / 6.8 : 1 on --bg / --surface / --card (pinned in
+         test/review-ui-pins.test.js). Keep --text-muted for pure decoration only. */
+      --text-2:     #8ea0bf;
       --font: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
     }
 
@@ -146,7 +151,7 @@
     .section-label .label-action {
       margin-left: auto; display: flex; align-items: center; gap: 10px;
     }
-    .section-label .lbl-time { font-size: 0.68rem; color: var(--text-muted); }
+    .section-label .lbl-time { font-size: 0.68rem; color: var(--text-2); }
 
     .refresh-btn {
       background: none; border: 1px solid var(--border);
@@ -1292,7 +1297,7 @@
     .sb-toggle { font-size: 0.6rem; font-weight: 700; padding: 5px 9px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border); background: var(--bg); color: var(--text-dim); flex-shrink: 0; }
     .sb-toggle.on  { color: var(--green); border-color: #10d98a55; background: var(--green-dim); }
     .sb-toggle.off { color: var(--red);   border-color: #ef505055; background: var(--red-dim); }
-    .sb-count { font-size: 0.64rem; color: var(--text-muted); margin-bottom: 11px; }
+    .sb-count { font-size: 0.64rem; color: var(--text-2); margin-bottom: 11px; }
     .sb-model { display: inline-block; font-size: 0.56rem; font-weight: 800; border: 1px solid transparent; border-radius: 999px; padding: 1px 7px; margin-left: 6px; vertical-align: middle; cursor: help; }
     .sb-horizons { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 6px; margin-bottom: 10px; }
     .sb-h { border: 1px solid var(--border); border-radius: 8px; padding: 8px 4px; text-align: center; }
@@ -1301,7 +1306,7 @@
     .sb-h-ret.up { color: var(--green); }
     .sb-h-ret.down { color: var(--red); }
     .sb-h-ret.na { color: var(--text-muted); font-size: 0.7rem; }
-    .sb-h-sub { font-size: 0.54rem; color: var(--text-dim); }
+    .sb-h-sub { font-size: 0.62rem; color: var(--text-2); }
     .sb-h-exc { font-size: 0.54rem; font-weight: 700; margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--border); font-variant-numeric: tabular-nums; }
     .sb-h-exc.up { color: var(--green); }
     .sb-h-exc.down { color: var(--red); }
@@ -1433,7 +1438,7 @@
       background-position: calc(100% - 16px) center, calc(100% - 11px) center;
       background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
     }
-    .scr-filter:focus { outline: none; border-color: #10d98a66; }
+    .scr-filter:focus { border-color: #10d98a66; }
     .scr-hc {
       background: var(--card); border: 1px solid var(--border); color: var(--text-dim);
       border-radius: 8px; padding: 8px 14px; font-size: 0.74rem; font-weight: 700; cursor: pointer;
@@ -2217,8 +2222,10 @@
     .live-dot.live-regular { background: var(--green); }
     .live-dot.live-pre, .live-dot.live-post { background: var(--amber, #f59e0b); }
     .live-dot.live-closed { background: var(--text-dim); }
-    .live-asof { display: flex; align-items: center; gap: 4px; font-size: 0.68rem; font-weight: 700; color: var(--text-dim); margin: -2px 0 8px; white-space: nowrap; }
-    .live-asof .live-dot { animation: live-pulse 2s ease-in-out infinite; }
+    .live-asof { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 0.68rem; font-weight: 700; color: var(--text-2); margin: -2px 0 8px; }
+    .live-asof .live-checked { font-weight: 400; }
+    /* The dot pulses ONLY when the quotes are from an open regular session. */
+    .live-asof.is-live .live-dot { animation: live-pulse 2s ease-in-out infinite; }
     @keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
     /* ⭐ Opportunities (Today home centerpiece) */
     .opp-wrap { margin: 4px 0; }
@@ -2517,7 +2524,7 @@
     .td-card { background: var(--card); border: 1px solid var(--border); border-radius: 11px; padding: 11px 13px; margin-bottom: 9px; cursor: pointer; transition: border-color .15s, background .15s; }
     .td-card:hover { border-color: var(--border-hi); background: var(--card-hover); }
     .td-top { display: flex; align-items: baseline; gap: 7px; }
-    .td-rank { font-size: 0.68rem; color: var(--text-muted); font-weight: 700; }
+    .td-rank { font-size: 0.68rem; color: var(--text-2); font-weight: 700; }
     .td-tk { font-weight: 700; font-size: 0.95rem; }
     .td-co { color: var(--text-dim); font-size: 0.72rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .td-score { font-weight: 700; font-size: 0.9rem; color: var(--cyan); }
@@ -2545,7 +2552,7 @@
     .td-levels { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.74rem; color: var(--text-dim); margin: 6px 0; }
     .td-levels b { color: var(--text); }
     .td-rr { color: var(--cyan); }
-    .td-hold { color: var(--text-muted); }
+    .td-hold { color: var(--text-2); }
     /* Related-workspace strip + the single top-plays shortlist (#1) */
     .td-related { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; margin: 10px 0 4px; font-size: 0.72rem; }
     .td-rel { border: 1px solid var(--border); background: var(--surface); color: var(--text-dim); border-radius: 999px; padding: 3px 11px; cursor: pointer; font-size: 0.72rem; transition: border-color .15s, color .15s; }
@@ -2555,10 +2562,10 @@
     .td-foot { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; font-size: 0.7rem; margin-top: 5px; }
     .td-track.td-pos { color: var(--green); }
     .td-track.td-neg { color: var(--red); }
-    .td-ci { color: var(--text-muted); font-size: 0.66rem; }
-    .td-ver { color: var(--text-muted) !important; font-variant-numeric: tabular-nums; }
+    .td-ci { color: var(--text-2); font-size: 0.66rem; }
+    .td-ver { color: var(--text-2) !important; font-variant-numeric: tabular-nums; }
     .td-cat { color: var(--amber); }
-    .td-dim { color: var(--text-muted); }
+    .td-dim { color: var(--text-2); }
     .td-lanes, .td-events { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 13px; }
     .td-lanes-h { font-size: 0.78rem; font-weight: 700; margin-bottom: 8px; }
     .td-lane { margin-bottom: 7px; font-size: 0.72rem; }
@@ -3247,7 +3254,7 @@
 #pulse .p2-toggle-wrap { display:inline-flex; border:1px solid #333; border-radius:6px; overflow:hidden; }
 #pulse .p2-vtab { background:#111; color:#9ca3af; border:none; padding:4px 10px; font-size:0.74rem; cursor:pointer; }
 #pulse .p2-vtab.p2-active { background:#1f2937; color:#f9fafb; }
-#pulse .p2-dim { color:#6b7280; font-size:0.72rem; }
+#pulse .p2-dim { color:#9ca3af; font-size:0.72rem; }
 #pulse .p2-basis { font-size:0.62rem; border:1px solid currentColor; border-radius:4px; padding:0 4px; margin-left:6px; white-space:nowrap; }
 #pulse .p2-clock { font-size:0.68rem; margin-left:8px; white-space:nowrap; }
 #pulse .p2-health { font-size:0.7rem; color:#6b7280; margin:6px 0; }
@@ -3292,7 +3299,7 @@
 #pulse .p2-vtabs { display:flex; gap:4px; margin:6px 0; }
 #pulse .p2-sec { margin:12px 0; }
 #pulse .p2-sec-head { font-weight:700; color:#f9fafb; margin-bottom:6px; font-size:0.85rem; }
-#pulse .p2-sec-n { color:#6b7280; font-weight:400; font-size:0.72rem; }
+#pulse .p2-sec-n { color:#9ca3af; font-weight:400; font-size:0.72rem; }
 #pulse .p2-card { background:#0d1220; border:1px solid #1f2937; border-left:3px solid #374151; border-radius:8px; padding:8px 10px; margin:6px 0; }
 #pulse .p2-card[data-state="PRICE_CONFIRMED"] { border-left-color:#22c55e; }
 #pulse .p2-card[data-state="ARMED"] { border-left-color:#f97316; }
@@ -3310,7 +3317,7 @@
 #pulse .p2-c-row { display:flex; justify-content:space-between; gap:10px; padding:2px 0; border-top:1px solid #111827; font-size:0.72rem; color:#d1d5db; }
 #pulse .p2-claim { font-size:0.72rem; margin:4px 0; color:#d1d5db; }
 #pulse .p2-src { color:#60a5fa; margin-left:6px; font-size:0.68rem; }
-#pulse .p2-empty { background:#0b0f17; border:1px dashed #374151; border-radius:8px; padding:8px 10px; color:#6b7280; font-size:0.74rem; margin:6px 0; }
+#pulse .p2-empty { background:#0b0f17; border:1px dashed #374151; border-radius:8px; padding:8px 10px; color:#9ca3af; font-size:0.74rem; margin:6px 0; }
 #pulse .p2-recent-row, #pulse .p2-alert-row { font-size:0.74rem; color:#d1d5db; padding:2px 0; }
 @media (max-width:640px) {
   #pulse .p2-play-lbl { flex-basis:100%; }
@@ -3464,3 +3471,30 @@ table.sortable th[aria-sort="descending"]::after { content: " ▼"; font-size: .
 .mb-remove { font:inherit; color:var(--text-dim); background:transparent; border:1px solid var(--border); border-radius:6px; cursor:pointer; padding:0 .4em; }
 .mb-disc { font-size:.7rem; }
 @media (max-width: 640px) { .mb-row { grid-template-columns:auto 1fr auto; } .mb-row .sb-dim:nth-child(4) { display:none; } }
+
+/* ── review 2026-10: readable supporting text, visible focus, decision-state copy ───── */
+/* Today / Session supporting text repointed to --text-2 (>= 4.5:1; see :root note). */
+#today .dt-note, #today .dt-dim, .td-co, .td-levels, .td-empty, .td-lane-h, #session .sb-dim { color: var(--text-2); }
+.td-levels b { color: var(--text); }
+/* ONE visible focus ring for every interactive element (cards and chips included). */
+:where(button, [role="button"], [role="link"], [tabindex]:not([tabindex="-1"]), summary, a, select, input, textarea):focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.td-card:focus-visible { border-color: var(--cyan); }
+/* Session / as-of line at the top of the Today board. */
+.td-session { font-size: .74rem; color: var(--text-2); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .35rem .7rem; }
+.td-session b { color: var(--text); }
+/* Retained-label meaning as visible text under the chips (was hover-only). */
+.td-retained-why { font-size: .68rem; margin: .1rem 0; }
+/* Thin-sample track record: no win/loss colour. */
+.td-track.td-track-thin { color: var(--text-2); }
+/* Scoreboard verdict: the horizon actually used, and the no-verdict (insufficient) state. */
+.sb-exp.pending { color: var(--text-2); background: var(--surface); border: 1px solid var(--border); text-transform: none; }
+.sb-exp-hz { font-weight: 600; opacity: .85; }
+.sb-thin { color: var(--amber); }
+/* Pulse horizon tabs carry their scoped counts; a view's scope line. */
+#pulse .p2-tab-n { font-weight: 400; opacity: .85; margin-left: .25em; }
+#pulse .p2-view-scope { margin: 4px 0 8px; }
+#pulse .p2-play-src a { color: var(--cyan); }
+#pulse .p2-play-unconf { color: var(--amber); font-size: .68rem; margin-left: .4em; }
+/* Opportunities: retry button and reload hint. */
+.opp-retry { font: inherit; font-size: .74rem; font-weight: 700; color: var(--cyan); background: transparent; border: 1px solid var(--cyan); border-radius: 6px; padding: 3px 10px; cursor: pointer; margin-left: 6px; }
+.opp-refreshing { margin-bottom: 8px; }

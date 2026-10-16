@@ -255,7 +255,10 @@ test('overlayPersistedChains: null/absent inputs pass through unchanged', () => 
 
 test('buildHealthResponse: lateChainFails flip healthy false with a warning', () => {
   const runs = [{ at: '2026-08-06T22:01:06Z', ok: true, failCount: 0, chains: { pattern: { dispatched: true, status: 'running-past-warm' } } }];
-  const r = buildHealthResponse(runs, { spyDate: '2026-08-06', ageDays: 0.5, persistedChains: {} });
+  // `now` injected 2026-10-04 (job-grading audit D8): health now also grades scheduler
+  // liveness, so the clock must sit the morning after this run or the warning would be
+  // the (correct) stale-run one instead of the lateChainFails one this test pins.
+  const r = buildHealthResponse(runs, { spyDate: '2026-08-06', ageDays: 0.5, persistedChains: {}, now: Date.parse('2026-08-07T13:00:00Z') });
   assert.strictEqual(r.healthy, false);
   assert.ok(/pattern/.test(r.warning));
 });
@@ -264,7 +267,9 @@ test('compactChainReport: health-shaped, bounded, and pure', () => {
   const { compactChainReport } = require('../lib/warm-chains-routes');
   const result = { name: 'ledger', complete: false, failed: ['x'], skipped: ['y'], failDetail: Array(20).fill({ op: 'z' }), elapsedMs: 52478, steps: [{ op: 'op=track' }] };
   const rep = compactChainReport(result, '2026-08-06T22:02:30Z');
-  assert.deepEqual(Object.keys(rep).sort(), ['at', 'complete', 'elapsedMs', 'failDetail', 'failed', 'name', 'skipped']);
+  // unknown / blocked / benign added 2026-10-04 (job-grading audit): an unknown-outcome or
+  // blocked step makes a chain incomplete, and op=health must be able to see why.
+  assert.deepEqual(Object.keys(rep).sort(), ['at', 'benign', 'blocked', 'complete', 'elapsedMs', 'failDetail', 'failed', 'name', 'skipped', 'unknown']);
   assert.equal(rep.failDetail.length, 12, 'detail bounded');
   assert.equal(rep.at, '2026-08-06T22:02:30Z');
   assert.equal(result.failDetail.length, 20, 'input not mutated');

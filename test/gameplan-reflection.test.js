@@ -226,7 +226,11 @@ test('route wiring: ET date anchor, gated SPY fetch, decoupled persistence, reba
   const synthIdx = src.indexOf('gp.synthesize');
   assert.ok(resolveIdx > 0 && persistIdx > resolveIdx && persistIdx < synthIdx,
     'resolutions must persist immediately after resolving, BEFORE (and regardless of) the LLM call');
-  assert.match(src, /readJSON\(reflection\.KEY, \{ entries: \[\] \}\)\.catch\(\(\) => reflectionDoc\)/, 're-read before record (rebase, not blind overwrite)');
+  // The record step is a compare-and-swap onto the STORED doc (lib/store-cas updateJSON):
+  // it re-reads, re-applies resolution + recordPlan, and an unavailable/invalid read throws
+  // instead of rebasing onto a fallback — strictly stronger than the old re-read.
+  assert.match(src, /updateJSON\(reflection\.KEY, \(stored\) => \{/, 'record via CAS on the stored doc (rebase, not blind overwrite)');
+  assert.doesNotMatch(src, /writeJSON\(reflection\.KEY, recorded/, 'no unconditional write of the recorded ledger');
   assert.ok(src.indexOf('recordPlan') > synthIdx, 'recording happens after synthesis');
 });
 

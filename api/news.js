@@ -1,4 +1,12 @@
 const Anthropic = require('@anthropic-ai/sdk');
+const { rateLimit, clientKey } = require('../lib/ratelimit');
+
+// The summary is an LLM call on caller-supplied text: throttle it per client and bound the
+// text, so the endpoint cannot be used as an open, unmetered completion proxy.
+const SUMMARY_LIMIT = { limit: 12, windowMs: 60000 };
+const MAX_TITLE_CHARS = 300;
+const MAX_BODY_CHARS = 2000;
+const clip = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
 
 const DOMAINS = 'reuters.com,bloomberg.com,apnews.com,cnbc.com,wsj.com,ft.com,barrons.com,marketwatch.com,investors.com,thestreet.com,forbes.com,fortune.com,businessinsider.com,economist.com,seekingalpha.com,morningstar.com,benzinga.com,motleyfool.com,nytimes.com,washingtonpost.com,axios.com,techcrunch.com,kiplinger.com';
 
@@ -13,7 +21,15 @@ async function summarize(req, res) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set.' });
 
-  const { title, description, content } = req.body || {};
+  const rl = rateLimit(`summarize:${clientKey(req)}`, SUMMARY_LIMIT);
+  if (!rl.ok) {
+    res.setHeader('Retry-After', Math.ceil(rl.retryAfterMs / 1000));
+    return res.status(429).json({ error: 'Too many summary requests — try again shortly.' });
+  }
+  const body = req.body || {};
+  const title = clip(body.title, MAX_TITLE_CHARS);
+  const description = clip(body.description, MAX_BODY_CHARS);
+  const content = clip(body.content, MAX_BODY_CHARS);
   if (!title) return res.status(400).json({ error: 'Missing title.' });
 
   const client = new Anthropic({ apiKey });

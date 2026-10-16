@@ -89,7 +89,11 @@ test('buildHealthResponse carries storeCas counters (per-instance scope stated) 
   fake.seed('x.json', { n: 0 });
   fake.hooks.beforePut = async () => { fake.seed('x.json', { n: 1 }); };
   await STORE.updateJSON('x.json', (c) => ({ n: c.n + 1 }));
-  const res = HEALTH.buildHealthResponse([run('t1')], { auth: { ok: true, production: false, secretConfigured: true, warnings: [] } });
+  // Fixture extended 2026-10-04 (job-grading audit D9): `healthy` now requires KNOWN,
+  // current market data, so this envelope test supplies a fresh benchmark and a clock —
+  // the storeCas counters it pins are unchanged.
+  const res = HEALTH.buildHealthResponse([run('2026-10-02T22:00:00Z')], { auth: { ok: true, production: false, secretConfigured: true, warnings: [] },
+    spyDate: '2026-10-02', spyDates: ['2026-10-01', '2026-10-02'], ageDays: 0.5, now: Date.parse('2026-10-03T13:00:00Z') });
   assert.equal(res.ok, true, 'ok stays the hardcoded envelope');
   assert.equal(res.storeCas.conflicts, 1);
   assert.equal(res.storeCas.updates, 1);
