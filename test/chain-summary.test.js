@@ -56,9 +56,30 @@ test('normalizeChainSummary: drops unknown fields, bounds arrays and strings, re
 });
 
 test('normalizeChainSummary: a chain without an explicit ok is graded from status/failed', () => {
-  const r = CS.normalizeChainSummary(payload({ chains: { a: { status: 'no-report' }, b: { failed: ['op=x'] }, c: { status: 'ok' } } }), { now: NOW });
+  // DELIBERATELY CHANGED 2026-10-04 (job-grading audit D5): `c` now carries complete:true —
+  // a status:'ok' chain whose completeness is unknown is graded unknown:incomplete (below).
+  const r = CS.normalizeChainSummary(payload({ chains: { a: { status: 'no-report' }, b: { failed: ['op=x'] }, c: { status: 'ok', complete: true } } }), { now: NOW });
   assert.deepEqual(r.value.failed, ['a', 'b']);
   assert.equal(r.value.chains.c.ok, true);
+});
+
+test('normalizeChain (D5): complete:null is NOT ok — an `ok` chain of unknown completeness is unknown:incomplete; explicit non-ok statuses keep their grade', () => {
+  const unknownDone = CS.normalizeChain({ ok: true, status: 'ok', complete: null, failed: [], skipped: [] });
+  assert.equal(unknownDone.ok, false); assert.equal(unknownDone.status, 'unknown:incomplete');
+  const absent = CS.normalizeChain({ status: 'ok' });
+  assert.equal(absent.ok, false); assert.equal(absent.status, 'unknown:incomplete');
+  const already = CS.normalizeChain({ ok: true, status: 'already-ok', complete: true, failed: [], skipped: [] });
+  assert.equal(already.ok, true); assert.equal(already.status, 'already-ok');
+  const noSecret = CS.normalizeChain({ ok: true, status: 'skipped:no-secret', failed: [], skipped: [] });
+  assert.equal(noSecret.ok, true, 'an explicit non-ok status keeps the grade its poster gave it'); assert.equal(noSecret.status, 'skipped:no-secret');
+  // Budget skips with complete:false stay ok (they self-heal; the chronic detector watches them).
+  const skips = CS.normalizeChain({ ok: true, status: 'ok', complete: false, failed: [], skipped: ['op=fadetick'] });
+  assert.equal(skips.ok, true);
+  // Unknown / blocked steps named by the chain deny ok and are carried.
+  const unk = CS.normalizeChain({ ok: true, status: 'ok', complete: false, failed: [], skipped: [], unknown: ['@decision'] });
+  assert.equal(unk.ok, false); assert.deepEqual(unk.unknown, ['@decision']); assert.equal(unk.status, 'unknown:incomplete');
+  const blk = CS.normalizeChain({ ok: false, status: 'incomplete', complete: false, failed: [], skipped: [], blocked: ['op=routercf&force=1'] });
+  assert.equal(blk.ok, false); assert.deepEqual(blk.blocked, ['op=routercf&force=1']); assert.equal(blk.status, 'incomplete');
 });
 
 // ── health view ──────────────────────────────────────────────────────────────
@@ -156,18 +177,61 @@ test('runChainSummary: writes chains/<date>.json under CAS and reports the verdi
   assert.equal(doc.runId, '42'); assert.equal(doc.receivedAt, new Date(NOW).toISOString()); assert.equal(doc.partial, false);
 }));
 
-test('runChainSummary: idempotent — the same full run posted twice yields the same record; a newer full run replaces it', () => withSecret('s3cret', async () => {
+test('runChainSummary: idempotent — the same full run posted twice is a no-op duplicate (200, nothing re-recorded); a newer full run replaces it', () => withSecret('s3cret', async () => {
+  // DELIBERATELY CHANGED 2026-10-04 (job-grading audit D5). This used to assert that the
+  // duplicate post added a `priorRuns` row naming itself — a double count of one receipt.
+  // The same receipt (runId + source + finishedAt + fullness) now merges to the existing doc
+  // unchanged, so the CAS layer writes nothing and the route answers 200 duplicate:true.
   const store = memStore();
   await R.runChainSummary(req({ body: payload({ partial: false }) }), fakeRes(), { store, now: () => NOW });
   const first = store.docs.get('chains/2026-10-02.json');
-  await R.runChainSummary(req({ body: payload({ partial: false }) }), fakeRes(), { store, now: () => NOW });
-  const { priorRuns, ...second } = store.docs.get('chains/2026-10-02.json');
-  assert.deepEqual(second, first);
-  assert.deepEqual(priorRuns.map((p) => p.runId), ['42'], 'the earlier post is kept as provenance');
+  const dup = fakeRes();
+  await R.runChainSummary(req({ body: payload({ partial: false }) }), dup, { store, now: () => NOW + 60000 });
+  assert.equal(dup.code, 200); assert.equal(dup.body.ok, true); assert.equal(dup.body.duplicate, true); assert.equal(dup.body.written, false);
+  assert.deepEqual(store.docs.get('chains/2026-10-02.json'), first, 'the record is byte-for-byte the first receipt');
+  assert.equal('priorRuns' in first, false, 'no provenance row is minted for a duplicate');
   await R.runChainSummary(req({ body: payload({ partial: false, runId: '43', chains: { ledger: okChain } }) }), fakeRes(), { store, now: () => NOW });
   assert.equal(store.docs.get('chains/2026-10-02.json').runId, '43');
+  assert.deepEqual(store.docs.get('chains/2026-10-02.json').priorRuns.map((p) => p.runId), ['42'], 'a different run IS provenance');
   assert.equal(store.docs.size, 1, 'one key per date — never a shared RMW doc');
 }));
+
+test('runChainSummary (D5): a LATE receipt never flips a newer terminal result — full is provenance only, partial fills gaps only', () => withSecret('s3cret', async () => {
+  const store = memStore();
+  // The newer full run (finished 22:39) is on record: ledger ok, capture failed.
+  await R.runChainSummary(req({ body: payload({ partial: false, runId: '50' }) }), fakeRes(), { store, now: () => NOW });
+  // An OLDER full run (finished 22:20) arrives late saying capture was fine: kept as provenance, record unchanged.
+  const lateFull = payload({ partial: false, runId: '49', finishedAt: '2026-10-02T22:20:00Z', chains: { ledger: okChain, capture: okChain } });
+  await R.runChainSummary(req({ body: lateFull }), fakeRes(), { store, now: () => NOW + 1000 });
+  let doc = store.docs.get('chains/2026-10-02.json');
+  assert.equal(doc.runId, '50'); assert.equal(doc.chains.capture.ok, false, 'the newer verdict stands');
+  assert.deepEqual(doc.priorRuns.map((p) => [p.runId, p.late]), [['49', true]]);
+  // An OLDER partial arrives late: it may fill a chain with no verdict, never override one.
+  const latePartial = payload({ partial: true, runId: '48', finishedAt: '2026-10-02T22:10:00Z', chains: { capture: okChain, maturity: okChain } });
+  await R.runChainSummary(req({ body: latePartial }), fakeRes(), { store, now: () => NOW + 2000 });
+  doc = store.docs.get('chains/2026-10-02.json');
+  assert.equal(doc.chains.capture.ok, false, 'late partial cannot flip capture'); assert.equal(doc.chains.maturity.ok, true, 'but it fills the gap');
+  assert.equal(doc.finishedAt, '2026-10-02T22:39:00.000Z', 'the record keeps the newer finish time (ISO-normalised by isoOrNull)');
+  assert.deepEqual(doc.patches.map((p) => [p.runId, p.late]), [['48', true]]);
+  // A NEWER partial (finished later) still flips, as before.
+  await R.runChainSummary(req({ body: payload({ partial: true, runId: '51', finishedAt: '2026-10-02T23:00:00Z', chains: { capture: okChain } }) }), fakeRes(), { store, now: () => NOW + 3000 });
+  assert.equal(store.docs.get('chains/2026-10-02.json').chains.capture.ok, true);
+  // The same late partial delivered again is a duplicate: nothing changes.
+  const before = store.docs.get('chains/2026-10-02.json');
+  const r = fakeRes();
+  await R.runChainSummary(req({ body: latePartial }), r, { store, now: () => NOW + 4000 });
+  assert.equal(r.body.duplicate, true); assert.deepEqual(store.docs.get('chains/2026-10-02.json'), before);
+}));
+
+test('mergeChainSummary (D5): sameReceipt / isLateReceipt are strict', () => {
+  const a = { runId: '1', source: 'github-matrix', finishedAt: 't1', partial: false };
+  assert.equal(CS.sameReceipt(a, { ...a }), true);
+  assert.equal(CS.sameReceipt(a, { ...a, finishedAt: 't2' }), false, 'a re-run of the same run id is a new receipt');
+  assert.equal(CS.sameReceipt(a, { ...a, partial: true }), false);
+  assert.equal(CS.sameReceipt({ ...a, runId: null }, { ...a, runId: null }), false, 'no run id → never a duplicate');
+  assert.equal(CS.isLateReceipt({ finishedAt: '2026-10-02T22:39:00Z' }, { finishedAt: '2026-10-02T22:20:00Z' }), true);
+  assert.equal(CS.isLateReceipt({ finishedAt: '2026-10-02T22:39:00Z' }, { finishedAt: null }), false, 'no timestamp → not late (receive order)');
+});
 
 test('runChainSummary: a partial (only=) post merges into the night instead of replacing it', () => withSecret('s3cret', async () => {
   const store = memStore();

@@ -188,3 +188,16 @@ test('assessFreshness result is frozen (immutable record)', () => {
   assert.ok(Object.isFrozen(f));
   assert.throws(() => { 'use strict'; f.executionAllowed = true; });
 });
+
+// ── Calendar coverage (review 2026-10): the holiday tables are finite ────────────────
+test('sessionInfoAt reports calendarCovered inside the maintained window and false beyond it', () => {
+  const MSX = require('../lib/market-session');
+  assert.equal(MSX.CALENDAR_COVERED_THROUGH, '2027-12-31');
+  assert.equal(MSX.sessionInfoAt(new Date('2026-10-05T15:00:00Z')).calendarCovered, true);
+  assert.equal(MSX.sessionInfoAt(new Date('2027-12-31T15:00:00Z')).calendarCovered, true);
+  // MLK day 2028 is NOT in the table: the session still classifies by the clock, but the
+  // descriptor says the calendar cannot vouch for it. No 2028 holiday is invented.
+  const beyond = MSX.sessionInfoAt(new Date('2028-01-17T15:00:00Z'));
+  assert.equal(beyond.calendarCovered, false);
+  assert.ok(![...MSX.FULL_HOLIDAYS].some(d => d.startsWith('2028')));
+});

@@ -1,5 +1,5 @@
-// Live intraday price overlay for the screener cards. The screeners run on daily
-// (EOD) bars; this fetches a near-live quote (/api/price, 5-min + pre/post, 30s
+// Intraday price overlay for the screener cards. The screeners run on daily
+// (EOD) bars; this fetches the latest available quote (/api/price, 5-min + pre/post, 30s
 // cache) for the names ON SCREEN and shows price + intraday % next to each ticker.
 // Cards opt in with data-live="TICKER"; a .live-px badge is injected/updated.
 import { esc } from './format.js';
@@ -48,18 +48,74 @@ function syncHeadline(liveEl, q) {
   chg.classList.toggle('down', !up);
 }
 
-// "🟢 live · HH:MM:SS · N names" indicator in the section header (updated on refresh).
-function updateAsOf(section, n) {
+// ── Section "as of" strip ────────────────────────────────────────────────────────────
+// What the strip may claim comes from the QUOTES, never from the polling clock:
+//   • the word "live" is earned only when the exchange session (marketState, derived
+//     server-side from the exchange calendar) is REGULAR;
+//   • the data time is the quote's own observedAt (provider print time). When the
+//     provider gave none, the time is stated as unknown — the moment we polled is shown
+//     separately and labelled "checked", so it can never read as the data's age.
+// A Saturday poll of Friday's bars therefore reads "last close · Oct 2, 2026, 4:00 PM ET".
+const NY_STAMP = { timeZone: 'America/New_York', year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+const NY_CLOCK = { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' };
+const NY_DAY = { timeZone: 'America/New_York', year: 'numeric', month: 'short', day: 'numeric' };
+const SESSION_WORD = { REGULAR: 'live', PRE: 'pre-market', POST: 'after-hours', CLOSED: 'last close' };
+
+function etStamp(ms, now) {
+  const d = new Date(ms);
+  try {
+    const sameDay = d.toLocaleDateString('en-US', NY_DAY) === new Date(now).toLocaleDateString('en-US', NY_DAY);
+    return `${d.toLocaleString('en-US', sameDay ? NY_CLOCK : NY_STAMP)} ET`;
+  } catch { return `${d.toISOString().slice(0, 16).replace('T', ' ')} UTC`; }
+}
+
+/**
+ * Pure. Decide what the strip says for a batch of quotes.
+ * @param {object|Array} quotes  ticker→quote map (or array) as returned by /api/price
+ * @param {Date|number} [now]
+ * @returns {{ state: string, live: boolean, dotClass: string, label: string, observedAt: string|null, count: number }}
+ */
+export function asOfLabelFor(quotes, now = new Date()) {
+  const list = (Array.isArray(quotes) ? quotes : Object.values(quotes || {})).filter(q => q && typeof q === 'object');
+  const states = new Set(list.map(q => String(q.marketState || '').toUpperCase()));
+  // One session per poll in practice; if the batch ever disagrees, take the LEAST live
+  // reading — a mixed batch must not borrow the "live" word from one of its members.
+  const state = !list.length ? 'UNKNOWN'
+    : ['CLOSED', 'POST', 'PRE', 'REGULAR'].find(s => states.has(s)) || 'UNKNOWN';
+  const observedMs = list.map(q => Date.parse(q.observedAt)).filter(Number.isFinite);
+  const newest = observedMs.length ? Math.max(...observedMs) : null;
+  const dates = [...new Set(list.map(q => q.observedDate).filter(Boolean))].sort();
+  const word = SESSION_WORD[state] || 'session unknown';
+  const when = newest != null ? etStamp(newest, now)
+    : dates.length ? `${dates[dates.length - 1]} (time unknown)`
+      : 'quote time unknown';
+  const n = list.length;
+  return {
+    state,
+    live: state === 'REGULAR',
+    dotClass: state === 'REGULAR' ? 'live-regular' : state === 'PRE' ? 'live-pre' : state === 'POST' ? 'live-post' : 'live-closed',
+    label: `${word} · ${state === 'REGULAR' || state === 'PRE' || state === 'POST' ? 'quotes as of ' : ''}${when} · ${n} name${n === 1 ? '' : 's'}`,
+    observedAt: newest != null ? new Date(newest).toISOString() : null,
+    count: n,
+  };
+}
+
+function updateAsOf(section, shown) {
   let el = section.querySelector('.live-asof');
   if (!el) {
     el = document.createElement('div');
     el.className = 'live-asof';
+    el.setAttribute('role', 'status');
     const label = section.querySelector('.section-label');
     if (label) label.insertAdjacentElement('afterend', el);   // its own line below the header (mobile-safe)
     else section.insertBefore(el, section.firstChild);
   }
-  const t = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  el.innerHTML = `<span class="live-dot live-regular"></span>live · ${t} · ${n} name${n === 1 ? '' : 's'}`;
+  const now = new Date();
+  const a = asOfLabelFor(shown, now);
+  let checked = '';
+  try { checked = ` <span class="live-checked">· checked ${esc(now.toLocaleTimeString('en-US', NY_CLOCK))} ET</span>`; } catch { /* no TZ data → omit */ }
+  el.classList.toggle('is-live', a.live);
+  el.innerHTML = `<span class="live-dot ${a.dotClass}"></span>${esc(a.label)}${checked}`;
 }
 
 let busy = false;
@@ -72,7 +128,10 @@ async function hydrate(section) {
   busy = true;
   let prices = {};
   try { prices = await fetchPrices(tickers); } finally { busy = false; }
-  let n = 0;
+  // The user switched sections while this poll was in flight: an obsolete response must
+  // not paint badges / an "as of" strip into a section that is no longer the live one.
+  if (current !== section) { if (current) hydrate(current); return; }
+  const shown = [];
   for (const el of els) {
     const q = prices[(el.dataset.live || '').toUpperCase()];
     if (!q) continue;
@@ -80,9 +139,9 @@ async function hydrate(section) {
     if (!badge) { badge = document.createElement('span'); badge.className = 'live-px'; el.appendChild(badge); }
     badge.innerHTML = badgeHTML(q);
     syncHeadline(el, q);
-    n++;
+    shown.push(q);
   }
-  if (n) updateAsOf(section, n);
+  if (shown.length) updateAsOf(section, shown);
 }
 
 let timer = null, current = null;

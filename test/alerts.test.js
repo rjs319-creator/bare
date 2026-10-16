@@ -165,3 +165,14 @@ test('an ungradeable entry NEVER counts as graded — edge stats must stay clean
   assert.equal(edge.n, 0);
   assert.equal(edge.edge, false);
 });
+
+// ── review 2026-10 (A13): undated posts keep null timestamps; age is bounded by collectedAt ──
+test('rankPosts: an undated post is weighted by its collectedAt, not as if published at epoch 0', () => {
+  const now = Date.parse('2026-10-05T15:00:00Z');
+  const dated = rankPosts([{ text: '$ABCD breakout! target 130 🚀🔥 all in', account: 'a1', timestamp: new Date(now - 60_000).toISOString() }], {}, now);
+  const undatedFresh = rankPosts([{ text: '$ABCD breakout! target 130 🚀🔥 all in', account: 'a1', timestamp: null, timestampKnown: false, collectedAt: new Date(now - 60_000).toISOString() }], {}, now);
+  const a = dated.find(r => r.ticker === 'ABCD'), b = undatedFresh.find(r => r.ticker === 'ABCD');
+  assert.ok(a && b);
+  assert.ok(Math.abs(a.weightedSignal - b.weightedSignal) < 1e-9, 'collected a minute ago ⇒ same weight as published a minute ago');
+  assert.ok(b.weightedSignal > 0);
+});

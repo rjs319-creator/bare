@@ -328,3 +328,18 @@ test('the dossier refuses a ticker outside the technology universe', () => {
   assert.equal(d.found, false);
   assert.match(d.reason, /not in the technology universe/i);
 });
+
+// ── Review 2026-10 (Prompt 4.3): retained rows never tell the reader to HOLD ──────────
+test('a retained TRIGGERED row is presented as "thesis intact — not a new entry", never as Hold', async () => {
+  const path = require('node:path');
+  const { pathToFileURL } = require('node:url');
+  const R = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'tech-command-render.js')).href);
+  for (const retainedLabel of ['TRIGGERED', 'MONITOR', 'HOLD' /* legacy persisted spelling */]) {
+    const b = SW.buildSwingBoard({ signals: [{ ...swingBase, retainedLabel }], universe, context: ctx });
+    assert.match(b.rows[0].removalReason, /thesis intact, not a new entry/);
+    assert.ok(!/\bhold\b/i.test(b.rows[0].removalReason), b.rows[0].removalReason);
+    const pill = R.actionPill(b.rows[0].action);
+    assert.match(pill, /Thesis intact — not a new entry/);
+    assert.ok(!/>\s*Hold\s*</.test(pill) && !/Action: Hold"/.test(pill), pill);
+  }
+});

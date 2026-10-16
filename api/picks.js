@@ -270,7 +270,21 @@ async function fetchSectors() {
   } catch { return null; }
 }
 
+// Each uncached call costs four news fetches and an LLM call; the CDN absorbs normal page
+// loads, so this only bites a cache-busting loop. The cron's bearer is exempt.
+const PICKS_LIMIT = { limit: 6, windowMs: 60000 };
+
 module.exports = async function handler(req, res) {
+  const { rateLimit, clientKey } = require('../lib/ratelimit');
+  const { isTrusted } = require('../lib/auth');
+  if (!isTrusted(req)) {
+    const rl = rateLimit(`picks:${clientKey(req)}`, PICKS_LIMIT);
+    if (!rl.ok) {
+      res.setHeader('Retry-After', Math.ceil(rl.retryAfterMs / 1000));
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(429).json({ error: 'Too many requests — try again shortly.' });
+    }
+  }
   const newsApiKey   = process.env.NEWS_API_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   if (!newsApiKey || !anthropicKey) {

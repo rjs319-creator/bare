@@ -189,11 +189,18 @@ test('PROPAGATE: a healthy nested chain leaves the parent healthy', async () => 
   assert.deepStrictEqual(r.failed, []);
 });
 
-test('PROPAGATE: a nested chain with NO body (child killed) is unknown, not a failure', async () => {
-  // The recorder returns no body for the child → honest "dispatched", parent stays ok.
+test('PROPAGATE: a nested chain with NO body (child killed) is unknown — not a failure, but never ok', async () => {
+  // DELIBERATELY CHANGED 2026-10-04 (job-grading audit D2/D3). This pin used to assert
+  // `r.ok === true`: a child that never answered was graded as if it had succeeded, so a
+  // decision spine killed at the wall read green in op=health. Unknown is not failure
+  // (nothing goes in `failed`), but it is not success either: the step is listed in
+  // `unknown`, the chain is incomplete, and `ok` is false.
   const call = recorder();
   const r = await WC.runChain('ledger', { call, now: clock().now });
-  assert.strictEqual(r.ok, true, 'no body = child still running/killed = not a failure');
+  assert.deepStrictEqual(r.failed, [], 'no body = child still running/killed = not a failure');
+  assert.deepStrictEqual(r.unknown, ['@decision'], 'but the outcome is UNKNOWN and named');
+  assert.strictEqual(r.complete, false);
+  assert.strictEqual(r.ok, false, 'unknown is never ok');
 });
 
 // ── failDetail: why a step failed, not just that it did ──────────────────────

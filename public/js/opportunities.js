@@ -311,10 +311,29 @@ export function collectAiSignals(c) {
   return out.sort((a, b) => b.score - a.score);
 }
 
+// Request sequencing: a scope click (or re-entry) while a load is in flight starts a newer
+// load; only the NEWEST may paint, so an older response can never overwrite the selection the
+// user is looking at. Per container, so the Home lane and the dedicated tab do not interfere.
+const LOAD_SEQ = new WeakMap();
+export function nextLoadSeq(container) {
+  const n = (LOAD_SEQ.get(container) || 0) + 1;
+  LOAD_SEQ.set(container, n);
+  return n;
+}
+export function isCurrentLoad(container, seq) { return LOAD_SEQ.get(container) === seq; }
+
+function retryButton(scope, limit) {
+  return `<button type="button" class="opp-retry" data-opp-retry data-scope="${esc(scope)}" data-limit="${limit}">⟳ Retry</button>`;
+}
+
 export async function loadOpportunities(container, scope = 'large', limit = 6) {
   if (!container) return;
-  container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Ranking research candidates — quiet accumulation + early bases…</p></div>`;
-  let d, sb, drift, rt, an, sw, ca, ts;
+  const seq = nextLoadSeq(container);
+  const hadBoard = !!container.querySelector('.opp-wrap-body, .rot-head');
+  // Keep a loaded board on screen while the next load runs; only a first load gets the spinner.
+  if (!hadBoard) container.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Ranking research candidates — quiet accumulation + early bases…</p></div>`;
+  else container.insertAdjacentHTML('afterbegin', `<div class="td-refreshing opp-refreshing" role="status">🔄 Loading ${esc(scope)} caps — the board below is the previous selection until it lands…</div>`);
+  let d, sb, drift, rt, an, sw, ca, ts, loadError = null;
   const j = op => fetchJSON('/api/tracker?op=' + op).catch(() => null);
   try {
     [d, sb, drift, rt, an, sw, ca, ts] = await Promise.all([
@@ -322,8 +341,18 @@ export async function loadOpportunities(container, scope = 'large', limit = 6) {
       j('scoreboard'), j('drift'),
       j('readthrough'), j('anomaly'), j('secondwave'), j('crossasset'), j('toneshift'),
     ]);
-  } catch { d = null; }
-  if (!d) { container.innerHTML = `<div class="dt-note">Couldn't load opportunities right now.</div>`; return; }
+  } catch (e) { d = null; loadError = e; }
+  if (!isCurrentLoad(container, seq)) return;   // superseded by a newer scope — do not paint
+  const hint = container.querySelector('.opp-refreshing'); if (hint) hint.remove();
+  if (!d) {
+    const why = loadError ? String((loadError && loadError.message) || loadError).slice(0, 120) : 'no screener payload';
+    const strip = `<div class="dt-note opp-load-failed" role="status" style="border-left-color:var(--red,#ef4444)">⚠️ Couldn't load ${esc(scope)}-cap opportunities (${esc(why)})${hadBoard ? ' — showing the previous selection below' : ''}. ${retryButton(scope, limit)}</div>`;
+    if (hadBoard) { const prev = container.querySelector('.opp-load-failed'); if (prev) prev.remove(); container.insertAdjacentHTML('afterbegin', strip); }
+    else container.innerHTML = strip;
+    const rb = container.querySelector('[data-opp-retry]');
+    if (rb) rb.addEventListener('click', () => loadOpportunities(container, rb.dataset.scope, +rb.dataset.limit || limit));
+    return;
+  }
   const regime = d.regime || {};
   const riskOff = regime.bearish === true || regime.riskOn === false;
   const reliability = buildReliability(sb && sb.groups);
@@ -385,7 +414,9 @@ export async function loadOpportunities(container, scope = 'large', limit = 6) {
       return `<div class="opp-ai-row"><span class="opp-ai-tk">$${esc(r.ticker)}</span><span class="opp-ai-badges">${badges}</span><span class="opp-ai-note">${esc(r.note)}</span></div>`;
     }).join('') + `</div>`;
   }
-  html += `<div class="dt-dim opp-foot">Ranked on momentum quant, setup stage, narrative &amp; theme/institutional signals only. Ghost accumulation, the conviction model, track records and the drift monitor are shown as labeled context — none of them tilts, scales or reorders this ranking (registry: shadow, zero weight). Algorithm-specific, evidence-gated reranking lives in the 📋 Swing Supervisor. Not advice; always confirm and use a ${L('stop', 'stop')}.</div>`;
+  html = `<div class="opp-wrap-body" data-scope="${esc(scope)}">` + html;
+  html += `<div class="dt-dim opp-foot">Ranked on momentum quant, setup stage, narrative &amp; theme/institutional signals only. Ghost accumulation, the conviction model, track records and the drift monitor are shown as labeled context — none of them tilts, scales or reorders this ranking (registry: shadow, zero weight). Algorithm-specific, evidence-gated reranking lives in the 📋 Swing Supervisor. Not advice; always confirm and use a ${L('stop', 'stop')}.</div></div>`;
+  if (!isCurrentLoad(container, seq)) return;
   container.innerHTML = html;
 }
 

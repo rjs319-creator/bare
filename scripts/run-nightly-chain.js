@@ -181,7 +181,10 @@ function failureInstants(a, grade) {
   return Number.isFinite(a && a.endMs) ? [new Date(a.endMs).toISOString()] : [];
 }
 
-// Status vocabulary (also what op=chainsummary stores): ok | failed | http:<code> | no-response.
+// Status vocabulary (also what op=chainsummary stores):
+//   ok | failed | app-failed | incomplete | no-body | http:<code> | no-response.
+// Transport AND application success are both required for `ok`: a 200 whose body says
+// ok:false, names unknown/blocked steps, or cannot be parsed is not ok.
 function gradeAttempt(a) {
   if (!a || a.error || a.httpStatus == null) return { ok: false, status: 'no-response', complete: null, failed: [], skipped: [], failDetail: [], error: (a && a.error) || 'no response' };
   const b = a.body && typeof a.body === 'object' ? a.body : null;
@@ -190,20 +193,42 @@ function gradeAttempt(a) {
     const reason = fromBody || (a.raw ? a.raw.replace(/\s+/g, ' ').trim() : '') || `HTTP ${a.httpStatus}`;
     return { ok: false, status: `http:${a.httpStatus}`, complete: false, failed: [], skipped: [], failDetail: [], error: String(reason).slice(0, MAX_ERROR_TEXT) };
   }
-  const failed = b && Array.isArray(b.failed) ? b.failed : [];
-  const skipped = b && Array.isArray(b.skipped) ? b.skipped : [];
-  const failDetail = stampFailDetail(b, b && Array.isArray(b.failDetail) ? b.failDetail.slice(0, 12) : [], a.endMs);
+  // HTTP 200 with nothing parseable: the chain handler always answers JSON, so this is a
+  // killed/truncated response. The outcome is UNKNOWN — recorded as such, never as ok
+  // (until 2026-10-04 this was graded `ok` with complete:null, so a chain that died
+  // mid-response read green in the summary and in op=health).
+  if (!b) {
+    return { ok: false, status: 'no-body', complete: null, failed: [], skipped: [], unknown: [], blocked: [], failDetail: [], error: 'HTTP 200 with no parseable JSON body — outcome unknown' };
+  }
+  const failed = Array.isArray(b.failed) ? b.failed : [];
+  const skipped = Array.isArray(b.skipped) ? b.skipped : [];
+  // Steps the chain could not grade (no body) or did not run behind a failed prerequisite
+  // (lib/warm-chains.js). Neither is a failure; both make the chain incomplete and not ok.
+  const unknown = Array.isArray(b.unknown) ? b.unknown : [];
+  const blocked = Array.isArray(b.blocked) ? b.blocked : [];
+  const failDetail = stampFailDetail(b, Array.isArray(b.failDetail) ? b.failDetail.slice(0, 12) : [], a.endMs);
   const firstDetail = failDetail[0];
-  return {
-    ok: failed.length === 0,
-    status: failed.length ? 'failed' : 'ok',
-    complete: b ? b.complete !== false : null,
-    failed, skipped, failDetail,
-    // Template-literal interpolation of a non-string `.error` (a nested object from the
-    // app's own step reporting) would silently collapse to "[object Object]" the same way
-    // the chain-level reason did on 2026-10-08 — reasonText() keeps it readable.
-    error: failed.length ? `${failed[0]} ${firstDetail && firstDetail.status ? firstDetail.status : ''} ${firstDetail && firstDetail.error ? reasonText(firstDetail.error) : ''}`.trim().slice(0, MAX_ERROR_TEXT) : null,
-  };
+  const complete = b.complete !== false;
+  if (failed.length) {
+    return {
+      ok: false, status: 'failed', complete, failed, skipped, unknown, blocked, failDetail,
+      error: `${failed[0]} ${firstDetail && firstDetail.status ? firstDetail.status : ''} ${firstDetail && firstDetail.error ? reasonText(firstDetail.error) : ''}`.trim().slice(0, MAX_ERROR_TEXT),
+    };
+  }
+  if (unknown.length || blocked.length) {
+    const parts = [unknown.length ? `${unknown.length} step(s) with unknown outcome: ${unknown.join(', ')}` : null, blocked.length ? `${blocked.length} blocked behind a failed prerequisite: ${blocked.join(', ')}` : null].filter(Boolean);
+    return { ok: false, status: 'incomplete', complete: false, failed, skipped, unknown, blocked, failDetail, error: parts.join('; ').slice(0, MAX_ERROR_TEXT) };
+  }
+  // The chain itself says it is not ok and names no failed/unknown/blocked step. Budget
+  // skips alone are the one honest reason (ok:false, complete:false, skipped:[…]) and stay
+  // ok here — they self-heal and the chronic detector in op=health watches them. Anything
+  // else is an application failure the transport status could not show.
+  if (b.ok === false && !skipped.length) {
+    // reasonText(): a nested reason OBJECT must never collapse to "[object Object]" (#455).
+    const reason = b.error || b.reason || b.message || 'chain reported ok:false';
+    return { ok: false, status: 'app-failed', complete, failed, skipped, unknown, blocked, failDetail, error: reasonText(reason).slice(0, MAX_ERROR_TEXT) };
+  }
+  return { ok: true, status: 'ok', complete, failed, skipped, unknown, blocked, failDetail, error: null };
 }
 
 function shouldRetry(a) {

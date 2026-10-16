@@ -83,6 +83,10 @@ test('daily-only feeds are labeled DAILY_ONLY, never realtime', () => {
   assert.equal(clocks.marketDataFreshnessOf(assessed), 'DAILY_ONLY');
 });
 
+test('dataMode describes document availability — its healthy value is "complete", never "live"', () => {
+  assert.equal(clocks.buildClocks({ now: REGULAR_NOW }).dataMode, 'complete');
+});
+
 test('buildClocks always carries modelVersion and dataMode', () => {
   const out = clocks.buildClocks({ now: REGULAR_NOW, dataMode: 'degraded' });
   assert.equal(out.modelVersion, clocks.MODEL_VERSION);

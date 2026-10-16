@@ -305,6 +305,12 @@ test('abstention is first-class: abstained flag + full rejection-reason histogra
   assert.equal(typeof gg.abstained, 'boolean');
   assert.equal(gg.abstained, gg.actionableCount === 0);
   assert.ok(gg.rejectionReasonCounts && typeof gg.rejectionReasonCounts === 'object');
+  // Review 2026-10 (Prompt 4.4): the histogram counts EVERY blocker on every excluded row,
+  // not just each row's first — so it sums to the total number of reasons, which is at
+  // least the number of rows. (The fixture's excluded list is under the 50-row truncation.)
   const totalCounted = Object.values(gg.rejectionReasonCounts).reduce((a, n) => a + n, 0);
-  assert.equal(totalCounted, gg.excludedCount, 'histogram must count all excluded rows, not the truncated sample');
+  assert.equal(gg.excluded.length, gg.excludedCount, 'fixture is not truncated');
+  const totalReasons = gg.excluded.reduce((a, x) => a + x.codes.length, 0);
+  assert.equal(totalCounted, totalReasons, 'histogram must count every reason on every excluded row');
+  assert.ok(totalCounted >= gg.excludedCount, 'every excluded row is counted at least once');
 });

@@ -310,7 +310,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       catch: `Leadership can rotate quickly.`,
     },
     options: {
-      what: `One options page: unusually large or aggressive <b>options bets</b>, the prediction-market crowd and sharp-money lanes, and put-selling setups.`,
+      what: `One options page: unusual <b>options activity</b> from delayed chains (direction unknown unless stated), the prediction-market crowd and sharp-money lanes, and put-selling setups.`,
       read: `Each row shows the ticker, the bullish or bearish lean and how unusual the activity is; use the lane pills to switch views.`,
       act: `A lead to investigate, not a trade — see whether the flow lines up with a price setup elsewhere.`,
       catch: `Options flow is noisy and often just hedging, and this uses free data with real gaps.`,
@@ -722,7 +722,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     }
     if (sev.background.length) {
       // Reported, not alarmed: these do not touch prices, screens or picks.
-      notes.push(`Background research steps didn't complete in the last nightly refresh${when}: ${list(sev.background)}.${chainsFrom} Market data is current; this doesn't affect prices, screens or picks.`);
+      // The reassurance is EVIDENCE, not a stock phrase: it may be printed only when op=health
+      // attests dataCurrent === true. false or unknown (null/absent) say so instead.
+      const dataLine = d.dataCurrent === true
+        ? 'Market data is current; this doesn\'t affect prices, screens or picks.'
+        : 'Market-data freshness could not be confirmed.';
+      notes.push(`Background research steps didn't complete in the last nightly refresh${when}: ${list(sev.background)}.${chainsFrom} ${dataLine}`);
     }
     if (!warns.length && !notes.length) return;
     const page = document.querySelector('.page'); if (!page) return;
@@ -1244,9 +1249,18 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   let ofAnalyses = {};
   let ofDeskRead = '';
 
+  // A board already on screen is kept while a refresh runs; a failed refresh keeps it behind a
+  // visible failure strip instead of replacing it with an error card (fetch/error path only).
+  let optionsBoardShown = false;
+  function optionsRefreshFailed(msg) {
+    if (!optionsBoardShown) { showOptionsError(msg); return; }
+    const prev = optionsContainer.querySelector('.of-refresh-failed'); if (prev) prev.remove();
+    const asOf = (of2 && of2.generatedAt) ? ` — showing the board from ${stampText(of2.generatedAt)}` : ' — showing the last board that loaded';
+    optionsContainer.insertAdjacentHTML('afterbegin', `<div class="dt-note of-refresh-failed" role="status" style="border-left-color:var(--red,#ef4444)">⚠️ Refresh failed (${esc(msg)})${esc(asOf)}. Try ⟳ Refresh.</div>`);
+  }
   async function fetchOptions(refresh) {
     optionsRefreshBtn.disabled = true;
-    optionsContainer.innerHTML = skeletonGrid(4);
+    if (!optionsBoardShown) optionsContainer.innerHTML = skeletonGrid(4);
     try {
       // v2 radar + legacy flow in parallel — the radar drives the primary views;
       // legacy powers the compatibility views (contracts/income/VRP) untouched.
@@ -1258,8 +1272,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       // Flag-off / pre-first-scan: fall back to a legacy default view.
       if (!of2 && OF2_IDS.includes(ofPrimaryView)) ofPrimaryView = 'confirmations';
       if (!data.ok) {
-        if (of2) { renderOptionsFlowShell({ ok: true, count: 0, universe: 0, signals: [], byTicker: [] }); return; }
-        showOptionsError(data.error || 'No options flow available right now.'); return;
+        if (of2) { renderOptionsFlowShell({ ok: true, count: 0, universe: 0, signals: [], byTicker: [] }); optionsBoardShown = true; return; }
+        optionsRefreshFailed(data.error || 'No options flow available right now.'); return;
       }
       optionsFlowAll = data.signals || [];
       ofBaseline = {};
@@ -1268,11 +1282,12 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       ofDeskRead = data.deskRead || '';
       ofDecisions = data.decisions || [];
       renderOptionsFlowShell(data);
+      optionsBoardShown = true;
       applyOptionsView();
       loadOptionsPerf();
       wireOfRoute();
       loadOptionsConfluence(refresh);
-    } catch { showOptionsError('Could not load options flow. Please try again.'); }
+    } catch { optionsRefreshFailed('Could not load options flow. Please try again.'); }
     finally { optionsRefreshBtn.disabled = false; }
   }
 
@@ -1614,7 +1629,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       + `<li><b>Provisional / mixed / unknown</b> = the honest directional state for a ticker. <i>Mixed</i> means bullish and bearish activity both show up; <i>unknown</i> means we can't defend a lean.</li>`
       + `<li><b>🎯 Single-stock</b> activity may reflect conviction; <b>🛡 Index/ETF</b> activity (SPY, QQQ…) is often hedging — so we separate them.</li>`
       + `<li><b>High-turnover contract</b> = volume far above open interest (new activity, not confirmed "sweep"). <b>Large estimated notional</b> = a big estimated dollar size (not a confirmed institutional "block"). These are size heuristics, not tape.</li>`
-      + `<li><b>⬆ @ ask / ⬇ @ bid</b> = where the <i>last</i> print landed in the spread. @ ask supports aggressive buying; @ bid is <b>unknown</b> (could be selling, closing, a spread, or liquidity). One print, not the whole day.</li>`
+      + `<li><b>⬆ @ ask / ⬇ @ bid</b> = where the <i>last</i> print landed in the spread. @ ask is at most <b>weak, provisional</b> support for the lean (it does not establish who initiated the trade); @ bid is <b>unknown</b> (could be selling, closing, a spread, or liquidity). One print, not the whole day.</li>`
       + `<li><b>Suspected spread / multi-leg</b> = coordinated contracts that look like a spread or combo. We mark these <b>ambiguous</b> rather than force a direction.</li>`
       + `<li><b>Breakeven & "needs +X%"</b> = how far the stock must move (and to what price) by expiry for a simple long option to pay — the real bar, shown for context.</li>`
       + `<li><b>⚠ ER (earnings)</b> = the company reports earnings <i>before</i> these options expire — an <b>event bet</b> where options can lose value even if the stock moves your way (volatility "crush"). Tread carefully.</li>`
@@ -1760,7 +1775,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         : esc(fit.reason);
       return ` · <b>${size.contracts}</b> contracts ($${size.dollarRisk} premium at risk) = ${fitTxt}`;
     }
-    if (serverSize && serverSize.available === false) return ` · <span title="${esc(serverSize.reason)}">size not evaluated</span>`;
+    if (serverSize && serverSize.available === false) return ` · <span title="${esc(serverSize.reason)}">size not evaluated — fill uncertainty unknown</span>`;
     if (serverSize && serverSize.available) return ` · ${serverSize.requestedContracts} contracts = ${serverSize.pctOfOpenInterest ?? '?'}% of OI`;
     return '';
   }
@@ -1788,12 +1803,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const rule = l.limitRule && l.limitRule.rule ? l.limitRule : null;
     const conc = c.strikeConcentrationFullChain;
     return `<div style="font-size:0.75rem;margin-bottom:5px;line-height:1.6">
-      ⚙ <b>Executable liquidity</b> on ${esc(String(ct.side || ''))} $${esc(String(ct.strike ?? '—'))} ${esc(ct.expiry || '')}: <b style="color:${col}">${esc(l.state)}</b>
+      ⚙ <b>${l.snapshotOnly === false ? 'Executable liquidity' : 'Snapshot spread quality (delayed)'}</b> on ${esc(String(ct.side || ''))} $${esc(String(ct.strike ?? '—'))} ${esc(ct.expiry || '')}: <b style="color:${col}">${esc(l.state)}</b>${l.executable ? '' : ' <span class="dt-dim">· not executable from this data</span>'}
       ${of2QuoteText(q)}
       ${of2SizeText(c, sz)}
+      ${l.currency ? `<div class="dt-dim">Quote: ${esc(l.currency.delayClass === 'delayed' ? `delayed ${l.currency.delayedByMin} min` : l.currency.delayClass === 'realtime' ? 'real-time' : 'delay unknown')} · session ${esc(l.currency.session || 'unknown')} · observed ${l.currency.quoteObservedAt ? esc(stampText(l.currency.quoteObservedAt)) : 'time unknown'}${l.requoteRequired ? ' · <b>re-quote required</b>' : ''}</div>` : ''}
       ${l.blocking && l.blocking.length ? `<div style="color:var(--red)">⛔ ${l.blocking.map(esc).join(' · ')}</div>` : ''}
       ${l.unavailableReason ? `<div style="color:var(--amber,#f0a832)">${esc(l.unavailableReason)}</div>` : ''}
-      ${rule ? `<div class="dt-dim">Limit rule: work ${rule.suggestedLimit}, never pay above ${rule.neverPayAbove}. ${esc(rule.rule)}</div>` : ''}
+      ${rule ? `<div class="dt-dim">Limit starting point${rule.requoteRequired ? ' (from the snapshot — re-quote first)' : ''}: ${rule.suggestedLimit}, never above ${rule.neverPayAbove}. ${esc(rule.rule)}</div>` : ''}
       ${conc ? (conc.available
     ? `<div class="dt-dim">Strike concentration (full chain): top strike ${Math.round(conc.top1Share * 100)}% of volume across ${conc.distinctStrikes} strikes${conc.concentrated ? ' — concentrated' : ''}</div>`
     : `<div class="dt-dim" title="${esc(conc.reason)}">Strike concentration: not computed (see why)</div>`) : ''}
@@ -1832,9 +1848,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const callN = contracts.filter(x => x.side === 'call').length, putN = contracts.length - callN;
     const oi = c.oiConfirmation || {};
     const oiLbl = oi.status === 'PENDING' ? '⏳ OI check pending (next session)'
-      : oi.status === 'CONFIRMED_BUILDING' ? '📈 OI built next session — positioning confirmed'
+      : oi.status === 'CONFIRMED_BUILDING' ? '📈 OI rose next session — net new contracts (side unknown)'
       : oi.status === 'WEAKENED' ? '📉 OI did not build — likely day-traded/closed'
-      : oi.status === 'FLAT' ? '➖ OI flat — no new positioning'
+      : oi.status === 'FLAT' ? '➖ OI flat — no net new contracts'
       : oi.status === 'UNAVAILABLE' ? '∅ OI follow-up unavailable' : '';
     const chg = c.changeSincePrev;
     const chgLine = chg ? [chg.activityStatus, chg.tradeStatus, chg.anomalyScore != null && chg.anomalyScore !== 0 ? `score ${chg.anomalyScore > 0 ? '+' : ''}${chg.anomalyScore}` : null].filter(Boolean).join(' · ') : '';
@@ -2089,7 +2105,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const single = roll.filter(r => !r.isIndex), idx = roll.filter(r => r.isIndex);
       if (cnt) cnt.textContent = `${roll.length} tickers`;
       const block = (title, rows) => rows.length ? `<div class="rot-head" style="margin:4px 0 8px">${title} <span class="dt-dim" style="font-weight:400">· ${rows.length}</span></div><div class="scr-grid" style="margin-bottom:18px">${rows.map(tickerRollupCard).join('')}</div>` : '';
-      grid.innerHTML = (block('🎯 Single-stock conviction', single) + block('🛡 Index / ETF flow (often hedging)', idx)) || empty;
+      grid.innerHTML = (block('🎯 Single-stock activity', single) + block('🛡 Index / ETF flow (often hedging)', idx)) || empty;
       grid.querySelectorAll('.of-expand').forEach(b => b.addEventListener('click', () => {
         const body = b.nextElementSibling; if (body) { const open = body.style.display !== 'none'; body.style.display = open ? 'none' : ''; b.textContent = open ? `▸ show ${b.dataset.n} contracts` : '▾ hide contracts'; }
       }));
@@ -2153,8 +2169,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const ask = s.aggressor === 'ask';
     const col = ask ? 'var(--green)' : 'var(--red)';
     const tip = ask
-      ? 'The last print lifted the ask — buyer-initiated, which backs the directional lean.'
-      : 'The last print hit the bid — seller-initiated, which fades the lean (could be writing/closing). Reads the last trade, not the whole day.';
+      ? 'The last print sat nearer the delayed ask. This does NOT establish who initiated the trade — at most weak, provisional support for the lean.'
+      : 'The last print sat nearer the delayed bid — direction unknown (could be writing, closing, a spread leg, or liquidity). One print against an unsynchronised delayed quote, not the whole day.';
     return `<span class="cx-tierbadge" title="${esc(tip)}" style="color:${col};border-color:currentColor">${ask ? '⬆ @ ask' : '⬇ @ bid'}</span>`;
   }
   // Last-trade time (contract's own last print). Unix seconds → local HH:MM.
@@ -2240,9 +2256,10 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   // resolved calls? Stays "building" until enough AI-tagged entries mature (~a week
   // of logging), then shows the head-to-head hit rates + a promote/tracking verdict.
   function ofFableEdgeHTML(fableEdge) {
-    const fe = fableEdge && (fableEdge['1w'] || fableEdge['1m']);
+    const feKey = fableEdge ? (fableEdge['1w'] ? '1w' : fableEdge['1m'] ? '1m' : null) : null;
+    const fe = feKey ? fableEdge[feKey] : null;
     if (!fe) return '';
-    const head = `<div class="rot-head" style="margin-top:16px;color:#a78bfa">🧠 Desk read vs. raw lean <span class="dt-dim" style="font-weight:400;font-size:0.74rem">— does the AI bias beat call/put alone?</span></div>`;
+    const head = `<div class="rot-head" style="margin-top:16px;color:#a78bfa">🧠 Desk read vs. raw lean <span class="dt-dim" style="font-weight:400;font-size:0.74rem">— does the AI bias beat call/put alone? · ${feKey === '1w' ? '1-week' : '1-month'} horizon (${esc(feKey)})</span></div>`;
     if (fe.fableHitRatePct == null) {
       return head + `<div class="dt-note" style="margin-top:6px">Building — ${esc(fe.verdict || '')}. Each day's 🧠 desk calls are scored against the underlying's forward move and compared head-to-head with the mechanical lean. By design it won't claim the AI helps until the sample is real.</div>`;
     }
@@ -3508,6 +3525,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     try {
       const res = await fetchJSON('/api/tracker?op=recalibrate');
       apexRecalMsg = res.error ? ('Error: ' + res.error)
+        : res.dryRun ? `🧪 Diagnostics only — a re-fit ${res.wouldRefit ? 'WOULD' : 'would NOT'} be adopted; adoption runs from the scheduled job.${res.dryRunNote ? ' ' + res.dryRunNote : ''}`
         : res.refit ? '✅ Re-fit adopted — weights updated and applied forward.'
         : `Kept current weights — ${res.totalResolved || 0} resolved signals (need ≥40 per regime, beating preset out-of-sample).`;
       await fetchApexModel();
@@ -3529,7 +3547,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
         const st = bf.stats || {};
         const res = await fetchJSON('/api/tracker?op=recalibrate&source=all');
         apexRecalMsg = `Seeded ${st.signals || 0} historical signals across ${st.datesUsed || 0} dates. `
-          + (res.refit ? '✅ Re-fit adopted from the seed (technical pillars only — P3 held neutral).'
+          + (res.dryRun ? `🧪 Diagnostics only — a re-fit ${res.wouldRefit ? 'WOULD' : 'would NOT'} be adopted from the seed; adoption runs from the scheduled job.${res.dryRunNote ? ' ' + res.dryRunNote : ''}`
+            : res.refit ? '✅ Re-fit adopted from the seed (technical pillars only — P3 held neutral).'
                        : 'Kept presets — the seed didn’t beat them under walk-forward CV.');
       }
       await fetchApexModel();
@@ -4327,17 +4346,25 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
   }
   document.getElementById('quickhit-refresh-btn')?.addEventListener('click', () => { quickHitLoaded = false; ensureQuickHit(); });
   function ensureToday() { if (!todayLoaded) { todayLoaded = true; runTodayUI(); } }
+  // Sequence token: a double-tap on ⟳ (or a tab re-entry) starts a second load; only the
+  // NEWEST request may paint, so an older response can never overwrite the current one.
+  let todaySeq = 0;
   async function runTodayUI() {
     const el = document.getElementById('today-container');
     if (!el) return;
+    const seq = ++todaySeq;
+    const rb = document.getElementById('today-refresh-btn');
+    if (rb) rb.disabled = true;
     el.innerHTML = `<div class="mom-status"><div class="mom-spinner"></div><p>Reading today's market…</p></div>`;
     try {
       const [tape, dt] = await Promise.all([
         fetchJSON('/api/tracker?op=tape').catch(() => null),
         fetchJSON('/api/tracker?op=daytrade').catch(() => null),
       ]);
+      if (seq !== todaySeq) return;   // superseded by a newer load
       renderToday(tape, dt);
-    } catch { el.innerHTML = `<div class="mom-status error"><p>Could not load Today.</p></div>`; }
+    } catch { if (seq === todaySeq) el.innerHTML = `<div class="mom-status error"><p>Could not load Today.</p></div>`; }
+    finally { if (seq === todaySeq && rb) rb.disabled = false; }
   }
   const TODAY_COND = { trending: ['📈', 'trending', 'A calm, directional market — a good environment for trend and breakout setups.'], choppy: ['🌊', 'choppy / ranging', 'A whippy, sideways market — trends get chopped up, so be careful.'], mixed: ['🤝', 'mixed', 'Direction is unclear right now — the safest play is patience and selectivity.'], riskoff: ['🛑', 'risk-off', 'A defensive, fearful market — new longs are risky.'] };
   const TODAY_REC = {
@@ -4355,9 +4382,13 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // The header reads the SAME served `regimeView` the command center reads (lib/regime-view):
     // op=tape only carries the MACRO read, so it is labelled macro risk — never "the regime" —
     // and once op=today arrives below, the governing breadth regime replaces this line.
-    const read = `<div class="rot-panel"><div class="rot-head">${ci} Today's market read</div><div class="rot-sub" id="today-regime-line">${todayRegimeLine(ok ? tape.regimeView : null, regLbl, clbl, eff)} ${cdesc}</div></div>`;
+    // A FAILED op=tape is not a "mixed" tape: rendering the neutral defaults here presented an
+    // outage as a market read ("Be selective — no clear edge today"). Say it is unavailable.
+    const read = ok
+      ? `<div class="rot-panel"><div class="rot-head">${ci} Today's market read</div><div class="rot-sub" id="today-regime-line">${todayRegimeLine(tape.regimeView, regLbl, clbl, eff)} ${cdesc}</div></div>`
+      : `<div class="rot-panel" style="border-left:3px solid var(--amber,#f59e0b)"><div class="rot-head">⚠️ Market read unavailable</div><div class="rot-sub" id="today-regime-line">The tape/regime source (op=tape) did not answer${tape && tape.error ? ` — ${esc(String(tape.error))}` : ''}. No tape condition or macro regime is shown rather than a neutral guess. Try ⟳ Refresh.</div></div>`;
     const r = TODAY_REC[cond] || TODAY_REC.mixed;
-    const rec = `<div class="dt-note" style="border-left-color:${r.col}"><b>${r.e} ${r.h}.</b> ${r.b}${r.cta ? ` <button class="today-cta" data-go="${r.cta.s}">${r.cta.l}</button>` : ''}</div>`;
+    const rec = ok ? `<div class="dt-note" style="border-left-color:${r.col}"><b>${r.e} ${r.h}.</b> ${r.b}${r.cta ? ` <button class="today-cta" data-go="${r.cta.s}">${r.cta.l}</button>` : ''}</div>` : '';
     // 🪁 Red-tape nudge → Down-Day Mode (reversion longs + shorts + the honest sit-out).
     const spyChg = ok ? tape.spyChangePct : null;
     const redTape = ok && ((spyChg != null && spyChg <= -0.4) || regime === 'risk-off' || cond === 'riskoff');
@@ -4387,7 +4418,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       const meta = document.getElementById('today-meta'); if (meta && rv && rv.governing) meta.textContent = `· ${rv.governing.label.toUpperCase()} (breadth) · ${clbl} tape`;
     });
     const gt = document.getElementById('today-gen-time'); if (gt && ok && tape.generatedAt) gt.textContent = stampText(tape.generatedAt);
-    const meta = document.getElementById('today-meta'); if (meta) meta.textContent = `· macro ${regLbl} · ${clbl} tape`;
+    const meta = document.getElementById('today-meta'); if (meta) meta.textContent = ok ? `· macro ${regLbl} · ${clbl} tape` : '· market read unavailable';
   }
   // One sentence from a served regimeView. With a governing (breadth) regime: "Breadth regime
   // is RISK-OFF (breadth 22%) · macro risk: risk-on"; macro-only (op=tape): "Macro risk reads
@@ -4474,12 +4505,22 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const el = document.getElementById('pulse-container');
     const rb = document.getElementById('pulse-refresh-btn');
     if (rb) { rb.disabled = true; rb.textContent = '⟳ Refreshing…'; }
-    if (el) el.innerHTML = '<div class="mom-status"><div class="mom-spinner"></div><p>Loading the market intelligence read…</p></div>';
-    let p = null;
-    try { p = await fetchJSON('/api/tracker?op=pulse2' + (refresh ? '&refresh=1' : ''), { timeoutMs: HEAVY_TIMEOUT_MS }); } catch { p = null; }
+    // A refresh over a board already on screen does NOT blank it: the last good payload stays
+    // visible until the new one lands, and a failed refresh keeps it behind a loud strip.
+    if (el && !pulse2Payload) el.innerHTML = '<div class="mom-status"><div class="mom-spinner"></div><p>Loading the market intelligence read…</p></div>';
+    let p = null, fetchError = null;
+    try { p = await fetchJSON('/api/tracker?op=pulse2' + (refresh ? '&refresh=1' : ''), { timeoutMs: HEAVY_TIMEOUT_MS }); } catch (e) { p = null; fetchError = e; }
     if (rb) { rb.disabled = false; rb.textContent = '⟳ Refresh'; }
-    // Fall back to the legacy v1 feed when v2 is flagged off or has no data yet.
     const hasV2 = p && p.ok && (p.marketState || (p.narratives && (p.narratives.items || []).length));
+    if (!hasV2 && pulse2Payload && !(p && p.disabled)) {
+      // Keep the last good v2 read; say the refresh failed and how old what's on screen is.
+      renderPulse2(pulse2Payload);
+      const why = fetchError ? String((fetchError && fetchError.message) || fetchError).slice(0, 120) : (p && p.error) || 'server returned no market-intelligence payload';
+      const asOf = pulse2Payload.clocks && pulse2Payload.clocks.narrativeGeneratedAt ? ` — showing the read from ${stampText(pulse2Payload.clocks.narrativeGeneratedAt)}` : ' — showing the last read that loaded';
+      if (el) el.insertAdjacentHTML('afterbegin', `<div class="dt-note p2-refresh-failed" role="status" style="border-left-color:var(--red,#ef4444)">⚠️ Refresh failed (${esc(why)})${esc(asOf)}. Try ⟳ Refresh.</div>`);
+      return;
+    }
+    // Fall back to the legacy v1 feed when v2 is flagged off or has no data yet.
     if (!hasV2) { runPulseUI(false); return; }
     renderPulse2(p);
   }
@@ -6801,8 +6842,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const card = p => {
       const tier = PS_TIER[p.tier] || PS_TIER.WATCH;
       const rp = p.realPut, ec = (rp && rp.economics) || {}, mg = (rp && rp.management) || {};
-      const ivChip = rp && rp.atmIV != null ? `<span class="ps-iv ${PS_IV[p.ivLevel] || ''}">IV ${(rp.atmIV * 100).toFixed(0)}%</span>` : '';
-      const earn = p.earningsInDays != null ? `<span class="ps-earn">📅 Earnings ${p.earningsInDays}d</span>` : '';
+      const ivChip = rp && rp.atmIV != null ? `<span class="ps-iv ${PS_IV[p.ivLevel] || ''}">IV ${(rp.atmIV * 100).toFixed(0)}%</span>` : (p.ivLevel === 'unknown' ? `<span class="ps-iv" title="${esc(p.ivNote || 'IV unavailable')}">IV unknown</span>` : '');
+      const earn = p.earningsInDays != null ? `<span class="ps-earn">📅 Earnings ${p.earningsInDays}d</span>` : `<span class="ps-earn dt-dim" title="Earnings date unavailable — event risk before expiry is unknown, not absent">📅 Earnings date unknown</span>`;
       const liq = rp ? `<span class="ps-meta" title="Real listed-contract liquidity">OI ${rp.openInterest ?? '–'} · spread ${rp.spreadPct != null ? rp.spreadPct + '%' : '–'}</span>` : '';
       const pd = rp && rp.proxyDelta && rp.proxyDelta.value != null
         ? `<span class="ps-meta" title="Moneyness+IV proxy — free chains carry no real greeks">~${(rp.proxyDelta.value * 100).toFixed(0)}Δ proxy</span>` : '';
@@ -6821,7 +6862,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
           </div>
           <div class="ps-trade">
             <div class="ps-trade-main">Sell the <b>$${rp.strike} put</b> · ${esc(rp.expiry)} <span class="dt-dim">(${rp.dte}d)</span></div>
-            <div class="ps-trade-sub">Credit ~<b>${money(rp.credit)}</b> (conservative bid) · <b>${ec.returnOnCash}%</b> on ${money(ec.cashRequired)} cash · <b>${ec.annualizedYield}%</b> annualized</div>
+            <div class="ps-trade-sub">Credit ~<b>${money(rp.credit)}</b> (bid at the delayed snapshot — re-quote before placing) · <b>${ec.returnOnCash}%</b> on ${money(ec.cashRequired)} cash · <b>${ec.annualizedYield}%</b> annualized</div>
+            <div class="ps-trade-sub dt-dim">Quote ${rp.quoteAsOf ? `observed ${esc(stampText(rp.quoteAsOf))}` : 'time unknown'}${rp.delayedByMin != null ? ` · delayed ${rp.delayedByMin} min` : ''}${rp.session ? ` · session ${esc(rp.session)}` : ''}${rp.lastTradeDate ? ` · last trade ${esc(stampText(rp.lastTradeDate))}` : ''} · ${esc(rp.source || 'delayed chain')}</div>
             <div class="ps-trade-sub">Breakeven <b>$${ec.breakeven}</b> (${ec.distanceToBreakevenPct}% cushion) · if assigned you own at $${ec.assignmentPrice} (${ec.assignmentDiscountPct}% below spot)</div>
           </div>
           <div class="ps-chips">${ivChip}${earn}${liq}${pd}${p.rsi != null ? `<span class="ps-meta">RSI ${p.rsi}</span>` : ''}</div>
@@ -6836,7 +6878,7 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     el.innerHTML = stratHead + `<div class="dt-dim" style="font-size:0.68rem;margin:2px 0 10px">Full-market scan · ${t.scanned || 0} names → ${t.qualified || 0} qualifying setups → ${picks.length} with a real, liquid listed put</div>
       <div class="ps-grid">${picks.map(card).join('')}</div>
       ${noContractNote}
-      <div class="dt-note" style="margin-top:12px">Real listed contracts, not synthetic strikes. Delta shown is a labeled moneyness+IV proxy (free chains carry no greeks); the credit is a conservative bid estimate — you may fill better. Educational, not advice: selling a cash-secured put obligates you to <b>buy 100 shares at the strike</b> if assigned — only sell puts on names you'd want to own at that price, and size to the cash required.</div>`;
+      <div class="dt-note" style="margin-top:12px">Real listed contracts, not synthetic strikes. Delta shown is a labeled moneyness+IV proxy (free chains carry no greeks); the credit is the bid at a delayed snapshot — re-quote before placing; nothing here is a fill or a current market. Educational, not advice: selling a cash-secured put obligates you to <b>buy 100 shares at the strike</b> if assigned — only sell puts on names you'd want to own at that price, and size to the cash required.</div>`;
   }
   document.getElementById('putsell-refresh-btn')?.addEventListener('click', runPutSellUI);
 
@@ -7620,14 +7662,21 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
 
   // Headline expectancy: prefer 1-month, fall back to 1-week, then 3-month —
   // from the currently-selected regime bucket.
+  const SB_THIN_N = 10; // below this resolved-sample a stat is INSUFFICIENT: no verdict, no win/loss colour
+  const SB_VERDICT_ORDER = ['20d', '1m', '10d', '5d', '1d', '3m'];
+  // Pure: the headline verdict for a sample. A one-record 100% is not evidence — below the
+  // thin floor the card says so and carries no positive/negative colouring.
+  function sampleVerdict(pick, hzKey) {
+    if (!pick) return { cls: 'pending', label: 'Pending', val: null, n: 0, hzKey: null, thin: false };
+    const n = Number(pick.n) || 0;
+    if (n < SB_THIN_N) return { cls: 'pending', label: `Insufficient (n=${n})`, val: pick.avg, n, hzKey, thin: true };
+    return { cls: pick.avg > 0 ? 'pos' : 'neg', label: pick.avg > 0 ? 'Positive' : 'Negative', val: pick.avg, n, hzKey, thin: false };
+  }
   function sbVerdict(g) {
     const h = sbHz(g);
-    const pick = h['20d'] || h['1m'] || h['10d'] || h['5d'] || h['1d'] || h['3m'];
-    if (!pick) return { cls: 'pending', label: 'Pending', val: null };
-    return { cls: pick.avg > 0 ? 'pos' : 'neg', label: pick.avg > 0 ? 'Positive' : 'Negative', val: pick.avg };
+    const hzKey = SB_VERDICT_ORDER.find(k => h[k]) || null;
+    return sampleVerdict(hzKey ? h[hzKey] : null, hzKey);
   }
-
-  const SB_THIN_N = 10; // below this resolved-sample, flag the regime split as thin
 
   // Model-quality chip — the section's score-decile verdict: does THIS section's own
   // conviction score actually rank its winners? (Same for every tier in the section.)
@@ -7695,8 +7744,8 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     // In a regime view, show that regime's logged-pick count; flag thin samples so
     // a 2-pick win-rate isn't mistaken for a real edge (the project's small-n rule).
     const regCount = sbRegime === 'all' ? g.picks : ((g.regimePicks && g.regimePicks[sbRegime]) || 0);
-    const thin = sbRegime !== 'all' && (!hl || hl.n < SB_THIN_N)
-      ? `<span class="sb-thin" title="Small sample for this regime in the current data window — interpret with caution; the live window is mostly risk-on so the risk-off bucket fills slowly.">⚠ thin sample</span>` : '';
+    const thin = (!hl || hl.n < SB_THIN_N)
+      ? `<span class="sb-thin" title="Fewer than ${SB_THIN_N} resolved picks${sbRegime !== 'all' ? ' for this regime in the current data window' : ''} — insufficient to read a win rate or an average; interpret with caution${sbRegime !== 'all' ? ' (the live window is mostly risk-on so the risk-off bucket fills slowly)' : ''}.">⚠ insufficient sample (n=${hl ? hl.n : 0})</span>` : '';
     const wl = hl ? `<div class="sb-wl"><span>Avg win <b class="win">+${hl.avgWin}%</b></span><span>Avg loss <b class="loss">${hl.avgLoss}%</b></span></div>` : '';
     // MARK-TO-MARKET strip (mtm-v1, graduation-league EA-5): the API computed this
     // lane on every group but the UI never rendered it — users saw resolved-only
@@ -7749,9 +7798,9 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
     const strat = (st && st.n) ? `<div class="sb-strat" title="STRATEGY efficacy — resolving each pick at its OWN logged entry/stop/target (target-before-stop, hold ≤63 sessions). 'Target-first' is the plan's real win rate; PF = gross target-R ÷ gross stop-R. This is 'could the published trade capture it', separate from 'did the stock move' above.">🎯 Plan: <b class="${st.targetFirstRate >= 50 ? 'win' : 'loss'}">${st.targetFirstRate}%</b> hit target first · 🛑 ${st.stopFirstRate}% stopped · PF <b class="${st.profitFactor != null && st.profitFactor >= 1 ? 'win' : 'loss'}">${st.profitFactor != null ? st.profitFactor : '∞'}</b> <span class="sb-strat-n">n=${st.n}</span></div>` : '';
     return `<div class="sb-card ${v.cls === 'pos' ? 'pos' : v.cls === 'neg' ? 'neg' : ''} ${disabled ? 'disabled' : ''}">
         <div class="sb-head">
-          <span class="sb-exp ${v.cls}">${v.label}${v.val != null ? ` ${v.val > 0 ? '+' : ''}${v.val}%` : ''}</span>
+          <span class="sb-exp ${v.cls}" title="${v.hzKey ? `Headline horizon actually used: ${esc((SB_HZ.find(x => x[0] === v.hzKey) || [])[1] || v.hzKey)}${v.thin ? ` — fewer than ${SB_THIN_N} resolved picks: no verdict is offered` : ''}` : 'No resolved horizon yet'}">${v.label}${v.val != null ? ` ${v.val > 0 ? '+' : ''}${v.val}%` : ''}${v.hzKey ? ` <span class="sb-exp-hz">@${esc(v.hzKey)}</span>` : ''}</span>
           <div class="sb-title"><div class="sb-sig">${SB_TIER_LABEL[g.tier] || esc(g.tier)}${bwBadge}</div></div>
-          <button class="sb-toggle ${disabled ? 'off' : 'on'}" data-sig-toggle="${g.section}:${g.tier}">${disabled ? '✕ Disabled' : '✓ Enabled'}</button>
+          <button class="sb-toggle ${disabled ? 'off' : 'on'}" data-sig-toggle="${g.section}:${g.tier}" aria-pressed="${disabled ? 'false' : 'true'}" title="Personal view filter for this browser only — hides or shows this lane in your screens. It does not change the strategy's governance status (Paper / Disabled / Production), which is shown separately.">${disabled ? '🙈 Hidden in my screens' : '👁 Shown in my screens'}</button>
         </div>
         <div class="sb-count">${regCount} pick${regCount === 1 ? '' : 's'} logged${sbRegime === 'all' ? '' : ` in ${sbRegime === 'risk-on' ? 'risk-on' : 'risk-off'}`} ${thin}${sbModelChip(g.section)}</div>
         <div class="sb-horizons">${hz}</div>

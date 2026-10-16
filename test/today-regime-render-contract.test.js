@@ -12,7 +12,11 @@ test('the Today header renders from regimeView and never says "The market is <ma
   const i = APP.indexOf('function renderToday'); assert.ok(i > -1);
   const fn = APP.slice(i, i + 6000);
   assert.doesNotMatch(fn, /The market is <b>/);
-  assert.match(fn, /todayRegimeLine\(ok \? tape\.regimeView : null/);
+  // The regime line is built from the served regimeView; a FAILED tape no longer renders the
+  // neutral defaults — it renders an explicit "Market read unavailable" panel (review 2026-10 A11).
+  assert.match(fn, /todayRegimeLine\(tape\.regimeView, regLbl, clbl, eff\)/);
+  assert.match(fn, /Market read unavailable/);
+  assert.match(fn, /const rec = ok \? /);
   // When op=today lands, the header is re-rendered from ITS regimeView (same payload as the board).
   assert.match(fn, /loadCommandCenter\(.*?\)\)\.then\(\(p\) =>/);
   assert.match(fn, /p\.regimeView/);

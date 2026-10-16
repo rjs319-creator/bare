@@ -10,7 +10,7 @@ const { composeWhyNow } = require('../lib/whynow');
 const { fetchMacro } = require('../lib/macro');
 const { loadCandleCache, cacheState, cacheGet, saveCandleCache } = require('../lib/candle-cache');
 const { rankOnly } = require('../lib/rank-semantics');
-const { isTrusted, cronSecret } = require('../lib/auth');
+const { isTrusted, cronSecret, isProduction } = require('../lib/auth');
 const { readJSON, writeJSON, hasStore } = require('../lib/store');
 const { fetchShortInterest, siFlag } = require('../lib/shortinterest');
 
@@ -211,7 +211,9 @@ async function handleRequest(req, res) {
   // ?warm=1 to trigger the ~515-ticker scan on demand. Fail-open until the secret
   // is set so the cron keeps rebuilding in the unconfigured deploy window.
   const warmRequested = !!(req.headers['x-warm'] || req.query.warm);
-  const isWarm = warmRequested && (!cronSecret() || isTrusted(req));
+  // Fail-open ONLY outside production: with no secret in production the warm lever fails
+  // closed, matching lib/auth.js requireTrusted (a missing secret must never mean "allow").
+  const isWarm = warmRequested && (isTrusted(req) || (!cronSecret() && !isProduction()));
   const isFullUniverse = sectorFilter === 'all';
 
   try {

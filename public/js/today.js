@@ -6,7 +6,8 @@
 // module only renders, so there is no client/server scoring skew.
 import { esc, timeAgo } from './format.js';
 import { fetchJSON, HEAVY_TIMEOUT_MS, OPTIONAL_TIMEOUT_MS } from './fetch-json.js';
-import { withLastGood, lastGoodStripHTML } from './last-good.js';
+import { withLastGood, lastGoodStripHTML, asOfLabel, snapshotAsOfMs } from './last-good.js';
+import { readLedger } from './my-book.js';
 
 const HORIZONS = [
   ['intraday', '⚡ Intraday', 'gaps · momentum · VWAP/ORB — same-session'],
@@ -133,16 +134,24 @@ function trackLine(sig) {
   // Exact-horizon contract: a missing record at THIS horizon is BUILDING EVIDENCE — the
   // server no longer substitutes another horizon's record (defect #8).
   if (!x || !x.known || !x.n) return `<span class="td-dim td-track" title="No graded outcomes at this signal's exact ${esc((x && x.horizonKey) || '')} horizon contract yet. Other horizons' records are never substituted.">🧱 BUILDING EVIDENCE${x && x.horizonKey ? ` (${esc(x.horizonKey)})` : ''} — no exact-horizon record yet</span>`;
-  const col = (x.avgExcess ?? 0) >= 0 ? 'td-pos' : 'td-neg';
+  // A thin sample is INSUFFICIENT: a one-record 100% win rate carries no win/loss colour and
+  // says so on the card (shared floor with the Scoreboard's SB_THIN_N).
+  const thin = !(Number(x.n) >= TRACK_THIN_N);
+  const col = thin ? 'td-track-thin' : (x.avgExcess ?? 0) >= 0 ? 'td-pos' : 'td-neg';
   // Evidence-based metrics shown SEPARATELY (#3): success rate · mean-vs-market · median · sample.
   const parts = [];
   if (x.winRate != null) parts.push(`${x.winRate}% win`);
   if (x.avgExcess != null) parts.push(`${pct(x.avgExcess)} vs mkt`);
   if (x.median != null) parts.push(`med ${pct(x.median)}`);
   parts.push(`n=${x.n}`);
-  const ci = x.ci ? `<span class="td-ci" title="90% confidence interval on the mean forward return — if it straddles 0, the average isn't distinguishable from zero at this sample.">CI [${pct(x.ci.lo)}, ${pct(x.ci.hi)}]</span>` : '';
-  return `<span class="td-track ${col}" title="Realized forward return of this signal class at its ${esc(x.horizonKey || '')} horizon, vs SPY (n=${x.n})">📊 ${esc(parts.join(' · '))}</span>${ci}`;
+  if (thin) parts.push(`insufficient sample (<${TRACK_THIN_N})`);
+  // The interval's confidence LEVEL is whatever the server computed — never a hardcoded 90%.
+  const lvl = x.ci && Number.isFinite(+x.ci.level) ? `${+x.ci.level}% ` : '';
+  const ci = x.ci ? `<span class="td-ci" title="${lvl}confidence interval on the mean forward return${x.ci.basis ? ` (${esc(x.ci.basis)})` : ''} — if it straddles 0, the average isn't distinguishable from zero at this sample.">CI${lvl ? ` ${lvl.trim()}` : ''} [${pct(x.ci.lo)}, ${pct(x.ci.hi)}]</span>` : '';
+  return `<span class="td-track ${col}" title="Realized forward return of this signal class at its ${esc(x.horizonKey || '')} horizon, vs SPY (n=${x.n})${thin ? ' — fewer than ' + TRACK_THIN_N + ' resolved: not evidence of an edge' : ''}">📊 ${esc(parts.join(' · '))}</span>${ci}`;
 }
+// Below this many resolved records a win rate / average is shown but labelled insufficient.
+const TRACK_THIN_N = 10;
 // Model/scoring version chip (#3) — the reader can see WHICH model version produced this,
 // so track records are never silently blended across versions.
 function versionChip(sig) {
@@ -235,8 +244,8 @@ function signalCard(sig, legend) {
   const exWarn = (sig.execution && sig.execution.penalties && sig.execution.penalties.length)
     ? `<span class="td-exec" title="Execution frictions penalize the rank">⚠️ ${esc(sig.execution.penalties[0])}</span>` : '';
   const tab = SRC_TAB[sig.source] || 'screener';
-  return `<div class="td-card" data-go="${tab}">`
-    + `<div class="td-top"><span class="td-rank">#${sig.rank}</span>`
+  return `<div class="td-card" data-go="${tab}" tabindex="0" role="link" aria-label="${esc(sig.ticker)} — open the ${esc(tab)} tab">`
+    + `<div class="td-top">${rankChip(sig)}`
     + `<span class="td-tk" data-live="${esc(sig.ticker)}">${esc(sig.ticker)}</span>`
     + `<span class="td-co">${esc(sig.company || sig.setup || '')}</span>`
     + `<span class="td-score" title="Composite: confidence × regime-fit × execution × resolved-expectancy × independent-evidence">${sig.score}</span></div>`
@@ -246,6 +255,7 @@ function signalCard(sig, legend) {
     + `<span class="td-setup">${esc(sig.setup || sig.source)}</span>`
     + (sig.sector ? `<span class="td-sect">${esc(sig.sector)}</span>` : '') + gradeChip(sig) + pctileChip(sig) + versionChip(sig) + exWarn + `</div>`
     + classReasonLine(sig)
+    + retainedLine(sig)
     + evidenceLine(sig, legend)
     + `<div class="td-breadth-row">${breadthChip(sig)}</div>`
     + remainingLine(sig)
@@ -258,12 +268,29 @@ function signalCard(sig, legend) {
     + `</div>`;
 }
 
+// Rank chip. `laneRank` (server, 1-based within the lane the row is shown in) is the number
+// a five-item lane may print; the global cross-section `rank` is only ever shown when it is
+// labelled as such ("#130 overall").
+function rankChip(sig) {
+  if (Number.isFinite(sig.laneRank)) {
+    return `<span class="td-rank" title="Rank within this lane${Number.isFinite(sig.rank) ? ` · #${sig.rank} overall in the ranked cross-section` : ''}">#${sig.laneRank}</span>`;
+  }
+  return Number.isFinite(sig.rank) ? `<span class="td-rank" title="Position in the full ranked cross-section, not within this lane">#${sig.rank} overall</span>` : '';
+}
+
+// A real holding exists only in the reader's own My Book ledger (per browser). Nothing
+// else in the app is a position record, so this is the ONLY input that may turn a
+// lifecycle fact (triggered) into position wording (hold / manage).
+let HELD = new Set();
+function isHeld(ticker) { return HELD.has(String(ticker || '').toUpperCase()); }
+
 // NOVICE LANE — one plain sentence: what to do, what would invalidate it, what it costs.
 // Never states a probability (the composite is a rank, see rank-semantics).
 function whyNowLine(sig) {
   if (sig.evidenceClass !== 'ACTIONABLE') return '';
   const bits = [];
-  const act = sig.state === 'triggered' || sig.state === 'extended' ? 'HOLD / manage'
+  const triggered = sig.state === 'triggered' || sig.state === 'extended';
+  const act = triggered ? (isHeld(sig.ticker) ? 'HOLD / manage (in your My Book)' : 'TRIGGERED — the entry level already traded; not a new entry')
     : sig.state === 'ready' ? 'ENTER on the trigger'
       : 'WAIT for the trigger';
   bits.push(`<b>${act}</b>`);
@@ -303,6 +330,10 @@ function expertDetails(sig) {
     body += row('Realized record', 'building evidence — no resolved record at this exact horizon and scope');
   }
   body += row('Probability', 'none shown — this is a relative setup score, not an out-of-fold calibrated probability');
+  if (sig.retainedLabel) {
+    const t = RETAINED_TEXT[displayRetainedLabel(sig)];
+    if (t) body += row('Retained label', `${t[0]} — ${t[1]}`);
+  }
   if (sig.eligibility) {
     body += row('Evidence class', sig.eligibility.signalClass)
       + row('Governance', sig.eligibility.governance ? `${sig.eligibility.governance.status} (weight ${sig.eligibility.governance.weight}, version ${sig.eligibility.governance.version || 'unversioned'})` : 'none')
@@ -344,9 +375,13 @@ function classReasonLine(sig) {
   return `<div class="td-dim td-classwhy" title="${esc((el.reasons || []).join(' · '))}">Not actionable: ${esc(txt)}.</div>`;
 }
 
-// What a holder of this name should do when it cannot be a fresh entry.
+// What a name that cannot be a fresh entry is labelled. TRIGGERED is a LIFECYCLE fact (the
+// entry level already traded). HOLD is position wording and is used ONLY when the reader's
+// My Book ledger holds the ticker — a disabled short with no borrow and no record can never
+// be told to hold.
 const RETAINED_TEXT = {
-  HOLD: ['🤝 HOLD', 'Already triggered — manage the existing position; this is not a new entry.'],
+  TRIGGERED: ['▶ TRIGGERED', 'The entry level already traded; not a new entry.'],
+  HOLD: ['🤝 HOLD', 'In your My Book — already triggered; manage the existing position. This is not a new entry.'],
   MONITOR: ['👁 MONITOR', 'Still watchable, but not a fresh entry right now.'],
   INVALIDATED: ['🚫 INVALIDATED', 'The original plan is broken (stop hit or expired) — not a trade.'],
   DATA_STALE: ['🕓 DATA STALE', 'Required data is stale or incomplete — no fresh judgement is offered today.'],
@@ -359,10 +394,23 @@ function negativeChip(sig) {
   return `<span class="td-neg" style="color:var(--red);border:1px solid var(--red);border-radius:4px;padding:0 4px" title="${esc(sig.expectancyTiltWhy || 'realized record is significantly negative')}">⛔ evidence negative — ranked out</span>`;
 }
 
+// Server label → the label shown. 'TRIGGERED' (and the pre-rename 'HOLD' spelling from older
+// payloads) becomes HOLD only with a My Book record; otherwise it stays TRIGGERED.
+function displayRetainedLabel(sig) {
+  const l = sig.retainedLabel;
+  if (l === 'TRIGGERED' || l === 'HOLD') return isHeld(sig.ticker) ? 'HOLD' : 'TRIGGERED';
+  return l;
+}
 function retainedChip(sig) {
-  const t = RETAINED_TEXT[sig.retainedLabel];
+  const t = RETAINED_TEXT[displayRetainedLabel(sig)];
   if (!t || sig.evidenceClass === 'ACTIONABLE') return '';
   return `<span class="td-retained" title="${esc(t[1])}">${t[0]}</span>`;
+}
+// The retained label's meaning as VISIBLE text (not hover-only), under the chips.
+function retainedLine(sig) {
+  const t = RETAINED_TEXT[displayRetainedLabel(sig)];
+  if (!t || sig.evidenceClass === 'ACTIONABLE') return '';
+  return `<div class="td-dim td-retained-why">${t[0].replace(/^\S+\s/, '')}: ${esc(t[1])}</div>`;
 }
 // Lifecycle age from the immutable origin — a re-emitted pick shows its true age instead of
 // looking newly detected forever (defect #11).
@@ -375,7 +423,7 @@ function ageChip(sig) {
 function lane(title, arr, legend) {
   if (!arr || !arr.length) return '';
   return `<div class="td-lane"><div class="td-lane-h">${title} <span class="td-dim">${arr.length}</span></div>`
-    + arr.slice(0, 6).map(s => `<span class="td-lane-tk" data-go="${SRC_TAB[s.source] || 'screener'}" title="${esc(s.setup || '')} · score ${s.score}">${esc(s.ticker)}</span>`).join('') + `</div>`;
+    + arr.slice(0, 6).map(s => `<span class="td-lane-tk" data-go="${SRC_TAB[s.source] || 'screener'}" tabindex="0" role="link" title="${esc(s.setup || '')} · score ${s.score}">${esc(s.ticker)}</span>`).join('') + `</div>`;
 }
 
 // ── Challenger action-first section (shadow) ─────────────────────────────────
@@ -438,9 +486,58 @@ function degradedBanner(dg) {
     + `<div class="td-dim">Names from these sources stay visible as monitor / hold; they are not offered as fresh entries.</div></div>`;
 }
 
-export function renderCommandCenter(container, p) {
+// "Session: market closed (weekend) · last completed session Fri, Oct 2, 2026 · board computed
+// Oct 3, 2026, 11:02 AM ET". Reads the served `session` block (lib/market-session on the
+// server) and the payload's own generatedAt — never the browser clock. Renders what it has.
+const SESSION_WORD = { regular: 'regular session open', premarket: 'pre-market', afterhours: 'after-hours', closed: 'market closed' };
+function etDateLabel(etDate) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(etDate || ''))) return esc(String(etDate || ''));
+  try { return new Date(`${etDate}T12:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }); } catch { return esc(etDate); }
+}
+export function sessionLine(p, now = new Date()) {
+  const s = p && p.session && typeof p.session === 'object' ? p.session : null;
+  const bits = [];
+  if (s && s.marketSession) {
+    const why = s.isTradingDay === false ? (s.isHoliday ? ' (holiday)' : s.isWeekend ? ' (weekend)' : '') : '';
+    bits.push(`<b>${esc(SESSION_WORD[s.marketSession] || s.marketSession)}</b>${why}${s.etDate ? ` · ${etDateLabel(s.etDate)} ET` : ''}`);
+    if (s.marketSession !== 'regular' && s.lastCompletedSession) bits.push(`last completed session ${etDateLabel(s.lastCompletedSession)}`);
+  }
+  if (p && p.generatedAt && Number.isFinite(Date.parse(p.generatedAt))) bits.push(`board computed ${esc(asOfLabel(p.generatedAt, now))}`);
+  if (!bits.length) return '';
+  return `<div class="td-session" role="status">🕒 ${bits.join(' · ')}</div>`;
+}
+
+// Why nothing cleared — built from the gate's per-code blocker counts so "no cleared trades
+// due to paper governance" is never conflated with "no borrow", "stale data" or "no plan".
+// Rows can carry several blockers; the server's note says so when it counts every code.
+const BLOCKER_SHORT = {
+  NOT_PRODUCTION: 'not cleared for live trading (paper / shadow governance)',
+  NO_GOVERNANCE: 'no current governance record',
+  GOVERNANCE_STALE: 'stale governance evidence',
+  VERSION_MISMATCH: 'evidence from a different version',
+  NO_CLEARANCE: 'clearance carries no sizing weight',
+  REDUCE_ONLY: 'reduce-only',
+  NO_BORROW: 'no observed borrow (shorts)',
+  CONDITION_UNMET: 'outside the validated context',
+  DATA_STALE: 'stale or incomplete data',
+  NO_PLAN: 'no complete entry / stop / target plan',
+  LEAD_ONLY: 'lead-only strategy (no trade plans)',
+  LIQUIDITY_UNKNOWN: 'liquidity unknown',
+};
+export function governedEmptyText(gate) {
+  const counts = gate && gate.rejectionReasonCounts && typeof gate.rejectionReasonCounts === 'object' ? gate.rejectionReasonCounts : null;
+  const entries = counts ? Object.entries(counts).filter(([k, v]) => k !== 'OK' && Number(v) > 0).sort((a, b) => b[1] - a[1]) : [];
+  if (!entries.length) return 'No cleared trades today — nothing passed the fail-closed eligibility gate; the list below is research, not a buy list.';
+  const parts = entries.map(([code, n]) => `${n} ${BLOCKER_SHORT[code] || REASON_TEXT[code] || code}`);
+  const multi = gate.rejectionReasonCountsNote ? ` ${esc(gate.rejectionReasonCountsNote)}` : ' (a row can carry more than one blocker)';
+  return `No cleared trades today — rows blocked by: ${esc(parts.join(' · '))}.${multi} The list below is research, not a buy list.`;
+}
+
+export function renderCommandCenter(container, p, opts = {}) {
   if (!container) return;
   if (!p || !p.ok) { container.innerHTML = `<div class="dt-note" style="border-left-color:var(--red)">⚠️ The command center couldn't load its signals right now — a data source may be down. Try Refresh.</div>`; return; }
+  // Position records: the reader's My Book ledger (per browser). Tests inject `heldTickers`.
+  HELD = new Set((opts.heldTickers || readLedger().map(e => e.ticker)).map(t => String(t || '').toUpperCase()));
   const legend = p.evidenceLegend || {};
   FAM_LEGEND = p.strategyFamilyLegend || {};
   BEARCASES = p.bearCases && p.bearCases.cases ? p.bearCases : null;
@@ -457,6 +554,7 @@ export function renderCommandCenter(container, p) {
   // Last-good strip: this board came from the snapshot layer (refresh failed / empty / offline
   // cache), so it says WHEN it was good instead of posing as the current read.
   html += lastGoodStripHTML(p, { cls: 'td-lg' });
+  html += sessionLine(p, opts.now || new Date());
   html += opportunityBanner(p.opportunity);
   html += actionSection(); // shadow challenger — first read, clearly labeled, never affects ranks below
   // `reg` (defaulted {}) — an ok payload without a regime block must degrade, not throw
@@ -504,7 +602,7 @@ export function renderCommandCenter(container, p) {
   const governedEmpty = !!abh && !!p.qualifiedLeadsByHorizon && !laneHas(abh) && !laneHas(p.qualifiedLeadsByHorizon);
   const governedCls = governedEmpty ? ' expert-only' : '';
   if (governedEmpty) {
-    html += `<div class="td-dim td-empty td-governed-empty">No cleared trades today — every strategy is still at paper weight; the list below is research, not a buy list.</div>`;
+    html += `<div class="td-dim td-empty td-governed-empty">${governedEmptyText(p.governanceGate)}</div>`;
   }
 
   // ── LANE 1: EXECUTABLE IDEAS ──────────────────────────────────────────────
@@ -610,10 +708,18 @@ export function renderCommandCenter(container, p) {
       host.innerHTML = `<div class="td-dim">Couldn't load the pair matrix right now — the ranking is unaffected.</div>`;
     }
   });
-  container.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', (ev) => {
-    if (ev.target.closest('[data-live]') && ev.target.hasAttribute('data-live')) return;
-    if (typeof window.showTab === 'function') window.showTab(b.dataset.go);
-  }));
+  container.querySelectorAll('[data-go]').forEach(b => {
+    b.addEventListener('click', (ev) => {
+      if (ev.target.closest('[data-live]') && ev.target.hasAttribute('data-live')) return;
+      if (typeof window.showTab === 'function') window.showTab(b.dataset.go);
+    });
+    // Cards/chips are not native buttons: Enter and Space must open them like a click does.
+    if (b.tagName !== 'BUTTON') b.addEventListener('keydown', (ev) => {
+      if (ev.target !== b || (ev.key !== 'Enter' && ev.key !== ' ')) return;
+      ev.preventDefault();
+      if (typeof window.showTab === 'function') window.showTab(b.dataset.go);
+    });
+  });
 }
 
 // Data-trust panel — per-source feed + freshness, plus the fact/feature/AI/unknown
@@ -622,9 +728,11 @@ function dataTrustPanel(fr) {
   const sources = fr.sources || [];
   if (!sources.length && !(fr.legend || []).length) return '';
   const rows = sources.map(s => {
-    const dot = !s.ok ? '🔴' : s.stale ? '🟠' : '🟢';
-    const age = s.ageHours == null ? 'age unknown' : s.ageHours < 1 ? '<1h old' : `${Math.round(s.ageHours)}h old`;
-    const status = !s.ok ? 'unavailable' : `${age} · ${s.delayed ? 'delayed' : 'real-time'}`;
+    const unknown = s.timestampKnown === false || s.ageHours == null;
+    const dot = !s.ok ? '🔴' : unknown ? '⚪' : s.stale ? '🟠' : '🟢';
+    const age = unknown ? 'age unknown — freshness not attested' : s.ageHours < 1 ? '<1h old' : `${Math.round(s.ageHours)}h old`;
+    const due = s.sessionDue && !unknown ? ` · session due ${esc(s.sessionDue)}` : '';
+    const status = !s.ok ? 'unavailable' : `${age}${due} · ${s.delayed ? 'delayed' : 'real-time'}`;
     return `<div class="dt-src"><span>${dot} <b>${esc(s.label || s.source)}</b></span><span class="td-dim">${esc((s.feed || []).join(', '))}</span><span class="dt-src-st ${s.stale ? 'stale' : ''}">${esc(status)}</span></div>`;
   }).join('');
   const legend = (fr.legend || []).map(l => `<div class="dt-leg"><span>${l.icon} <b>${esc(l.label)}</b></span> <span class="td-dim">${esc(l.basis)}</span></div>`).join('');
@@ -774,7 +882,9 @@ export async function loadCommandCenter(container) {
   //    flagged stale (rendered with its "as of" strip) instead of an error card.
   let p = null, mat = null, chal = null;
   try { [p, mat, chal] = await Promise.all([
-    withLastGood('today', () => fetchJSON('/api/tracker?op=today', { timeoutMs: HEAVY_TIMEOUT_MS })),
+    // passLegitEmpty: an ok:true board with zero signals and no failed source is an ANSWER
+    // ("nothing qualifies"), shown as such — not replaced by yesterday's last-good board.
+    withLastGood('today', () => fetchJSON('/api/tracker?op=today', { timeoutMs: HEAVY_TIMEOUT_MS }), { passLegitEmpty: true }),
     fetchJSON('/api/tracker?op=maturity', { timeoutMs: OPTIONAL_TIMEOUT_MS }).catch(() => null),
     fetchJSON('/api/tracker?op=challenger', { timeoutMs: OPTIONAL_TIMEOUT_MS }).catch(() => null), // shadow — optional
   ]); } catch { p = null; }
@@ -791,11 +901,13 @@ export async function loadCommandCenter(container) {
   if (p && p.ok && !p.stale) {
     applyGrades(mat);
     applyChallenger(chal);
-    try { localStorage.setItem(TODAY_CACHE_KEY, JSON.stringify({ p, mat, chal, at: Date.now() })); } catch { /* quota → skip caching */ }
+    // `at` is the board's own generatedAt (snapshotAsOfMs), not the arrival clock: a CDN
+    // stale-while-revalidate body hours old on arrival must age from when it was computed.
+    try { localStorage.setItem(TODAY_CACHE_KEY, JSON.stringify({ p, mat, chal, at: snapshotAsOfMs(p) })); } catch { /* quota → skip caching */ }
     renderSafely(p);                            // replace stale with fresh
   } else if (p && p.ok && p.stale) {
     // The last-good board (its own asOf strip says when it was good). Never written to the
-    // instant-paint cache: that cache's `at` stamp must mean "fetched fresh then".
+    // instant-paint cache: that cache's `at` stamp must mean "computed then (fresh read)".
     if (mat) applyGrades(mat);
     if (chal) applyChallenger(chal);
     renderSafely(p);

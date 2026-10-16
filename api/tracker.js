@@ -54,6 +54,17 @@ const PRIVILEGED_OPS = new Set([
   // 'warmchain' runs ledger WRITES and expensive rebuilds (op=redundancy&force=1 refetches
   // candles for every ticker in the ledger history) — cron-only, never public.
   'warmchain',
+  // The AI-reasoning ticks have NO cached-read branch: every call runs detection, an LLM
+  // investigation and a ledger + cache write. They sat in SHARED_FORCE_OPS, but stripping
+  // `force` does nothing to a handler that never reads it — so an anonymous GET spent LLM
+  // budget and wrote the day's record. The cron (api/warm.js, bearer via internalHeaders)
+  // is the only caller that should; the two UI Refresh buttons already tolerate a failed
+  // tick and fall through to the cached read.
+  'anomalytick', 'readthroughtick', 'secondwavetick', 'toneshifttick', 'crossassettick', 'biotechtick',
+  // biotechgrade unconditionally overwrites the grade doc; dualreadbackfill overwrites a
+  // caller-chosen shard after ~80 history fetches; fadeseed rebuilds the live fade learner
+  // from empty and overwrites it.
+  'biotechgrade', 'dualreadbackfill', 'fadeseed',
   // 'chainsummary' is the per-night chains record POSTed by the GitHub nightly-chains
   // matrix (writes chains/<date>.json, read by op=health) — bearer-only, never public.
   'chainsummary',
@@ -244,7 +255,7 @@ const PRIVILEGED_OPS = new Set([
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
-  'recalibrate', 'fadeseed', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'leadtime2', 'failuremodel', 'complab', 'challengereval', 'router', 'routercf', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward', 'rltwalkforward', 'evidencediag', 'datasetsurvival',
+  'recalibrate', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'leadtime2', 'failuremodel', 'complab', 'challengereval', 'router', 'routercf', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward', 'rltwalkforward', 'evidencediag', 'datasetsurvival',
   'peerprop', 'peerpropwf', 'underreaction', 'targetcompare', 'expgap', 'psrlresearch',
   // bearcase: the empty state is deliberately no-store (pre-first-tick CDN trap), so an
   // anonymous cache-busting loop would otherwise drive an unthrottled Blob list() per hit.
@@ -290,14 +301,21 @@ const EXPENSIVE_OPS = new Set([
   // page traffic coalesces; the throttle stops a cache-busting caller from driving repeated
   // full retrains. (forecastcaps and forecastboard are cheap: a probe and a file read.)
   'forecastrank',
+  // dualread: anonymous POST with caller-supplied text runs an LLM analysis and writes its
+  // cache. drift: resolves the apex ledger (candle fetch per open signal) and rewrites the
+  // resolved map. Both are browser features, so throttled rather than denied.
+  'dualread', 'drift',
 ]);
 const EXPENSIVE_LIMIT = { limit: 6, windowMs: 60000 }; // ≤6 heavy recomputes/min per IP
 // Ops both the cron AND the browser call: leave the cached read public, but strip
 // the expensive force/refresh rebuild levers for untrusted callers.
 const SHARED_FORCE_OPS = new Set([
-  'aligned', 'anomalytick', 'biotechtick', 'biotechgrade', 'calibration', 'coredrift', 'crossassettick',
-  'optionsflow', 'optionsepisodes', 'pulse', 'pulserefine', 'putsell', 'readthroughtick', 'secondwavetick',
-  'toneshifttick', 'atlasx',
+  'aligned', 'calibration', 'coredrift',
+  'optionsflow', 'optionsepisodes', 'pulse', 'pulserefine', 'putsell',
+  'atlasx',
+  // gameplan / readthrough: the cached read is public; refresh=1 / force=1 re-runs the news
+  // fetch + LLM synthesis and rewrites the day's plan — trusted callers only.
+  'gameplan', 'readthrough',
   // redundancy: the cached model is public (the UI panel reads it), but a force=1 rebuild
   // refetches candles for every ticker in the ledger history — trusted callers (the cron)
   // only. Rate-limiting alone wasn't enough: 6/min per IP of a 200+ ticker rebuild is still
@@ -317,6 +335,54 @@ const SHARED_FORCE_OPS = new Set([
 ]);
 // Ingest endpoints: POST-only + their own token/secret gate inside the route.
 const INGEST_OPS = new Set(['insideringest', 'alertsingest']);
+// The browser's OWN push-subscription record — a per-device write the visitor is entitled to.
+const USER_WRITE_OPS = new Set(['pushsubscribe', 'pushunsubscribe']);
+// Public reads. Listed EXPLICITLY so that "no policy" can never again mean "public": an op
+// missing from every set below is refused before dispatch (test/op-policy.test.js parses the
+// dispatch chain and fails on any op without exactly one base policy). Being listed here is
+// a claim that an anonymous GET cannot spend LLM/provider budget on demand or write shared
+// state — ops whose handler writes on a trusted-only branch (maturity, adaptivepolicy,
+// pitdata, daytrade, daytradecapture, swingmonitor, rlt, today) gate that branch themselves,
+// and `?log=1` is stripped from every untrusted request below.
+const PUBLIC_READ_OPS = new Set([
+  'adaptivepolicy', 'alertfeed', 'alerts', 'alignedbook', 'alphabook', 'anomaly', 'archivehealth',
+  'ark', 'attention', 'baseline', 'baselines', 'biotech', 'brief', 'cern', 'cernfsprobe',
+  'cernlockprobe', 'cfl', 'cflduds', 'cflforecast', 'cflmissed', 'cfltrace', 'challenger', 'coil',
+  'coilbook', 'confluence', 'confluencebook', 'confluencemarginal', 'confluenceopt', 'core',
+  'crossasset', 'crowd', 'datahealth', 'daytrade', 'daytradealerts', 'daytradebook', 'daytradecapture',
+  'daytradeopt', 'daytradescanhealth', 'decisionqueue', 'delisting', 'dilution', 'downday',
+  'downdaybook', 'dualreadbook', 'ensemble', 'ephemeral', 'evidence', 'evidencestock', 'evolve',
+  'evolvehealth', 'evolvewalkforward', 'factors', 'fadebook', 'fadeopt', 'fadesignals', 'floatprobe',
+  'forecastboard', 'forecastcaps', 'forecastshadow', 'fundamentals', 'gapdown', 'gapdownbook', 'gapgo',
+  'gapgobook', 'govdemand', 'gridlock', 'gridlockscenario', 'health', 'hypotheses', 'ignition',
+  'ignitionlive', 'insider', 'insidercluster', 'intraday', 'intradaybook', 'intradayvalidation',
+  'ivrvsample', 'largemoverbook', 'lifecycle', 'lowfloatbook', 'ltrecs', 'maturity', 'model',
+  'modelstatus', 'nsl', 'omega', 'omegaab', 'omegamodel', 'optionsevidence2', 'optionsgex',
+  'optionshealth2', 'optionsperf', 'optionsradar', 'orbit', 'orbithealth', 'orbitml', 'orbitmlhealth',
+  'paperexec', 'patterns', 'patternsearch', 'perf', 'pitdata', 'positionsize', 'predict', 'premove',
+  'promotionreadiness', 'provenance', 'psrl', 'psrldetail', 'psrlhealth', 'pulse2', 'pulse2evidence',
+  'pulse2health', 'pulseepisodes', 'pushstatus', 'quoteprobe', 'redflags', 'rlt', 'scoreboard',
+  'secondwave', 'shortvol', 'stbull', 'survival', 'swingmonitor', 'swingsearchstatus', 'tape',
+  'techcommandhealth', 'timing', 'timingbook', 'today', 'tone', 'toneshift', 'trend', 'trendbook',
+  'trendopt', 'version', 'volforecast', 'vreversal', 'vreversaltest', 'vrpbook', 'whynow',
+]);
+
+const BASE_POLICIES = Object.freeze([
+  ['privileged', PRIVILEGED_OPS],        // bearer required; cron/scheduler only
+  ['ingest', INGEST_OPS],                // POST + the route's own token gate
+  ['shared-force', SHARED_FORCE_OPS],    // cached read public; force/refresh/reset/log stripped
+  ['user-write', USER_WRITE_OPS],
+  ['public-read', PUBLIC_READ_OPS],
+]);
+/** The op's base policy name, or null when it has none (→ refused). */
+function policyOf(op) {
+  if (typeof op !== 'string') return null;
+  const hit = BASE_POLICIES.find(([, set]) => set.has(op));
+  if (hit) return hit[0];
+  // EXPENSIVE_OPS is a throttle layered on top of a base policy; an op listed only there
+  // is a public, rate-limited recompute.
+  return EXPENSIVE_OPS.has(op) ? 'public-throttled' : null;
+}
 
 // Every log line emitted while handling this request carries the op that caused it,
 // so a `no daily data` warning names its own caller instead of having to be inferred.
@@ -342,6 +408,10 @@ module.exports = async function handler(req, res) {
   }
 };
 
+// Exposed for test/op-policy.test.js (the handler stays the module's default export).
+module.exports.policyOf = policyOf;
+module.exports.POLICY_SETS = Object.freeze({ PRIVILEGED_OPS, EXPENSIVE_OPS, SHARED_FORCE_OPS, INGEST_OPS, USER_WRITE_OPS, PUBLIC_READ_OPS });
+
 async function handleRequest(req, res) {
   // Deploy version — the client compares this against the value it booted with and
   // prompts a refresh when a new deploy lands. Cheap (env read), never cached.
@@ -354,6 +424,8 @@ async function handleRequest(req, res) {
   //    ops require the CRON_SECRET bearer; shared ops lose their force/refresh lever
   //    for anonymous callers. All fail-open until CRON_SECRET is configured.
   const op = req.query.op || 'scoreboard';
+  // Fail closed: an op with no policy never reaches a handler.
+  if (!policyOf(op)) return respondUnknownOp(req, res);
   if (INGEST_OPS.has(op) && !requireMethod(req, res, ['POST'])) return;
   if (PRIVILEGED_OPS.has(op)) { if (!requireTrusted(req, res)) return; }
   else if (SHARED_FORCE_OPS.has(op)) { stripForceParams(req); }

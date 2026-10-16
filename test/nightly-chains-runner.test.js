@@ -52,12 +52,36 @@ test('runChain: HTTP 200 whose BODY reports failed steps is graded failed (the 2
   assert.equal(r.attempts, 1, 'a chain that ran is never retried'); assert.match(r.error, /op=track http:503 no picks/);
 });
 
-test('runChain: budget skips alone stay ok (complete:false) with a warning annotation; non-JSON 200 is graded unknown-but-ok', async () => {
+test('runChain: budget skips alone stay ok (complete:false) with a warning annotation; non-JSON 200 is UNKNOWN and not ok', async () => {
   const r = await RUN.runChain('capture', opts(async () => resp(200, { ok: false, complete: false, failed: [], skipped: ['op=fadetick'] })));
   assert.equal(r.ok, true); assert.equal(r.complete, false); assert.deepEqual(r.skipped, ['op=fadetick']);
   assert.match(RUN.annotations(r)[0], /budget-skipped::op=fadetick/);
+  // DELIBERATELY CHANGED 2026-10-04 (job-grading audit D4). This used to pin "non-JSON 200
+  // is graded unknown-but-ok": a chain killed mid-response was recorded ok in the summary
+  // and op=health read green. Unknown is not failure (nothing in failed[]) but never ok.
   const r2 = await RUN.runChain('capture', opts(async () => resp(200, null, 'not json')));
-  assert.equal(r2.ok, true); assert.equal(r2.complete, null);
+  assert.equal(r2.ok, false); assert.equal(r2.status, 'no-body'); assert.equal(r2.complete, null);
+  assert.deepEqual(r2.failed, []); assert.match(r2.error, /no parseable JSON body/);
+  assert.equal(r2.attempts, 1, 'the chain ran — a no-body 200 is never retried');
+});
+
+test('runChain (D4): a 200 whose body says ok:false with no failed/skipped/unknown is an APPLICATION failure', async () => {
+  const r = await RUN.runChain('capture', opts(async () => resp(200, { ok: false, name: 'capture', error: 'unknown chain "capture"' })));
+  assert.equal(r.ok, false); assert.equal(r.status, 'app-failed'); assert.match(r.error, /unknown chain/);
+  assert.equal(r.attempts, 1);
+});
+
+test('runChain (D4): unknown-outcome or blocked steps in the body make the chain INCOMPLETE and not ok, without inventing failures', async () => {
+  const r = await RUN.runChain('ledger', opts(async () => resp(200, { ok: false, complete: false, failed: [], skipped: [], unknown: ['@decision'], blocked: [] })));
+  assert.equal(r.ok, false); assert.equal(r.status, 'incomplete'); assert.equal(r.complete, false);
+  assert.deepEqual(r.failed, []); assert.deepEqual(r.unknown, ['@decision']); assert.match(r.error, /unknown outcome: @decision/);
+  const b = await RUN.runChain('router', opts(async () => resp(200, { ok: false, complete: false, failed: ['op=router&force=1'], skipped: [], unknown: [], blocked: ['op=routercf&force=1'], failDetail: [{ op: 'op=router&force=1', status: 'app:failed', error: 'candles unavailable' }] })));
+  assert.equal(b.status, 'failed', 'a named failure outranks the incomplete grade'); assert.deepEqual(b.blocked, ['op=routercf&force=1']);
+});
+
+test('buildSummaryPayload (D4): per-chain records carry unknown/blocked so op=health can name them', () => {
+  const p = SUM.buildSummaryPayload([{ chain: 'ledger', ok: false, status: 'incomplete', complete: false, failed: [], skipped: [], unknown: ['@decision'], blocked: [], startedAt: '2026-10-02T22:05:00Z', finishedAt: '2026-10-02T22:09:00Z' }], { expected: ['ledger'], now: Date.parse('2026-10-02T22:10:00Z') });
+  assert.deepEqual(p.chains.ledger.unknown, ['@decision']); assert.deepEqual(p.chains.ledger.blocked, []); assert.equal(p.chains.ledger.ok, false);
 });
 
 // ── platform crashes (co-located Fluid instance OOM) ─────────────────────────────────

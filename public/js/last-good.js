@@ -25,9 +25,18 @@ function isValidEntry(v) {
   return isPlainObject(v) && typeof v.asOf === 'string' && Number.isFinite(Date.parse(v.asOf)) && isPlainObject(v.data);
 }
 
+// WHEN a payload was good is the payload's own generatedAt (the server's compute time), not
+// the moment it reached this browser: a CDN / stale-while-revalidate response can be hours
+// old on arrival, and stamping it "now" would let an old board pose as fresh. Arrival time is
+// only the fallback for a payload that carries no parseable generatedAt (or a future one).
+export function snapshotAsOfMs(data, nowMs = Date.now()) {
+  const gen = isPlainObject(data) ? Date.parse(data.generatedAt) : NaN;
+  return Number.isFinite(gen) && gen <= nowMs ? gen : nowMs;
+}
+
 export async function rememberSnapshot(key, data, nowMs = Date.now(), store = defaultStore()) {
   if (!store || !key || !isPlainObject(data)) return false;
-  try { await store.set(LAST_GOOD_PREFIX + key, { asOf: new Date(nowMs).toISOString(), data }); return true; } catch { return false; }
+  try { await store.set(LAST_GOOD_PREFIX + key, { asOf: new Date(snapshotAsOfMs(data, nowMs)).toISOString(), data }); return true; } catch { return false; }
 }
 
 export async function recallSnapshot(key, store = defaultStore()) {
@@ -38,6 +47,17 @@ export async function recallSnapshot(key, store = defaultStore()) {
 // A payload is usable when it is a real, non-empty object that was NOT itself served from a cache.
 export function isUsablePayload(p) {
   return isPlainObject(p) && p.stale !== true && !POLICY.isEmptyState(p);
+}
+
+// A LEGITIMATELY empty board: the server answered ok:true, nothing failed or degraded, and
+// there is simply nothing to show (e.g. no signal qualified). That is an answer, not an
+// outage — it must be shown as empty rather than papered over with an older board.
+export function isLegitEmpty(p) {
+  if (!isPlainObject(p) || p.ok !== true || p.stale === true) return false;
+  if (p.error != null || p.degraded === true || p.persisted === false) return false;
+  const failed = (list) => Array.isArray(list) && list.some((s) => s && s.ok === false);
+  if (failed(p.sources) || (isPlainObject(p.freshness) && failed(p.freshness.sources))) return false;
+  return POLICY.isEmptyState(p);
 }
 
 function staleReasonFor(fresh, error) {
@@ -51,8 +71,9 @@ function staleReasonFor(fresh, error) {
  * Pure: pick what to render. Returns `fresh` untouched when usable; otherwise a NEW object made
  * from the cached snapshot with {stale:true, asOf, staleReason}; otherwise `fresh` as-is.
  */
-export function mergeLastGood(fresh, cached, { error = null, nowMs = Date.now() } = {}) {
+export function mergeLastGood(fresh, cached, { error = null, nowMs = Date.now(), passLegitEmpty = false } = {}) {
   if (isUsablePayload(fresh)) return fresh;
+  if (passLegitEmpty && !error && isLegitEmpty(fresh)) return fresh;
   const valid = isValidEntry(cached) && nowMs - Date.parse(cached.asOf) <= LAST_GOOD_MAX_AGE_MS;
   if (!valid) return fresh;
   const freshIsNewerStale = isPlainObject(fresh) && fresh.stale === true && Number.isFinite(Date.parse(fresh.asOf))
@@ -65,14 +86,16 @@ export function mergeLastGood(fresh, cached, { error = null, nowMs = Date.now() 
  * Run a fetch thunk under a last-good key. Remembers a usable result; on failure / empty /
  * sw-cache result returns the remembered snapshot flagged stale. With nothing remembered it
  * preserves the thunk's own contract (rethrows the error, passes the empty payload through).
+ * `passLegitEmpty` (opt-in per caller): a clean ok:true empty board is returned as-is instead
+ * of being replaced by the remembered one — and it never overwrites the remembered one.
  */
-export async function withLastGood(key, run, { store = defaultStore(), nowMs } = {}) {
+export async function withLastGood(key, run, { store = defaultStore(), nowMs, passLegitEmpty = false } = {}) {
   let fresh = null, error = null;
   try { fresh = await run(); } catch (e) { error = e; }
-  const stamp = nowMs ?? Date.now();   // asOf = when the answer ARRIVED, not when the read began
+  const stamp = nowMs ?? Date.now();   // the clock at ARRIVAL; the stored asOf prefers payload.generatedAt
   if (isUsablePayload(fresh)) { await rememberSnapshot(key, fresh, stamp, store); return fresh; }
   const cached = await recallSnapshot(key, store);
-  const merged = mergeLastGood(fresh, cached, { error, nowMs: stamp });
+  const merged = mergeLastGood(fresh, cached, { error, nowMs: stamp, passLegitEmpty });
   if (merged == null && error) throw error;
   return merged;
 }

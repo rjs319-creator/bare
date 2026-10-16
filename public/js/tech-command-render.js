@@ -34,7 +34,9 @@ const ACTION_META = {
   ACCUMULATE: ['Accumulate', 'var(--green)', '▲'],
   READY: ['Ready', 'var(--cyan)', '◆'],
   MANAGE: ['Manage', 'var(--blue)', '■'],
-  HOLD: ['Hold', 'var(--blue)', '■'],
+  // 'HOLD' is the boards' internal id for "thesis intact, nothing new to do". The app has no
+  // position record on this surface, so the label never tells the reader to hold a position.
+  HOLD: ['Thesis intact — not a new entry', 'var(--blue)', '■'],
   WATCH_VALUATION: ['Watch valuation', 'var(--amber)', '◐'],
   WATCH: ['Watch', DIM, '○'],
   DO_NOT_CHASE: ['Do not chase', 'var(--amber)', '✕'],

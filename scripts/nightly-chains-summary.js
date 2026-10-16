@@ -75,7 +75,10 @@ function buildSummaryPayload(results, { expected = ROOT_CHAINS, only = [], runId
     const r = byChain[c];
     if (!r) return [c, NO_REPORT];
     return [c, { ok: r.ok === true, status: r.status || (r.ok ? 'ok' : 'failed'), httpStatus: r.httpStatus ?? null, attempts: r.attempts ?? null,
-      complete: typeof r.complete === 'boolean' ? r.complete : null, failed: r.failed || [], skipped: r.skipped || [], elapsedMs: r.elapsedMs ?? null, error: r.error || null,
+      complete: typeof r.complete === 'boolean' ? r.complete : null, failed: r.failed || [], skipped: r.skipped || [],
+      // Unknown-outcome / prerequisite-blocked steps (lib/warm-chains.js): not failures, but
+      // the chain is incomplete and not ok. Carried so op=health can name them.
+      unknown: r.unknown || [], blocked: r.blocked || [], elapsedMs: r.elapsedMs ?? null, error: r.error || null,
       ...(r.crashedWithPeers ? { crashedWithPeers: true, peers: r.peers } : {}) }];
   }));
   const starts = Object.values(byChain).map((r) => Date.parse(r.startedAt)).filter(Number.isFinite);

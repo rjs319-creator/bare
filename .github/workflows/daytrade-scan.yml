@@ -185,8 +185,12 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Runner-capture / miss-taxonomy report
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl -sS --max-time 120 "$APP_URL/api/tracker?op=daytradecapture" | head -c 2000
+          # The bearer is what lets this call PERSIST the day's report; without it the op
+          # still returns the report but stores nothing.
+          curl -sS --max-time 120 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/tracker?op=daytradecapture" | head -c 2000
       - name: Grade the day's PIT dataset rows (bounded passes)
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}

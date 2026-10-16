@@ -187,9 +187,25 @@ export function renderMarketNow(state, clocks) {
 }
 
 // ── 2. PLAYBOOK ─────────────────────────────────────────────────────────────
+// A playbook line is { text, basis } and MAY carry provenance: sources [{url, publisher}],
+// asOf, dateUnconfirmed. Links and as-of render only when present; the basis chip is whatever
+// the server said — a verified badge is never implied by the row's shape.
+function sourceLinks(sources) {
+  const list = (Array.isArray(sources) ? sources : []).filter(s => s && (s.url || s.publisher));
+  if (!list.length) return '';
+  const a = list.slice(0, 3).map(s => {
+    const name = esc(s.publisher || (() => { try { return new URL(s.url).hostname; } catch { return 'source'; } })());
+    const href = typeof s.url === 'string' && /^https?:\/\//i.test(s.url) ? s.url : null;
+    return href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${name}</a>` : `<span>${name}</span>`;
+  }).join(', ');
+  return `<span class="p2-play-src p2-dim">· ${a}</span>`;
+}
 function playLine(label, l) {
   if (!l) return '';
-  return `<div class="p2-play-row"><span class="p2-play-lbl">${esc(label)}</span><span class="p2-play-txt">${esc(l.text)}</span>${basisChip(l.basis)}</div>`;
+  if (typeof l === 'string') l = { text: l, basis: null };
+  const asOf = l.asOf && Number.isFinite(Date.parse(l.asOf)) ? `<span class="p2-play-asof p2-dim">· as of ${timeEl(l.asOf)}</span>` : '';
+  const unconfirmed = l.dateUnconfirmed ? `<span class="p2-play-unconf" title="The event date could not be confirmed against a primary source">date unconfirmed</span>` : '';
+  return `<div class="p2-play-row"><span class="p2-play-lbl">${esc(label)}</span><span class="p2-play-txt">${esc(l.text == null ? '' : String(l.text))}</span>${l.basis ? basisChip(l.basis) : ''}${unconfirmed}${sourceLinks(l.sources)}${asOf}</div>`;
 }
 export function renderPlaybook(pb) {
   if (!pb) return emptySection('Playbook', 'needs a market-state snapshot');
@@ -278,16 +294,32 @@ export function compareCards(a, b) {
     || String((a && a.eventId) || '').localeCompare(String((b && b.eventId) || ''));
 }
 
-export function renderView(name, list, novice, emptyWhy) {
+// Per-view counts: `current` is what the main list shows, `context` the collapsed group,
+// `total` the raw rows for that horizon. Pure; used by the tab badges and the empty copy.
+export function viewCounts(list) {
   const items = (list || []).filter(Boolean);
-  if (!items.length) return emptySection(name, emptyWhy);
+  const context = items.filter(d => d && d.freshness && d.freshness.group === 'context').length;
+  return { total: items.length, current: items.length - context, context };
+}
+export function horizonCountsLine(views, selected) {
+  const names = { day: 'Day', swing: 'Swing', investor: 'Investor' };
+  const all = ['day', 'swing', 'investor'].map(k => ({ k, ...viewCounts(views && views[k]) }));
+  const total = all.reduce((a, v) => a + v.total, 0);
+  const mine = all.find(v => v.k === selected) || { current: 0, total: 0 };
+  return `${mine.current} current in ${names[selected] || selected} · ${total} across all horizons (${all.map(v => `${names[v.k]} ${v.total}`).join(' / ')})`;
+}
+export function renderView(name, list, novice, emptyWhy, allViews = null, key = null) {
+  const items = (list || []).filter(Boolean);
+  const scoped = allViews && key ? ` <span class="p2-dim">${esc(horizonCountsLine(allViews, key))}</span>` : '';
+  if (!items.length) return emptySection(name, `${emptyWhy}${scoped ? ' —' : ''}`) + (scoped ? `<div class="p2-dim p2-view-scope">0 in ${esc(name)} · ${esc(horizonCountsLine(allViews, key))}</div>` : '');
   const sorted = [...items].sort(compareCards);
   // Current stories lead; older/undated items sit in a clearly separated,
   // collapsed context group — never mixed into the main list.
   const current = sorted.filter(d => !d.freshness || d.freshness.group !== 'context');
   const context = sorted.filter(d => d.freshness && d.freshness.group === 'context');
   const main = current.map(d => viewCard(d, novice)).join('')
-    || emptySection(name, 'nothing current right now — older or undated stories are in the context group below');
+    || emptySection(name, `nothing current right now — the ${context.length} older or undated ${context.length === 1 ? 'story is' : 'stories are'} in the context group below`)
+      + (scoped ? `<div class="p2-dim p2-view-scope">0 current in ${esc(name)} · ${esc(horizonCountsLine(allViews, key))}</div>` : '');
   const ctx = context.length
     ? `<details class="p2-context-group"><summary>🕰 Earlier / undated context (${context.length}) — not current ${esc(name)} stories</summary>${context.map(d => viewCard(d, novice)).join('')}</details>`
     : '';
@@ -337,12 +369,27 @@ export function eventCard(e, sourcesById, novice) {
     </details>`}
   </div>`;
 }
+// The badge is the number of cards actually drawn. The persisted section lists are written at
+// tick time and can name events that have since expired or fall outside the loaded window;
+// those are reported as such — never as a quiet market, and never as a badge the list
+// contradicts.
+export function sectionCounts(ids, byId) {
+  const listed = (ids || []).length;
+  const visible = (ids || []).map(id => byId.get(id)).filter(Boolean);
+  return { listed, visible: visible.length, missing: listed - visible.length, events: visible };
+}
 export function renderEventSections(sections, events, sourcesById, novice) {
   const byId = new Map((events || []).map(e => [e.id, e]));
   return SECTION_META.map(([key, title, emptyWhy]) => {
-    const ids = (sections && sections[key]) || [];
-    const cards = ids.map(id => byId.get(id)).filter(Boolean).map(e => eventCard(e, sourcesById, novice)).join('');
-    return `<div class="p2-sec"><div class="p2-sec-head">${esc(title)} <span class="p2-sec-n">${ids.length}</span></div>${cards || emptySection(title, emptyWhy)}</div>`;
+    const c = sectionCounts((sections && sections[key]) || [], byId);
+    const cards = c.events.map(e => eventCard(e, sourcesById, novice)).join('');
+    const badge = c.missing > 0
+      ? `<span class="p2-sec-n" title="${c.listed} listed at the last collection tick; ${c.missing} are expired or outside the loaded event window">${c.visible} visible · ${c.missing} listed ${c.missing === 1 ? 'is' : 'are'} expired or outside the loaded window</span>`
+      : `<span class="p2-sec-n">${c.visible}</span>`;
+    const empty = c.visible ? '' : (c.missing > 0
+      ? emptySection(title, `${c.listed} listed at the last tick ${c.listed === 1 ? 'is' : 'are'} no longer loadable (expired or outside the loaded window) — nothing to show now; this is not a quiet market`)
+      : emptySection(title, emptyWhy));
+    return `<div class="p2-sec"><div class="p2-sec-head">${esc(title)} ${badge}</div>${cards || empty}</div>`;
   }).join('');
 }
 
@@ -388,12 +435,18 @@ export function renderHealthStrip(clocks, unavailable, coverage, cache) {
     ? `<span class="p2-dim">narrative updated ${esc(String(clocks.narrativeAgeMinutes))}m ago</span>` : '';
   const next = clocks && clocks.nextNarrativeRefreshAt
     ? `<span class="p2-dim">next update ${timeEl(clocks.nextNarrativeRefreshAt)}</span>` : '';
+  // The CDN/narrative cache state describes the NARRATIVE SNAPSHOT, and says so.
   const cacheChip = cache && cache.status
-    ? `<span class="p2-dim" title="TTL ${esc(String(cache.ttlSeconds))}s">cache ${esc(cache.status)}</span>` : '';
+    ? `<span class="p2-dim" title="Narrative snapshot cache state (CDN TTL ${esc(String(cache.ttlSeconds))}s). HIT = served from cache within its collection cycle; STALE = older than a cycle; REFRESHED = re-read and current.">narrative snapshot: ${esc(CACHE_WORD[cache.status] || String(cache.status).toLowerCase())}</span>` : '';
+  // dataMode describes DOC AVAILABILITY (complete / degraded / unavailable) — it is not a
+  // freshness or session claim; the clock chips carry those. The pre-rename value 'live' is
+  // mapped to 'complete' so an older payload can never print "live" here.
   return `<div class="p2-health">
-    <span class="p2-dim">mode: ${esc((clocks && clocks.dataMode) || '?')} · model ${esc((clocks && clocks.modelVersion) || '?')}</span> ${narr} ${next} ${cacheChip} ${cov}${un}
+    <span class="p2-dim" title="Whether every persisted input doc was present and whole. Freshness and session are the separate clock chips.">data: ${esc(DATA_MODE_WORD[clocks && clocks.dataMode] || (clocks && clocks.dataMode) || 'unknown')} · model ${esc((clocks && clocks.modelVersion) || '?')}</span> ${narr} ${next} ${cacheChip} ${cov}${un}
   </div>`;
 }
+const DATA_MODE_WORD = { complete: 'complete', live: 'complete', degraded: 'degraded', unavailable: 'unavailable' };
+const CACHE_WORD = { HIT: 'cached (within cycle)', STALE: 'stale', REFRESHED: 'refreshed — current', MISS: 'no snapshot' };
 
 // ── shell ───────────────────────────────────────────────────────────────────
 // ── Three-layer regime stack ────────────────────────────────────────────────
@@ -468,9 +521,10 @@ export function renderCrossAsset(m) {
   const rows = Object.values(m.rows || {});
   const row = r => {
     const [mark, col] = P2_VERDICT_STYLE[r.verdict] || P2_VERDICT_STYLE.UNAVAILABLE;
+    const unit = r.unit ? ` ${esc(String(r.unit))}` : '';
     const val = r.changePct != null ? `${r.changePct >= 0 ? '+' : ''}${r.changePct}%`
-      : r.level != null ? String(r.level)
-        : r.slope != null ? `slope ${r.slope}` : '—';
+      : r.level != null ? `${String(r.level)}${r.kind === 'level' ? unit : ''}`
+        : r.slope != null ? `slope ${r.slope}${unit}` : '—';
     return `<tr title="${esc(r.proxyNote || r.reason || '')}">
       <td>${esc(r.underlying)}</td>
       <td class="p2-dim">${r.proxy ? esc(r.proxy) : '—'}</td>
@@ -483,7 +537,7 @@ export function renderCrossAsset(m) {
     <div class="p2-dim">${esc(m.summary.confirmationRatioNote)}</div>
     ${m.summary.contradicting ? `<div class="p2-conflict">⚠ <b>Contradicting:</b> ${m.summary.contradictingLegs.map(esc).join(' · ')}</div>` : ''}
     <div class="p2-ca-scroll"><table class="p2-ca-table">
-      <thead><tr><th>Leg</th><th>Proxy</th><th style="text-align:right">Change</th><th>vs equities</th></tr></thead>
+      <thead><tr><th>Leg</th><th>Proxy</th><th style="text-align:right" title="Change of the PROXY instrument over the lookback — not the underlying itself">Proxy change</th><th>vs equities</th></tr></thead>
       <tbody>${rows.map(row).join('')}</tbody>
     </table></div>
     <div class="p2-dim">${esc(m.proxyDisclosure)}</div>
@@ -491,6 +545,11 @@ export function renderCrossAsset(m) {
   </div>`;
 }
 
+// Tab badge: "current/total" for that horizon — the number the tab's own list will show.
+function tabCount(list) {
+  const c = viewCounts(list);
+  return `<span class="p2-tab-n" title="${c.current} current · ${c.context} older/undated in the context group · ${c.total} total for this horizon">${c.current}/${c.total}</span>`;
+}
 export function renderShell({ payload, novice }) {
   const p = payload || {};
   const clocks = p.clocks || null;
@@ -511,11 +570,11 @@ export function renderShell({ payload, novice }) {
   <div class="p2-views">
     <div class="p2-sec-head">🎯 Horizon views</div>
     <div class="p2-vtabs">
-      ${modeBtn('p2-v-day', '⚡ Day', true)}${modeBtn('p2-v-swing', '📅 Swing', false)}${modeBtn('p2-v-investor', '🏛 Investor', false)}
+      ${modeBtn('p2-v-day', `⚡ Day ${tabCount(views.day)}`, true)}${modeBtn('p2-v-swing', `📅 Swing ${tabCount(views.swing)}`, false)}${modeBtn('p2-v-investor', `🏛 Investor ${tabCount(views.investor)}`, false)}
     </div>
-    <div class="p2-view-body" data-view="day">${renderView('Day trade', views.day, novice, 'no day-trade reads — needs fresh regular-session data and collected events')}</div>
-    <div class="p2-view-body" data-view="swing" style="display:none">${renderView('Swing', views.swing, novice, 'no swing reads — needs collected events with daily structure')}</div>
-    <div class="p2-view-body" data-view="investor" style="display:none">${renderView('Investor', views.investor, novice, 'no investor reads yet')}</div>
+    <div class="p2-view-body" data-view="day">${renderView('Day trade', views.day, novice, 'no day-trade reads — needs fresh regular-session data and collected events', views, 'day')}</div>
+    <div class="p2-view-body" data-view="swing" style="display:none">${renderView('Swing', views.swing, novice, 'no swing reads — needs collected events with daily structure', views, 'swing')}</div>
+    <div class="p2-view-body" data-view="investor" style="display:none">${renderView('Investor', views.investor, novice, 'no investor reads yet', views, 'investor')}</div>
   </div>
   ${renderEventSections(p.narratives && p.narratives.sections, p.events, sourcesById, novice)}
   ${renderRecent(p.recentlyChanged, p.alerts)}

@@ -23,10 +23,16 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 // A warmOne whose DISPATCH is deferred — used to keep the fire-and-forget kicks out of
 // the t=0 burst (they each become a heavy invocation of their own). The kick still
 // happens while warm is draining the chain reports, long before warm returns.
-const delayedWarmOne = (path, delayMs) => (async () => {
-  if (delayMs) await sleep(delayMs);
-  return warmOne(path);
-})().catch(() => null);
+// `sink` (optional) collects the kick's graded result so warm's run record can say what each
+// kick DID — a dispatch acknowledgement is not completed work (job-grading audit D7).
+const delayedWarmOne = (path, delayMs, sink) => {
+  const p = (async () => {
+    if (delayMs) await sleep(delayMs);
+    return kickOne(path);
+  })().catch(() => null);
+  if (sink) sink.track(path, p);
+  return p;
+};
 
 async function warmOne(p) {
   const t0 = Date.now();
@@ -36,6 +42,46 @@ async function warmOne(p) {
   } catch (e) {
     return { p, error: String(e && e.message || e), ms: Date.now() - t0 };
   }
+}
+
+// A KICK is graded on transport AND application outcome. Every tick op answers a failed
+// run with HTTP 200 + {ok:false, error} (no key, no store, provider down), which warmOne's
+// status-only record read as success. The body here is small (a tick's summary), unlike
+// the multi-MB cache warms warmOne is kept for.
+//   appOk   true  body.ok !== false      the work completed
+//           false body.ok === false      application failure (error carries the reason)
+//           null  no parseable JSON      outcome unknown — never success
+//   benign  the explicit no-op marker (lib/warm-chains.js benignNoop), when present
+async function kickOne(p, { fetchImpl = fetch } = {}) {
+  const t0 = Date.now();
+  try {
+    const r = await fetchImpl('https://' + HOST + p, { headers: internalHeaders() });
+    const raw = await r.text().catch(() => '');
+    let body = null;
+    try { body = raw ? JSON.parse(raw) : null; } catch { /* non-JSON: unknown outcome */ }
+    const obj = body && typeof body === 'object' ? body : null;
+    const appOk = obj ? obj.ok !== false : null;
+    const benign = WC.benignNoop(obj);
+    const error = obj && obj.ok === false ? String(obj.error || obj.reason || obj.note || 'handler reported ok:false').slice(0, 200)
+      : (!obj && r.ok ? 'no parseable JSON body — outcome unknown' : (!r.ok ? String(raw || `HTTP ${r.status}`).replace(/\s+/g, ' ').slice(0, 200) : null));
+    return { p, status: r.status, ms: Date.now() - t0, appOk, benign, error };
+  } catch (e) {
+    return { p, status: null, ms: Date.now() - t0, appOk: null, benign: null, error: String((e && e.message) || e).slice(0, 200) };
+  }
+}
+
+// Collects every kick's promise so the run record can list them: settled results as they
+// are, and anything still in flight at the drain ceiling as `running-past-warm`.
+function kickSink() {
+  const entries = [];
+  return {
+    track(path, promise) {
+      const entry = { p: path, result: null };
+      entries.push(entry);
+      promise.then((r) => { entry.result = r; }, () => {});
+    },
+    list() { return entries.map((e) => e.result || { p: e.p, status: 'running-past-warm', appOk: null, benign: null, error: null }); },
+  };
 }
 
 // A warmchain dispatch, WITH its response body. A chain returns HTTP 200 even when its
@@ -132,17 +178,18 @@ module.exports = async function handler(req, res) {
   // Deferred to the third dispatch wave: 6 more simultaneous heavy invocations at t=0
   // were part of the OOM burst the staggering exists to remove.
   const AI_TICKS_DELAY_MS = 2 * WC.DISPATCH_WAVE_GAP_MS;
+  const kicks = kickSink();
   const aiTicks = [
     '/api/tracker?op=readthroughtick', '/api/tracker?op=anomalytick', '/api/tracker?op=secondwavetick',
     '/api/tracker?op=crossassettick', '/api/tracker?op=toneshifttick', '/api/tracker?op=biotechtick',
-  ].map(p => delayedWarmOne(p, AI_TICKS_DELAY_MS));
+  ].map(p => delayedWarmOne(p, AI_TICKS_DELAY_MS, kicks));
 
   // 🧠 Options-flow Fable analysis — reads today's flow snapshot (built by op=optionsflow
   // in PATHS above) and writes per-ticker trade plans + a desk read + stamps the ledger
   // for the A/B. Fire-and-forget: it's a ~30-50s Fable call in its own 60s budget, so it
   // must NOT be awaited on warm's critical path.
   const SINGLE_KICKS_DELAY_MS = 3 * WC.DISPATCH_WAVE_GAP_MS;
-  const optionsAssessKick = delayedWarmOne('/api/tracker?op=optionsassess', SINGLE_KICKS_DELAY_MS);
+  const optionsAssessKick = delayedWarmOne('/api/tracker?op=optionsassess', SINGLE_KICKS_DELAY_MS, kicks);
 
   // ── SINGLE-DISPATCH KICKS ──────────────────────────────────────────────────
   // These were never broken by the .then()-chain bug: one dispatch each, no ordering, so
@@ -152,22 +199,22 @@ module.exports = async function handler(req, res) {
   // built by PATHS long before the delay elapses.
   //
   // 💰 Options Moves — put-selling setups (full-market scan + IV/earnings).
-  const putsellKick = delayedWarmOne('/api/tracker?op=putsell', SINGLE_KICKS_DELAY_MS);
+  const putsellKick = delayedWarmOne('/api/tracker?op=putsell', SINGLE_KICKS_DELAY_MS, kicks);
   // 📏 Options episode grading — next-open, SPY-relative, cost-aware grading of the
   // immutable decision episodes (folded by op=optionsflow above). Heavy (candle fetches
   // per resolvable episode) → its own 60s budget, off warm's critical path.
-  const optionsEpisodesKick = delayedWarmOne('/api/tracker?op=optionsepisodes&refresh=1', SINGLE_KICKS_DELAY_MS);
+  const optionsEpisodesKick = delayedWarmOne('/api/tracker?op=optionsepisodes&refresh=1', SINGLE_KICKS_DELAY_MS, kicks);
   // Predict-tab feedback loop — recompute each class's Wilson-bounded track-record grade
   // so cards auto-feature/demote as picks resolve. Heavy (fetches history), own budget.
-  const calibKick = delayedWarmOne('/api/tracker?op=calibration&force=1', SINGLE_KICKS_DELAY_MS);
+  const calibKick = delayedWarmOne('/api/tracker?op=calibration&force=1', SINGLE_KICKS_DELAY_MS, kicks);
   // 🧪 Baseline factor scan — refresh the point-in-time cross-section (rank-IC + top-
   // quintile excess for momentum / 52-week / rel-volume) that the Baselines tab reads via
   // op=baselines. The bearer (internalHeaders) exempts it from the op=research rate limit.
-  const researchKick = delayedWarmOne('/api/tracker?op=research&scope=large', SINGLE_KICKS_DELAY_MS);
+  const researchKick = delayedWarmOne('/api/tracker?op=research&scope=large', SINGLE_KICKS_DELAY_MS, kicks);
   // 🧬 Biotech episode grading — next-open, XBI-relative, multi-horizon (3/5/10/21) grading of
   // the biotech research ledger, stratified by archetype. Heavy (candle fetch per ledger
   // ticker) → its own 60s budget, off warm's critical path. Shadow measurement only.
-  const biotechGradeKick = delayedWarmOne('/api/tracker?op=biotechgrade', SINGLE_KICKS_DELAY_MS);
+  const biotechGradeKick = delayedWarmOne('/api/tracker?op=biotechgrade', SINGLE_KICKS_DELAY_MS, kicks);
 
   // The tick chains are now warmchain roots (ticks1/ticks2/ticks3 in lib/warm-chains.js).
   // They were previously built HERE as `.then()` chains and drained for whatever was left
@@ -235,8 +282,15 @@ module.exports = async function handler(req, res) {
   void biotechGradeKick;  // single dispatch: biotech episode grading in its own budget
 
   const chainsDispatched = chainKicks.length;
+  // Every kick's GRADED outcome (transport + application), or running-past-warm if it had
+  // not settled by the drain ceiling. The exchange calendar rides along so op=health can
+  // treat an application no-op on a closed session (no flow snapshot to assess, no fresh
+  // bars to grade) as deferred rather than failed. Optional analytics, never `ok` itself.
+  let kicksSession = null;
+  try { const et = require('../lib/stats').nowET(); kicksSession = { date: et.date, closed: et.isMarketClosed === true }; } catch { kicksSession = null; }
   const result = {
     ok: true, host: HOST, warmed: out, warmedExtra,
+    kicks: kicks.list(), kicksSession,
     // Ordered work now lives in lib/warm-chains.js. Each root reports dispatched + its
     // own per-step outcome in its OWN logs ([warmchain] <name>); a chain still running
     // when warm returns is normal and no longer means the work was lost.
@@ -262,3 +316,7 @@ module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   return res.json(result);
 };
+
+// Unit seams (no network in tests): the kick grader and its collector.
+module.exports.kickOne = kickOne;
+module.exports.kickSink = kickSink;

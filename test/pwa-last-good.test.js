@@ -61,7 +61,10 @@ test('withLastGood stores a good payload under the key and returns it as-is', as
   const out = await LG.withLastGood('sessionboard', async () => GOOD, { store, nowMs: T0 });
   assert.equal(out, GOOD);
   const entry = store.m.get(LG.LAST_GOOD_PREFIX + 'sessionboard');
-  assert.equal(entry.asOf, new Date(T0).toISOString());
+  // asOf is the payload's own generatedAt (13:30), NOT the arrival clock (14:00) — a board
+  // that was already 30 min old on arrival must not be remembered as fresh-at-arrival.
+  assert.equal(entry.asOf, GOOD.generatedAt);
+  assert.notEqual(entry.asOf, new Date(T0).toISOString());
   assert.equal(entry.data, GOOD);
 });
 
@@ -70,7 +73,7 @@ test('withLastGood returns the remembered snapshot flagged stale when the fetch 
   await LG.withLastGood('today', async () => GOOD, { store, nowMs: T0 });
   const failed = await LG.withLastGood('today', async () => { throw new Error('Failed to fetch'); }, { store, nowMs: T0 + 60_000 });
   assert.equal(failed.stale, true);
-  assert.equal(failed.asOf, new Date(T0).toISOString());
+  assert.equal(failed.asOf, GOOD.generatedAt);
   assert.deepEqual(failed.items, GOOD.items);
   const empty = await LG.withLastGood('today', async () => ({ ok: true, empty: true, items: [] }), { store, nowMs: T0 + 120_000 });
   assert.equal(empty.stale, true);
@@ -154,4 +157,52 @@ test('fetch-json.js keeps its timeout constants and the fetchJSON contract (pinn
   assert.match(src, /export const OPTIONAL_TIMEOUT_MS = 30000/);
   assert.match(src, /export async function fetchJSON\(/);
   assert.match(src, /export async function fetchSnapshot\(/);
+});
+
+// ── review 2026-10: observation time, not arrival time; legit empty ≠ failure ────────
+test('snapshotAsOfMs: generatedAt wins; arrival time only when it is missing, garbage or in the future', () => {
+  assert.equal(LG.snapshotAsOfMs(GOOD, T0), Date.parse(GOOD.generatedAt));
+  assert.equal(LG.snapshotAsOfMs({ ok: true }, T0), T0);
+  assert.equal(LG.snapshotAsOfMs({ ok: true, generatedAt: 'nope' }, T0), T0);
+  assert.equal(LG.snapshotAsOfMs({ ok: true, generatedAt: new Date(T0 + 3600_000).toISOString() }, T0), T0);
+});
+
+test('an old cached payload cannot become fresh because it was fetched now', async () => {
+  const store = memStore();
+  const dayOld = { ...GOOD, generatedAt: '2026-09-30T13:30:00.000Z' };       // CDN stale-while-revalidate body
+  await LG.withLastGood('today', async () => dayOld, { store, nowMs: T0 });
+  const failed = await LG.withLastGood('today', async () => { throw new Error('HTTP 503'); }, { store, nowMs: T0 + 1000 });
+  assert.equal(failed.asOf, '2026-09-30T13:30:00.000Z');
+  assert.match(LG.lastGoodStripHTML(failed, { now: new Date(T0) }), /as of Sep 30, 2026/);
+});
+
+test('passLegitEmpty: a clean ok:true empty board is shown as empty, not replaced by the last good one', async () => {
+  const store = memStore();
+  await LG.withLastGood('today', async () => GOOD, { store, nowMs: T0 });
+  const legit = { ok: true, generatedAt: '2026-10-01T14:01:00.000Z', counts: { signals: 0 }, freshness: { sources: [{ source: 'screener', ok: true }] } };
+  const out = await LG.withLastGood('today', async () => legit, { store, nowMs: T0 + 60_000, passLegitEmpty: true });
+  assert.equal(out, legit);
+  assert.equal(out.stale, undefined);
+  assert.equal(store.m.get(LG.LAST_GOOD_PREFIX + 'today').data, GOOD, 'an empty board still never overwrites the last good one');
+  // Default (not opted in) keeps the historical behaviour.
+  assert.equal((await LG.withLastGood('today', async () => legit, { store, nowMs: T0 + 60_000 })).stale, true);
+});
+
+test('passLegitEmpty does NOT wave through a failure dressed as empty', async () => {
+  const store = memStore();
+  await LG.withLastGood('today', async () => GOOD, { store, nowMs: T0 });
+  const cases = [
+    { ok: true, counts: { signals: 0 }, freshness: { sources: [{ source: 'screener', ok: false }] } },  // a source failed
+    { ok: true, counts: { signals: 0 }, degraded: true },
+    { ok: false, counts: { signals: 0 }, error: 'boom' },
+    { ok: true, counts: { signals: 0 }, stale: true, asOf: '2026-09-01T00:00:00Z' },                     // sw-cache served
+  ];
+  for (const c of cases) {
+    assert.equal(LG.isLegitEmpty(c), false, JSON.stringify(c));
+    const out = await LG.withLastGood('today', async () => c, { store, nowMs: T0 + 60_000, passLegitEmpty: true });
+    assert.equal(out.stale, true);
+    assert.deepEqual(out.items, GOOD.items);
+  }
+  const thrown = await LG.withLastGood('today', async () => { throw new Error('HTTP 500'); }, { store, nowMs: T0 + 60_000, passLegitEmpty: true });
+  assert.equal(thrown.stale, true);
 });
