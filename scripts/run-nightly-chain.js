@@ -150,8 +150,25 @@ function crashSearchText(a) {
   return `${(a && a.raw) || ''} ${bodyReason}`;
 }
 
+// 2026-10-15 (pitdata): a THIRD distinct kill wording — "500: A server error has occurred",
+// no FUNCTION_INVOCATION_FAILED substring, no OOM wording, nothing a regex can anchor on —
+// proves chasing Vercel's exact crash-page text is a losing game; it is not a documented,
+// stable contract and a fourth wording will show up eventually. The durable signal instead:
+// api/tracker.js's own top-level catch (see its header comment, written for this exact
+// problem once before) makes it an INVARIANT of this app that any request our handler code
+// ever got to run — success, failure, even an unhandled throw — always comes back as valid
+// JSON. A 500 whose body does NOT parse as JSON can therefore only be the platform
+// intercepting the request before our handler ran (or killing it mid-flight): a kill, by
+// elimination, never a code defect. (A 500 WITH a parseable body, e.g. {error:'TypeError...'},
+// is still our own catch and is correctly left alone — this clause only fires on raw/HTML/
+// unparseable crash pages, which is exactly what two of the three real incidents looked like.)
+function isUnparseableServerError(a) {
+  return a && a.httpStatus === 500 && a.body === null;
+}
+
 function isPlatformCrash(a, grade) {
   if (!a) return false;
+  if (isUnparseableServerError(a)) return true;
   if (a.httpStatus != null && (CRASH_STATUSES.has(a.httpStatus) || (a.httpStatus === 500 && CRASH_MARKER.test(crashSearchText(a))))) return true;
   const details = (grade && grade.failDetail) || [];
   return details.some((d) => d && (d.status === 'http:502' || (d.status === 'http:500' && CRASH_MARKER.test(String(d.error || '')))));
