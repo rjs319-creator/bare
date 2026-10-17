@@ -155,10 +155,11 @@ test('the banner renders the server list and no longer re-derives it', () => {
   test('the background list is justified from source, not assumed', () => {
     // Each entry must be traceable to a source comment declaring it shadow/research.
     assert.ok(BACKGROUND_CHAINS.has('challenger'), 'challenger-routes.js: "SHADOW ONLY"');
+    assert.ok(BACKGROUND_CHAINS.has('pitdata'), 'warm-chains.js pitdata root: "Shadow-only — no live consumer reads pitdata/*"');
     assert.ok(BACKGROUND_CHAINS.has('alphacal'), 'warm-chains.js: archive-first collection');
     assert.ok(BACKGROUND_CHAINS.has('insidercluster'), 'insider-cluster-routes.js: "shadow route handlers (weight 0; prospective ledger only)"');
     assert.ok(BACKGROUND_CHAINS.has('forecastshadow'), 'forecast-shadow-routes.js: weight-0 prospective ledger (forecastshadow/v1/*)');
-    assert.strictEqual(BACKGROUND_CHAINS.size, 4, 'keep this list verified — do not pad it');
+    assert.strictEqual(BACKGROUND_CHAINS.size, 5, 'keep this list verified — do not pad it');
   });
 
   test('buildHealthResponse exposes the split for the client to render', () => {
