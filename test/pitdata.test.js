@@ -185,3 +185,32 @@ test('re-running the collector is idempotent at the raw layer (content-addressed
   const rawKeys2 = [...deps.blobs.keys()].filter((k) => k.startsWith('pitdata/raw/')).sort();
   assert.deepEqual(rawKeys2, rawKeys1, 'replay must not duplicate raw snapshots');
 });
+
+// ── Plan-capped pagination ─────────────────────────────────────────────────────
+test('delisted-companies: a 402 on page ≥1 is the plan\'s one-page cap — disclosed on the state, step advances; page 0 failing is still a failure', async () => {
+  const delisted = Array.from({ length: 100 }, (_, i) => ({ symbol: `D${i}`, delistedDate: '2024-01-02', companyName: `Dead ${i}`, exchange: 'NASDAQ' }));
+  const deps = memDeps([
+    { match: '/stock-list', reply: page([{ symbol: 'AAPL', exchange: 'NASDAQ' }]) },
+    { match: 'delisted-companies', reply: (url) => (url.includes('page=0') ? page(delisted) : { ok: false, status: 402, body: null }) },
+    { match: '/symbol-change', reply: page([]) },
+  ]);
+  const outs = await runAllSteps(deps, 3);
+  const delistedOut = outs.find(o => o.did && o.did.step === 'delisted');
+  assert.equal(delistedOut.ok, true, 'the capped step is not a failure');
+  assert.equal(delistedOut.did.rows, 100, 'page 0 rows were stored');
+  assert.equal(delistedOut.did.capped.atPage, 1);
+  assert.equal(delistedOut.did.capped.http, 402);
+  assert.match(delistedOut.did.capped.note, /plan-limited, NOT complete/);
+  const state = deps.blobs.get('pitdata/state.json');
+  assert.equal(state.counts.delistedCapped.atPage, 1);
+  assert.notEqual(state.step, 'delisted', 'the cursor no longer re-tries the capped page every night');
+
+  // Page 0 itself answering 402 is a capability failure, not a cap.
+  const broken = memDeps([
+    { match: '/stock-list', reply: page([{ symbol: 'AAPL', exchange: 'NASDAQ' }]) },
+    { match: 'delisted-companies', reply: { ok: false, status: 402, body: null } },
+  ]);
+  const outs2 = await runAllSteps(broken, 2);
+  assert.equal(outs2[1].ok, false);
+  assert.match(outs2[1].error, /page 0 unavailable \(http 402\)/);
+});
