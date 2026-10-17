@@ -208,6 +208,27 @@ test('runChain: an unparseable 500 that NEVER recovers still surfaces a readable
   assert.match(r.error, /A server error has occurred/);
 });
 
+// ── THE 2026-10-17 INCIDENT: a FOURTH distinct shape (confirmed against Vercel's own
+// runtime-error log at the identical millisecond as the failure). Neither #455's marker nor
+// #456's unparseable-body rule fired, because this kill came back as VALID, PARSEABLE JSON —
+// `{"error":"500: A server error has occurred"}`, a flat generic string with no crash code
+// and no OOM wording — so `body` is a real object, not null, and the string carries none of
+// the earlier markers. What it shares with 3 of the 4 real incidents (including the
+// original CRASH_TEXT fixture above) is Vercel's own boilerplate phrase "A server error has
+// occurred", now added to CRASH_MARKER.
+test('runChain: a slow 500 whose body is VALID JSON {"error":"500: A server error has occurred"} — parseable, no crash code, no OOM wording, the exact 2026-10-17 pitdata shape — IS retried because the boilerplate phrase is now a marker', async () => {
+  let n = 0;
+  const fetchImpl = async () => (++n === 1 ? resp(500, { error: '500: A server error has occurred' }) : resp(200, { ok: true, failed: [], skipped: [], elapsedMs: 100 }));
+  const r = await RUN.runChain('pitdata', opts(fetchImpl, { now: clock(RUN.FAST_FAIL_MS), crashRetryDelayMs: 0 }));
+  assert.equal(n, 2, 'a parseable JSON body with the boilerplate phrase still gets the crash retry'); assert.equal(r.crashRetry, true); assert.equal(r.ok, true);
+});
+
+test('runChain: a genuine app-level 500 with a SPECIFIC exception message (no boilerplate phrase) is still never retried — the broadened marker does not swallow real code defects', async () => {
+  let n = 0;
+  const r = await RUN.runChain('ledger', opts(async () => { n++; return resp(500, { ok: false, error: 'TypeError: x is not a function' }); }, { now: clock(RUN.FAST_FAIL_MS), crashRetryDelayMs: 0 }));
+  assert.equal(n, 1, 'a specific app exception message is still our own catch, never the platform boilerplate'); assert.equal(r.crashRetry, false);
+});
+
 test('runChain: an unknown chain name throws before any request', async () => {
   await assert.rejects(() => RUN.runChain('nope', opts(async () => { throw new Error('must not fetch'); })), /unknown chain/);
 });
