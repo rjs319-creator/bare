@@ -62,7 +62,20 @@ const CRASH_STATUSES = new Set([502, 503]);
 // "FUNCTION_INVOCATION_FAILED" crash page — its own dashboard labels it "Vercel Runtime
 // Error: instance was killed because it ran out of available memory" with no shared
 // substring. Both phrasings are a dead Fluid instance, not a code defect, so both retry.
-const CRASH_MARKER = /FUNCTION_INVOCATION_FAILED|ran out of available memory|instance was killed|\bOUT_OF_MEMORY\b/i;
+//
+// 2026-10-17 (pitdata, a FOURTH real incident — confirmed against Vercel's own runtime-
+// error log at the identical millisecond): neither this marker (#455) nor the unparseable-
+// body rule (#456, below) fired, because this kill came back as *valid* JSON shaped
+// `{"error":"500: A server error has occurred"}` — a flat, generic string with no crash
+// code and no OOM wording at all. Four incidents in, chasing Vercel's exact wording OR
+// shape is a losing game one event at a time. What all four share, including the very
+// first test fixture this file was written against, is Vercel's own boilerplate phrase
+// "A server error has occurred" — present whether the page is plain text, JSON-nested, or
+// JSON-flat. It is end-user-facing platform language this app's own code (always a
+// specific exception message: "TypeError: …", "fetch failed", "API keys not configured.",
+// etc. — see every `res.status(500).json(...)` site in api/ and lib/) would never organically
+// produce, so it is a safe, durable anchor independent of the surrounding shape.
+const CRASH_MARKER = /FUNCTION_INVOCATION_FAILED|ran out of available memory|instance was killed|\bOUT_OF_MEMORY\b|a server error has occurred/i;
 const MAX_ERROR_TEXT = 200;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
