@@ -28,7 +28,7 @@ test('factor-adjusted alpha gate is registered: confirmatory, open, weight-0 sha
 });
 
 test('nightly refresh rides the maturity chain after op=maturity (no new root → matrix unchanged)', () => {
-  assert.deepEqual(CHAINS.CHAINS.maturity, ['op=maturity', 'op=factorsrefresh']);
+  assert.deepEqual(CHAINS.CHAINS.maturity, ['op=maturity', 'op=factorsrefresh', 'op=recalibrate&cadence=weekly']);
   assert.ok(!CHAINS.ROOT_CHAINS.includes('factors'), 'no new root chain');
 });
 
