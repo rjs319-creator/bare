@@ -255,7 +255,7 @@ const PRIVILEGED_OPS = new Set([
 // can't 401 them without breaking those buttons, so rate-limit anonymous callers
 // instead (trusted cron is exempt). Best-effort per-instance throttle; see lib/ratelimit.js.
 const EXPENSIVE_OPS = new Set([
-  'recalibrate', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'leadtime2', 'failuremodel', 'complab', 'challengereval', 'router', 'routercf', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward', 'rltwalkforward', 'evidencediag', 'datasetsurvival',
+  'recalibrate', 'exits', 'longshort', 'pead', 'congress', 'revisions', 'backfill', 'moverstudy', 'cerndecay', 'rankquality', 'research', 'evolveomegawf', 'omegawf', 'omegafunnel', 'redundancy', 'leadtime', 'leadtime2', 'failuremodel', 'complab', 'challengereval', 'router', 'routercf', 'orbitwalkforward', 'orbitmlwalkforward', 'orbitcontrols', 'atlasxwalkforward', 'rltwalkforward', 'rltfunnel', 'evidencediag', 'datasetsurvival',
   'peerprop', 'peerpropwf', 'underreaction', 'targetcompare', 'expgap', 'psrlresearch',
   // bearcase: the empty state is deliberately no-store (pre-first-tick CDN trap), so an
   // anonymous cache-busting loop would otherwise drive an unthrottled Blob list() per hit.
@@ -868,6 +868,7 @@ async function handleRequest(req, res) {
   if (req.query.op === 'rltlog') return require('../lib/rlt-routes').runRltLog(req, res);
   if (req.query.op === 'rltresolve') return require('../lib/rlt-routes').runRltResolve(req, res);
   if (req.query.op === 'rltwalkforward') return require('../lib/rlt-routes').runRltWalkForward(req, res);
+  if (req.query.op === 'rltfunnel') return require('../lib/rlt-routes').runRltFunnel(req, res);
   // Peer Propagation — SHADOW (weight-0). Read board + cron-only ledger writer +
   // walk-forward with built-in falsifications (reversed edges / random peers).
   if (req.query.op === 'peerprop') return require('../lib/peerprop-routes').runPeerProp(req, res);
