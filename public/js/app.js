@@ -4389,11 +4389,11 @@ import { initTickerLookup, openTickerLookup } from './ticker-lookup.js';
       : `<div class="rot-panel" style="border-left:3px solid var(--amber,#f59e0b)"><div class="rot-head">⚠️ Market read unavailable</div><div class="rot-sub" id="today-regime-line">The tape/regime source (op=tape) did not answer${tape && tape.error ? ` — ${esc(String(tape.error))}` : ''}. No tape condition or macro regime is shown rather than a neutral guess. Try ⟳ Refresh.</div></div>`;
     const r = TODAY_REC[cond] || TODAY_REC.mixed;
     const rec = ok ? `<div class="dt-note" style="border-left-color:${r.col}"><b>${r.e} ${r.h}.</b> ${r.b}${r.cta ? ` <button class="today-cta" data-go="${r.cta.s}">${r.cta.l}</button>` : ''}</div>` : '';
-    // 🪁 Red-tape nudge → Down-Day Mode (reversion longs + shorts + the honest sit-out).
+    // 🪁 Red-tape nudge (Down-Day Mode is retired → today, so no CTA; the honest sit-out).
     const spyChg = ok ? tape.spyChangePct : null;
     const redTape = ok && ((spyChg != null && spyChg <= -0.4) || regime === 'risk-off' || cond === 'riskoff');
     const downNudge = redTape
-      ? `<div class="dt-note" style="border-left-color:#a78bfa;background:#a78bfa14"><b>🪁 It's a red tape${spyChg != null ? ` (SPY ${spyChg >= 0 ? '+' : ''}${spyChg}%)` : ''} — momentum longs won't work today.</b> Down-Day Mode shows what actually pays on a down day: oversold-bounce longs, overheated shorts, and the honest math on why chasing strength here loses. <button class="today-cta" data-go="downday">Open Down-Day Mode →</button></div>`
+      ? `<div class="dt-note" style="border-left-color:#a78bfa;background:#a78bfa14"><b>🪁 It's a red tape${spyChg != null ? ` (SPY ${spyChg >= 0 ? '+' : ''}${spyChg}%)` : ''} — momentum longs won't work today.</b> Sitting out or sizing down is a valid call on a red tape.</div>`
       : '';
     let ideas = '';
     if (cond !== 'riskoff' && dt && dt.ok) {

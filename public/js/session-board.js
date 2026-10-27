@@ -269,7 +269,7 @@ function deltaTag(d) {
 export function renderCard(it, { delta = null, rank = null } = {}) {
   const tf = it.timeframe || {};
   const side = it.side === 'short' ? '<span class="sb-side sb-short">SHORT</span>' : '<span class="sb-side sb-long">LONG</span>';
-  const name = [it.company, it.sector].filter(Boolean).map((s) => esc(String(s))).join(' · ');
+  const name = [it.company, it.sector].filter((s) => s && s !== '?').map((s) => esc(String(s))).join(' · ');
   const gradeWhy = whyList(it.grade && it.grade.why, 'sb-grade-why');
   return `<article class="sb-card" data-id="${esc(it.id || '')}" data-ticker="${esc(it.ticker || '')}" data-tf="${esc(tf.key || it.horizon || '')}">
     <div class="sb-card-hd">
