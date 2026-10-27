@@ -7,12 +7,15 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { recalibrateDue } = require('../lib/apex-routes');
 
-test('weekly cadence is due only on a Friday trading day (ET)', () => {
+test('weekly cadence is due only on the last trading day of the week (ET)', () => {
   assert.deepEqual(recalibrateDue('weekly', new Date('2026-10-16T22:10:00Z')), { due: true, reason: null });          // Fri
   assert.equal(recalibrateDue('weekly', new Date('2026-10-15T22:10:00Z')).due, false);                               // Thu
   assert.match(recalibrateDue('weekly', new Date('2026-10-17T15:00:00Z')).reason, /not a trading day/);              // Sat
   assert.equal(recalibrateDue('weekly', new Date('2026-11-27T22:10:00Z')).due, true);                                 // Fri early close is still a trading day
   assert.equal(recalibrateDue('weekly', new Date('2026-07-03T22:10:00Z')).due, false);                                // Fri Jul 3 2026 observed holiday
+  assert.equal(recalibrateDue('weekly', new Date('2026-07-02T22:10:00Z')).due, true);                                 // Thu Jul 2 = that week's last session
+  assert.equal(recalibrateDue('weekly', new Date('2026-12-24T22:10:00Z')).due, true);                                 // Thu Dec 24 (Fri Dec 25 closed)
+  assert.equal(recalibrateDue('weekly', new Date('2026-12-23T22:10:00Z')).due, false);                                // Wed Dec 23
 });
 
 test('no cadence (the browser dry run, a manual trusted call) is always due', () => {
