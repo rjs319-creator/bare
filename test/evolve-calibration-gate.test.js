@@ -15,7 +15,13 @@ const path = require('node:path');
 const E = require('../lib/evolve');
 
 const SRC = fs.readFileSync(path.join(__dirname, '..', 'lib', 'evolve.js'), 'utf8');
-const cal = (helps) => ({ edges: [0, 0.5, 1], table: [0.2, 0.8], calibrationHelpsOOS: helps });
+const cal = (helps) => ({ edges: [0, 0.5, 1], table: [0.2, 0.8], calibrationHelpsOOS: helps, basis: 'rawProbability' });
+
+test('a pre-#457 calibrator (fit on published P, no rawProbability basis) is never applied', () => {
+  const { basis, ...legacy } = cal(true);
+  assert.equal(E.calibratorUsable(legacy), false);
+  assert.equal(E.calibratorUsable({ ...legacy, basis: 'probability' }), false);
+});
 
 test('a calibrator is usable only when it BEAT raw P out-of-fold', () => {
   assert.equal(E.calibratorUsable(cal(true)), true);
