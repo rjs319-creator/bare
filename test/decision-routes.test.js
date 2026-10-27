@@ -117,6 +117,17 @@ test('sectorStrength: ranks leading/weakening and scores names -1..1', () => {
   assert.equal(s.byName['Utilities'], -1);
 });
 
+test('sectorStrength: index ETFs (SPY/QQQ) are not ranked as sectors', () => {
+  const s = N.sectorStrength({ sectors: [
+    { symbol: 'QQQ', name: 'Nasdaq', changePct: 3 },
+    { symbol: 'SPY', name: 'S&P 500', changePct: 2 },
+    { symbol: 'XLK', name: 'Technology', changePct: 1 },
+    { symbol: 'XLU', name: 'Utilities', changePct: -1 },
+  ] });
+  assert.deepEqual(s.rows.map(r => r.name), ['Technology', 'Utilities']);
+  assert.equal(s.byName['Nasdaq'], undefined);
+});
+
 test('buildToday: merges AAA across screener+gapgo into one multi-family signal', () => {
   const p = buildToday({ screener: SCREENER, gapgo: GAPGO, daytrade: DAYTRADE, coil: COIL, sectors: SECTORS, scoreboard: SCOREBOARD, ai: AI }, null, null, null, ANNOTATE);
   // AAA appears in screener(swing) and gapgo(intraday) — different horizons, so NOT merged.
