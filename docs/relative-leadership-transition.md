@@ -93,7 +93,10 @@ lib/rlt-episodes.js     supervisor adapter (PRIMED/ARMED/TRIGGERED/ACCEPTED with
 lib/rlt-governance.js   REGISTRATION (hypothesis, bars, limitations), modelHealth, promotionView, assertShadow
 lib/rlt-store.js        rlt/* persistence; WRITE-ONCE daily cross-sections; sector-state history; ledger stream
 lib/rlt-alerts.js       transition-only deduplicated alerts incl. SECTOR ROLLOVER / ENTRY TOO EXTENDED
-lib/rlt-routes.js       op=rlt (read), op=rltlog (cron write), op=rltresolve (grade), op=rltwalkforward (research)
+lib/rlt-routes.js       op=rlt (read), op=rltlog (cron write), op=rltresolve (grade), op=rltwalkforward (research),
+                        op=rltfunnel (read-only false-early-rate / lead-time study, §13)
+lib/rlt-funnel.js       pure funnel aggregator for op=rltfunnel: progression vs explicit-failure vs
+                        censored, lead time in accrued sessions, per-sector splits gated on a sample floor
 lib/rlt-research.js     harness events (fold-local PIT residualization by construction) + baseline ladder comparison
 public/js/rlt-lab.js    Research Lab panel (state buckets, abstention reasons, calibration status, sector strip)
 ```
@@ -309,6 +312,23 @@ lead-time study once cross-sections accrue. No further backtest variant on
 this same data window is justified — repeated re-slicing of one window is how
 false edges get manufactured.
 
+### False-early-rate / lead-time study — implemented, not yet run (2026-10-27)
+
+`op=rltfunnel` (`lib/rlt-routes.js` + pure `lib/rlt-funnel.js`) implements the
+study registered 2026-07-27 (§20.2): of names that entered DISCOVERED /
+EMERGING_LEADER / PRIMED, what fraction later reached a more-advanced funnel
+state vs. explicitly WEAKENING/INVALIDATED/EXPIRED/DROPPED, and the lead time
+(in accrued sessions) to progression. **No model** — it reads the transition
+log already written by `op=rltlog` directly; censored (still-open) episodes
+are counted and reported separately, never as failures, and a per-sector
+split is withheld below a 20-entry floor. Below 40 distinct accrual dates the
+result is flagged `sampleTooThin`/`INCONCLUSIVE` and reports what exists
+rather than extrapolating. This build environment has no Blob read/write
+credentials, so the study has not yet been run against the real accrued
+cross-sections — only against synthetic fixtures (`test/rlt-funnel.test.js`).
+Running `GET /api/tracker?op=rltfunnel` once deployed is the next honest step;
+this entry stays here until that real run is recorded.
+
 ## 14. Limitations
 
 1. Sector metadata is present-day (no PIT reclassification history) —
@@ -404,7 +424,8 @@ under all RLT_MODE values + pinned eligibility + frozen contract.
 2. **False-early-rate study**: of names entering EMERGING_LEADER, what fraction
    reach PRIMED/ARMED vs WEAKENING/DROPPED, and what is the median lead time to
    trigger? This measures the system's stated purpose (earliness) directly from
-   the immutable cross-sections — no model needed.
+   the immutable cross-sections — no model needed. Implemented as `op=rltfunnel`
+   (see §13); not yet run against real accrued data in this environment.
 3. **Redundancy audit vs ATLAS-X/Coil/Ghost**: rank-correlation of
    `transitionRank` against each existing score on identical dates; if ρ > 0.8
    anywhere, RLT is a re-labeling, not a new signal — apply the discount or
